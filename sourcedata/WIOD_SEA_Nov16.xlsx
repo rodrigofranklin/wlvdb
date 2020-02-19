@@ -1,0 +1,121 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html lang="en">
+<head>
+	<title>WIOD Redirect</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<meta content="en" http-equiv="Content-Language">	
+	
+     <!--Auto refresh upon loading page, no cached version will be shown. This ensures users will always see the most recent version of the webpage-->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    
+    <link href="/definitions/style16.css" type="text/css" rel="stylesheet">	
+	<link rel="shortcut icon" href="/img/favicon.ico" >
+    <script type="text/javascript" src="/definitions/last_change.js"></script>
+    <script type="text/javascript" src="/definitions/redirect.js"></script>
+           	
+	<!--Google Analytics Script-->
+	<script type="text/javascript">
+    var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+    document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+    </script>
+    <script type="text/javascript">
+    try {
+    var pageTracker = _gat._getTracker("UA-9144243-1");
+    pageTracker._trackPageview();
+    } catch(err) {}</script>
+    <!--End Google Analytics Script-->
+        
+</head>
+
+<body class="home" onLoad="insertLastChange(); redirect();">
+
+  <div id="wrap">
+  
+    <div id="header">
+    <h1>World Input-Output Database</h1>    
+    </div>
+    
+       
+    
+    
+    <div id="menubar">    
+     <div class="menuleft">     
+        <ul id="menu">
+          <li class="home"><a href="/home">WIOD Home</a></li>
+          <li class="gvc"><a href="/gvc">GVC Research</a></li>
+          <li class="data13 sub"><a href="/release13">Release 2013<!--[if gte IE 7]><!--></a><!--<![endif]-->
+          <!--[if lte IE 6]><table><tr><td><![endif]-->
+            <ul>
+              <li><a href="/database/wiots13">Input-Output Tables</a></li> 
+              <!--<li><a href="/database/niots13">National Input-Output Tables</a></li>-->              
+              <li><a href="/database/seas13">Socio Economic Accounts</a></li>
+              <li><a href="/database/eas13">Environmental Accounts</a></li>                
+            </ul>
+          <!--[if lte IE 6]></td></tr></table></a><![endif]-->
+          </li>
+          <li class="data16 sub"><a href="/release16">Release 2016<!--[if gte IE 7]><!--></a><!--<![endif]-->
+          <!--[if lte IE 6]><table><tr><td><![endif]-->
+            <ul>
+              <li><a href="/database/wiots16">Input-Output Tables</a></li> 
+              <!--<li><a href="/database/niots">National Input-Output Tables</a></li>-->             
+              <li><a href="/database/seas16">Socio Economic Accounts</a></li>
+              <!--<li><a href="/database/eas">Environmental Accounts</a></li>-->                
+            </ul>
+          <!--[if lte IE 6]></td></tr></table></a><![endif]-->
+          </li>              
+          <li class="otherio"><a href="/otherdb">Other IO Databases</a></li>
+          <li class="project"><a href="/project">Initial Project</a></li>             
+        </ul>
+      </div>      
+      <div class="menuright">
+        <a class="menulinkselected" href="mailto:wiod@rug.nl">Contact</a>          
+      </div>    
+    </div>
+
+    
+    <!--Breadcrumbs list-->
+    <div id="crumbs">
+        <li><a class="selected" href="/home">WIOD Home</a></li>        
+    </div>
+    
+    <div id="content"> 
+        
+      <div class="leftcol">            
+        <h1>WIOD Page Redirect</h1>
+        <br>
+        <h2>The page you are trying to visit has been moved to the new WIOD website, or it no longer exists.<br><br>You are being redirected to the new WIOD home page in <span id="timer">10</span> seconds.</h2>        
+        <br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>           
+      </div>  
+      
+      <div class="rightcol">
+        <!-- start feedwind code -->
+
+<!--<script type="text/javascript">document.write('\x3Cscript type="text/javascript" src="' + ('https:' == document.location.protocol ? 'https://' : 'http://') + 'feed.mikle.com/js/rssmikle.js">\x3C/script>');</script>
+<script type="text/javascript">(function() {var params = {rssmikle_url: "http://www.rug.nl/ggdc/valuechain/wiod/news!RSS",rssmikle_frame_width: "100%",rssmikle_frame_height: "400",frame_height_by_article: "4",rssmikle_target: "_blank",rssmikle_font: "Arial, Helvetica, sans-serif",rssmikle_font_size: "12",rssmikle_border: "1px solid #ececec",responsive: "off",rssmikle_css_url: "",text_align: "left",text_align2: "left",corner: "off",scrollbar: "on",autoscroll: "on",scrolldirection: "up",scrollstep: "5",mcspeed: "20",sort: "Off",rssmikle_title: "on",rssmikle_title_sentence: "",rssmikle_title_link: "",rssmikle_title_bgcolor: "#75B4DB",rssmikle_title_color: "#FFFFFF",rssmikle_title_bgimage: "",rssmikle_item_bgcolor: "#FFFFFF",rssmikle_item_bgimage: "",rssmikle_item_title_length: "55",rssmikle_item_title_color: "#283A90",rssmikle_item_border_bottom: "on",rssmikle_item_description: "on",item_link: "off",rssmikle_item_description_length: "150",rssmikle_item_description_color: "#666666",rssmikle_item_date: "gl1",rssmikle_timezone: "Etc/GMT",datetime_format: "%e-%m-%Y",item_description_style: "text+tn",item_thumbnail: "full",item_thumbnail_selection: "auto",article_num: "10",rssmikle_item_podcast: "off",keyword_inc: "",keyword_exc: ""};feedwind_show_widget_iframe(params);})();</script>
+
+<!--Please display the above link in your web page according to Terms of Service.-->
+<!--<div style="font-size:10px; text-align:center; width:800px;"><a href="http://feed.mikle.com/" target="_blank" style="color:#CCCCCC;">RSS Feed Widget</a></div>
+
+
+
+
+<!-- end feedwind code -->
+
+<a rel="license" href="http://creativecommons.org/licenses/by/4.0/" target="_blank"><img alt="Creative Commons-License" style="border-width:0" src="https://i.creativecommons.org/l/by/4.0/88x31.png" /></a>
+<br>
+<p>WIOD is licensed under a Creative Commons Attribution 4.0 International-license.</p>
+
+      </div>   
+      
+    </div>
+    
+    <div id="footer">       
+       <div id="lastchange"></div>
+    </div>
+  
+  </div>
+
+</body>
+</html>
