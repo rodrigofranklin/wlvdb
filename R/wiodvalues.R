@@ -45,7 +45,8 @@ laborvaluesv1 <- function(ano = 2000, intermed , laborvector) {
                                (seaano$Code != "TOT"),length(seaano)])
     laborvector <- as.double(laborvector)
   #Preparar el vector - completar información ausente - 1400 x 1435
-      
+
+          
   #4) multiplicar coeficiente de trabajo por inversa de leontief
   
   laborvalues <- laborvector * leontief
