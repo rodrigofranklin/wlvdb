@@ -3,6 +3,7 @@ library("wiod")
 library(readxl)
 library(dplyr)
 library(matlib)
+library(data.table)
 
 
 
@@ -41,14 +42,16 @@ laborvaluesv1 <- function(ano = 2000, intermed , laborvector) {
     sea95legend <- read_xlsx(seav1, range = "A7:F55", col_names = T)
     sea95 <- read_xlsx(seav1, sheet = "DATA", col_names = T)
     seaano <- sea95[c("Country","Variable","Code",paste0("_",ano))]
-    laborvector <- as.matrix(seaano[(seaano$Variable == "H_EMP") & 
-                               (seaano$Code != "TOT"),length(seaano)])
+    seaano <- data.table(seaano)
+    laborvector <- as.matrix(seaano[Variable == "H_EMP" & Code != "TOT", 4])
     laborvector <- as.double(laborvector)
   #Preparar el vector - completar información ausente - 1400 x 1435
-
-          
-  #4) multiplicar coeficiente de trabajo por inversa de leontief
+    #seaano[Variable == "H_EMP" & Code != "TOT", ] <- selecciona indonesia
+    
+    
+  #4) multiplicar vector de requerimientos directos trabajo por inversa de leontief
   
+    #horas-trabajo / producción bruta
   laborvalues <- laborvector * leontief
 }
 
