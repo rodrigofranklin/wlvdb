@@ -3,7 +3,7 @@
 #
 # Utiliza as seguintes informações:
 # Parametros.mat -> arquivo do matlab com os parâmetros necessários para os cálculos
-# M*.mat -> arquivos com os dados WIOD. esses arquivos incluem um conjunto de linhas 
+# WIOD_*.csv -> arquivos com os dados WIOD. esses arquivos incluem um conjunto de linhas 
 # em seu final contendo:
 # - horas trabalhadas por pessoa engajada na produção (H_EMP*1000000),
 # - horas trabalhadas pelos trabalhadores assalariados (H_EMPE*1000000),
@@ -23,11 +23,29 @@
 
 
 library(R.matlab)
+library(beepr)
 
 for (Z in 1995:2009) {
+
+  # Lista dos países
+  Paises <- read.csv2(file = paste0(getwd(),"/sourcedata/Paises.csv"), row.names = 1)
+  Num_Paises <- length(Paises[,2])
+  
+  # Obtém a informação dos setores produtivos e prepara as variávels LinProds e ColProds
+  setores<-read.csv2(paste0(getwd(),"/sourcedata/setores.csv"))
+  LinProds = NULL
+  W=1
+  for (X in Paises[,2]) {
+    for (Y in 1:dim(setores)[1]){
+      if (setores[Y,4]==1)  {LinProds <- c(LinProds,W)}
+      W<-W+1
+    }
+  }
+  ColProds <- LinProds
+  
   Parametros<-readMat(paste0(getwd(),"/sourcedata/Parametros.mat"))
-  LinProds <- Parametros$LinProds
-  ColProds <- Parametros$ColProds
+#  LinProds <- Parametros$LinProds
+#  ColProds <- Parametros$ColProds
   ColFBCF <- Parametros$ColFBCF
   ColDemanda <- Parametros$ColDemanda
   ColDemandaFinal <- Parametros$ColDemandaFinal
@@ -47,18 +65,17 @@ for (Z in 1995:2009) {
   LinTrabalhadores <- Parametros$LinTrabalhadores
   
   M <-readMat(paste0(getwd(),"/sourcedata/M",as.character(Z),".mat"))[[1]]
-
+# Tentei converter os arquivos de Matlab para ".csv", mas fica dando erro...
+#  M <- as.matrix(read.csv2(file = paste0(getwd(),"/sourcedata/WIOD_",as.character(Z),".csv"), row.names = 1))
+  
   source(paste0(getwd(),"/R/Transformar.R"))
 
+  write.csv2(MT, file = paste0(getwd(),"/Resultados/WIOD_HORAS_",as.character(Z),".csv"))
   write.csv2(Resultados, file = paste0(getwd(),"/Resultados/Resultados",as.character(Z),".csv"))
   write.csv2(TransferenciaPais,
              file = paste0(getwd(),"/Resultados/Transferencias",as.character(Z),".csv"),
-             row.names = c("Austrália","Áustria",
-                           "Bélgica","Bulgária","Brasil","Canadá","China","Chipre","Tchéquia","Alemanha","Dinamarca","Espanha",
-                           "Estônia","Finlândia","França","Reino Unido","Grécia","Hungria","Indonésia","Índia","Irlanda","Itália",
-                           "Japão","Coreia do Sul","Lituânia","Luxemburgo","Letônia","México","Malta","Países Baixos","Polônia",
-                           "Portugal","Romênia","Federação Russa","Eslováquia","Eslovênia","Suécia","Turquia","Taiwan",
-                           "Estados Unidos","Mundo"))
+             row.names = Paises[,1])
   rm(list = ls())
+  beep(sound=2)
 }
-
+beep(sound=3)

@@ -37,7 +37,6 @@ for (Z in 1995:2009) {
 #if (Pais=='China'){
 #}
 
-Pais <- Paises[30]
 
 #Taxa de exploração baseada em pessoas engajadas (menor do que a taxa de exploração de fato)
 for (Pais in Paises) {
