@@ -12,15 +12,12 @@ library(matlib)
 #Indica los años todos - primera prueba en la primera versión - WIOD2013
 anosv1 <- 1995:2009
 
-#Importa todas las tablas disponibles como 'built-in' en el paquete WIOD
-lapply(anosv1,function(x) do.call(data,as.list(paste0("wiot_",x))))
-
 #importa SEA y completa los datos de horas trabajadas
 source("usdbylabourhours.R")
 
 laborvaluesv1 <- function(ano = 2000) {
   ####1) Coeficientes Técnicos
-  intermed <- as.array(get(paste0("wiot_",ano))$inter)
+  intermed <- as.array(do.call(data,as.list(paste0("wiot_",ano)))$inter)
   coef_tec <- prop.table(intermed,2)
   coef_tec <- as.matrix(coef_tec)
   matident <- diag(nrow(coef_tec))
@@ -36,7 +33,7 @@ laborvaluesv1 <- function(ano = 2000) {
   #4) multiplicar vector de requerimientos directos trabajo por inversa de leontief
   
     #horas-trabajo / producción bruta
-  laborvalues <- laborvector ** leontief
+  laborvalues <- laborvector %*% leontief
 }
 
-laborvaluesv1()
+valorestodos <- lapply(anosv1, laborvaluesv1)
