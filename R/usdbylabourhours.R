@@ -74,7 +74,7 @@ eratevector$year <- as.integer(eratevector$year)
 vavector <- vavector %>% left_join(eratevector[,2:4], by = c("Country", "year"))
 
 
-vavector$vausd <- vavector$value/vavector$ENDA_XDC_USD_RATE
+vavector$vausd <- 1000000*vavector$value/vavector$ENDA_XDC_USD_RATE
 
 #Preparar el vector - completar información ausente - 1400 x 1435
 #seaano[Variable == "H_EMP" & Code != "TOT", ] <- selecciona indonesia
@@ -85,16 +85,25 @@ directlaboureq <- hoursvector %>% left_join(vavector[,c(1,4,5,8)], by = c("Count
 
 directlaboureq$hourusd <- directlaboureq$value/directlaboureq$vausd
 
+#troca NA por 0 - setores sem informação de produção de valor
+directlaboureq[is.na(directlaboureq$hourusd),8] <- 0
 
+#Troca infinito por 0 - setor sem informação de valor adicionado
+directlaboureq[is.infinite(directlaboureq$hourusd),8] <- 0
 ### Especifica el RoW como copia de indonesia
 
 rowdle <- directlaboureq[directlaboureq$Country == "IDN",] %>% mutate("Country" = "RoW")
 
 directlaboureq <- rbind(directlaboureq,rowdle)
 
+
 #Simplifica resultado para quedarse apenas con País, año, sector y horasusd
 
 directlaboureq <- directlaboureq[,c(1,4,5,8)]
+
+
+
+
 
 #A futuro - comprobar si ya hay estimativa completa con el nombre final del objeto
 #if(exists(laborvector)) 
