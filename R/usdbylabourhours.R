@@ -57,6 +57,9 @@ sea <- data.table(sea)
 
 hoursvector <- sea[Variable == "H_EMP" & Code != "TOT"]
 
+#más clareza en nomenclatura
+colnames(hoursvector)[6] <- "hours"
+
 vavector <- sea[Variable == "VA" & Code != "TOT"]
 
 
@@ -83,7 +86,7 @@ vavector$vausd <- 1000000*vavector$value/vavector$ENDA_XDC_USD_RATE
 directlaboureq <- hoursvector %>% left_join(vavector[,c(1,4,5,8)], by = c("Country","Code","year"))
 
 
-directlaboureq$hourusd <- directlaboureq$value/directlaboureq$vausd
+directlaboureq$hourusd <- directlaboureq$hours/directlaboureq$vausd
 
 #troca NA por 0 - setores sem informação de produção de valor
 directlaboureq[is.na(directlaboureq$hourusd),8] <- 0

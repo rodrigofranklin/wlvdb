@@ -10,10 +10,10 @@ library(matlib)
 
 
 #Indica los años todos - primera prueba en la primera versión - WIOD2013
-anosv1 <- 1995:2009
+anosv1 <- 1995:2008
 
 #importa SEA y completa los datos de horas trabajadas
-source("usdbylabourhours.R")
+source("R/usdbylabourhours.R")
 
 
 laborvaluesv1 <- function(ano = 2000) {
