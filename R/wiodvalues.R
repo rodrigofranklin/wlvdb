@@ -25,6 +25,7 @@ laborvaluesv1 <- function(ano = 2000) {
   gc()
   intermed <- wiotbase$inter
   coef_tec <- prop.table(intermed,2)
+  coef_tec[is.na(coef_tec)] <- 0
   coef_tec <- as.matrix(coef_tec)
   matident <- diag(nrow(coef_tec))
   ####2)Inversa de Leontief
@@ -37,7 +38,7 @@ laborvaluesv1 <- function(ano = 2000) {
   #  source("usdbylabourhours.R") más arriba
     laborvector <- directlaboureq[directlaboureq$year == ano,4]
   #4) multiplicar vector de requerimientos directos trabajo por inversa de leontief
-   print(summary(laborvector))
+  # print(summary(laborvector))
     #horas-trabajo / producción bruta
   laborvector %*% leontief
 }
