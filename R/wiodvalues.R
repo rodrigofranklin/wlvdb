@@ -9,7 +9,8 @@ library(matlib)
 
 
 
-#Indica los años todos - primera prueba en la primera versión - WIOD2013
+
+# actualmente el año 2009 no pude realizarlo por un error a verificar
 anosv1 <- 1995:2008
 
 #importa SEA y completa los datos de horas trabajadas
@@ -43,5 +44,22 @@ laborvaluesv1 <- function(ano = 2000) {
   laborvector %*% leontief
 }
 
-valor2000 <- laborvaluesv1()
-valorestodos <- lapply(anosv1, laborvaluesv1)
+valorestodos <- lapply(anosv1, function(x) as.vector(laborvaluesv1(x)))
+names(valorestodos) <- anosv1
+
+
+#Función (borrador) para visualizar un año de los valores estimados
+visualizavalores <- function(ano = 2000, objvalor = valorestodos) {
+  require(ggplot2)
+  valoresconpais <- cbind(directlaboureq[directlaboureq$year == ano, 1:2],valorestodos[[paste0(ano)]])
+  names(valoresconpais)[3] <- "values"
+  graf <- ggplot(valoresconpais, aes(x = Code,
+                             y = values, color = Country))+
+    geom_line(aes(group = valoresconpais$Country))+
+    theme_minimal()+
+    scale_y_log10()+
+    theme(legend.position="bottom", legend.title = element_blank())
+  graf
+}
+
+visualizavalores()
