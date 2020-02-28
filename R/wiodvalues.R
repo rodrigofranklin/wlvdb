@@ -16,11 +16,12 @@ anosv1 <- 1995:2008
 #importa SEA y completa los datos de horas trabajadas
 source("R/usdbylabourhours.R")
 
+#Carga todas las wiot del periodo a calcular
+lapply(anosv1,function(x) do.call(data,list(paste0("wiot_",x))))
 
 laborvaluesv1 <- function(ano = 2000) {
   ####1) Coeficientes Técnicos
   #carga wiot correspondiente de la v1
-  do.call(data,list(paste0("wiot_",ano)))
   wiotbase <- get(paste0("wiot_",ano))
   rm(list=ls(pattern="wiot_\\d+"))
   gc()
@@ -51,15 +52,30 @@ names(valorestodos) <- anosv1
 #Función (borrador) para visualizar un año de los valores estimados
 visualizavalores <- function(ano = 2000, objvalor = valorestodos) {
   require(ggplot2)
+  require(plotly)
   valoresconpais <- cbind(directlaboureq[directlaboureq$year == ano, 1:2],valorestodos[[paste0(ano)]])
   names(valoresconpais)[3] <- "values"
-  graf <- ggplot(valoresconpais, aes(x = Code,
-                             y = values, color = Country))+
-    geom_line(aes(group = valoresconpais$Country))+
+  valp <- valoresconpais[valoresconpais$values > 500,]
+  valp <- valp %>% arrange_at(1)
+  valp$destaque <- (grepl("USA|BRA|MEX|ESP",valp$Country)+0.5)^2
+  #destaque de legendas
+  legd <- c(rep(0.5,4),100,rep(0.5,6),10,rep(0.5,15),10,rep(0.5,12),10)
+  graf <- ggplot(valp)+
+    aes(x = Code,y = values, color = Country)+
+    geom_line(size = valp$destaque, aes(group = valp$Country, size = valp$destaque))+
     theme_minimal()+
-    scale_y_log10()+
-    theme(legend.position="bottom", legend.title = element_blank())
+    theme(legend.position="bottom", legend.title = element_blank())+
+    theme(legend.text=element_text(size=12,
+                                   family = "Calibri",
+                                   margin = margin(2,12,2,12,unit = "pt")))+
+    guides(guide_legend(override.aes = list(size = legd)))+
+    scale_y_continuous(trans = "log")
   graf
 }
 
 visualizavalores()
+ggplotly(visualizavalores()) %>%
+  layout(legend = list(
+    orientation = "h"
+  )
+  )
