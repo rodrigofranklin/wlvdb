@@ -29,11 +29,11 @@ source("R/seaimport.R")
 hoursvector <- sea[Variable == "H_EMP" & Code != "TOT"]
 
 #más clareza en nomenclatura
-colnames(hoursvector)[6] <- "hours"
-
+names(hoursvector)[6] <- "hours"
+names(hoursvector)[4] <- "sectors"
 
 #combina países y sectores
-pasect <- expand.grid(sectors = wiot_1995$industries, stringsAsFactors = F, countries = wiot_1995$countries)
+pasect <- expand.grid(sectors = unique(hoursvector$sectors), stringsAsFactors = F, countries = wiot_1995$countries)
 
 
 #obtiene el producto total de las wiot, ordenados año a año
@@ -46,15 +46,15 @@ paisecvtan <- function (ano = 2000) {
 vtotvector <-  rbindlist(lapply(anosv1, paisecvtan))
 
 #define nombres de columnas como los de SEA por claridad de código 
-names(vtotvector) <- c("year","Code","Country","Valor Total")
+names(vtotvector) <- c("year","sectors","Country","Valor Total")
 #Preparar el vector - completar información ausente - 1400 x 1435
 #seaano[Variable == "H_EMP" & Code != "TOT", ] <- selecciona indonesia
 
 
-directlaboureq <- hoursvector %>% left_join(vtotvector, by = c("Country","Code","year"))
+directlaboureq <- hoursvector %>% left_join(vtotvector, by = c("Country","sectors","year"))
 
 #mantener en millón de horas
-directlaboureq$hourusd <- directlaboureq$hours/directlaboureq$`Valor Total`
+directlaboureq$hourusd <- directlaboureq$hours/(1000000*directlaboureq$`Valor Total`)
 
 #troca NA por 0 - setores sem informação de produção de valor
 directlaboureq[is.na(directlaboureq$hourusd),8] <- 0
@@ -72,6 +72,8 @@ directlaboureq <- rbind(directlaboureq,rowdle)
 
 directlaboureq <- directlaboureq[,c(1,4,5,8)]
 
+#fix ordering
+directlaboureq <- directlaboureq %>% arrange(year,Country)
 
 
 

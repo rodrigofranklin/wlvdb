@@ -13,11 +13,12 @@ library(matlib)
 # actualmente el año 2009 no pude realizarlo por un error a verificar
 anosv1 <- 1995:2008
 
+#Carga todas las wiot del periodo a calcular
+lapply(anosv1,function(x) do.call(data,list(paste0("wiot_",x))))
+
 #importa SEA y completa los datos de horas trabajadas
 source("R/usdbylabourhours.R")
 
-#Carga todas las wiot del periodo a calcular
-lapply(anosv1,function(x) do.call(data,list(paste0("wiot_",x))))
 
 laborvaluesv1 <- function(ano = 2000) {
   ####1) Coeficientes Técnicos
@@ -41,9 +42,11 @@ laborvaluesv1 <- function(ano = 2000) {
     laborvector <- directlaboureq[directlaboureq$year == ano,4]
   #4) multiplicar vector de requerimientos directos trabajo por inversa de leontief
   # print(summary(laborvector))
-    #horas-trabajo / producción bruta
+    #horas-trabajo / producción total
   laborvector %*% leontief
 }
+
+valores2000 <- laborvaluesv1()
 
 valorestodos <- lapply(anosv1, function(x) as.vector(laborvaluesv1(x)))
 names(valorestodos) <- anosv1
@@ -55,13 +58,13 @@ visualizavalores <- function(ano = 2000, objvalor = valorestodos) {
   require(plotly)
   valoresconpais <- cbind(directlaboureq[directlaboureq$year == ano, 1:2],valorestodos[[paste0(ano)]])
   names(valoresconpais)[3] <- "values"
-  valp <- valoresconpais[valoresconpais$values > 500,]
-  valp <- valp %>% arrange_at(1)
+  valp <- valoresconpais[valoresconpais$values > 10,]
+  #valp <- valp %>% arrange_at(1)
   valp$destaque <- (grepl("USA|BRA|MEX|ESP",valp$Country)+0.5)^2
   #destaque de legendas
   legd <- c(rep(0.5,4),100,rep(0.5,6),10,rep(0.5,15),10,rep(0.5,12),10)
   graf <- ggplot(valp)+
-    aes(x = Code,y = values, color = Country)+
+    aes(x = sectors,y = values, color = Country)+
     geom_line(size = valp$destaque, aes(group = valp$Country, size = valp$destaque))+
     theme_minimal()+
     theme(legend.position="bottom", legend.title = element_blank())+
@@ -74,6 +77,7 @@ visualizavalores <- function(ano = 2000, objvalor = valorestodos) {
 }
 
 visualizavalores()
+
 ggplotly(visualizavalores()) %>%
   layout(legend = list(
     orientation = "h"
