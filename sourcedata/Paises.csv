@@ -1,42 +1,42 @@
-"";"Países";"Código"
-"1";"Austrália";1
-"2";"Áustria";2
-"3";"Bélgica";3
-"4";"Bulgária";4
-"5";"Brasil";5
-"6";"Canadá";6
-"7";"China";7
-"8";"Chipre";8
-"9";"Tchéquia";9
-"10";"Alemanha";10
-"11";"Dinamarca";11
-"12";"Espanha";12
-"13";"Estônia";13
-"14";"Finlândia";14
-"15";"França";15
-"16";"Reino Unido";16
-"17";"Grécia";17
-"18";"Hungria";18
-"19";"Indonésia";19
-"20";"Índia";20
-"21";"Irlanda";21
-"22";"Itália";22
-"23";"Japão";23
-"24";"Coreia do Sul";24
-"25";"Lituânia";25
-"26";"Luxemburgo";26
-"27";"Letônia";27
-"28";"México";28
-"29";"Malta";29
-"30";"Países Baixos";30
-"31";"Polônia";31
-"32";"Portugal";32
-"33";"Romênia";33
-"34";"Federação Russa";34
-"35";"Eslováquia";35
-"36";"Eslovênia";36
-"37";"Suécia";37
-"38";"Turquia";38
-"39";"Taiwan";39
-"40";"Estados Unidos";40
-"41";"Mundo";41
+;Países;Código;Legenda
+1;Austrália;1;AUS
+2;Áustria;2;AUT
+3;Bélgica;3;BEL
+4;Bulgária;4;BGR
+5;Brasil;5;BRA
+6;Canadá;6;CAN
+7;China;7;CHN
+8;Chipre;8;CYP
+9;Tchéquia;9;CZE
+10;Alemanha;10;DEU
+11;Dinamarca;11;DNK
+12;Espanha;12;ESP
+13;Estônia;13;EST
+14;Finlândia;14;FIN
+15;França;15;FRA
+16;Reino Unido;16;GBR
+17;Grécia;17;GRC
+18;Hungria;18;HUN
+19;Indonésia;19;IDN
+20;Índia;20;IND
+21;Irlanda;21;IRL
+22;Itália;22;ITA
+23;Japão;23;JPN
+24;Coreia do Sul;24;KOR
+25;Lituânia;25;LTU
+26;Luxemburgo;26;LUX
+27;Letônia;27;LVA
+28;México;28;MEX
+29;Malta;29;MLT
+30;Países Baixos;30;NLD
+31;Polônia;31;POL
+32;Portugal;32;PRT
+33;Romênia;33;ROU
+34;Federação Russa;34;RUS
+35;Eslováquia;35;SVK
+36;Eslovênia;36;SVN
+37;Suécia;37;SWE
+38;Turquia;38;TUR
+39;Taiwan;39;TWN
+40;Estados Unidos;40;USA
+41;Mundo;41;ROW

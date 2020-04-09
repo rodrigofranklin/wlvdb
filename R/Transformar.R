@@ -10,7 +10,7 @@
 # ColFBCF - Colunas da Formação Bruta de Capital Fixo
 # PaisLins - País a que pertence cada linha
 # PaisCols - País a que pertence cada coluna
-# LinProdutoTotal - Linha do Produto Total
+# ColProdutoTotal - Coluna do Produto Total
 # LinConsumoIntermediario - Linha do consumo intermediário
 #
 # LinCapital - Linha do estoque de capital
@@ -28,8 +28,6 @@
 #
 ###################################################
 
-library(matlib)
-
 ##########################################
 # Calcula Coeficientes e Leontief
 ##########################################
@@ -38,10 +36,9 @@ library(matlib)
 Coeficientes <- matrix(0, nrow = length(LinProds), ncol = length(ColProds))
 
 
-# Calcula a matriz de coeficientes técnicos
+# Calcula a matriz de coeficientes técnicos (Repare na diferença entre x,y e X,Y)
 x <- 1
 y <- 1
-
 for (X in LinProds) {
   for (Y in ColProds) {
     Coeficientes[x,y] <- ifelse (M[LinProdutoTotal,Y]==0, 0, M[X,Y]/M[LinProdutoTotal,Y])
@@ -66,8 +63,20 @@ Trabalho = matrix(0, nrow=1,ncol=Cols)
 
 # Calcula a relação trabalho/produto de cada setor (i.e., requerimentos diretos de trabalho)
 x <- 1
+Num_Setores_Produtivos <- sum(Setores[,4])
 for (X in ColProds) {
-  Trabalho[1,x] <- ifelse(M[LinProdutoTotal,X]==0, 0 , M[LinTrabalho, X]/M[LinProdutoTotal,X])
+  Trabalho[1,x] <- ifelse(M[LinProdutoTotal,X]==0, 0 , H_EMP[X]/M[LinProdutoTotal,X])
+  #Suposição para o resto do mundo: o mesmo da indonésia (19)
+  if (PaisCols[X] == 41) {
+    Trabalho[1,x] <- Trabalho[1,x-((41-19)*Num_Setores_Produtivos)]
+    H_EMP[X] <- Trabalho[1,x] * M[LinProdutoTotal,X]
+  }
+  
+  #Suposição para o resto do mundo: média dos países da amostra
+#  if (PaisCols[X] == 41) {
+#    Trabalho[1,x] <- mean(Trabalho[1,seq(x-(40*Num_Setores_Produtivos), x, by = Num_Setores_Produtivos)])
+#    H_EMP[X] <- Trabalho[1,x] * M[LinProdutoTotal,X]
+#  }
   x <- x+1
 }
 
@@ -98,7 +107,7 @@ for (X in ColProds) {
 #####################################
 # Primeiro, aloca o espaço de todas as variáveis desejadas
 
-Cols <- max(PaisCols[1,])
+Cols <- max(PaisCols[])
 
 ExportacaoMPais <- matrix(0,Cols,Cols)
 ExportacaoTPais <- matrix(0,Cols,Cols)
@@ -137,48 +146,48 @@ InsumosProdutivosPais <- matrix(0,Cols,Cols)
 
 for (X in ColProds){
   #Produto total em horas de trabalho e em moeda (soma dos setores produtivos)
-  ProdutoTotalTPais[1,PaisCols[1,X]] <- ProdutoTotalTPais[1,PaisCols[1,X]] + MT[LinProdutoTotal, X]
-  ProdutoTotalMPais[1,PaisCols[1,X]] <- ProdutoTotalMPais[1,PaisCols[1,X]] + M[LinProdutoTotal, X]
+  ProdutoTotalTPais[1,PaisCols[X]] <- ProdutoTotalTPais[1,PaisCols[X]] + MT[LinProdutoTotal, X]
+  ProdutoTotalMPais[1,PaisCols[X]] <- ProdutoTotalMPais[1,PaisCols[X]] + M[LinProdutoTotal, X]
 
   # Valor agregado total em horas de trabalho e em moeda (dos setores produtivos).
   # O valor agregado (valor novo criado) em termos de horas de trabalho consiste
   # na soma das horas trabalhadas nos setores produtivos.
-  PIBTPais[1,PaisCols[1,X]] <- PIBTPais[1,PaisCols[1,X]] + M[LinTrabalho, X]
+  PIBTPais[1,PaisCols[X]] <- PIBTPais[1,PaisCols[X]] + H_EMP[X]
   # O valor agregado em termos de moeda consiste no produto total menos o custo intermediário.
   # Obs: é preciso deduzir também a depreciação do capital. Além disso, deveríamos somar a margem de comércio.
-  PIBMPais[1,PaisCols[1,X]] <- PIBMPais[1,PaisCols[1,X]] + (M[LinProdutoTotal, X]- M[LinConsumoIntermediario, X])
+  PIBMPais[1,PaisCols[X]] <- PIBMPais[1,PaisCols[X]] + (M[LinProdutoTotal, X]- M[LinConsumoIntermediario, X])
 
   # Número de pessoas engajadas na produção e sua remuneração (nominal e real)
-  TrabalhadoresPais[1,PaisCols[1,X]] <- TrabalhadoresPais[1,PaisCols[1,X]] + M[LinTrabalhadores, X]
-  RemuneracaoMPais[1,PaisCols[1,X]] <- RemuneracaoMPais[1,PaisCols[1,X]] + M[LinRemuneracao, X]
-  RemuneracaoRealPais[1,PaisCols[1,X]] <- RemuneracaoRealPais[1,PaisCols[1,X]] + M[LinRemuneracaoReal, X]
+  TrabalhadoresPais[1,PaisCols[X]] <- TrabalhadoresPais[1,PaisCols[X]] + EMP[X]
+  RemuneracaoMPais[1,PaisCols[X]] <- RemuneracaoMPais[1,PaisCols[X]] + LAB_USD[X]
+  RemuneracaoRealPais[1,PaisCols[X]] <- RemuneracaoRealPais[1,PaisCols[X]] + LAB_REAL[X]
 
   # Número de trabalhadores assalariados, jornada de trabalho total e remuneração total (nominal e real)
-  JornadaTotalPais[1,PaisCols[1,X]]<-JornadaTotalPais[1,PaisCols[1,X]]+M[LinTrabalhoAssalariado,X]
-  AssalariadosPais[1,PaisCols[1,X]] <- AssalariadosPais[1,PaisCols[1,X]] + M[LinAssalariados, X]
-  SalarioMPais[1,PaisCols[1,X]] <- SalarioMPais[1,PaisCols[1,X]] + M[LinSalarios, X]
-  SalarioRealPais[1,PaisCols[1,X]] <- SalarioRealPais[1,PaisCols[1,X]] + M[LinSalarioReal, X]
+  JornadaTotalPais[1,PaisCols[X]] <- JornadaTotalPais[1,PaisCols[X]] + H_EMPE[X]
+  AssalariadosPais[1,PaisCols[X]] <- AssalariadosPais[1,PaisCols[X]] + EMPE[X]
+  SalarioMPais[1,PaisCols[X]] <- SalarioMPais[1,PaisCols[X]] + COMP_USD[X]
+  SalarioRealPais[1,PaisCols[X]] <- SalarioRealPais[1,PaisCols[X]] + COMP_REAL[X]
 
   # Compensação do capital e estoque de capital
-  LucroMPais[1,PaisCols[1,X]] <- LucroMPais[1,PaisCols[1,X]] + M[LinLucro, X]
-  CapitalMPais[1,PaisCols[1,X]] <- CapitalMPais[1,PaisCols[1,X]] + M[LinCapital, X]
+  LucroMPais[1,PaisCols[X]] <- LucroMPais[1,PaisCols[X]] + CAP_USD[X]
+  CapitalMPais[1,PaisCols[X]] <- CapitalMPais[1,PaisCols[X]] + K_GFCF_USD[X]
 
-  ConsumoIntermediarioPPais[1,PaisCols[1,X]] <- ConsumoIntermediarioPPais[1,PaisCols[1,X]] + M[LinConsumoIntermediario, X]
+  ConsumoIntermediarioPPais[1,PaisCols[X]] <- ConsumoIntermediarioPPais[1,PaisCols[X]] + M[LinConsumoIntermediario, X]
 
   # Soma os consumos intermediários produtivos em variáveis temporárias (Capital constate = trabalho, insumo produtivo = moeda)
   for (Y in LinProds){
-    CapitalConstanteTotalPais[1,PaisCols[1,X]] <- CapitalConstanteTotalPais[1,PaisCols[1,X]] + MT[Y, X]
-    InsumosProdutivosPais[PaisLins[Y,1],PaisCols[1,X]] <- InsumosProdutivosPais[PaisLins[Y,1],PaisCols[1,X]] + M[Y, X]
+    CapitalConstanteTotalPais[1,PaisCols[X]] <- CapitalConstanteTotalPais[1,PaisCols[X]] + MT[Y, X]
+    InsumosProdutivosPais[PaisLins[Y],PaisCols[X]] <- InsumosProdutivosPais[PaisLins[Y],PaisCols[X]] + M[Y, X]
   }
 }
 
 
 # Soma a formação bruta de capital fixo (em moeda e trabalho) e acrescenta aos insumos produtivos
-for (X in ColFBCF[1,]){
+for (X in ColFBCF){
   for (Y in LinProds) {
-    FBCFMPais[1,PaisCols[1,X]] <- FBCFMPais[1,PaisCols[1,X]] + M[Y, X]
-    FBCFTPais[1,PaisCols[1,X]] <- FBCFTPais[1,PaisCols[1,X]] + MT[Y, X]
-    InsumosProdutivosPais[PaisLins[Y,1],PaisCols[1,X]] <- InsumosProdutivosPais[PaisLins[Y,1],PaisCols[1,X]] + M[Y, X]
+    FBCFMPais[1,PaisCols[X]] <- FBCFMPais[1,PaisCols[X]] + M[Y, X]
+    FBCFTPais[1,PaisCols[X]] <- FBCFTPais[1,PaisCols[X]] + MT[Y, X]
+    InsumosProdutivosPais[PaisLins[Y],PaisCols[X]] <- InsumosProdutivosPais[PaisLins[Y],PaisCols[X]] + M[Y, X]
   }
 }
 
@@ -188,10 +197,10 @@ CapitalConstanteTotalPais <- ((CapitalMPais/FBCFMPais)*FBCFTPais)+CapitalConstan
 
 
 # Soma a demanda final em moeda e trabalho
-for (X in ColDemandaFinal[1,]) {
+for (X in ColDemandaFinal) {
   for (Y in 1:1435) {
-    DemandaFinalTPais[1,PaisCols[1,X]] <- DemandaFinalTPais[1,PaisCols[1,X]] + MT[Y, X]
-    DemandaFinalMPais[1,PaisCols[1,X]] <- DemandaFinalMPais[1,PaisCols[1,X]] + M[Y, X]
+    DemandaFinalTPais[1,PaisCols[X]] <- DemandaFinalTPais[1,PaisCols[X]] + MT[Y, X]
+    DemandaFinalMPais[1,PaisCols[X]] <- DemandaFinalMPais[1,PaisCols[X]] + M[Y, X]
   }
 }
 
@@ -204,8 +213,8 @@ FatorDemanda <- DemandaFinalTPais/DemandaFinalMPais
 # Calcula as rendas em trabalho de cada país usando FatorDemanda
 # (das pessoas engajadas e dos trabalhadores assalariados)
 for (Y in ColProds){
-  RemuneracaoTPais[1,PaisCols[1,Y]]<-RemuneracaoTPais[1,PaisCols[1,Y]]+(M[LinRemuneracao,Y]*FatorDemanda[1,PaisCols[1,Y]])
-  SalarioTPais[1,PaisCols[1,Y]]<-SalarioTPais[1,PaisCols[1,Y]]+(M[LinSalarios,Y]*FatorDemanda[1,PaisCols[1,Y]])
+  RemuneracaoTPais[1,PaisCols[Y]]<-RemuneracaoTPais[1,PaisCols[Y]]+(LAB_USD[Y]*FatorDemanda[1,PaisCols[Y]])
+  SalarioTPais[1,PaisCols[Y]]<-SalarioTPais[1,PaisCols[Y]]+(COMP_USD[Y]*FatorDemanda[1,PaisCols[Y]])
 }
 
 #Calcula saldo das transferências pelo Fator Dinheiro Mundial - DECIDI
@@ -218,9 +227,9 @@ Cols <- ncol(M)-1 # -1 para desconsiderar a coluna do produto total
 #Soma todas as exportações dos setores produtivos (todos os destinos de cada linha de setor produtivo)
 for (X in LinProds){
   for (Y in 1:Cols) {
-    if (PaisLins[X,1] != PaisCols[1,Y]) { #ignora as transações internas de cada país
-    ExportacaoMPais[PaisLins[X,1],PaisCols[1,Y]]<-ExportacaoMPais[PaisLins[X,1],PaisCols[1,Y]]+M[X,Y]
-    ExportacaoTPais[PaisLins[X,1],PaisCols[1,Y]]<-ExportacaoTPais[PaisLins[X,1],PaisCols[1,Y]]+MT[X,Y]
+    if (PaisLins[X] != PaisCols[Y]) { #ignora as transações internas de cada país
+    ExportacaoMPais[PaisLins[X],PaisCols[Y]]<-ExportacaoMPais[PaisLins[X],PaisCols[Y]]+M[X,Y]
+    ExportacaoTPais[PaisLins[X],PaisCols[Y]]<-ExportacaoTPais[PaisLins[X],PaisCols[Y]]+MT[X,Y]
     }
   }
 }
@@ -239,9 +248,9 @@ ImpoMTotalPais <- colSums(ExportacaoMPais)
 # exportações do mundo todo (Novamente, um tipo de variável K específica do comércio mundial)
 for (X in LinProds){
   for (Y in 1:Cols) {
-    if (PaisLins[X,1] != PaisCols[1,Y]) {
-      FatorD[PaisLins[X,1],PaisCols[1,Y]]<-FatorD[PaisLins[X,1],PaisCols[1,Y]]+M[X,Y]
-      FatorH[PaisLins[X,1],PaisCols[1,Y]]<-FatorH[PaisLins[X,1],PaisCols[1,Y]]+MT[X,Y]
+    if (PaisLins[X] != PaisCols[Y]) {
+      FatorD[PaisLins[X],PaisCols[Y]]<-FatorD[PaisLins[X],PaisCols[Y]]+M[X,Y]
+      FatorH[PaisLins[X],PaisCols[Y]]<-FatorH[PaisLins[X],PaisCols[Y]]+MT[X,Y]
     }
   }
 }
@@ -279,30 +288,29 @@ Cols <- ncol(M)-1 # -1 para desconsiderar a coluna do produto total
 
 for (Y in LinProds) {
   for (X in 1:Cols) {
-    if (PaisLins[Y,1] != PaisCols[1,X]) {
-      Exp_Setor[Y,PaisLins[Y,1]] = Exp_Setor[Y,PaisLins[Y,1]] + M[Y,X]
-      Exp_Total[PaisLins[Y,1]] = Exp_Total[PaisLins[Y,1]] + M[Y,X]
-      Imp_Setor[Y,PaisCols[1,X]] = Imp_Setor[Y,PaisCols[1,X]] + M[Y,X]
-      Imp_Total[PaisCols[1,X]] = Imp_Total[PaisCols[1,X]] + M[Y,X]
+    if (PaisLins[Y] != PaisCols[X]) {
+      Exp_Setor[Y,PaisLins[Y]] = Exp_Setor[Y,PaisLins[Y]] + M[Y,X]
+      Exp_Total[PaisLins[Y]] = Exp_Total[PaisLins[Y]] + M[Y,X]
+      Imp_Setor[Y,PaisCols[X]] = Imp_Setor[Y,PaisCols[X]] + M[Y,X]
+      Imp_Total[PaisCols[X]] = Imp_Total[PaisCols[X]] + M[Y,X]
     }
   }
 }
 
 for (Y in LinProds) {
   for (X in Paises[,2]) {
-    if (PaisLins[Y,1] == X) {
+    if (PaisLins[Y] == X) {
       # Pondera a participação do capital e do trabalho conforme a importância do setor para as exportações do país
       sigma = Exp_Setor[Y,X] / Exp_Total[X]
-      COXK[1,X] = COXK[1,X] + ((M[LinCapital,Y] + M[LinConsumoIntermediario,Y]) * sigma)
-      COXT[1,X] = COXT[1,X] + (M[LinTrabalho,Y] * sigma)
+      COXK[1,X] = COXK[1,X] + ((K_GFCF_USD[Y] + M[LinConsumoIntermediario,Y]) * sigma)
+      COXT[1,X] = COXT[1,X] + (H_EMP[Y] * sigma)
     } else {
       # Pondera a participação do capital e do trabalho conforme a importância do setor para as importações do país
       sigma = Imp_Setor[Y,X] / Imp_Total[X]
-      COIK[1,X] = COIK[1,X] +((M[LinCapital,Y] + M[LinConsumoIntermediario,Y]) * sigma)
-      COIT[1,X] = COIT[1,X] + (M[LinTrabalho,Y] * sigma)
-      
-#      CORELK[PaisLins[Y,1],X] = CORELK[PaisLins[Y,1],X] + ((M[LinCapital,Y] + M[LinConsumoIntermediario,Y]) * sigma)
-#      CORELT[PaisLins[Y,1],X] = CORELT[PaisLins[Y,1],X] + (M[LinTrabalho,Y] * sigma)
+      COIK[1,X] = COIK[1,X] +((K_GFCF_USD[Y] + M[LinConsumoIntermediario,Y]) * sigma)
+      COIT[1,X] = COIT[1,X] + (H_EMP[Y] * sigma)
+#      CORELK[PaisLins[Y],X] = CORELK[PaisLins[Y],X] + ((K_GFCF_USD[Y] + M[LinConsumoIntermediario,Y]) * sigma)
+#      CORELT[PaisLins[Y],X] = CORELT[PaisLins[Y],X] + (H_EMP[Y] * sigma)
     }
   }
 }

@@ -31,6 +31,8 @@ for (Z in 1995:2009) {
 }
 #####
 
+plot((Resultados[,"Brasil",'JornadaTotalPais']-Resultados[,"Brasil",'SalarioTPais'])/Resultados[,"Brasil",'SalarioTPais'],type = "l")
+
 
 #VFT <- teste[,Pais,'SalarioTPais']/teste[,Pais,'AssalariadosPais']
 #JORNADA <- teste[,Pais,'JornadaTotalPais']/teste[,Pais,'AssalariadosPais']
