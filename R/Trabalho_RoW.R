@@ -26,10 +26,9 @@ TOTAL_PONDERACAO <- sum(PONDERACAO[which(PaisLins == Num_Paises)])
 for (Setor in 1:Num_Setores) {
   posicao <- Setor+posROW
   PONDERACAO[posicao] <- PONDERACAO[posicao]/TOTAL_PONDERACAO
-  H_EMP[posicao] <- EMP[posicao]*(H_EMP_Setor_WIOD/EMP_Setor_WIOD)
   EMP[posicao] <- EMP_ROW_TOTAL*PONDERACAO[posicao]
+  H_EMP[posicao] <- EMP[posicao]*(H_EMP_Setor_WIOD/EMP_Setor_WIOD)
 }
-EMP[is.na(EMP)] <- 0
 
+EMP[is.na(EMP)] <- 0
 H_EMP[is.na(H_EMP)] <- 0
-EMP
