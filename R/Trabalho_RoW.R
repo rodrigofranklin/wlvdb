@@ -18,7 +18,7 @@ for (Setor in 1:Num_Setores) {
   EMP_Setor_WIOD <- sum(EMP[seq(Setor,tamanho,Num_Setores)])
   H_EMP_Setor_WIOD <- sum(H_EMP[seq(Setor,tamanho,Num_Setores)])
   VA_Setor_WIOD <- sum(M[LinVA,seq(Setor,tamanho-Num_Setores,Num_Setores)])
-  PONDERACAO[posicao] <- (M[LinVA,posicao]/VA_ROW)*((EMP_Setor_WIOD/EMP_WIOD)/(VA_Setor_WIOD/VA_WIOD))
+  PONDERACAO[posicao] <- M[LinVA,posicao]*EMP_Setor_WIOD/VA_Setor_WIOD
 }
 
 TOTAL_PONDERACAO <- sum(PONDERACAO[which(PaisLins == Num_Paises)])
