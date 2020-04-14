@@ -30,7 +30,10 @@ for (X in LinProds) {
 
 # Calcula a matriz Leontief (falta acrescentar a depreciação)
 Cols <- ncol(Coeficientes)
-Leontief <- solve(diag(1,nrow = Cols)-Coeficientes)
+#Loads depreciation matrix Carga la matriz de depreciacion
+source("R/depreciacion.R"
+       #Added depreciation matrix to Leontief's inverse calculus
+Leontief <- solve(diag(1,nrow = Cols)-Coeficientes-depreciacion)
 
 #############################
 # Calcula o Fator Trabalho (o parâmetro de multiplicação de cada setor para
