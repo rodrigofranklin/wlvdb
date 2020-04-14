@@ -23,9 +23,12 @@ coeficientes[x,x] <- m.wio[col.prods,lin.prods]/matrix(m.wio[lin.produto.total,l
 coeficientes[is.infinite(coeficientes)] <- 0
 coeficientes[is.nan(coeficientes)] <- 0
 
+#Loads depreciation matrix Carga la matriz de depreciacion
+source("R/depreciacion.R"
 
+#Added depreciation matrix to Leontief's inverse calculus
 # Calcula a matriz leontief (falta acrescentar a depreciação)
-leontief <- solve(diag(1,nrow = cols)-coeficientes)
+leontief <- solve(diag(1,nrow = cols)-coeficientes-depreciacion)
 
 #############################
 # Calcula o Fator Trabalho (o parâmetro de multiplicação de cada setor para
