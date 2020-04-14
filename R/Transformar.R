@@ -5,27 +5,6 @@
 #
 # M - Matriz contendo todos os dados da WIOD (incluindo trabalho e capital)
 #
-# LinProds - Linhas dos setores produtivos
-# ColProds - Colunas dos setores produtivos
-# ColFBCF - Colunas da Formação Bruta de Capital Fixo
-# PaisLins - País a que pertence cada linha
-# PaisCols - País a que pertence cada coluna
-# ColProdutoTotal - Coluna do Produto Total
-# LinConsumoIntermediario - Linha do consumo intermediário
-#
-# LinCapital - Linha do estoque de capital
-# LinLucro - Linha dos lucros
-#
-# LinTrabalhoAssalariado - Linha das horas trabalhadas por assalariados
-# LinSalarios - Linha dos salários
-# LinSalarioReal
-# LinAssalariados
-#
-# LinTrabalho - Linha das horas trabalhadas
-# LinRemuneracao - Linha da remuneração do trabalho
-# LinRemuneracaoReal
-# LinTrabalhadores - Linha da quantidade de trabalhadores
-#
 ###################################################
 
 ##########################################
@@ -51,7 +30,7 @@ for (X in LinProds) {
 
 # Calcula a matriz Leontief (falta acrescentar a depreciação)
 Cols <- ncol(Coeficientes)
-Leontief = solve(diag(1,nrow = Cols)-Coeficientes)
+Leontief <- solve(diag(1,nrow = Cols)-Coeficientes)
 
 #############################
 # Calcula o Fator Trabalho (o parâmetro de multiplicação de cada setor para
@@ -59,24 +38,12 @@ Leontief = solve(diag(1,nrow = Cols)-Coeficientes)
 ##############################
   
 # Aloca espaço em matriz temporária
-Trabalho = matrix(0, nrow=1,ncol=Cols)
+Trabalho <- matrix(0, nrow=1,ncol=Cols)
 
 # Calcula a relação trabalho/produto de cada setor (i.e., requerimentos diretos de trabalho)
 x <- 1
-Num_Setores_Produtivos <- sum(Setores[,4])
 for (X in ColProds) {
-  Trabalho[1,x] <- ifelse(M[LinProdutoTotal,X]==0, 0 , H_EMP[X]/M[LinProdutoTotal,X])
-  #Suposição para o resto do mundo: o mesmo da indonésia (19)
-  if (PaisCols[X] == 41) {
-    Trabalho[1,x] <- Trabalho[1,x-((41-19)*Num_Setores_Produtivos)]
-    H_EMP[X] <- Trabalho[1,x] * M[LinProdutoTotal,X]
-  }
-  
-  #Suposição para o resto do mundo: média dos países da amostra
-#  if (PaisCols[X] == 41) {
-#    Trabalho[1,x] <- mean(Trabalho[1,seq(x-(40*Num_Setores_Produtivos), x, by = Num_Setores_Produtivos)])
-#    H_EMP[X] <- Trabalho[1,x] * M[LinProdutoTotal,X]
-#  }
+  Trabalho[1,x] <- ifelse(M[LinProdutoTotal,X]==0, 0 , EMP[X]/M[LinProdutoTotal,X])
   x <- x+1
 }
 
@@ -152,7 +119,7 @@ for (X in ColProds){
   # Valor agregado total em horas de trabalho e em moeda (dos setores produtivos).
   # O valor agregado (valor novo criado) em termos de horas de trabalho consiste
   # na soma das horas trabalhadas nos setores produtivos.
-  PIBTPais[1,PaisCols[X]] <- PIBTPais[1,PaisCols[X]] + H_EMP[X]
+  PIBTPais[1,PaisCols[X]] <- PIBTPais[1,PaisCols[X]] + EMP[X]
   # O valor agregado em termos de moeda consiste no produto total menos o custo intermediário.
   # Obs: é preciso deduzir também a depreciação do capital. Além disso, deveríamos somar a margem de comércio.
   PIBMPais[1,PaisCols[X]] <- PIBMPais[1,PaisCols[X]] + (M[LinProdutoTotal, X]- M[LinConsumoIntermediario, X])
@@ -170,7 +137,7 @@ for (X in ColProds){
 
   # Compensação do capital e estoque de capital
   LucroMPais[1,PaisCols[X]] <- LucroMPais[1,PaisCols[X]] + CAP_USD[X]
-  CapitalMPais[1,PaisCols[X]] <- CapitalMPais[1,PaisCols[X]] + K_GFCF_USD[X]
+  CapitalMPais[1,PaisCols[X]] <- CapitalMPais[1,PaisCols[X]] + K_USD[X]
 
   ConsumoIntermediarioPPais[1,PaisCols[X]] <- ConsumoIntermediarioPPais[1,PaisCols[X]] + M[LinConsumoIntermediario, X]
 
@@ -302,14 +269,14 @@ for (Y in LinProds) {
     if (PaisLins[Y] == X) {
       # Pondera a participação do capital e do trabalho conforme a importância do setor para as exportações do país
       sigma = Exp_Setor[Y,X] / Exp_Total[X]
-      COXK[1,X] = COXK[1,X] + ((K_GFCF_USD[Y] + M[LinConsumoIntermediario,Y]) * sigma)
+      COXK[1,X] = COXK[1,X] + ((K_USD[Y] + M[LinConsumoIntermediario,Y]) * sigma)
       COXT[1,X] = COXT[1,X] + (H_EMP[Y] * sigma)
     } else {
       # Pondera a participação do capital e do trabalho conforme a importância do setor para as importações do país
       sigma = Imp_Setor[Y,X] / Imp_Total[X]
-      COIK[1,X] = COIK[1,X] +((K_GFCF_USD[Y] + M[LinConsumoIntermediario,Y]) * sigma)
+      COIK[1,X] = COIK[1,X] +((K_USD[Y] + M[LinConsumoIntermediario,Y]) * sigma)
       COIT[1,X] = COIT[1,X] + (H_EMP[Y] * sigma)
-#      CORELK[PaisLins[Y],X] = CORELK[PaisLins[Y],X] + ((K_GFCF_USD[Y] + M[LinConsumoIntermediario,Y]) * sigma)
+#      CORELK[PaisLins[Y],X] = CORELK[PaisLins[Y],X] + ((K_USD[Y] + M[LinConsumoIntermediario,Y]) * sigma)
 #      CORELT[PaisLins[Y],X] = CORELT[PaisLins[Y],X] + (H_EMP[Y] * sigma)
     }
   }
