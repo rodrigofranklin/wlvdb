@@ -18,7 +18,7 @@ Paises <- c("Austrália","Áustria",
             "Portugal","Romênia","Federação Russa","Eslováquia","Eslovênia","Suécia","Turquia","Taiwan",
             "Estados Unidos","Mundo")
 # Aloca a matriz de resultados
-Resultados <- array(data = 0,dim = c(15,41,28), dimnames = list(c(1995:2009),
+Resultados <- array(data = 0,dim = c(17,41,28), dimnames = list(c(1995:2011),
                                                   Paises,
                                                   c("","ExpoTTotalPais",
                                                     "ExpoMTotalPais","ImpoTTotalPais","ImpoMTotalPais","TransfTotalPais","ProdutoTotalTPais","ProdutoTotalMPais",
@@ -26,7 +26,7 @@ Resultados <- array(data = 0,dim = c(15,41,28), dimnames = list(c(1995:2009),
                                                     "RemuneracaoRealPais","JornadaTotalPais","AssalariadosPais","SalarioTPais","SalarioMPais","SalarioRealPais",
                                                     "LucroMPais","CapitalMPais","ConsumoIntermediarioPPais","COXK","COXT","COIK","COIT")))
 # Lê os resultados dos arquivos .csv
-for (Z in 1995:2009) {
+for (Z in 1995:2011) {
   Resultados[as.character(Z),,] <- as.matrix(read.csv2(file = paste0(getwd(),"/Resultados/Resultados",as.character(Z),".csv"), row.names = 1))
 }
 #####
@@ -51,10 +51,9 @@ for (Pais in Paises) {
      xaxt="n",
      lty="dotted", lwd=3, col="red")
   lines(JORNADA,lty="solid", lwd=3)
-  axis(side=1,1:15,as.character(1995:2009))
+  axis(side=1,1:17,as.character(1995:2011))
   
-  polygon(c(1:15,15:1),c(JORNADA,VFT[15:1]),col="gray")
-  readline(prompt="Press [enter] to continue")
+  polygon(c(1:17,17:1),c(JORNADA,VFT[17:1]),col="gray")
 }
 
 #Taxa de exploração de fato (trabalhadores assalariados)
@@ -72,10 +71,9 @@ for (Pais in Paises) {
        xaxt="n",
        lty="dotted", lwd=3)
   lines(JORNADA,lty="solid", lwd=3)
-  axis(side=1,1:15,as.character(1995:2009))
+  axis(side=1,1:17,as.character(1995:2011))
   
-  polygon(c(1:15,15:1),c(JORNADA,VFT[15:1]),col="gray")
-  readline(prompt="Press [enter] to continue")
+  polygon(c(1:17,17:1),c(JORNADA,VFT[17:1]),col="gray")
 }
 
 for (Pais in Paises) {
@@ -87,8 +85,7 @@ for (Pais in Paises) {
        xaxt="n",
        lty="solid", lwd=3,
        )
-  lines(rep(0,times=15), col="red")
-  axis(side=1,1:15,as.character(1995:2009))
-  polygon(c(1:15,15:1),c(Transferencias,rep(0,times=15)),col="gray")
-  readline(prompt="Press [enter] to continue")
+  lines(rep(0,times=17), col="red")
+  axis(side=1,1:17,as.character(1995:2011))
+  polygon(c(1:17,17:1),c(Transferencias,rep(0,times=17)),col="gray")
 }
