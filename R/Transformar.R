@@ -12,24 +12,19 @@
 ##########################################
   
 # Aloca espaços da matriz de coeficientes técnicos
+Cols <- length(ColProds)
+Lins <- length(LinProds)
 Coeficientes <- matrix(0, nrow = length(LinProds), ncol = length(ColProds))
 
 
 # Calcula a matriz de coeficientes técnicos (Repare na diferença entre x,y e X,Y)
-x <- 1
-y <- 1
-for (X in LinProds) {
-  for (Y in ColProds) {
-    Coeficientes[x,y] <- ifelse (M[LinProdutoTotal,Y]==0, 0, M[X,Y]/M[LinProdutoTotal,Y])
-    y <- y+1
-  }
-  y <- 1
-  x <- x+1
-}
+x<- seq(1,Lins)
+Coeficientes[x,x] <- M[ColProds,LinProds]/matrix(M[LinProdutoTotal,LinProds], nrow = Cols, ncol=Cols, byrow = TRUE)
+Coeficientes[is.infinite(Coeficientes)] <- 0
+Coeficientes[is.nan(Coeficientes)] <- 0
 
 
 # Calcula a matriz Leontief (falta acrescentar a depreciação)
-Cols <- ncol(Coeficientes)
 Leontief <- solve(diag(1,nrow = Cols)-Coeficientes)
 
 #############################
@@ -41,11 +36,7 @@ Leontief <- solve(diag(1,nrow = Cols)-Coeficientes)
 Trabalho <- matrix(0, nrow=1,ncol=Cols)
 
 # Calcula a relação trabalho/produto de cada setor (i.e., requerimentos diretos de trabalho)
-x <- 1
-for (X in ColProds) {
-  Trabalho[1,x] <- ifelse(M[LinProdutoTotal,X]==0, 0 , EMP[X]/M[LinProdutoTotal,X])
-  x <- x+1
-}
+Trabalho[1,x] <- ifelse(M[LinProdutoTotal,ColProds]==0, 0 , EMP[ColProds]/M[LinProdutoTotal,ColProds])
 
 # Calcula o Fator Trabalho
 FatorT <- Trabalho%*%Leontief
@@ -56,14 +47,6 @@ FatorT <- Trabalho%*%Leontief
 
 MT <- matrix(0, ncol=ncol(M), nrow=nrow(M))
 
-x <- 1
-for (X in LinProds) {
-    for (Y in 1:ncol(M)) MT[X,Y] <- M[X,Y]*FatorT[1,x]
-  x <- x+1
-}
-
-x <- 1
-for (X in ColProds) {
-  MT[LinProdutoTotal,X] <- M[LinProdutoTotal,X]*FatorT[1,x]
-  x <- x+1
-}
+y<- seq(1:ncol(M))
+MT[LinProds,y] <- M[LinProds,y]*FatorT[1,x]
+MT[LinProdutoTotal,ColProds] <- M[LinProdutoTotal,ColProds]*FatorT[1,x]
