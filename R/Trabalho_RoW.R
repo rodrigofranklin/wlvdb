@@ -5,9 +5,6 @@
 
 EMP_WIOD <- sum(EMP)
 
-VA_ROW <- sum(M[LinVA,which(PaisLins == Num_Paises)])
-VA_WIOD <- sum(M[LinVA,])-VA_ROW
-
 posROW <- (Num_Paises-1)*Num_Setores
 tamanho <- dim(EMP)
 
