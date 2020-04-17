@@ -10,9 +10,14 @@ library(beepr)
 #VERSAO <- 'July14'
 VERSAO <- 'Nov16'
 
+# 
+variavel_trabalho <- 'H_EMP'
+#variavel_trabalho <- 'EMP'
+#variavel_trabalho <- 'H_EMP_alternativo'
+
+
 #Paises y sectores - Inicialmente LinProds ColProds PaisLins pasado a módulo propio
 source('R/sectorespaises.R')
-
 
 # Obtém informações sobre as colunas de demanda
 Demanda<-read.csv2(paste0(getwd(),"/sourcedata/",VERSAO,"/demanda.csv"))
@@ -34,6 +39,12 @@ source("R/importar_sea.R")
 
 # Carrega as informações da estimativa do EMP do RoW
 ROW_EMP <- as.data.frame(read_xlsx(paste0(getwd(),"/sourcedata/ROW_EMP/Emprego_ROW.xlsx"), sheet = "DATA", col_names = T))
+
+# Carrega as informações da estimativa do EMPE da China
+was_w_china <- as.data.frame(read_xlsx(paste0(getwd(),"/sourcedata/china/was_w.xlsx"), sheet = "DATA", col_names = T))
+jornada_media_china <- read.csv2(file = paste0(getwd(),"/sourcedata/Nov16/China_H_EMPE-EMPE.csv"), row.names = 1)
+colnames(jornada_media_china) <- tolower(gsub("X","",colnames(jornada_media_china)))
+
 
 for (Z in Anos) {
 
@@ -100,20 +111,36 @@ for (Z in Anos) {
       w <- w+1
     }
   }
+  if (VERSAO == "Nov16") {
+    H_EMP <- H_EMPE/EMPE*EMP
+    H_EMP[which(PaisLins==Paises[Paises[,3]=="CHN",2])] <- EMP[which(PaisLins==Paises[Paises[,3]=="CHN",2])]*t(jornada_media_china[,as.character(Z)])[1,]*1000
+    H_EMP[is.na(H_EMP)] <- 0
+  }
+  EMPE[which(PaisLins==Paises[Paises[,3]=="CHN",2])] <- EMP[which(PaisLins==Paises[Paises[,3]=="CHN",2])]*as.numeric(was_w_china[as.character(Z)])/100
+  H_EMPE[which(PaisLins==Paises[Paises[,3]=="CHN",2])] <- H_EMP[which(PaisLins==Paises[Paises[,3]=="CHN",2])]*as.numeric(was_w_china[as.character(Z)])/100
   ColunaSEA <- ColunaSEA+1
 
   # Estimativa do EMP e H_EMP para o RoW
-  EMP_ROW_TOTAL <- ROW_EMP[which(ROW_EMP==VERSAO),as.character(Z)]
   source(paste0(getwd(),"/R/Trabalho_RoW.R"))
-  
+
+  # Define qual a variável que será utilizada para o cálculo do valor
+  if (variavel_trabalho == "H_EMP") {
+    trabalho <- H_EMP
+  } else if (variavel_trabalho == "EMP") {
+    trabalho <- EMP
+  } else {
+    trabalho <- H_EMPE/EMPE*EMP
+    trabalho[is.na(trabalho)] <- 0
+  }
+
   source(paste0(getwd(),"/R/Transformar.R"))
 
   source(paste0(getwd(),"/R/estimar-vars.R"))
-
-  saveRDS(MT, file = paste0(getwd(),"/Resultados/",VERSAO,"_WIOD_HORAS_",as.character(Z),".rds"))
-  write.csv2(Resultados, file = paste0(getwd(),"/Resultados/",VERSAO,"_Resultados",as.character(Z),".csv"))
+  
+  saveRDS(MT, file = paste0(getwd(),"/Resultados/",VERSAO,"_",variavel_trabalho,"_WIOD_HORAS_",as.character(Z),".rds"))
+  write.csv2(Resultados, file = paste0(getwd(),"/Resultados/",VERSAO,"_",variavel_trabalho,"_Resultados",as.character(Z),".csv"))
   write.csv2(TransferenciaPais,
-             file = paste0(getwd(),"/Resultados/",VERSAO,"_Transferencias",as.character(Z),".csv"),
+             file = paste0(getwd(),"/Resultados/",VERSAO,"_",variavel_trabalho,"_Transferencias",as.character(Z),".csv"),
              row.names = Paises[,1])
   beep(sound=2)
 }
