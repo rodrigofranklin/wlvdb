@@ -33,13 +33,13 @@ Leontief <- solve(diag(1,nrow = Cols)-Coeficientes)
 ##############################
   
 # Aloca espaço em matriz temporária
-Trabalho <- matrix(0, nrow=1,ncol=Cols)
+requerimentos_diretos <- matrix(0, nrow=1,ncol=Cols)
 
 # Calcula a relação trabalho/produto de cada setor (i.e., requerimentos diretos de trabalho)
-Trabalho[1,x] <- ifelse(M[LinProdutoTotal,ColProds]==0, 0 , EMP[ColProds]/M[LinProdutoTotal,ColProds])
+requerimentos_diretos[1,x] <- ifelse(M[LinProdutoTotal,ColProds]==0, 0 , trabalho[ColProds]/M[LinProdutoTotal,ColProds])
 
 # Calcula o Fator Trabalho
-FatorT <- Trabalho%*%Leontief
+FatorT <- requerimentos_diretos%*%Leontief
 
 ####################################
 # Calcula tudo em termos de trabalho
