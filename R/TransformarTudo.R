@@ -108,6 +108,8 @@ for (Z in Anos) {
   
   source(paste0(getwd(),"/R/Transformar.R"))
 
+  source(paste0(getwd(),"/R/estimar-vars.R"))
+
   saveRDS(MT, file = paste0(getwd(),"/Resultados/",VERSAO,"_WIOD_HORAS_",as.character(Z),".rds"))
   write.csv2(Resultados, file = paste0(getwd(),"/Resultados/",VERSAO,"_Resultados",as.character(Z),".csv"))
   write.csv2(TransferenciaPais,
