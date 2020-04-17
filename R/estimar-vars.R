@@ -49,7 +49,7 @@ for (X in 1:Num_Paises){
   # Valor agregado total em horas de trabalho e em moeda (dos setores produtivos).
   # O valor agregado (valor novo criado) em termos de horas de trabalho consiste
   # na soma das horas trabalhadas nos setores produtivos.
-  PIBTPais[X] <- sum(H_EMP[x])
+  PIBTPais[X] <- sum(trabalho[x])
   # O valor agregado em termos de moeda consiste no produto total menos o custo intermediário.
   # Obs: é preciso deduzir também a depreciação do capital. Além disso, deveríamos somar a margem de comércio.
   PIBMPais[X] <- sum(M[LinProdutoTotal, x]- M[LinConsumoIntermediario, x])
