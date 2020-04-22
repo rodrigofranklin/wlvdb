@@ -10,26 +10,14 @@ library(beepr)
 #VERSAO <- 'July14'
 VERSAO <- 'Nov16'
 
-# Lista dos países
-Paises <- read.csv2(file = paste0(getwd(),"/sourcedata/",VERSAO,"/Paises.csv"), row.names = 1)
-Num_Paises <- dim(Paises)[1]
+# 
+variavel_trabalho <- 'H_EMP'
+#variavel_trabalho <- 'EMP'
+#variavel_trabalho <- 'H_EMP_alternativo'
 
-# Obtém a informação dos setores produtivos e prepara as variávels LinProds, ColProds e PaisLins
-Setores<-read.csv2(paste0(getwd(),"/sourcedata/",VERSAO,"/setores.csv"))
-Num_Setores <- dim(Setores)[1]
-LinProds <- NULL
-PaisLins <- NULL
-W=1
-for (X in Paises[,2]) {
-  for (Y in 1:Num_Setores){
-    PaisLins <- c(PaisLins, X)
-    if (Setores[Y,4]==1)  {LinProds <- c(LinProds,W)}
-    W<-W+1
-  }
-}
-LinProds <- t(LinProds)
-ColProds <- LinProds
-LinConsumoIntermediario <- Num_Paises*Num_Setores + 1
+
+#Paises y sectores - Inicialmente LinProds ColProds PaisLins pasado a módulo propio
+source('R/sectorespaises.R')
 
 # Obtém informações sobre as colunas de demanda
 Demanda<-read.csv2(paste0(getwd(),"/sourcedata/",VERSAO,"/demanda.csv"))
@@ -47,27 +35,16 @@ for (X in Paises[,2]) {
 ColProdutoTotal <- Num_Setores*Num_Paises + Num_Demanda*Num_Paises + 1
 
 # Carrega as informações das contas socioeconômicas
-SEA <- as.data.frame(read_xlsx(paste0(getwd(),"/sourcedata/",VERSAO,"/WIOD_SEA_",VERSAO,".xlsx"), sheet = "DATA", col_names = T, na = 'NA'))
-SEA[is.na(SEA)] <- 0
-colnames(SEA) <- tolower(gsub("_","",colnames(SEA)))
-Linhas_H_EMP <- which(SEA[,'variable'] == 'H_EMP')
-Linhas_H_EMPE <- which(SEA[,'variable'] == 'H_EMPE')
-Linhas_EMP <- which(SEA[,'variable'] == 'EMP')
-Linhas_EMPE <- which(SEA[,'variable'] == 'EMPE')
-Linhas_GO <- which(SEA[,'variable'] == 'GO')
-Linhas_VA <- which(SEA[,'variable'] == 'VA')
-Linhas_VA_P <- which((SEA[,'variable'] == 'VA_P')|(SEA[,'variable'] == 'VA_PI'))
-Linhas_COMP <- which(SEA[,'variable'] == 'COMP')
-Linhas_LAB <- which(SEA[,'variable'] == 'LAB')
-Linhas_CAP <- which(SEA[,'variable'] == 'CAP')
-Linhas_K_GFCF <- which(SEA[,'variable'] == 'K_GFCF')
-Linhas_GFCF_P <- which(SEA[,'variable'] == 'GFCF_P')
-Linhas_K <- which(SEA[,'variable'] == 'K')
-ColunaSEA <- 5
-Anos <- as.numeric(colnames(SEA)[5:dim(SEA)[2]])
+source("R/importar_sea.R")
 
 # Carrega as informações da estimativa do EMP do RoW
 ROW_EMP <- as.data.frame(read_xlsx(paste0(getwd(),"/sourcedata/ROW_EMP/Emprego_ROW.xlsx"), sheet = "DATA", col_names = T))
+
+# Carrega as informações da estimativa do EMPE da China
+was_w_china <- as.data.frame(read_xlsx(paste0(getwd(),"/sourcedata/china/was_w.xlsx"), sheet = "DATA", col_names = T))
+jornada_media_china <- read.csv2(file = paste0(getwd(),"/sourcedata/Nov16/China_H_EMPE-EMPE.csv"), row.names = 1)
+colnames(jornada_media_china) <- tolower(gsub("X","",colnames(jornada_media_china)))
+
 
 for (Z in Anos) {
 
@@ -134,18 +111,36 @@ for (Z in Anos) {
       w <- w+1
     }
   }
+  if (VERSAO == "Nov16") {
+    H_EMP <- H_EMPE/EMPE*EMP
+    H_EMP[which(PaisLins==Paises[Paises[,3]=="CHN",2])] <- EMP[which(PaisLins==Paises[Paises[,3]=="CHN",2])]*t(jornada_media_china[,as.character(Z)])[1,]*1000
+    H_EMP[is.na(H_EMP)] <- 0
+  }
+  EMPE[which(PaisLins==Paises[Paises[,3]=="CHN",2])] <- EMP[which(PaisLins==Paises[Paises[,3]=="CHN",2])]*as.numeric(was_w_china[as.character(Z)])/100
+  H_EMPE[which(PaisLins==Paises[Paises[,3]=="CHN",2])] <- H_EMP[which(PaisLins==Paises[Paises[,3]=="CHN",2])]*as.numeric(was_w_china[as.character(Z)])/100
   ColunaSEA <- ColunaSEA+1
 
   # Estimativa do EMP e H_EMP para o RoW
-  EMP_ROW_TOTAL <- ROW_EMP[which(ROW_EMP==VERSAO),as.character(Z)]
   source(paste0(getwd(),"/R/Trabalho_RoW.R"))
-  
+
+  # Define qual a variável que será utilizada para o cálculo do valor
+  if (variavel_trabalho == "H_EMP") {
+    trabalho <- H_EMP
+  } else if (variavel_trabalho == "EMP") {
+    trabalho <- EMP
+  } else {
+    trabalho <- H_EMPE/EMPE*EMP
+    trabalho[is.na(trabalho)] <- 0
+  }
+
   source(paste0(getwd(),"/R/Transformar.R"))
 
-  saveRDS(MT, file = paste0(getwd(),"/Resultados/",VERSAO,"_WIOD_HORAS_",as.character(Z),".rds"))
-  write.csv2(Resultados, file = paste0(getwd(),"/Resultados/",VERSAO,"_Resultados",as.character(Z),".csv"))
+  source(paste0(getwd(),"/R/estimar-vars.R"))
+  
+  saveRDS(MT, file = paste0(getwd(),"/Resultados/",VERSAO,"_",variavel_trabalho,"_WIOD_HORAS_",as.character(Z),".rds"))
+  write.csv2(Resultados, file = paste0(getwd(),"/Resultados/",VERSAO,"_",variavel_trabalho,"_Resultados",as.character(Z),".csv"))
   write.csv2(TransferenciaPais,
-             file = paste0(getwd(),"/Resultados/",VERSAO,"_Transferencias",as.character(Z),".csv"),
+             file = paste0(getwd(),"/Resultados/",VERSAO,"_",variavel_trabalho,"_Transferencias",as.character(Z),".csv"),
              row.names = Paises[,1])
   beep(sound=2)
 }
