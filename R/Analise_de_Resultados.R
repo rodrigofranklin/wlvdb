@@ -1,6 +1,6 @@
 #####################################
 #
-# Script para exigição de gráficos 
+# Script para exibição de gráficos 
 # com os principais resultados
 #
 #####################################
