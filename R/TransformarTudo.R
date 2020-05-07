@@ -7,129 +7,129 @@ library(readxl)
 library(beepr)
 
 # Define a versão do WIOD que será utilizada: July14 ou Nov16
-#VERSAO <- 'July14'
-VERSAO <- 'Nov16'
+#versao <- 'July14'
+versao <- 'Nov16'
 
 # 
-variavel_trabalho <- 'H_EMP'
-#variavel_trabalho <- 'EMP'
-#variavel_trabalho <- 'H_EMP_alternativo'
+variavel_trabalho <- 'h.emp'
+#variavel_trabalho <- 'emp'
+#variavel_trabalho <- 'h.emp_alternativo'
 
 
-#Paises y sectores - Inicialmente LinProds ColProds PaisLins pasado a módulo propio
+#paises y sectores - Inicialmente LinProds ColProds pais.lins pasado a módulo propio
 source('R/sectorespaises.R')
 
 # Obtém informações sobre as colunas de demanda
-Demanda<-read.csv2(paste0(getwd(),"/sourcedata/",VERSAO,"/demanda.csv"))
-Num_Demanda <- dim(Demanda)[1]
-PaisCols <- PaisLins
-ColFBCF <- NULL
-ColDemandaFinal <- NULL
-for (X in Paises[,2]) {
-  ColFBCF <- c(ColFBCF, (Num_Setores*Num_Paises) + Demanda[Demanda == 'Gross fixed capital formation',3] + (Num_Demanda*(X-1)))
-  ColDemandaFinal <- c(ColDemandaFinal, (Num_Setores*Num_Paises) + Demanda[Demanda == 'Final consumption expenditure by households',3] + (Num_Demanda*(X-1)))
-  for (Y in 1:Num_Demanda){
-    PaisCols <- c( PaisCols, X)
+demanda<-read.csv2(paste0(getwd(),"/sourcedata/",versao,"/demanda.csv"))
+num_demanda <- dim(demanda)[1]
+pais.cols <- pais.lins
+col.fbcf <- NULL
+col.demanda.final <- NULL
+for (x in paises[,2]) {
+  col.fbcf <- c(col.fbcf, (num.setores*num.paises) + demanda[demanda == 'Gross fixed capital formation',3] + (num_demanda*(x-1)))
+  col.demanda.final <- c(col.demanda.final, (num.setores*num.paises) + demanda[demanda == 'Final consumption expenditure by households',3] + (num_demanda*(x-1)))
+  for (y in 1:num_demanda){
+    pais.cols <- c( pais.cols, x)
   }
 }
-ColProdutoTotal <- Num_Setores*Num_Paises + Num_Demanda*Num_Paises + 1
+col.produto.total <- num.setores*num.paises + num_demanda*num.paises + 1
 
 # Carrega as informações das contas socioeconômicas
 source("R/importar_sea.R")
 
-# Carrega as informações da estimativa do EMP do RoW
-ROW_EMP <- as.data.frame(read_xlsx(paste0(getwd(),"/sourcedata/ROW_EMP/Emprego_ROW.xlsx"), sheet = "DATA", col_names = T))
+# Carrega as informações da estimativa do emp do RoW
+row.emp <- as.data.frame(read_xlsx(paste0(getwd(),"/sourcedata/ROW_emp/emprego_ROW.xlsx"), sheet = "DATA", col_names = T))
 
-# Carrega as informações da estimativa do EMPE da China
+# Carrega as informações da estimativa do empe da China
 was_w_china <- as.data.frame(read_xlsx(paste0(getwd(),"/sourcedata/china/was_w.xlsx"), sheet = "DATA", col_names = T))
 jornada_media_china <- read.csv2(file = paste0(getwd(),"/sourcedata/Nov16/China_H_EMPE-EMPE.csv"), row.names = 1)
 colnames(jornada_media_china) <- tolower(gsub("X","",colnames(jornada_media_china)))
 
 
-for (Z in Anos) {
+for (z in anos) {
 
   #Carrega a matriz insumo-produto multirregional
-  if (VERSAO == "July14") {
-    M <- readRDS(paste0(getwd(),"/sourcedata/",VERSAO,"/WIOT_",as.character(Z),".rds"))
-    LinProdutoTotal <- nrow(M)
-    LinVA <- 1441
+  if (versao == "July14") {
+    m <- readRDS(paste0(getwd(),"/sourcedata/",versao,"/WIOT_",as.character(z),".rds"))
+    lin.produto.total <- nrow(m)
+    lin.va <- 1441
   } else {
-    load(paste0(getwd(),"/sourcedata/Nov16/WIOT",as.character(Z),"_October16_ROW.RData"))
-    M <- as.matrix(wiot[,6:ncol(wiot)])
-    LinProdutoTotal <- which(wiot[,'IndustryCode'] == 'GO')
-    LinVA <- which(wiot[,'IndustryCode'] == 'VA')
+    load(paste0(getwd(),"/sourcedata/Nov16/WIOT",as.character(z),"_October16_ROW.RData"))
+    m <- as.matrix(wiot[,6:ncol(wiot)])
+    lin.produto.total <- which(wiot[,'IndustryCode'] == 'GO')
+    lin.va <- which(wiot[,'IndustryCode'] == 'VA')
   }
   
   # Separa as variáveis desejadas da tabela de contas socioeconômicas
-  H_EMP = H_EMPE = EMP = EMPE = COMP_REAL = LAB_REAL = K_USD = CAP_USD = LAB_USD = COMP_USD <- array(data = 0, dim = Num_Paises*Num_Setores)
+  h.emp = h.empe = emp = empe = comp.real = lab.real = k.usd = cap.usd = lab.usd = comp.usd <- array(data = 0, dim = num.paises*num.setores)
   w <- 1
-  for (x in 1:(Num_Paises-1)) {
-    Linhas_Pais_H_EMP <- Linhas_H_EMP[which(SEA[Linhas_H_EMP,'country'] == as.character(Paises[x,3]))]
-    Linhas_Pais_H_EMPE <- Linhas_H_EMPE[which(SEA[Linhas_H_EMPE,'country'] == as.character(Paises[x,3]))]
-    Linhas_Pais_EMP <- Linhas_EMP[which(SEA[Linhas_EMP,'country'] == as.character(Paises[x,3]))]
-    Linhas_Pais_EMPE <- Linhas_EMPE[which(SEA[Linhas_EMPE,'country'] == as.character(Paises[x,3]))]
-    Linhas_Pais_GO <- Linhas_GO[which(SEA[Linhas_GO,'country'] == as.character(Paises[x,3]))]
-    Linhas_Pais_VA <- Linhas_VA[which(SEA[Linhas_VA,'country'] == as.character(Paises[x,3]))]
-    Linhas_Pais_VA_P <- Linhas_VA_P[which(SEA[Linhas_VA_P,'country'] == as.character(Paises[x,3]))]
-    Linhas_Pais_COMP <- Linhas_COMP[which(SEA[Linhas_COMP,'country'] == as.character(Paises[x,3]))]
-    Linhas_Pais_LAB <- Linhas_LAB[which(SEA[Linhas_LAB,'country'] == as.character(Paises[x,3]))]
-    Linhas_Pais_CAP <- Linhas_CAP[which(SEA[Linhas_CAP,'country'] == as.character(Paises[x,3]))]
-    Linhas_Pais_K_GFCF <- Linhas_K_GFCF[which(SEA[Linhas_K_GFCF,'country'] == as.character(Paises[x,3]))]
-    Linhas_Pais_GFCF_P <- Linhas_GFCF_P[which(SEA[Linhas_GFCF_P,'country'] == as.character(Paises[x,3]))]
-    Linhas_Pais_K <- Linhas_K[which(SEA[Linhas_K,'country'] == as.character(Paises[x,3]))]
+  for (x in 1:(num.paises-1)) {
+    linhas.pais.h.emp <- linhas.h.emp[which(sea[linhas.h.emp,'country'] == as.character(paises[x,3]))]
+    linhas.pais.h.empe <- linhas.h.empe[which(sea[linhas.h.empe,'country'] == as.character(paises[x,3]))]
+    linhas.pais.emp <- linhas.emp[which(sea[linhas.emp,'country'] == as.character(paises[x,3]))]
+    linhas.pais.h.empe <- linhas.empe[which(sea[linhas.empe,'country'] == as.character(paises[x,3]))]
+    linhas.pais.go <- linhas.go[which(sea[linhas.go,'country'] == as.character(paises[x,3]))]
+    linhas.pais.va <- linhas.va[which(sea[linhas.va,'country'] == as.character(paises[x,3]))]
+    linhas.pais.va.p <- linhas.va_P[which(sea[linhas.va_P,'country'] == as.character(paises[x,3]))]
+    linhas.pais.comp <- linhas.comp[which(sea[linhas.comp,'country'] == as.character(paises[x,3]))]
+    linhas.pais.lab <- linhas.lab[which(sea[linhas.lab,'country'] == as.character(paises[x,3]))]
+    linhas.pais.cap <- linhas.cap[which(sea[linhas.cap,'country'] == as.character(paises[x,3]))]
+    linhas.pais.k.gfcf <- linhas.k.gfcf[which(sea[linhas.k.gfcf,'country'] == as.character(paises[x,3]))]
+    linhas.pais.gfcf.p <- linhas.gfcf.p[which(sea[linhas.gfcf.p,'country'] == as.character(paises[x,3]))]
+    linhas.pais.k <- linhas.k[which(sea[linhas.k,'country'] == as.character(paises[x,3]))]
     
-    for (y in 1:Num_Setores) {
-      Linhas_Setor_Pais_H_EMP <- Linhas_Pais_H_EMP[which(SEA[Linhas_Pais_H_EMP,'code'] == as.character(Setores[y,1]))]
-      Linhas_Setor_Pais_H_EMPE <- Linhas_Pais_H_EMPE[which(SEA[Linhas_Pais_H_EMPE,'code'] == as.character(Setores[y,1]))]
-      Linhas_Setor_Pais_EMP <- Linhas_Pais_EMP[which(SEA[Linhas_Pais_EMP,'code'] == as.character(Setores[y,1]))]
-      Linhas_Setor_Pais_EMPE <- Linhas_Pais_EMPE[which(SEA[Linhas_Pais_EMPE,'code'] == as.character(Setores[y,1]))]
-      Linhas_Setor_Pais_GO <- Linhas_Pais_GO[which(SEA[Linhas_Pais_GO,'code'] == as.character(Setores[y,1]))]
-      Linhas_Setor_Pais_VA <- Linhas_Pais_VA[which(SEA[Linhas_Pais_VA,'code'] == as.character(Setores[y,1]))]
-      Linhas_Setor_Pais_VA_P <- Linhas_Pais_VA_P[which(SEA[Linhas_Pais_VA_P,'code'] == as.character(Setores[y,1]))]
-      Linhas_Setor_Pais_COMP <- Linhas_Pais_COMP[which(SEA[Linhas_Pais_COMP,'code'] == as.character(Setores[y,1]))]
-      Linhas_Setor_Pais_LAB <- Linhas_Pais_LAB[which(SEA[Linhas_Pais_LAB,'code'] == as.character(Setores[y,1]))]
-      Linhas_Setor_Pais_CAP <- Linhas_Pais_CAP[which(SEA[Linhas_Pais_CAP,'code'] == as.character(Setores[y,1]))]
-      Linhas_Setor_Pais_K_GFCF <- Linhas_Pais_K_GFCF[which(SEA[Linhas_Pais_K_GFCF,'code'] == as.character(Setores[y,1]))]
-      Linhas_Setor_Pais_GFCF_P <- Linhas_Pais_GFCF_P[which(SEA[Linhas_Pais_GFCF_P,'code'] == as.character(Setores[y,1]))]
-      Linhas_Setor_Pais_K <- Linhas_Pais_K[which(SEA[Linhas_Pais_K,'code'] == as.character(Setores[y,1]))]
+    for (y in 1:num.setores) {
+      linhas.setor.pais.h.emp <- linhas.pais.h.emp[which(sea[linhas.pais.h.emp,'code'] == as.character(setores[y,1]))]
+      linhas.setor.pais.h.empe <- linhas.pais.h.empe[which(sea[linhas.pais.h.empe,'code'] == as.character(setores[y,1]))]
+      linhas.setor.pais.emp <- linhas.pais.emp[which(sea[linhas.pais.emp,'code'] == as.character(setores[y,1]))]
+      linhas.setor.pais.empe <- linhas.pais.h.empe[which(sea[linhas.pais.h.empe,'code'] == as.character(setores[y,1]))]
+      linhas.setor.pais.go <- linhas.pais.go[which(sea[linhas.pais.go,'code'] == as.character(setores[y,1]))]
+      linhas.setor.pais.va <- linhas.pais.va[which(sea[linhas.pais.va,'code'] == as.character(setores[y,1]))]
+      linhas.setor.pais.va.p <- linhas.pais.va.p[which(sea[linhas.pais.va.p,'code'] == as.character(setores[y,1]))]
+      linhas.setor.pais.comp <- linhas.pais.comp[which(sea[linhas.pais.comp,'code'] == as.character(setores[y,1]))]
+      linhas.setor.pais.lab <- linhas.pais.lab[which(sea[linhas.pais.lab,'code'] == as.character(setores[y,1]))]
+      linhas.setor.pais.cap <- linhas.pais.cap[which(sea[linhas.pais.cap,'code'] == as.character(setores[y,1]))]
+      linhas.setor.pais.k.gfcf <- linhas.pais.k.gfcf[which(sea[linhas.pais.k.gfcf,'code'] == as.character(setores[y,1]))]
+      linhas.setor.pais.gfcf.p <- linhas.pais.gfcf.p[which(sea[linhas.pais.gfcf.p,'code'] == as.character(setores[y,1]))]
+      linhas.setor.pais.k <- linhas.pais.k[which(sea[linhas.pais.k,'code'] == as.character(setores[y,1]))]
       
-      CAMBIO <- ifelse(as.numeric(SEA[Linhas_Setor_Pais_VA,ColunaSEA]) !=0,M[LinVA,w]/as.numeric(SEA[Linhas_Setor_Pais_VA,ColunaSEA]),0)
-      H_EMPE[w]<-as.numeric(SEA[Linhas_Setor_Pais_H_EMPE,ColunaSEA])*1000000
-      EMP[w]<-as.numeric(SEA[Linhas_Setor_Pais_EMP,ColunaSEA])*1000
-      EMPE[w]<-as.numeric(SEA[Linhas_Setor_Pais_EMPE,ColunaSEA])*1000
-      COMP_REAL[w] <- as.numeric(SEA[Linhas_Setor_Pais_COMP,ColunaSEA])/as.numeric(SEA[Linhas_Setor_Pais_VA_P,ColunaSEA])*100
-      LAB_REAL[w] <- as.numeric(SEA[Linhas_Setor_Pais_LAB,ColunaSEA])/as.numeric(SEA[Linhas_Setor_Pais_VA_P,ColunaSEA])*100
-      CAP_USD[w] <- as.numeric(SEA[Linhas_Setor_Pais_CAP,ColunaSEA])*CAMBIO
-      LAB_USD[w] <- as.numeric(SEA[Linhas_Setor_Pais_LAB,ColunaSEA])*CAMBIO
-      COMP_USD[w] <- as.numeric(SEA[Linhas_Setor_Pais_COMP,ColunaSEA])*CAMBIO
-      if (VERSAO == 'July14') {
-        H_EMP[w] <- as.numeric(SEA[Linhas_Setor_Pais_H_EMP,ColunaSEA])*1000000
-        K_USD[w] <- as.numeric(SEA[Linhas_Setor_Pais_K_GFCF,ColunaSEA])*as.numeric(SEA[Linhas_Setor_Pais_GFCF_P,ColunaSEA])/100*CAMBIO
+      cambio <- ifelse(as.numeric(sea[linhas.setor.pais.va,coluna.sea]) !=0,M[lin.va,w]/as.numeric(sea[linhas.setor.pais.va,coluna.sea]),0)
+      h.empe[w]<-as.numeric(sea[linhas.setor.pais.h.empe,coluna.sea])*1000000
+      emp[w]<-as.numeric(sea[linhas.setor.pais.emp,coluna.sea])*1000
+      empe[w]<-as.numeric(sea[linhas.setor.pais.empe,coluna.sea])*1000
+      comp.real[w] <- as.numeric(sea[linhas.setor.pais.comp,coluna.sea])/as.numeric(sea[linhas.setor.pais.va.p,coluna.sea])*100
+      lab.real[w] <- as.numeric(sea[linhas.setor.pais.lab,coluna.sea])/as.numeric(sea[linhas.setor.pais.va.p,coluna.sea])*100
+      cap.usd[w] <- as.numeric(sea[linhas.setor.pais.cap,coluna.sea])*cambio
+      lab.usd[w] <- as.numeric(sea[linhas.setor.pais.lab,coluna.sea])*cambio
+      comp.usd[w] <- as.numeric(sea[linhas.setor.pais.comp,coluna.sea])*cambio
+      if (versao == 'July14') {
+        h.emp[w] <- as.numeric(sea[linhas.setor.pais.h.emp,coluna.sea])*1000000
+        k.usd[w] <- as.numeric(sea[linhas.setor.pais.k.gfcf,coluna.sea])*as.numeric(sea[linhas.setor.pais.gfcf.p,coluna.sea])/100*cambio
       } else {
-        K_USD[w] <- as.numeric(SEA[Linhas_Setor_Pais_K,ColunaSEA])*CAMBIO
+        k.usd[w] <- as.numeric(sea[linhas.setor.pais.k,coluna.sea])*cambio
       }
       w <- w+1
     }
   }
-  if (VERSAO == "Nov16") {
-    H_EMP <- H_EMPE/EMPE*EMP
-    H_EMP[which(PaisLins==Paises[Paises[,3]=="CHN",2])] <- EMP[which(PaisLins==Paises[Paises[,3]=="CHN",2])]*t(jornada_media_china[,as.character(Z)])[1,]*1000
-    H_EMP[is.na(H_EMP)] <- 0
+  if (versao == "Nov16") {
+    h.emp <- h.empe/empe*emp
+    h.emp[which(pais.lins==paises[paises[,3]=="CHN",2])] <- emp[which(pais.lins==paises[paises[,3]=="CHN",2])]*t(jornada_media_china[,as.character(z)])[1,]*1000
+    h.emp[is.na(h.emp)] <- 0
   }
-  EMPE[which(PaisLins==Paises[Paises[,3]=="CHN",2])] <- EMP[which(PaisLins==Paises[Paises[,3]=="CHN",2])]*as.numeric(was_w_china[as.character(Z)])/100
-  H_EMPE[which(PaisLins==Paises[Paises[,3]=="CHN",2])] <- H_EMP[which(PaisLins==Paises[Paises[,3]=="CHN",2])]*as.numeric(was_w_china[as.character(Z)])/100
-  ColunaSEA <- ColunaSEA+1
+  empe[which(pais.lins==paises[paises[,3]=="CHN",2])] <- emp[which(pais.lins==paises[paises[,3]=="CHN",2])]*as.numeric(was_w_china[as.character(z)])/100
+  h.empe[which(pais.lins==paises[paises[,3]=="CHN",2])] <- h.emp[which(pais.lins==paises[paises[,3]=="CHN",2])]*as.numeric(was_w_china[as.character(z)])/100
+  coluna.sea <- coluna.sea+1
 
-  # Estimativa do EMP e H_EMP para o RoW
+  # Estimativa do emp e h.emp para o RoW
   source(paste0(getwd(),"/R/Trabalho_RoW.R"))
 
   # Define qual a variável que será utilizada para o cálculo do valor
-  if (variavel_trabalho == "H_EMP") {
-    trabalho <- H_EMP
-  } else if (variavel_trabalho == "EMP") {
-    trabalho <- EMP
+  if (variavel_trabalho == "h.emp") {
+    trabalho <- h.emp
+  } else if (variavel_trabalho == "emp") {
+    trabalho <- emp
   } else {
-    trabalho <- H_EMPE/EMPE*EMP
+    trabalho <- h.empe/empe*emp
     trabalho[is.na(trabalho)] <- 0
   }
 
@@ -137,11 +137,11 @@ for (Z in Anos) {
 
   source(paste0(getwd(),"/R/estimar-vars.R"))
   
-  saveRDS(MT, file = paste0(getwd(),"/Resultados/",VERSAO,"_",variavel_trabalho,"_WIOD_HORAS_",as.character(Z),".rds"))
-  write.csv2(Resultados, file = paste0(getwd(),"/Resultados/",VERSAO,"_",variavel_trabalho,"_Resultados",as.character(Z),".csv"))
+  saveRDS(mt, file = paste0(getwd(),"/Resultados/",versao,"_",variavel_trabalho,"_WIOD_HORAS_",as.character(z),".rds"))
+  write.csv2(Resultados, file = paste0(getwd(),"/Resultados/",versao,"_",variavel_trabalho,"_Resultados",as.character(z),".csv"))
   write.csv2(TransferenciaPais,
-             file = paste0(getwd(),"/Resultados/",VERSAO,"_",variavel_trabalho,"_Transferencias",as.character(Z),".csv"),
-             row.names = Paises[,1])
+             file = paste0(getwd(),"/Resultados/",versao,"_",variavel_trabalho,"_Transferencias",as.character(z),".csv"),
+             row.names = paises[,1])
   beep(sound=2)
 }
 beep(sound=3)
