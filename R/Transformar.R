@@ -12,20 +12,20 @@
 ##########################################
   
 # Aloca espaços da matriz de coeficientes técnicos
-Cols <- length(ColProds)
-Lins <- length(LinProds)
-Coeficientes <- matrix(0, nrow = length(LinProds), ncol = length(ColProds))
+cols <- length(col.prods)
+lins <- length(lin.prods)
+Coeficientes <- matrix(0, nrow = length(lin.prods), ncol = length(col.prods))
 
 
 # Calcula a matriz de coeficientes técnicos (Repare na diferença entre x,y e X,Y)
-x<- seq(1,Lins)
-Coeficientes[x,x] <- M[ColProds,LinProds]/matrix(M[LinProdutoTotal,LinProds], nrow = Cols, ncol=Cols, byrow = TRUE)
+x<- seq(1,lins)
+Coeficientes[x,x] <- M[col.prods,lin.prods]/matrix(M[lin.produto.total,lin.prods], nrow = cols, ncol=cols, byrow = TRUE)
 Coeficientes[is.infinite(Coeficientes)] <- 0
 Coeficientes[is.nan(Coeficientes)] <- 0
 
 
 # Calcula a matriz Leontief (falta acrescentar a depreciação)
-Leontief <- solve(diag(1,nrow = Cols)-Coeficientes)
+Leontief <- solve(diag(1,nrow = cols)-Coeficientes)
 
 #############################
 # Calcula o Fator Trabalho (o parâmetro de multiplicação de cada setor para
@@ -33,10 +33,10 @@ Leontief <- solve(diag(1,nrow = Cols)-Coeficientes)
 ##############################
   
 # Aloca espaço em matriz temporária
-requerimentos_diretos <- matrix(0, nrow=1,ncol=Cols)
+requerimentos_diretos <- matrix(0, nrow=1,ncol=cols)
 
 # Calcula a relação trabalho/produto de cada setor (i.e., requerimentos diretos de trabalho)
-requerimentos_diretos[1,x] <- ifelse(M[LinProdutoTotal,ColProds]==0, 0 , trabalho[ColProds]/M[LinProdutoTotal,ColProds])
+requerimentos_diretos[1,x] <- ifelse(M[lin.produto.total,col.prods]==0, 0 , trabalho[col.prods]/M[lin.produto.total,col.prods])
 
 # Calcula o Fator Trabalho
 FatorT <- requerimentos_diretos%*%Leontief
@@ -48,5 +48,5 @@ FatorT <- requerimentos_diretos%*%Leontief
 MT <- matrix(0, ncol=ncol(M), nrow=nrow(M))
 
 y<- seq(1:ncol(M))
-MT[LinProds,y] <- M[LinProds,y]*FatorT[1,x]
-MT[LinProdutoTotal,ColProds] <- M[LinProdutoTotal,ColProds]*FatorT[1,x]
+MT[lin.prods,y] <- M[lin.prods,y]*FatorT[1,x]
+MT[lin.produto.total,col.prods] <- M[lin.produto.total,col.prods]*FatorT[1,x]
