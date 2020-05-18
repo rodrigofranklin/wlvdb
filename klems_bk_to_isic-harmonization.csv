@@ -1,12 +1,12 @@
 Codigo bK;Nombre tipo de bK;Codigo ISIC4;Nombre Industria/Sector ISIC4
 K_IT;Computing equipment;C26;Manufacture of computer, electronic and optical products
 K_CT;Communications equipment;C26;Manufacture of computer, electronic and optical products
-K_Soft_DB;Computer software and databases;G45;Wholesale and retail trade and repair of motor vehicles and motorcycles
+K_Soft_DB;Computer software and databases;G46;Wholesale trade, except of motor vehicles and motorcycles
 ;;G47;Retail trade, except of motor vehicles and motorcycles
 ;;J58;Publishing activities
 K _TraEq; Transport Equipment;C30;Manufacture of other transport equipment
-K_OMach;Other Machinery and Equipment;G46;Wholesale trade, except of motor vehicles and motorcycles
-K_OCon;Total Non-residential investment;K64;Financial service activities, except insurance and pension funding
+K_OMach;Other Machinery and Equipment;C28;Manufacture of machinery and equipment n.e.c.
+K_OCon;Total Non-residential investment;F;Construction
 K_Rstruc;Residential structures;F;Construction
 K_Cult;Cultivated assets;K65;Insurance, reinsurance and pension funding, except compulsory social security
 K_RD;Research and  development;M72;Scientific research and development
