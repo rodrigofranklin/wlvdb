@@ -4,7 +4,7 @@
 
 kkurl <- "http://euklems.eu/bulk/Statistical_Capital.rds"
 f <- tempfile()
-download.file(kkurl, klemsk)
+download.file(kkurl, f)
 
 euklems <- readRDS(f)
 #rm(f)
