@@ -84,7 +84,7 @@ for (p in 1:num_paises){
     insumoprodutivospais[y,x] <- sum(m[y, x], m[y,xfbcf])
 
     #Soma todas as exportações dos setores produtivos (todos os destinos de cada linha de setor produtivo)
-    if (x != y) { #ignora as transações internas de cada país
+    if (p != y) { #ignora as transações internas de cada país
       exportacaompais[y,x]<- sum(m[y,which(paiscols==p)])
       exportacaotpais[y,x]<- sum(mt[y,which(paiscols==p)])
     }
