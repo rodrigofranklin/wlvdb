@@ -79,14 +79,14 @@ for (p in 1:num_paises){
   fbcfmpais[p] <- sum(m[linprods, xfbcf])
   fbcftpais[p] <- sum(mt[linprods, xfbcf])
 
-  for (y in 1:num_paises) {
-    y <- linprods[which(paislins[linprods]==y)]
-    insumoprodutivospais[y,x] <- sum(m[y, x], m[y,xfbcf])
+  for (py in 1:num_paises) {
+    y <- linprods[which(paislins[linprods]==py)]
+    insumoprodutivospais[py,p] <- sum(m[y, x], m[y,xfbcf])
 
     #Soma todas as exportações dos setores produtivos (todos os destinos de cada linha de setor produtivo)
     if (p != y) { #ignora as transações internas de cada país
-      exportacaompais[y,x]<- sum(m[y,which(paiscols==p)])
-      exportacaotpais[y,x]<- sum(mt[y,which(paiscols==p)])
+      exportacaompais[py,x]<- sum(m[y,which(paiscols==p)])
+      exportacaotpais[py,x]<- sum(mt[y,which(paiscols==p)])
     }
   }
 
@@ -97,18 +97,18 @@ for (p in 1:num_paises){
 
   # Capital Constante total por pais (Para o cálculo da composição orgânica)
   # Esse cálculo soma o estoque de capital (ponderado pela estrutura da formação bruta de k fixo) em horas de trabalho
-  capitalconstantetotalpais[x] <- ((capitalmpais[x]/fbcfmpais[x])*fbcftpais[x])+capitalconstantetotalpais[x]
+  capitalconstantetotalpais[p] <- ((capitalmpais[p]/fbcfmpais[p])*fbcftpais[p])+capitalconstantetotalpais[p]
   
   # O fatordinn corresponde à constate K de Ochoa para o cálculo dos preços diretos
-  fatordinn[x] <- produtototaltpais[x]/produtototalmpais[x]
+  fatordinn[p] <- produtototaltpais[p]/produtototalmpais[p]
   # O fatordemanda é uma espécide de constate K exclusiva para o consumo das famílias.
   # Por isso, a utilizei para o cálculo do valor da força de trabalho
-  fatordemanda[x] <- demandafinaltpais[x]/demandafinalmpais[x]
+  fatordemanda[p] <- demandafinaltpais[p]/demandafinalmpais[p]
   
   # Calcula as rendas em trabalho de cada país usando fatordemanda
   # (das pessoas engajadas e dos trabalhadores assalariados)
-  remuneracaotpais[x]<- sum(lab_usd[x])*fatordemanda[x]
-  salariotpais[x]<- sum(comp_usd[x])*fatordemanda[x]
+  remuneracaotpais[p]<- sum(lab_usd[x])*fatordemanda[p]
+  salariotpais[p]<- sum(comp_usd[x])*fatordemanda[p]
 }
 
 #Calcula saldo das transferências pelo Fator Dinheiro mundial - DECIDI
