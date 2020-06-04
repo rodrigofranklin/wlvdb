@@ -3,8 +3,8 @@
 # Cálculo do emprego mundial
 #
 
-emp_row_total <- row_emp[which(row_emp==versao),as.character(Z)]
-was_w_row <- as.numeric(row_emp[which(row_emp=='was_w'),as.character(Z)])/100
+emp_row_total <- row_emp[which(row_emp==versao),as.character(z)]
+was_w_row <- as.numeric(row_emp[which(row_emp=='was_w'),as.character(z)])/100
 emp_wiod <- sum(emp)
 
 posrow <- (num_paises-1)*num_setores
