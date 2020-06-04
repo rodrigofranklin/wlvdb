@@ -40,44 +40,44 @@ consumointermediarioppais <- matrix(0,1,cols)
 capitalconstantetotalpais <- matrix(0,1,cols)
 insumoprodutivospais <- matrix(0,cols,cols)
 
-for (x in 1:num_paises){
+for (p in 1:num_paises){
   #Produto total em horas de trabalho e em moeda (soma dos setores produtivos)
-  x <- colprods[which(paiscols[colprods]==x)]
-  produtototaltpais[x] <- sum(mt[linprodutototal,x])
-  produtototalmpais[x] <- sum(m[linprodutototal, x])
+  x <- colprods[which(paiscols[colprods]==p)]
+  produtototaltpais[p] <- sum(mt[linprodutototal,x])
+  produtototalmpais[p] <- sum(m[linprodutototal, x])
   
   # Valor agregado total em horas de trabalho e em moeda (dos setores produtivos).
   # O valor agregado (valor novo criado) em termos de horas de trabalho consiste
   # na soma das horas trabalhadas nos setores produtivos.
-  pibtpais[x] <- sum(trabalho[x])
+  pibtpais[p] <- sum(trabalho[x])
   # O valor agregado em termos de moeda consiste no produto total menos o custo intermediário.
   # Obs: é preciso deduzir também a depreciação do capital. Além disso, deveríamos somar a margem de comércio.
-  pibmpais[x] <- sum(m[linprodutototal, x]- m[linconsumointermediario, x])
+  pibmpais[p] <- sum(m[linprodutototal, x]- m[linconsumointermediario, x])
   
   # Número de pessoas engajadas na produção e sua remuneração (nominal e real)
-  trabalhadorespais[x] <- sum(emp[x])
-  remuneracaompais[x] <- sum(lab_usd[x])
-  remuneracaorealpais[x] <- sum(lab_real[x])
+  trabalhadorespais[p] <- sum(emp[x])
+  remuneracaompais[p] <- sum(lab_usd[x])
+  remuneracaorealpais[p] <- sum(lab_real[x])
   
   # Número de trabalhadores assalariados, jornada de trabalho total e remuneração total (nominal e real)
-  jornadatotalpais[x] <- sum(h_empe[x])
-  assalariadospais[x] <- sum(empe[x])
-  salariompais[x] <- sum(comp_usd[x])
-  salariorealpais[x] <- sum(comp_real[x])
+  jornadatotalpais[p] <- sum(h_empe[x])
+  assalariadospais[p] <- sum(empe[x])
+  salariompais[p] <- sum(comp_usd[x])
+  salariorealpais[p] <- sum(comp_real[x])
   
   # Compensação do capital e estoque de capital
-  lucrompais[x] <- sum(cap_usd[x])
-  capitalmpais[x] <- sum(k_usd[x])
+  lucrompais[p] <- sum(cap_usd[x])
+  capitalmpais[p] <- sum(k_usd[x])
   
-  consumointermediarioppais[x] <- sum(m[linconsumointermediario, x])
+  consumointermediarioppais[p] <- sum(m[linconsumointermediario, x])
                                         
   # Soma os consumos intermediários produtivos em variáveis temporárias (Capital constate = trabalho, insumo produtivo = moeda)
-  capitalconstantetotalpais[x] <- sum(mt[linprods, x])
+  capitalconstantetotalpais[p] <- sum(mt[linprods, x])
 
   # Soma a formação bruta de capital fixo (em moeda e trabalho) e acrescenta aos insumos produtivos
-  xfbcf <- colfbcf[which(paiscols[colfbcf]==x)]
-  fbcfmpais[x] <- sum(m[linprods, xfbcf])
-  fbcftpais[x] <- sum(mt[linprods, xfbcf])
+  xfbcf <- colfbcf[which(paiscols[colfbcf]==p)]
+  fbcfmpais[p] <- sum(m[linprods, xfbcf])
+  fbcftpais[p] <- sum(mt[linprods, xfbcf])
 
   for (y in 1:num_paises) {
     y <- linprods[which(paislins[linprods]==y)]
@@ -85,13 +85,13 @@ for (x in 1:num_paises){
 
     #Soma todas as exportações dos setores produtivos (todos os destinos de cada linha de setor produtivo)
     if (x != y) { #ignora as transações internas de cada país
-      exportacaompais[y,x]<- sum(m[y,which(paiscols==x)])
-      exportacaotpais[y,x]<- sum(mt[y,which(paiscols==x)])
+      exportacaompais[y,x]<- sum(m[y,which(paiscols==p)])
+      exportacaotpais[y,x]<- sum(mt[y,which(paiscols==p)])
     }
   }
 
   # Soma a demanda final em moeda e trabalho
-  xdemandafinal <- coldemandafinal[which(paiscols[coldemandafinal]==x)]
+  xdemandafinal <- coldemandafinal[which(paiscols[coldemandafinal]==p)]
   demandafinaltpais[x] <- sum(mt[1:tamanho, xdemandafinal])
   demandafinalmpais[x] <- sum(m[1:tamanho, xdemandafinal])
 
