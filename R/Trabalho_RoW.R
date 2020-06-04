@@ -3,34 +3,34 @@
 # Cálculo do emprego mundial
 #
 
-EMP_ROW_TOTAL <- ROW_EMP[which(ROW_EMP==VERSAO),as.character(Z)]
-was_w_row <- as.numeric(ROW_EMP[which(ROW_EMP=='was_w'),as.character(Z)])/100
-EMP_WIOD <- sum(EMP)
+emp_row_total <- row_emp[which(row_emp==VERSAO),as.character(Z)]
+was_w_row <- as.numeric(row_emp[which(row_emp=='was_w'),as.character(Z)])/100
+emp_wiod <- sum(emp)
 
-posROW <- (Num_Paises-1)*Num_Setores
-tamanho <- dim(EMP)
+posrow <- (num_paises-1)*num_setores
+tamanho <- dim(emp)
 
-PONDERACAO <- EMP
+ponderacao <- emp
 
-for (Setor in 1:Num_Setores) {
-  posicao <- Setor+posROW
-  EMP_Setor_WIOD <- sum(EMP[seq(Setor,tamanho,Num_Setores)])
-  H_EMP_Setor_WIOD <- sum(H_EMP[seq(Setor,tamanho,Num_Setores)])
-  VA_Setor_WIOD <- sum(M[LinVA,seq(Setor,tamanho-Num_Setores,Num_Setores)])
-  PONDERACAO[posicao] <- M[LinVA,posicao]*EMP_Setor_WIOD/VA_Setor_WIOD
+for (setor in 1:num_setores) {
+  posicao <- setor+posrow
+  emp_setor_wiod <- sum(emp[seq(setor,tamanho,num_setores)])
+  h_emp_setor_wiod <- sum(h_emp[seq(setor,tamanho,num_setores)])
+  va_setor_wiod <- sum(m[linva,seq(setor,tamanho-num_setores,num_setores)])
+  ponderacao[posicao] <- m[linva,posicao]*emp_setor_wiod/va_setor_wiod
 }
 
-posicao <- which(PaisLins==Paises[Paises[,3]=="ROW",2])
+posicao <- which(paislin==paises[paises[,3]=="ROW",2])
 
 
-TOTAL_PONDERACAO <- sum(PONDERACAO[posicao])
-PONDERACAO[posicao] <- PONDERACAO[posicao]/TOTAL_PONDERACAO
-EMP[posicao] <- PONDERACAO[posicao]*EMP_ROW_TOTAL
-H_EMP[posicao] <- EMP[posicao]*(H_EMP_Setor_WIOD/EMP_Setor_WIOD)
-EMPE[posicao] <- EMP[posicao]*was_w_row
-H_EMPE[posicao] <- H_EMP[posicao]*was_w_row
+paisesponderacao <- sum(ponderacao[posicao])
+ponderacao[posicao] <- ponderacao[posicao]/paisesponderacao
+emp[posicao] <- ponderacao[posicao]*emp_row_total
+h_emp[posicao] <- emp[posicao]*(h_emp_setor_wiod/emp_setor_wiod)
+empE[posicao] <- emp[posicao]*was_w_row
+h_empE[posicao] <- h_emp[posicao]*was_w_row
 
-EMP[is.na(EMP)] <- 0
-H_EMP[is.na(H_EMP)] <- 0
-EMPE[is.na(EMPE)] <- 0
-H_EMPE[is.na(H_EMPE)] <- 0
+emp[is.na(emp)] <- 0
+h_emp[is.na(h_emp)] <- 0
+empE[is.na(empE)] <- 0
+h_empE[is.na(h_empE)] <- 0
