@@ -7,6 +7,7 @@ f <- tempfile()
 download.file(kkurl, f)
 
 euklems <- readRDS(f)
+saveRDS(euklems, file = paste0(getwd(),'/sourcedata/euklems.rds'))
 #rm(f)
 
 
