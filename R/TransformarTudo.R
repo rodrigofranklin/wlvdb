@@ -38,7 +38,7 @@ col.produto.total <- num.setores*num.paises + num.demanda*num.paises + 1
 source("R/importar_sea.R")
 
 # Carrega as informações da estimativa do emp do RoW
-row.emp <- as.data.frame(read_xlsx(paste0(getwd(),"/sourcedata/ROW_emp/emprego_ROW.xlsx"), sheet = "DATA", col_names = T))
+row.emp <- as.data.frame(read_xlsx(paste0(getwd(),"/sourcedata/row_emp/emprego_row.xlsx"), sheet = "DATA", col_names = T))
 
 # Carrega as informações da estimativa do empe da China
 was_w_china <- as.data.frame(read_xlsx(paste0(getwd(),"/sourcedata/china/was_w.xlsx"), sheet = "DATA", col_names = T))

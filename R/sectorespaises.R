@@ -2,11 +2,11 @@
 #a los mismos
 
 # Lista dos países
-paises <- read.csv2(file = paste0(getwd(),"/sourcedata/",versao,"/paises.csv"), row.names = 1)
+paises <- read.csv2(file = paste0(getwd(),"/sourcedata/",versao,"/paises.csv"), row.names = 1, check.names = F)
 num.paises <- dim(paises)[1]
 
 # Obtém a informação dos setores produtivos e prepara as variávels lin.prods, col.prods e pais.lins
-setores<-read.csv2(paste0(getwd(),"/sourcedata/",versao,"/setores.csv"))
+setores<-read.csv2(paste0(getwd(),"/sourcedata/",versao,"/setores.csv"),check.names = F)
 num.setores <- dim(setores)[1]
 lin.prods <- NULL
 pais.lins <- NULL
