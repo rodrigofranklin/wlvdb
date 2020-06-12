@@ -120,8 +120,8 @@ for (z in anos) {
   h.empe[which(pais.lins==paises[paises[,3]=="CHN",2])] <- h.emp[which(pais.lins==paises[paises[,3]=="CHN",2])]*as.numeric(was_w_china[as.character(z)])/100
   coluna.sea <- coluna.sea+1
 
-  # Estimativa do emp e h.emp para o RoW
-  source(paste0(getwd(),"/R/Trabalho_RoW.R"))
+  # Estimativa de variáveis para o RoW
+  source(paste0(getwd(),"/R/suposicoes_row.R"))
 
   # Define qual a variável que será utilizada para o cálculo do valor
   if (variavel_trabalho == "h.emp") {
@@ -133,7 +133,7 @@ for (z in anos) {
     trabalho[is.na(trabalho)] <- 0
   }
 
-  source(paste0(getwd(),"/R/Transformar.R"))
+  source(paste0(getwd(),"/R/transformar.R"))
 
   source(paste0(getwd(),"/R/estimar-vars.R"))
   

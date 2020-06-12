@@ -24,7 +24,7 @@ coeficientes[is.infinite(coeficientes)] <- 0
 coeficientes[is.nan(coeficientes)] <- 0
 
 #Loads depreciation matrix Carga la matriz de depreciacion
-source("R/depreciacion.R")
+source("R/depreciacao.R")
 
 #Added depreciation matrix to Leontief's inverse calculus
 # Calcula a matriz leontief
