@@ -6,7 +6,11 @@
 k.composicao <- matrix(rep(t(prop.table(m.wio[1:(tamanho),col.fbcf],2)),each=num.setores), ncol = tamanho, nrow = tamanho, byrow = TRUE)*matrix(k.usd,nrow=tamanho,ncol=tamanho, byrow= TRUE)
 
 #Calcula as taxas de depreciacao
-tx.depreciacao <- matrix(0.15 , nrow = tamanho , ncol = tamanho)
+tx.depreciacao <- as.matrix(read.csv2(paste0(getwd(),"/sourcedata/",versao,"/txdepreciacao.csv"),header = FALSE))
+tx.depreciacao <- do.call("rbind", replicate(num.paises, tx.depreciacao, simplify=FALSE))
+tx.depreciacao <- do.call("cbind", replicate(num.paises, tx.depreciacao, simplify=FALSE))
+
+#Devemos utilizar outro método: distribuir o estoque de capital, distribuir a fbcf e realizar as deduções
 
 #Aplica as taxas de depreciacao ao capital total
 m.depreciacao <- k.composicao*tx.depreciacao

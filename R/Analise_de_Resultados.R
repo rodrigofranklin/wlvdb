@@ -27,7 +27,7 @@ Resultados <- array(data = 0,dim = c(17,41,28), dimnames = list(c(1995:2011),
                                                     "LucroMPais","CapitalMPais","ConsumoIntermediarioPPais","COXK","COXT","COIK","COIT")))
 # Lê os resultados dos arquivos .csv
 for (Z in 1995:2011) {
-  Resultados[as.character(Z),,] <- as.matrix(read.csv2(file = paste0(getwd(),"/Resultados/Resultados",as.character(Z),".csv"), row.names = 1))
+  Resultados[as.character(Z),,] <- as.matrix(read.csv2(file = paste0(getwd(),"/Resultados/July14_h.emp_Resultados",as.character(Z),".csv"), row.names = 1))
 }
 #####
 
@@ -64,6 +64,10 @@ for (Pais in Paises) {
     VFT <- Resultados[,Pais,'RemuneracaoTPais']/Resultados[,Pais,'TrabalhadoresPais']
     JORNADA <- Resultados[,Pais,'PIBTPais']/Resultados[,Pais,'TrabalhadoresPais']
   }
+  JORNADA[is.na(JORNADA)] <- 0
+  VFT[is.na(VFT)] <- 0
+  JORNADA[is.infinite(JORNADA)] <- 0
+  VFT[is.infinite(VFT)] <- 0
   plot(VFT,
        type = "l",
        ylim = c(min(VFT,JORNADA),max(JORNADA,VFT)),
