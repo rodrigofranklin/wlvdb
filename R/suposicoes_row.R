@@ -30,7 +30,8 @@ h.empe[is.na(h.empe)] <- 0
 paises.pobres <- c(17, 18, 4, 5, 37, 27, 7, 32, 31, 29, 16, 23, 24, 33, 11, 9)
 filtro <- rep(0, times=pos.row)
 for (y in 1: length(paises.pobres)) {
-  filtro <- filtro + c(rep(0, times = (35*(paises.pobres[y]-1))),rep(1,times=35),rep(0,times=35*(40-paises.pobres[y])))
+  filtro <- filtro + c(rep(0, times = (num.setores*(paises.pobres[y]-1))),rep(1,times=num.setores),rep(0,times=num.setores*(num.paises-1-paises.pobres[y])))
 }
 filtro <- filtro*rep(1:num.setores,times = num.paises-1)
+
 k.usd[posicao.row] <- m.wio[lin.va,posicao.row]*tapply(k.usd[1:pos.row], filtro, sum, simplify = TRUE)[2:(num.setores+1)]/tapply(m.wio[lin.va,1:pos.row], filtro, sum, simplify = TRUE)[2:(num.setores+1)]

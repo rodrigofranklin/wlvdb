@@ -20,3 +20,5 @@ depreciacao <- matrix(0, nrow = length(lin.prods), ncol = length(col.prods))
 depreciacao[x,x] <- m.depreciacao[col.prods,lin.prods]/matrix(m.wio[lin.produto.total,lin.prods], nrow = cols, ncol=cols, byrow = TRUE)
 depreciacao[is.infinite(depreciacao)] <- 0
 depreciacao[is.nan(depreciacao)] <- 0
+
+k.dep <- array(colSums(m.depreciacao))

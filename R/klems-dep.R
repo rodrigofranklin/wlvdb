@@ -3,149 +3,141 @@
 ###R format available euklems data on capital stock by sector by country by year
 library(magrittr)
 library(dplyr)
+#library(tidyr)
 
 ### Instruções de download
-#kkurl <- "http://euklems.eu/bulk/Statistical_Capital.rds"
-#f <- tempfile()
-#download.file(kkurl, f)
-#euklems <- readRDS(f)
-#saveRDS(euklems, file = paste0(getwd(),'/sourcedata/euklems.rds'))
-#rm(f)
+# kkurl <- "http://euklems.eu/bulk/Statistical_Capital.rds"
+# f <- paste0(getwd(),'/sourcedata/euklems.rds')
+# download.file(kkurl, f)
+# euklems <- readRDS(f)
+
+# kkurl <- "http://euklems.eu/bulk/Statistical_National-Accounts.rds"
+# f <- paste0(getwd(),'/sourcedata/euklems-na.rds')
+# download.file(kkurl, f)
+# euklems.na <- readRDS(f)
 
 ## Instruções para leitura de dados já baixados
 euklems <- readRDS(paste0(getwd(),'/sourcedata/euklems.rds'))
-
-
-#Converter dados - verificar se precisamos covnerter para setores
-
-#euklems <- euklems %>% pivot_longer(-1:-6,names_to = "var", values_to = "value")
-
-#estimar matrizes de depreciação de capital - K(t+1) = k - D + I   
-# D = k -k(t+1) + I
-
-#euklemsl <- euklems %>% pivot_wider(names_from = var, values_from = value) 
-
-euklemsK <- euklems[grepl("K_",euklems$var),]
-
-euklemsI <- euklems[grepl("I_",euklems$var),]
-
-euklemsI$var <- gsub("^I","K",euklemsI$var)
-
-euklemski <- left_join(euklemsK, euklemsI, by = names(euklemsK)[-length(names(euklemsK))])
-
-euklemsK$year <- euklemsK$year -1
-euklemsI$year <- euklemsI$year -1
-
-
-
-euklemsd <- left_join(euklemski, euklemsK, by = names(euklemsK)[-length(names(euklemsK))])
-
-euklemsd$depreciation <- (euklemsd$value.x+euklemsd$value.y -euklemsd$value)
-euklemsd$tx.depreciation <- 1-((euklemsd$value-euklemsd$value.y)/euklemsd$value.x)
-
-euklemsd <- left_join(euklemsd, euklemsI, by = names(euklemsI)[-length(names(euklemsI))])
-euklemsd$tx.depreciation.2 <- 1-((euklemsd$value.x.x-euklemsd$value.y.y)/euklemsd$value.x)
-
-
-matrizd <- euklemsd[,c(1,5,6,7,11)]
-
-matrizd$paisetor <- paste(matrizd$country,matrizd$code)
+euklems.na <- readRDS(paste0(getwd(),'/sourcedata/euklems-na.rds'))
 
 paises.euklems <- unique(euklems[,1])
-setores.euklems <- unique(euklems[,6])
-paises.setores <- data.frame(cbind(country=rep(paises.euklems,each=length(setores.euklems)),code=setores.euklems))
+setores.euklems <- unique(euklems[,c(5,6)])
+paises.setores <- data.frame(cbind(country=rep(paises.euklems,each=length(setores.euklems[,2])),code=setores.euklems[,2],agg=setores.euklems[,1]))
+ek.va = ek.i = ek.k <- paises.setores[,c(1,2)]
 
-ek.i.it[which(ek.k.it[,2]=="TOT"),3]
-rep(ek.k.it[which(ek.k.it[,2]=="TOT"),4], each = length(setores.euklems))
+ek.va$va <- left_join(paises.setores[,c(1,2)],euklems.na[which(euklems.na[,3]=="VA" & euklems.na[,7]=="2014"),c(1,6,8)], by = c("country", "code"))[,3]
 
-ek.k.it <- left_join(paises.setores,euklems[which(euklems[,3]=="K_IT" & euklems[,7]=="1995"),c(1,5,6,8)])
-ek.k.it$prop <- ek.k.it$value/rep(ek.k.it[which(ek.k.it[,2]=="TOT"),4], each = length(setores.euklems))
-ek.k.it$media <- rep(tapply(ek.k.it$prop, ek.k.it$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.k.it$prop, ek.k.it$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.k.it$prop[is.na(ek.k.it$prop)] <- ek.k.it$media[is.na(ek.k.it$prop)]
-ek.i.it <- left_join(paises.setores,euklems[which(euklems[,3]=="I_IT" & euklems[,7]=="1995"),c(1,6,8)])
-ek.i.it$prop <- ek.i.it$value/rep(tapply(ek.i.it$value, ek.i.it$country, sum, na.rm = TRUE), each = length(setores.euklems))
-ek.i.it$media <- rep(tapply(ek.i.it$prop, ek.i.it$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.i.it$prop, ek.i.it$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.i.it$prop[is.na(ek.i.it$prop)] <- ek.i.it$media[is.na(ek.i.it$prop)]
+ek.k$gfcf <- left_join(paises.setores[,c(1,2)],euklems[which(euklems[,3]=="K_GFCF" & euklems[,7]=="2014"),c(1,6,8)], by = c("country", "code"))[,3]
 
-ek.k.ct <- left_join(paises.setores,euklems[which(euklems[,3]=="K_CT" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="1995"),c(1,6,8)])
-ek.k.ct$prop <- ek.k.ct$value/rep(tapply(ek.k.ct$value, ek.k.ct$country, sum, na.rm = TRUE), each = length(setores.euklems))
-ek.k.ct$media <- rep(tapply(ek.k.ct$prop, ek.k.ct$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.k.ct$prop, ek.k.ct$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.k.ct$prop[is.na(ek.k.ct$prop)] <- ek.k.ct$media[is.na(ek.k.ct$prop)]
-ek.i.ct <- left_join(paises.setores,euklems[which(euklems[,3]=="I_CT" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="1995"),c(1,6,8)])
-ek.i.ct$prop <- ek.i.ct$value/rep(tapply(ek.i.ct$value, ek.i.ct$country, sum, na.rm = TRUE), each = length(setores.euklems))
-ek.i.ct$media <- rep(tapply(ek.i.ct$prop, ek.i.ct$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.i.ct$prop, ek.i.ct$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.i.ct$prop[is.na(ek.i.ct$prop)] <- ek.i.ct$media[is.na(ek.i.ct$prop)]
+ek.k$it <- left_join(paises.setores[,c(1,2)],euklems[which(euklems[,3]=="K_IT"& euklems[,7]=="2014"),c(1,6,8)], by = c("country", "code"))[,3]
+ek.k$ct <- left_join(paises.setores[,c(1,2)],euklems[which(euklems[,3]=="K_CT"& euklems[,7]=="2014"),c(1,6,8)], by = c("country", "code"))[,3]
+ek.k$soft <- left_join(paises.setores[,c(1,2)],euklems[which(euklems[,3]=="K_Soft_DB"& euklems[,7]=="2014"),c(1,6,8)], by = c("country", "code"))[,3]
+ek.k$traeq <- left_join(paises.setores[,c(1,2)],euklems[which(euklems[,3]=="K_TraEq"& euklems[,7]=="2014"),c(1,6,8)], by = c("country", "code"))[,3]
+ek.k$omach <- left_join(paises.setores[,c(1,2)],euklems[which(euklems[,3]=="K_OMach"& euklems[,7]=="2014"),c(1,6,8)], by = c("country", "code"))[,3]
+ek.k$ocon <- left_join(paises.setores[,c(1,2)],euklems[which(euklems[,3]=="K_OCon"& euklems[,7]=="2014"),c(1,6,8)], by = c("country", "code"))[,3]
+ek.k$rstruc <- left_join(paises.setores[,c(1,2)],euklems[which(euklems[,3]=="K_RStruc"& euklems[,7]=="2014"),c(1,6,8)], by = c("country", "code"))[,3]
+ek.k$oipp <- left_join(paises.setores[,c(1,2)],euklems[which(euklems[,3]=="K_OIPP"& euklems[,7]=="2014"),c(1,6,8)], by = c("country", "code"))[,3]
+ek.k$rd <- left_join(paises.setores[,c(1,2)],euklems[which(euklems[,3]=="K_RD"& euklems[,7]=="2014"),c(1,6,8)], by = c("country", "code"))[,3]
+ek.k$cult <- left_join(paises.setores[,c(1,2)],euklems[which(euklems[,3]=="K_Cult"& euklems[,7]=="2014"),c(1,6,8)], by = c("country", "code"))[,3]
+ek.k$soma <- rowSums(ek.k[,4:13], na.rm = TRUE)
 
-ek.k.soft <- left_join(paises.setores,euklems[which(euklems[,3]=="K_Soft_DB" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="1995"),c(1,6,8)])
-ek.k.soft$prop <- ek.k.soft$value/rep(tapply(ek.k.soft$value, ek.k.soft$country, sum, na.rm = TRUE), each = length(setores.euklems))
-ek.k.soft$media <- rep(tapply(ek.k.soft$prop, ek.k.soft$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.k.soft$prop, ek.k.soft$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.k.soft$prop[is.na(ek.k.soft$prop)] <- ek.k.soft$media[is.na(ek.k.soft$prop)]
-ek.i.soft <- left_join(paises.setores,euklems[which(euklems[,3]=="I_Soft_DB" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="1995"),c(1,6,8)])
-ek.i.soft$prop <- ek.i.soft$value/rep(tapply(ek.i.soft$value, ek.i.soft$country, sum, na.rm = TRUE), each = length(setores.euklems))
-ek.i.soft$media <- rep(tapply(ek.i.soft$prop, ek.i.soft$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.i.soft$prop, ek.i.soft$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.i.soft$prop[is.na(ek.i.soft$prop)] <- ek.i.soft$media[is.na(ek.i.soft$prop)]
 
-ek.k.traeq <- left_join(paises.setores,euklems[which(euklems[,3]=="K_TraEq" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="1995"),c(1,6,8)])
-ek.k.traeq$prop <- ek.k.traeq$value/rep(tapply(ek.k.traeq$value, ek.k.traeq$country, sum, na.rm = TRUE), each = length(setores.euklems))
-ek.k.traeq$media <- rep(tapply(ek.k.traeq$prop, ek.k.traeq$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.k.traeq$prop, ek.k.traeq$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.k.traeq$prop[is.na(ek.k.traeq$prop)] <- ek.k.traeq$media[is.na(ek.k.traeq$prop)]
-ek.i.traeq <- left_join(paises.setores,euklems[which(euklems[,3]=="I_TraEq" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="1995"),c(1,6,8)])
-ek.i.traeq$prop <- ek.i.traeq$value/rep(tapply(ek.i.traeq$value, ek.i.traeq$country, sum, na.rm = TRUE), each = length(setores.euklems))
-ek.i.traeq$media <- rep(tapply(ek.i.traeq$prop, ek.i.traeq$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.i.traeq$prop, ek.i.traeq$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.i.traeq$prop[is.na(ek.i.traeq$prop)] <- ek.i.traeq$media[is.na(ek.i.traeq$prop)]
+##Resolver desagregações
 
-ek.k.omach <- left_join(paises.setores,euklems[which(euklems[,3]=="K_OMach" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="1995"),c(1,6,8)])
-ek.k.omach$prop <- ek.k.omach$value/rep(tapply(ek.k.omach$value, ek.k.omach$country, sum, na.rm = TRUE), each = length(setores.euklems))
-ek.k.omach$media <- rep(tapply(ek.k.omach$prop, ek.k.omach$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.k.omach$prop, ek.k.omach$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.k.omach$prop[is.na(ek.k.omach$prop)] <- ek.k.omach$media[is.na(ek.k.omach$prop)]
-ek.i.omach <- left_join(paises.setores,euklems[which(euklems[,3]=="I_OMach" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="1995"),c(1,6,8)])
-ek.i.omach$prop <- ek.i.omach$value/rep(tapply(ek.i.omach$value, ek.i.omach$country, sum, na.rm = TRUE), each = length(setores.euklems))
-ek.i.omach$media <- rep(tapply(ek.i.omach$prop, ek.i.omach$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.i.omach$prop, ek.i.omach$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.i.omach$prop[is.na(ek.i.omach$prop)] <- ek.i.omach$media[is.na(ek.i.omach$prop)]
+#Primeiro, preciso estabelecer as ponderações do valor agregado
+ek.va$prop <- 0
+ek.va$prop2 <- 0
+ek.va$prop[grep("C.", ek.va[,2])] <- ek.va[grep("C.", ek.va[,2]),3]/rep(ek.va[ek.va[,2]=="C",3], each = length(grep("C.", setores.euklems[,2])))
+ek.va$prop2[ek.va[,2] %in% c("C20", "C21")] <- ek.va[ek.va[,2] %in% c("C20", "C21"),3]/rep(ek.va[ek.va[,2]=="C20_C21",3], each = 2)
+ek.va$prop2[ek.va[,2] %in% c("C26", "C27")] <- ek.va[ek.va[,2] %in% c("C26", "C27"),3]/rep(ek.va[ek.va[,2]=="C26_C27",3], each = 2)
+ek.va$prop[grep("H.", ek.va[,2])] <- ek.va[grep("H.", ek.va[,2]),3]/rep(ek.va[ek.va[,2]=="H",3], each = length(grep("H.", setores.euklems[,2])))
+ek.va$prop[grep("J.", ek.va[,2])] <- ek.va[grep("J.", ek.va[,2]),3]/rep(ek.va[ek.va[,2]=="J",3], each = length(grep("J.", setores.euklems[,2])))
+ek.va$prop[grep("G.", ek.va[,2])] <- ek.va[grep("G.", ek.va[,2]),3]/rep(ek.va[ek.va[,2]=="G",3], each = length(grep("G.", setores.euklems[,2])))
+ek.va$prop[ek.va[,2] %in% c("D", "E")] <- ek.va[ek.va[,2] %in% c("D", "E"),3]/rep(ek.va[ek.va[,2]=="D_E",3], each = 2)
+ek.va$prop[ek.va[,2] %in% c("R", "S")] <- ek.va[ek.va[,2] %in% c("R", "S"),3]/rep(ek.va[ek.va[,2]=="R_S",3], each = 2)
+ek.va$prop[ek.va[,2] %in% c("O", "P", "Q")] <- ek.va[ek.va[,2] %in% c("O", "P", "Q"),3]/rep(ek.va[ek.va[,2]=="O-Q",3], each = 3)
+ek.va.prop <- do.call("cbind", replicate(10, ek.va$prop, simplify=FALSE))
+ek.va.prop2 <- do.call("cbind", replicate(10, ek.va$prop2, simplify=FALSE))
 
-ek.k.ocon <- left_join(paises.setores,euklems[which(euklems[,3]=="K_OCon" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="1995"),c(1,6,8)])
-ek.k.ocon$prop <- ek.k.ocon$value/rep(tapply(ek.k.ocon$value, ek.k.ocon$country, sum, na.rm = TRUE), each = length(setores.euklems))
-ek.k.ocon$media <- rep(tapply(ek.k.ocon$prop, ek.k.ocon$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.k.ocon$prop, ek.k.ocon$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.k.ocon$prop[is.na(ek.k.ocon$prop)] <- ek.k.ocon$media[is.na(ek.k.ocon$prop)]
-ek.i.ocon <- left_join(paises.setores,euklems[which(euklems[,3]=="I_OCon" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="1995"),c(1,6,8)])
-ek.i.ocon$prop <- ek.i.ocon$value/rep(tapply(ek.i.ocon$value, ek.i.ocon$country, sum, na.rm = TRUE), each = length(setores.euklems))
-ek.i.ocon$media <- rep(tapply(ek.i.ocon$prop, ek.i.ocon$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.i.ocon$prop, ek.i.ocon$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.i.ocon$prop[is.na(ek.i.ocon$prop)] <- ek.i.ocon$media[is.na(ek.i.ocon$prop)]
+#Em seguida, desagregar
 
-ek.k.rstruc <- left_join(paises.setores,euklems[which(euklems[,3]=="K_RStruc" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="1995"),c(1,6,8)])
-ek.k.rstruc$prop <- ek.k.rstruc$value/rep(tapply(ek.k.rstruc$value, ek.k.rstruc$country, sum, na.rm = TRUE), each = length(setores.euklems))
-ek.k.rstruc$media <- rep(tapply(ek.k.rstruc$prop, ek.k.rstruc$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.k.rstruc$prop, ek.k.rstruc$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.k.rstruc$prop[is.na(ek.k.rstruc$prop)] <- ek.k.rstruc$media[is.na(ek.k.rstruc$prop)]
-ek.i.rstruc <- left_join(paises.setores,euklems[which(euklems[,3]=="I_RStruc" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="1995"),c(1,6,8)])
-ek.i.rstruc$prop <- ek.i.rstruc$value/rep(tapply(ek.i.rstruc$value, ek.i.rstruc$country, sum, na.rm = TRUE), each = length(setores.euklems))
-ek.i.rstruc$media <- rep(tapply(ek.i.rstruc$prop, ek.i.rstruc$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.i.rstruc$prop, ek.i.rstruc$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.i.rstruc$prop[is.na(ek.i.rstruc$prop)] <- ek.i.rstruc$media[is.na(ek.i.rstruc$prop)]
+agregacao.setores <- read.csv2(paste0(getwd(),'/sourcedata/agregacao-euklems.csv'))
 
-ek.k.oipp <- left_join(paises.setores,euklems[which(euklems[,3]=="K_OIPP" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="1995"),c(1,6,8)])
-ek.k.oipp$prop <- ek.k.oipp$value/rep(tapply(ek.k.oipp$value, ek.k.oipp$country, sum, na.rm = TRUE), each = length(setores.euklems))
-ek.k.oipp$media <- rep(tapply(ek.k.oipp$prop, ek.k.oipp$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.k.oipp$prop, ek.k.oipp$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.k.oipp$prop[is.na(ek.k.oipp$prop)] <- ek.k.oipp$media[is.na(ek.k.oipp$prop)]
-ek.i.oipp <- left_join(paises.setores,euklems[which(euklems[,3]=="I_OIPP" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="1995"),c(1,6,8)])
-ek.i.oipp$prop <- ek.i.oipp$value/rep(tapply(ek.i.oipp$value, ek.i.oipp$country, sum, na.rm = TRUE), each = length(setores.euklems))
-ek.i.oipp$media <- rep(tapply(ek.i.oipp$prop, ek.i.oipp$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.i.oipp$prop, ek.i.oipp$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.i.oipp$prop[is.na(ek.i.oipp$prop)] <- ek.i.oipp$media[is.na(ek.i.oipp$prop)]
+for (x in 1:nrow(agregacao.setores)) {
+  filtro1 <- ek.k[,2]==as.character(agregacao.setores[x,1]) & ek.k[,14]==0
+  filtro2 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]==as.character(agregacao.setores[x,2])
+  ek.k[filtro1,4:13] <- ek.k[filtro2,4:13] * ek.va.prop2[filtro1,]
+  #ek.k[filtro1,14] <- rowSums(ek.k[filtro1,4:13], na.rm = TRUE)
+}
 
-ek.k.rd <- left_join(paises.setores,euklems[which(euklems[,3]=="K_RD" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="1995"),c(1,6,8)])
-ek.k.rd$prop <- ek.k.rd$value/rep(tapply(ek.k.rd$value, ek.k.rd$country, sum, na.rm = TRUE), each = length(setores.euklems))
-ek.k.rd$media <- rep(tapply(ek.k.rd$prop, ek.k.rd$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.k.rd$prop, ek.k.rd$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.k.rd$prop[is.na(ek.k.rd$prop)] <- ek.k.rd$media[is.na(ek.k.rd$prop)]
-ek.i.rd <- left_join(paises.setores,euklems[which(euklems[,3]=="I_RD" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="1995"),c(1,6,8)])
-ek.i.rd$prop <- ek.i.rd$value/rep(tapply(ek.i.rd$value, ek.i.rd$country, sum, na.rm = TRUE), each = length(setores.euklems))
-ek.i.rd$media <- rep(tapply(ek.i.rd$prop, ek.i.rd$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.i.rd$prop, ek.i.rd$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.i.rd$prop[is.na(ek.i.rd$prop)] <- ek.i.rd$media[is.na(ek.i.rd$prop)]
+ek.k$soma <- rowSums(ek.k[,4:13], na.rm = TRUE) #soma os dados disponíveis para saber quais foram alterados
 
-ek.k.cult <- left_join(paises.setores,euklems[which(euklems[,3]=="K_Cult" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="1995"),c(1,6,8)])
-ek.k.cult$prop <- ek.k.cult$value/rep(tapply(ek.k.cult$value, ek.k.cult$country, sum, na.rm = TRUE), each = length(setores.euklems))
-ek.k.cult$media <- rep(tapply(ek.k.cult$prop, ek.k.cult$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.k.cult$prop, ek.k.cult$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.k.cult$prop[is.na(ek.k.cult$prop)] <- ek.k.cult$media[is.na(ek.k.cult$prop)]
-ek.i.cult <- left_join(paises.setores,euklems[which(euklems[,3]=="I_Cult" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="1995"),c(1,6,8)])
-ek.i.cult$prop <- ek.i.cult$value/rep(tapply(ek.i.cult$value, ek.i.cult$country, sum, na.rm = TRUE), each = length(setores.euklems))
-ek.i.cult$media <- rep(tapply(ek.i.cult$prop, ek.i.cult$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.i.cult$prop, ek.i.cult$country, sum, na.rm = TRUE), each =  length(setores.euklems))
-ek.i.cult$prop[is.na(ek.i.cult$prop)] <- ek.i.cult$media[is.na(ek.i.cult$prop)]
+for (x in 1:nrow(agregacao.setores)) {
+  filtro1 <- ek.k[,2]==as.character(agregacao.setores[x,1]) & ek.k[,14]==0
+  filtro2 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]==as.character(agregacao.setores[x,2])
+  ek.k[filtro1,4:13] <- ek.k[filtro2,4:13] * ek.va.prop[filtro1,]
+}
+
+##Preparar proporções
+
+#Criar colunas de tipos de capital faltando
+ek.k$itct <- ek.k$it + ek.k$ct
+ek.k$rsoc <- ek.k$rstruc + ek.k$ocon
+ek.k$softipp <- ek.k$soft + ek.k$oipp
+ek.k$rdetc <- ek.k$rd + ek.k$softipp
+
+#Calcula as proporções
+for (x in 4:13) {
+  ek.k[,x] <- ek.k[,x]/rep(ek.k[ek.k[,2]=="TOT",x], each=length(setores.euklems[,2]))
+}
+
+##Eliminar países sem dados adequados
+ek.k$soma <- rowSums(ek.k[,4:13], na.rm = FALSE)
+paises.para.excluir <- (ek.k[ek.k[,2]=="TOT_IND" & is.na(ek.k[,14]),1]) #como vou retirar as agregações agora, registro quais países devem ser mantidos (para excluir os demais futuramente)
+ek.k <- ek.k[!(ek.k[,1] %in% paises.para.excluir),]
+
+##Resolver a falta de agregações
+ek.k[is.na(ek.k)] <- 0
+
+filtro1 = ek.k[,2]=="C20_C21" & ek.k[,3]==0
+ek.k[filtro1, 4:13] <- ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C20",4:13]+ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C21",4:13]
+
+filtro1 = ek.k[,2]=="C26_C27" & ek.k[,3]==0
+ek.k[filtro1, 4:13] <- ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C26",4:13]+ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C27",4:13]
+
+filtro1 = ek.k[,2]=="D_E" & ek.k[,3]==0
+ek.k[filtro1, 4:13] <- ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="D",4:13]+ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="E",4:13]
+
+ek.k.rsu = ek.k.53_63 <- ek.k[ek.k[,2]=="R",]
+
+ek.k.rsu$code <- "R_S_U"
+filtro1 = ek.k[,2]=="R_S" & ek.k[,3]==0
+ek.k[filtro1, 4:13] <- ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="R",4:13]+ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="S",4:13]
+ek.k.rsu[4:13] <- ek.k[ek.k[,2]=="R_S",4:13] + ek.k[ek.k[,2]=="U",4:13]
+
+ek.k.53_63$code <- "H53-J63"
+ek.k.53_63[4:13] <- ek.k[ek.k[,2]=="H53",4:13] + ek.k[ek.k[,2]=="J58-J60",4:13] + ek.k[ek.k[,2]=="J61",4:13] + ek.k[ek.k[,2]=="J62_J63",4:13]
+
+ek.k <- rbind(ek.k, ek.k.rsu, ek.k.53_63)
+
+##Calcular situação padrão para aplicação generalizada
+
+#Primeira possibilidade -> espanha
+
+#segunda possibilidade -> média
+
+##Projetar tabela 1435x1435 (Correspondência países e setores)
+
+
+##Salvar tabela
+
+# ek.k.cult <- left_join(paises.setores,euklems[which(euklems[,3]=="K_Cult" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="2014"),c(1,6,8)], by = c("country", "code"))
+# ek.k.cult$prop <- ek.k.cult$value/rep(tapply(ek.k.cult$value, ek.k.cult$country, sum, na.rm = TRUE), each = length(setores.euklems[,2]))
+# ek.k.cult$media <- rep(tapply(ek.k.cult$prop, ek.k.cult$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.k.cult$prop, ek.k.cult$country, sum, na.rm = TRUE), each =  length(setores.euklems[,2]))
+# ek.k.cult$prop[is.na(ek.k.cult$prop)] <- ek.k.cult$media[is.na(ek.k.cult$prop)]
+# ek.i.cult <- left_join(paises.setores,euklems[which(euklems[,3]=="I_Cult" & euklems[,5]!="Agg" & euklems[,5]!="*Agg" & euklems[,7]=="2014"),c(1,6,8)], by = c("country", "code"))
+# ek.i.cult$prop <- ek.i.cult$value/rep(tapply(ek.i.cult$value, ek.i.cult$country, sum, na.rm = TRUE), each = length(setores.euklems[,2]))
+# ek.i.cult$media <- rep(tapply(ek.i.cult$prop, ek.i.cult$code, mean, na.rm = TRUE), times = length(paises.euklems))*rep(1-tapply(ek.i.cult$prop, ek.i.cult$country, sum, na.rm = TRUE), each =  length(setores.euklems[,2]))
+# ek.i.cult$prop[is.na(ek.i.cult$prop)] <- ek.i.cult$media[is.na(ek.i.cult$prop)]
 
 #exportar isso como RDS

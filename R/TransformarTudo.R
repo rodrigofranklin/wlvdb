@@ -61,7 +61,7 @@ for (z in anos) {
   }
   
   # Separa as variáveis desejadas da tabela de contas socioeconômicas
-  h.emp = h.empe = emp = empe = comp.real = lab.real = k.usd = cap.usd = lab.usd = comp.usd <- array(data = 0, dim = num.paises*num.setores)
+  cambio = h.emp = h.empe = emp = empe = comp.real = lab.real = k.usd = cap.usd = lab.usd = comp.usd <- array(data = 0, dim = num.paises*num.setores)
   w <- 1
   for (x in 1:(num.paises-1)) {
     linhas.pais.h.emp <- linhas.h.emp[which(sea[linhas.h.emp,'country'] == as.character(paises[x,3]))]
@@ -93,20 +93,20 @@ for (z in anos) {
       linhas.setor.pais.gfcf.p <- linhas.pais.gfcf.p[which(sea[linhas.pais.gfcf.p,'code'] == as.character(setores[y,1]))]
       linhas.setor.pais.k <- linhas.pais.k[which(sea[linhas.pais.k,'code'] == as.character(setores[y,1]))]
       
-      cambio <- ifelse(as.numeric(sea[linhas.setor.pais.va,coluna.sea]) !=0,m.wio[lin.va,w]/as.numeric(sea[linhas.setor.pais.va,coluna.sea]),0)
+      cambio[w] <- ifelse(as.numeric(sea[linhas.setor.pais.va,coluna.sea]) !=0,m.wio[lin.va,w]/as.numeric(sea[linhas.setor.pais.va,coluna.sea]),0)
       h.empe[w]<-as.numeric(sea[linhas.setor.pais.h.empe,coluna.sea])*1000000
       emp[w]<-as.numeric(sea[linhas.setor.pais.emp,coluna.sea])*1000
       empe[w]<-as.numeric(sea[linhas.setor.pais.empe,coluna.sea])*1000
       comp.real[w] <- as.numeric(sea[linhas.setor.pais.comp,coluna.sea])/as.numeric(sea[linhas.setor.pais.va.p,coluna.sea])*100
       lab.real[w] <- as.numeric(sea[linhas.setor.pais.lab,coluna.sea])/as.numeric(sea[linhas.setor.pais.va.p,coluna.sea])*100
-      cap.usd[w] <- as.numeric(sea[linhas.setor.pais.cap,coluna.sea])*cambio
-      lab.usd[w] <- as.numeric(sea[linhas.setor.pais.lab,coluna.sea])*cambio
-      comp.usd[w] <- as.numeric(sea[linhas.setor.pais.comp,coluna.sea])*cambio
+      cap.usd[w] <- as.numeric(sea[linhas.setor.pais.cap,coluna.sea])*cambio[w]
+      lab.usd[w] <- as.numeric(sea[linhas.setor.pais.lab,coluna.sea])*cambio[w]
+      comp.usd[w] <- as.numeric(sea[linhas.setor.pais.comp,coluna.sea])*cambio[w]
       if (versao == 'July14') {
         h.emp[w] <- as.numeric(sea[linhas.setor.pais.h.emp,coluna.sea])*1000000
-        k.usd[w] <- as.numeric(sea[linhas.setor.pais.k.gfcf,coluna.sea])*as.numeric(sea[linhas.setor.pais.gfcf.p,coluna.sea])/100*cambio
+        k.usd[w] <- as.numeric(sea[linhas.setor.pais.k.gfcf,coluna.sea])*as.numeric(sea[linhas.setor.pais.gfcf.p,coluna.sea])/100*cambio[w]
       } else {
-        k.usd[w] <- as.numeric(sea[linhas.setor.pais.k,coluna.sea])*cambio
+        k.usd[w] <- as.numeric(sea[linhas.setor.pais.k,coluna.sea])*cambio[w]
       }
       w <- w+1
     }
