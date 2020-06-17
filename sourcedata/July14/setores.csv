@@ -1,36 +1,36 @@
-Code;Setor;WIOD;produtivo;produtivo
-AtB;Agriculture, Hunting, Forestry and Fishing;c1;1;1
-C;Mining and Quarrying;c2;1;1
-15t16;Food, Beverages and Tobacco;c3;1;1
-17t18;Textiles and Textile Products;c4;1;1
-19;Leather, Leather and Footwear;c5;1;1
-20;Wood and Products of Wood and Cork;c6;1;1
-21t22;Pulp, Paper, Paper , Printing and Publishing;c7;1;1
-23;Coke, Refined Petroleum and Nuclear Fuel;c8;1;1
-24;Chemicals and Chemical Products;c9;1;1
-25;Rubber and Plastics;c10;1;1
-26;Other Non-Metallic Mineral;c11;1;1
-27t28;Basic Metals and Fabricated Metal;c12;1;1
-29;Machinery, Nec;c13;1;1
-30t33;Electrical and Optical Equipment;c14;1;1
-34t35;Transport Equipment;c15;1;1
-36t37;"Manufacturing, Nec; Recycling";c16;1;1
-E;Electricity, Gas and Water Supply;c17;1;1
-F;Construction;c18;1;1
-50;"Sale, Maintenance and Repair of Motor Vehicles and Motorcycles; Retail Sale of Fuel";c19;0;0
-51;Wholesale Trade and Commission Trade, Except of Motor Vehicles and Motorcycles;c20;0;0
-52;"Retail Trade, Except of Motor Vehicles and Motorcycles; Repair of Household Goods";c21;0;0
-H;Hotels and Restaurants;c22;0;0
-60;Inland Transport;c23;1;1
-61;Water Transport;c24;1;1
-62;Air Transport;c25;1;1
-63;"Other Supporting and Auxiliary Transport Activities; Activities of Travel Agencies";c26;0;0
-64;Post and Telecommunications;c27;0;0
-J;Financial Intermediation;c28;0;0
-70;Real Estate Activities;c29;0;0
-71t74;Renting of M&Eq and Other Business Activities;c30;0;0
-L;"Public Admin and Defence; Compulsory Social Security";c31;0;0
-M;Education;c32;1;1
-N;Health and Social Work;c33;1;1
-O;Other Community, Social and Personal Services;c34;0;0
-P;Private Households with Employed Persons;c35;0;0
+Code;Setor;WIOD;produtivo;produtivo;euklems.capital;euklems.setor
+AtB;Agriculture, Hunting, Forestry and Fishing;c1;1;1;cult;A
+C;Mining and Quarrying;c2;1;1;oipp;B
+15t16;Food, Beverages and Tobacco;c3;1;1;omach;C10-C12
+17t18;Textiles and Textile Products;c4;1;1;omach;C13-C15
+19;Leather, Leather and Footwear;c5;1;1;omach;C13-C15
+20;Wood and Products of Wood and Cork;c6;1;1;omach;C16-C18
+21t22;Pulp, Paper, Paper , Printing and Publishing;c7;1;1;omach;C16-C18
+23;Coke, Refined Petroleum and Nuclear Fuel;c8;1;1;omach;C19
+24;Chemicals and Chemical Products;c9;1;1;omach;C20_C21
+25;Rubber and Plastics;c10;1;1;omach;C22_C23
+26;Other Non-Metallic Mineral;c11;1;1;omach;C31-C33
+27t28;Basic Metals and Fabricated Metal;c12;1;1;omach;C24_C25
+29;Machinery, Nec;c13;1;1;omach;C28
+30t33;Electrical and Optical Equipment;c14;1;1;itct;C26_C27
+34t35;Transport Equipment;c15;1;1;traeq;C29_C30
+36t37;"Manufacturing, Nec; Recycling";c16;1;1;omach;C31-C33
+E;Electricity, Gas and Water Supply;c17;1;1;omach;D_E
+F;Construction;c18;1;1;rsoc;F
+50;"Sale, Maintenance and Repair of Motor Vehicles and Motorcycles; Retail Sale of Fuel";c19;0;0;oipp;G45
+51;Wholesale Trade and Commission Trade, Except of Motor Vehicles and Motorcycles;c20;0;0;oipp;G46
+52;"Retail Trade, Except of Motor Vehicles and Motorcycles; Repair of Household Goods";c21;0;0;oipp;G47
+H;Hotels and Restaurants;c22;0;0;ocon;I
+60;Inland Transport;c23;1;1;traeq;H49
+61;Water Transport;c24;1;1;traeq;H50
+62;Air Transport;c25;1;1;traeq;H51
+63;"Other Supporting and Auxiliary Transport Activities; Activities of Travel Agencies";c26;0;0;traeq;H52
+64;Post and Telecommunications;c27;0;0;softipp;H53-J63
+J;Financial Intermediation;c28;0;0;oipp;K
+70;Real Estate Activities;c29;0;0;ocon;L
+71t74;Renting of M&Eq and Other Business Activities;c30;0;0;rdetc;M_N
+L;"Public Admin and Defence; Compulsory Social Security";c31;0;0;oipp;O
+M;Education;c32;1;1;oipp;P
+N;Health and Social Work;c33;1;1;oipp;Q
+O;Other Community, Social and Personal Services;c34;0;0;oipp;R_S_U
+P;Private Households with Employed Persons;c35;0;0;rsoc;T

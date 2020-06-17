@@ -22,3 +22,4 @@ linprods <- t(linprods)
 colprods <- linprods
 linconsumoIntermediario <- num_paises*num_setores + 1
 
+

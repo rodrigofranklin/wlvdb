@@ -43,8 +43,9 @@ insumoprodutivospais <- matrix(0,cols,cols)
 for (p in 1:num_paises){
   #Produto total em horas de trabalho e em moeda (soma dos setores produtivos)
   x <- colprods[which(paiscols[colprods]==p)]
-  produtototaltpais[p] <- sum(mt[linprodutototal,x])
-  produtototalmpais[p] <- sum(m[linprodutototal, x])
+  produtototaltpais[p] <- sum(m.t[linprodutototal,x])
+  produtototalmpais[p] <- sum(m.wio[linprodutototal, x])
+
   
   # Valor agregado total em horas de trabalho e em moeda (dos setores produtivos).
   # O valor agregado (valor novo criado) em termos de horas de trabalho consiste
@@ -52,7 +53,7 @@ for (p in 1:num_paises){
   pibtpais[p] <- sum(trabalho[x])
   # O valor agregado em termos de moeda consiste no produto total menos o custo intermediário.
   # Obs: é preciso deduzir também a depreciação do capital. Além disso, deveríamos somar a margem de comércio.
-  pibmpais[p] <- sum(m[linprodutototal, x]- m[linconsumointermediario, x])
+  pibmpais[p] <- sum(m.wio[linprodutototal, x]- m.wio[linconsumointermediario, x])
   
   # Número de pessoas engajadas na produção e sua remuneração (nominal e real)
   trabalhadorespais[p] <- sum(emp[x])
@@ -69,31 +70,33 @@ for (p in 1:num_paises){
   lucrompais[p] <- sum(cap_usd[x])
   capitalmpais[p] <- sum(k_usd[x])
   
-  consumointermediarioppais[p] <- sum(m[linconsumointermediario, x])
+  consumointermediarioppais[p] <- sum(m.wio[linconsumointermediario, x])
                                         
   # Soma os consumos intermediários produtivos em variáveis temporárias (Capital constate = trabalho, insumo produtivo = moeda)
-  capitalconstantetotalpais[p] <- sum(mt[linprods, x])
+  capitalconstantetotalpais[p] <- sum(m.t[linprods, x])
 
   # Soma a formação bruta de capital fixo (em moeda e trabalho) e acrescenta aos insumos produtivos
   xfbcf <- colfbcf[which(paiscols[colfbcf]==p)]
-  fbcfmpais[p] <- sum(m[linprods, xfbcf])
-  fbcftpais[p] <- sum(mt[linprods, xfbcf])
+  fbcfmpais[p] <- sum(m.wio[linprods, xfbcf])
+  fbcftpais[p] <- sum(m.t[linprods, xfbcf])
 
   for (py in 1:num_paises) {
     y <- linprods[which(paislins[linprods]==py)]
-    insumoprodutivospais[py,p] <- sum(m[y, x], m[y,xfbcf])
+    insumoprodutivospais[py,p] <- sum(m.wio[y, x], m.wio[y,xfbcf])
 
     #Soma todas as exportações dos setores produtivos (todos os destinos de cada linha de setor produtivo)
     if (p != y) { #ignora as transações internas de cada país
-      exportacaompais[py,x]<- sum(m[y,which(paiscols==p)])
-      exportacaotpais[py,x]<- sum(mt[y,which(paiscols==p)])
+      exportacaompais[py,x]<- sum(m.wio[y,which(paiscols==p)])
+      exportacaotpais[py,x]<- sum(m.t[y,which(paiscols==p)])
+
     }
   }
 
   # Soma a demanda final em moeda e trabalho
   xdemandafinal <- coldemandafinal[which(paiscols[coldemandafinal]==p)]
-  demandafinaltpais[x] <- sum(mt[1:tamanho, xdemandafinal])
-  demandafinalmpais[x] <- sum(m[1:tamanho, xdemandafinal])
+  demandafinaltpais[x] <- sum(m.t[1:tamanho, xdemandafinal])
+  demandafinalmpais[x] <- sum(m.wio[1:tamanho, xdemandafinal])
+
 
   # Capital Constante total por pais (Para o cálculo da composição orgânica)
   # Esse cálculo soma o estoque de capital (ponderado pela estrutura da formação bruta de k fixo) em horas de trabalho
@@ -109,6 +112,7 @@ for (p in 1:num_paises){
   # (das pessoas engajadas e dos trabalhadores assalariados)
   remuneracaotpais[p]<- sum(lab_usd[x])*fatordemanda[p]
   salariotpais[p]<- sum(comp_usd[x])*fatordemanda[p]
+
 }
 
 #Calcula saldo das transferências pelo Fator Dinheiro mundial - DECIDI
@@ -120,10 +124,12 @@ importacaompais <- t(exportacaompais)
 importacaotpais <- t(exportacaotpais)
 
 # Calcula o total por país
+<<<<<<< HEAD
 expottotalpais <- colsums(importacaotpais)
 expomtotalpais <- colsums(importacaompais)
 impottotalpais <- colsums(exportacaotpais)
 impomtotalpais <- colsums(exportacaompais)
+
 
 # Calculando o saldo de transferências utilizando o fator H/$ das
 # exportações do mundo todo (Novamente, um tipo de variável K específica do comércio mundial)
@@ -161,10 +167,11 @@ coi <- matrix(0,nrow = 1, ncol = num_paises)
 #for (y in linprods) {
 #  for (x in 1:cols) {
 #    if (paislins[y] != paiscols[x]) {
-#      exp_setor[y,paislins[y]] = exp_setor[y,paislins[y]] + m[y,x]
-#      exp_total[paislins[y]] = exp_total[paislins[y]] + m[y,x]
-#      imp_setor[y,paiscols[x]] = imp_setor[y,paiscols[x]] + m[y,x]
-#      imp_total[paiscols[x]] = imp_total[paiscols[x]] + m[y,x]
+#      exp_setor[y,paislins[y]] = exp_setor[y,paislins[y]] + m.wio[y,x]
+#      exp_total[paislins[y]] = exp_total[paislins[y]] + m.wio[y,x]
+#      imp_setor[y,paiscols[x]] = imp_setor[y,paiscols[x]] + m.wio[y,x]
+#      imp_total[paiscols[x]] = imp_total[paiscols[x]] + m.wio[y,x]
+
 #    }
 #  }
 #}
@@ -174,15 +181,16 @@ coi <- matrix(0,nrow = 1, ncol = num_paises)
 #    if (paislins[y] == x) {
 #      # Pondera a participação do capital e do trabalho conforme a importância do setor para as exportações do país
 #      sigma = exp_setor[y,x] / exp_total[x]
-#      coxk[1,x] = coxk[1,x] + ((k_usd[y] + m[linconsumointermediario,y]) * sigma)
+#      coxk[1,x] = coxk[1,x] + ((k_usd[y] + m.wio[linconsumointermediario,y]) * sigma)
 #      coxt[1,x] = coxt[1,x] + (H_emp[y] * sigma)
 #    } else {
 #      # Pondera a participação do capital e do trabalho conforme a importância do setor para as importações do país
 #      sigma = imp_setor[y,x] / imp_total[x]
-#     coik[1,x] = coik[1,x] +((k_usd[y] + m[linconsumointermediario,y]) * sigma)
+#     coik[1,x] = coik[1,x] +((k_usd[y] + m.wio[linconsumointermediario,y]) * sigma)
 #      coit[1,x] = coit[1,x] + (H_emp[y] * sigma)
-#      #      CORELK[paislins[y],x] = CORELK[paislins[y],x] + ((k_usd[y] + m[linconsumointermediario,y]) * sigma)
+#      #      CORELK[paislins[y],x] = CORELK[paislins[y],x] + ((k_usd[y] + m.wio[linconsumointermediario,y]) * sigma)
 #      #      CORELT[paislins[y],x] = CORELT[paislins[y],x] + (H_emp[y] * sigma)
+
 #    }
 #  }
 #}
