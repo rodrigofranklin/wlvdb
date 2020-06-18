@@ -5,3 +5,5 @@
 .rds
 .xls
 .xlsx
+/Resultados/*
+/sourcedata/*
