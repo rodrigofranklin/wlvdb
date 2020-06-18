@@ -6,191 +6,183 @@
 #####################################
 # Primeiro, aloca o espaço de todas as variáveis desejadas
 
-cols <- max(paiscols[])
+Cols <- max(pais.cols[])
 
-exportacaompais <- matrix(0,cols,cols)
-exportacaotpais <- matrix(0,cols,cols)
+ExportacaoMPais <- matrix(0,Cols,Cols)
+ExportacaoTPais <- matrix(0,Cols,Cols)
 
-fatordinn = produtototalmpais = produtototaltpais <- matrix(0,1,cols)
+FatorDINN = ProdutoTotalMPais = ProdutoTotalTPais <- matrix(0,1,Cols)
 
-pibtpais <- matrix(0,1,cols)
-pibmpais <- matrix(0,1,cols)
+PIBTPais <- matrix(0,1,Cols)
+PIBMPais <- matrix(0,1,Cols)
 
-fatordemanda = demandafinaltpais <- matrix(0,1,cols)
-demandafinalmpais <- matrix(0,1,cols)
+FatorDemanda = DemandaFinalTPais <- matrix(0,1,Cols)
+DemandaFinalMPais <- matrix(0,1,Cols)
 
-trabalhadorespais <- matrix(0,1,cols)
-remuneracaotpais <- matrix(0,1,cols)
-remuneracaompais <- matrix(0,1,cols)
-remuneracaorealpais <- matrix(0,1,cols)
+TrabalhadoresPais <- matrix(0,1,Cols)
+RemuneracaoTPais <- matrix(0,1,Cols)
+RemuneracaoMPais <- matrix(0,1,Cols)
+RemuneracaoRealPais <- matrix(0,1,Cols)
 
-jornadatotalpais <- matrix(0,1,cols)
-assalariadospais <- matrix(0,1,cols)
-salariotpais <- matrix(0,1,cols)
-salariompais <- matrix(0,1,cols)
-salariorealpais <- matrix(0,1,cols)
+JornadaTotalPais <- matrix(0,1,Cols)
+AssalariadosPais <- matrix(0,1,Cols)
+SalarioTPais <- matrix(0,1,Cols)
+SalarioMPais <- matrix(0,1,Cols)
+SalarioRealPais <- matrix(0,1,Cols)
 
-lucrompais <- matrix(0,1,cols)
-lucrotpais <- matrix(0,1,cols)
+LucroMPais <- matrix(0,1,Cols)
+LucroTPais <- matrix(0,1,Cols)
 
-capitalmpais <- matrix(0,1,cols)
-fbcfmpais <- matrix(0,1,cols)
-fbcftpais <- matrix(0,1,cols)
-consumointermediarioppais <- matrix(0,1,cols)
-capitalconstantetotalpais <- matrix(0,1,cols)
-insumoprodutivospais <- matrix(0,cols,cols)
+CapitalMPais <- matrix(0,1,Cols)
+FBCFMPais <- matrix(0,1,Cols)
+FBCFTPais <- matrix(0,1,Cols)
+ConsumoIntermediarioPPais <- matrix(0,1,Cols)
+CapitalConstanteTotalPais <- matrix(0,1,Cols)
+InsumosProdutivosPais <- matrix(0,Cols,Cols)
 
-for (p in 1:num_paises){
+for (X in 1:num.paises){
   #Produto total em horas de trabalho e em moeda (soma dos setores produtivos)
-  x <- colprods[which(paiscols[colprods]==p)]
-  produtototaltpais[p] <- sum(m.t[linprodutototal,x])
-  produtototalmpais[p] <- sum(m.wio[linprodutototal, x])
-
+  x <- col.prods[which(pais.cols[col.prods]==X)]
+  ProdutoTotalTPais[X] <- sum(m.t[lin.produto.total,x])
+  ProdutoTotalMPais[X] <- sum(m.wio[lin.produto.total, x])
   
   # Valor agregado total em horas de trabalho e em moeda (dos setores produtivos).
   # O valor agregado (valor novo criado) em termos de horas de trabalho consiste
   # na soma das horas trabalhadas nos setores produtivos.
-  pibtpais[p] <- sum(trabalho[x])
+  PIBTPais[X] <- sum(trabalho[x])
   # O valor agregado em termos de moeda consiste no produto total menos o custo intermediário.
   # Obs: é preciso deduzir também a depreciação do capital. Além disso, deveríamos somar a margem de comércio.
-  pibmpais[p] <- sum(m.wio[linprodutototal, x]- m.wio[linconsumointermediario, x])
+  PIBMPais[X] <- sum(m.wio[lin.produto.total, x]- m.wio[lin.consumo.intermediario, x])
   
   # Número de pessoas engajadas na produção e sua remuneração (nominal e real)
-  trabalhadorespais[p] <- sum(emp[x])
-  remuneracaompais[p] <- sum(lab_usd[x])
-  remuneracaorealpais[p] <- sum(lab_real[x])
+  TrabalhadoresPais[X] <- sum(emp[x])
+  RemuneracaoMPais[X] <- sum(lab.usd[x])
+  RemuneracaoRealPais[X] <- sum(lab.real[x])
   
   # Número de trabalhadores assalariados, jornada de trabalho total e remuneração total (nominal e real)
-  jornadatotalpais[p] <- sum(h_empe[x])
-  assalariadospais[p] <- sum(empe[x])
-  salariompais[p] <- sum(comp_usd[x])
-  salariorealpais[p] <- sum(comp_real[x])
+  JornadaTotalPais[X] <- sum(h.empe[x])
+  AssalariadosPais[X] <- sum(empe[x])
+  SalarioMPais[X] <- sum(comp.usd[x])
+  SalarioRealPais[X] <- sum(comp.real[x])
   
   # Compensação do capital e estoque de capital
-  lucrompais[p] <- sum(cap_usd[x])
-  capitalmpais[p] <- sum(k_usd[x])
+  LucroMPais[X] <- sum(cap.usd[x])
+  CapitalMPais[X] <- sum(k.usd[x])
   
-  consumointermediarioppais[p] <- sum(m.wio[linconsumointermediario, x])
+  ConsumoIntermediarioPPais[X] <- sum(m.wio[lin.consumo.intermediario, x])
                                         
   # Soma os consumos intermediários produtivos em variáveis temporárias (Capital constate = trabalho, insumo produtivo = moeda)
-  capitalconstantetotalpais[p] <- sum(m.t[linprods, x])
+  CapitalConstanteTotalPais[X] <- sum(m.t[lin.prods, x])
 
   # Soma a formação bruta de capital fixo (em moeda e trabalho) e acrescenta aos insumos produtivos
-  xfbcf <- colfbcf[which(paiscols[colfbcf]==p)]
-  fbcfmpais[p] <- sum(m.wio[linprods, xfbcf])
-  fbcftpais[p] <- sum(m.t[linprods, xfbcf])
+  xFBCF <- col.fbcf[which(pais.cols[col.fbcf]==X)]
+  FBCFMPais[X] <- sum(m.wio[lin.prods, xFBCF])
+  FBCFTPais[X] <- sum(m.t[lin.prods, xFBCF])
 
-  for (py in 1:num_paises) {
-    y <- linprods[which(paislins[linprods]==py)]
-    insumoprodutivospais[py,p] <- sum(m.wio[y, x], m.wio[y,xfbcf])
+  for (Y in 1:num.paises) {
+    y <- lin.prods[which(pais.lins[lin.prods]==Y)]
+    InsumosProdutivosPais[Y,X] <- sum(m.wio[y, x], m.wio[y,xFBCF])
 
     #Soma todas as exportações dos setores produtivos (todos os destinos de cada linha de setor produtivo)
-    if (p != y) { #ignora as transações internas de cada país
-      exportacaompais[py,x]<- sum(m.wio[y,which(paiscols==p)])
-      exportacaotpais[py,x]<- sum(m.t[y,which(paiscols==p)])
-
+    if (X != Y) { #ignora as transações internas de cada país
+      ExportacaoMPais[Y,X]<- sum(m.wio[y,which(pais.cols==X)])
+      ExportacaoTPais[Y,X]<- sum(m.t[y,which(pais.cols==X)])
     }
   }
 
   # Soma a demanda final em moeda e trabalho
-  xdemandafinal <- coldemandafinal[which(paiscols[coldemandafinal]==p)]
-  demandafinaltpais[x] <- sum(m.t[1:tamanho, xdemandafinal])
-  demandafinalmpais[x] <- sum(m.wio[1:tamanho, xdemandafinal])
-
+  xDemandaFinal <- col.demanda.final[which(pais.cols[col.demanda.final]==X)]
+  DemandaFinalTPais[X] <- sum(m.t[1:tamanho, xDemandaFinal])
+  DemandaFinalMPais[X] <- sum(m.wio[1:tamanho, xDemandaFinal])
 
   # Capital Constante total por pais (Para o cálculo da composição orgânica)
   # Esse cálculo soma o estoque de capital (ponderado pela estrutura da formação bruta de k fixo) em horas de trabalho
-  capitalconstantetotalpais[p] <- ((capitalmpais[p]/fbcfmpais[p])*fbcftpais[p])+capitalconstantetotalpais[p]
+  CapitalConstanteTotalPais[X] <- ((CapitalMPais[X]/FBCFMPais[X])*FBCFTPais[X])+CapitalConstanteTotalPais[X]
   
-  # O fatordinn corresponde à constate K de Ochoa para o cálculo dos preços diretos
-  fatordinn[p] <- produtototaltpais[p]/produtototalmpais[p]
-  # O fatordemanda é uma espécide de constate K exclusiva para o consumo das famílias.
+  # O FatorDINN corresponde à constate K de Ochoa para o cálculo dos preços diretos
+  FatorDINN[X] <- ProdutoTotalTPais[X]/ProdutoTotalMPais[X]
+  # O FatorDemanda é uma espécide de constate K exclusiva para o consumo das famílias.
   # Por isso, a utilizei para o cálculo do valor da força de trabalho
-  fatordemanda[p] <- demandafinaltpais[p]/demandafinalmpais[p]
+  FatorDemanda[X] <- DemandaFinalTPais[X]/DemandaFinalMPais[X]
   
-  # Calcula as rendas em trabalho de cada país usando fatordemanda
+  # Calcula as rendas em trabalho de cada país usando FatorDemanda
   # (das pessoas engajadas e dos trabalhadores assalariados)
-  remuneracaotpais[p]<- sum(lab_usd[x])*fatordemanda[p]
-  salariotpais[p]<- sum(comp_usd[x])*fatordemanda[p]
-
+  RemuneracaoTPais[X]<- sum(lab.usd[x])*FatorDemanda[X]
+  SalarioTPais[X]<- sum(comp.usd[x])*FatorDemanda[X]
 }
 
-#Calcula saldo das transferências pelo Fator Dinheiro mundial - DECIDI
-#APRESENTAR OS SALDOS DE HORAS ExPORTADAS E ImPORTADAS, ASSIm COmO OS
-#SALDOS mONETÁRIOS ExPORTADOS E ImPORTADOS.
+#Calcula saldo das transferências pelo Fator Dinheiro Mundial - DECIDI
+#APRESENTAR OS SALDOS DE HORAS EXPORTADAS E IMPORTADAS, ASSIM COMO OS
+#SALDOS MONETÁRIOS EXPORTADOS E IMPORTADOS.
 
 # A importação é a transposta da exportação
-importacaompais <- t(exportacaompais)
-importacaotpais <- t(exportacaotpais)
+ImportacaoMPais <- t(ExportacaoMPais)
+ImportacaoTPais <- t(ExportacaoTPais)
 
 # Calcula o total por país
-<<<<<<< HEAD
-expottotalpais <- colsums(importacaotpais)
-expomtotalpais <- colsums(importacaompais)
-impottotalpais <- colsums(exportacaotpais)
-impomtotalpais <- colsums(exportacaompais)
-
+ExpoTTotalPais <- colSums(ImportacaoTPais)
+Expom.totalPais <- colSums(ImportacaoMPais)
+ImpoTTotalPais <- colSums(ExportacaoTPais)
+Impom.totalPais <- colSums(ExportacaoMPais)
 
 # Calculando o saldo de transferências utilizando o fator H/$ das
 # exportações do mundo todo (Novamente, um tipo de variável K específica do comércio mundial)
-fatorsaldo <- sum(exportacaotpais)/sum(exportacaompais)
+FatorSaldo <- sum(ExportacaoTPais)/sum(ExportacaoMPais)
 
-transferenciapais <- (exportacaompais*fatorsaldo)-exportacaotpais+importacaotpais-(importacaompais*fatorsaldo)
-transferenciapais <- t(transferenciapais)
-transftotalpais <- as.matrix(colsums(transferenciapais))
+TransferenciaPais <- (ExportacaoMPais*FatorSaldo)-ExportacaoTPais+ImportacaoTPais-(ImportacaoMPais*FatorSaldo)
+TransferenciaPais <- t(TransferenciaPais)
+TransfTotalPais <- as.matrix(colSums(TransferenciaPais))
 
 # Composição Orgânica
-# cox -> composição orgânica ponderada pelas exportações
-# coi -> composição orgânica ponderada pelas importações
-y <- ncol(m)
+# COX -> composição orgânica ponderada pelas exportações
+# COI -> composição orgânica ponderada pelas importações
+Y <- ncol(m.wio)
 
-exp_setor <- matrix(0,nrow = y, ncol = num_paises)
-exp_total <- matrix(0,nrow = 1, ncol = num_paises)
-imp_setor <- matrix(0,nrow = y, ncol = num_paises)
-imp_total <- matrix(0,nrow = 1, ncol = num_paises)
+Exp_Setor <- matrix(0,nrow = Y, ncol = num.paises)
+Exp_Total <- matrix(0,nrow = 1, ncol = num.paises)
+Imp_Setor <- matrix(0,nrow = Y, ncol = num.paises)
+Imp_Total <- matrix(0,nrow = 1, ncol = num.paises)
 
-coxk <- matrix(0,nrow = 1, ncol = num_paises)
-coxt <- matrix(0,nrow = 1, ncol = num_paises)
-cox <- matrix(0,nrow = 1, ncol = num_paises)
+COXK <- matrix(0,nrow = 1, ncol = num.paises)
+COXT <- matrix(0,nrow = 1, ncol = num.paises)
+COX <- matrix(0,nrow = 1, ncol = num.paises)
 
-coik <- matrix(0,nrow = 1, ncol = num_paises)
-coit <- matrix(0,nrow = 1, ncol = num_paises)
-coi <- matrix(0,nrow = 1, ncol = num_paises)
+COIK <- matrix(0,nrow = 1, ncol = num.paises)
+COIT <- matrix(0,nrow = 1, ncol = num.paises)
+COI <- matrix(0,nrow = 1, ncol = num.paises)
 
 #Não lembro para que isso serve...
-#CORELK <- matrix(0,nrow = num_paises, ncol = num_paises)
-#CORELT <- matrix(0,nrow = num_paises, ncol = num_paises)
-#COREL <- matrix(0,nrow = num_paises, ncol = num_paises)
+#CORELK <- matrix(0,nrow = num.paises, ncol = num.paises)
+#CORELT <- matrix(0,nrow = num.paises, ncol = num.paises)
+#COREL <- matrix(0,nrow = num.paises, ncol = num.paises)
 
-#cols <- ncol(m)-1 # -1 para desconsiderar a coluna do produto total
+#Cols <- ncol(M)-1 # -1 para desconsiderar a coluna do produto total
 
-#for (y in linprods) {
-#  for (x in 1:cols) {
-#    if (paislins[y] != paiscols[x]) {
-#      exp_setor[y,paislins[y]] = exp_setor[y,paislins[y]] + m.wio[y,x]
-#      exp_total[paislins[y]] = exp_total[paislins[y]] + m.wio[y,x]
-#      imp_setor[y,paiscols[x]] = imp_setor[y,paiscols[x]] + m.wio[y,x]
-#      imp_total[paiscols[x]] = imp_total[paiscols[x]] + m.wio[y,x]
-
+#for (Y in lin.prods) {
+#  for (X in 1:Cols) {
+#    if (pais.lins[Y] != pais.cols[X]) {
+#      Exp_Setor[Y,pais.lins[Y]] = Exp_Setor[Y,pais.lins[Y]] + m.wio[Y,X]
+#      Exp_Total[pais.lins[Y]] = Exp_Total[pais.lins[Y]] + m.wio[Y,X]
+#      Imp_Setor[Y,pais.cols[X]] = Imp_Setor[Y,pais.cols[X]] + m.wio[Y,X]
+#      Imp_Total[pais.cols[X]] = Imp_Total[pais.cols[X]] + m.wio[Y,X]
 #    }
 #  }
 #}
 
-#for (y in linprods) {
-#  for (x in paises[,2]) {
-#    if (paislins[y] == x) {
+#for (Y in lin.prods) {
+#  for (X in paises[,2]) {
+#    if (pais.lins[Y] == X) {
 #      # Pondera a participação do capital e do trabalho conforme a importância do setor para as exportações do país
-#      sigma = exp_setor[y,x] / exp_total[x]
-#      coxk[1,x] = coxk[1,x] + ((k_usd[y] + m.wio[linconsumointermediario,y]) * sigma)
-#      coxt[1,x] = coxt[1,x] + (H_emp[y] * sigma)
+#      sigma = Exp_Setor[Y,X] / Exp_Total[X]
+#      COXK[1,X] = COXK[1,X] + ((k.usd[Y] + m.wio[lin.consumo.intermediario,Y]) * sigma)
+#      COXT[1,X] = COXT[1,X] + (h.emp[Y] * sigma)
 #    } else {
 #      # Pondera a participação do capital e do trabalho conforme a importância do setor para as importações do país
-#      sigma = imp_setor[y,x] / imp_total[x]
-#     coik[1,x] = coik[1,x] +((k_usd[y] + m.wio[linconsumointermediario,y]) * sigma)
-#      coit[1,x] = coit[1,x] + (H_emp[y] * sigma)
-#      #      CORELK[paislins[y],x] = CORELK[paislins[y],x] + ((k_usd[y] + m.wio[linconsumointermediario,y]) * sigma)
-#      #      CORELT[paislins[y],x] = CORELT[paislins[y],x] + (H_emp[y] * sigma)
-
+#      sigma = Imp_Setor[Y,X] / Imp_Total[X]
+#     COIK[1,X] = COIK[1,X] +((k.usd[Y] + m.wio[lin.consumo.intermediario,Y]) * sigma)
+#      COIT[1,X] = COIT[1,X] + (h.emp[Y] * sigma)
+#      #      CORELK[pais.lins[Y],X] = CORELK[pais.lins[Y],X] + ((k.usd[Y] + m.wio[lin.consumo.intermediario,Y]) * sigma)
+#      #      CORELT[pais.lins[Y],X] = CORELT[pais.lins[Y],X] + (h.emp[Y] * sigma)
 #    }
 #  }
 #}
@@ -198,37 +190,37 @@ coi <- matrix(0,nrow = 1, ncol = num_paises)
 #COREL = CORELK./CORELT
 
 # Formatação do resultado
-resultados <- matrix(0, nrow = 28, ncol = num_paises, dimnames = list(c("","expottotalpais",
-                                                                        "expomtotalpais","impottotalpais","impomtotalpais","transftotalpais","produtototaltpais","produtototalmpais",
-                                                                        "fatordinn","fatordemanda","pibtpais","pibmpais","trabalhadorespais","remuneracaotpais","remuneracaompais",
-                                                                        "remuneracaorealpais","jornadatotalpais","assalariadospais","salariotpais","salariompais","salariorealpais",
-                                                                        "lucrompais","capitalmpais","consumointermediarioppais","coxk","coxt","coik","coit"),paises[,1]))
-#resultados[1,] <- 
-resultados[2,] <- expottotalpais
-resultados[3,] <- expomtotalpais
-resultados[4,] <- impottotalpais
-resultados[5,] <- impomtotalpais
-resultados[6,] <- transftotalpais
-resultados[7,] <- produtototaltpais
-resultados[8,] <- produtototalmpais
-resultados[9,] <- fatordinn
-resultados[10,] <- fatordemanda
-resultados[11,] <- pibtpais
-resultados[12,] <- pibmpais
-resultados[13,] <- trabalhadorespais
-resultados[14,] <- remuneracaotpais
-resultados[15,] <- remuneracaompais
-resultados[16,] <- remuneracaorealpais
-resultados[17,] <- jornadatotalpais
-resultados[18,] <- assalariadospais
-resultados[19,] <- salariotpais
-resultados[20,] <- salariompais
-resultados[21,] <- salariorealpais
-resultados[22,] <- lucrompais
-resultados[23,] <- capitalmpais
-resultados[24,] <- consumointermediarioppais
-resultados[25,] <- coxk
-resultados[26,] <- coxt
-resultados[27,] <- coik
-resultados[28,] <- coit
-resultados= t(resultados)
+Resultados <- matrix(0, nrow = 28, ncol = num.paises, dimnames = list(c("","ExpoTTotalPais",
+                                                                        "Expom.totalPais","ImpoTTotalPais","Impom.totalPais","TransfTotalPais","ProdutoTotalTPais","ProdutoTotalMPais",
+                                                                        "FatorDINN","FatorDemanda","PIBTPais","PIBMPais","TrabalhadoresPais","RemuneracaoTPais","RemuneracaoMPais",
+                                                                        "RemuneracaoRealPais","JornadaTotalPais","AssalariadosPais","SalarioTPais","SalarioMPais","SalarioRealPais",
+                                                                        "LucroMPais","CapitalMPais","ConsumoIntermediarioPPais","COXK","COXT","COIK","COIT"),paises[,1]))
+#Resultados[1,] <- 
+Resultados[2,] <- ExpoTTotalPais
+Resultados[3,] <- Expom.totalPais
+Resultados[4,] <- ImpoTTotalPais
+Resultados[5,] <- Impom.totalPais
+Resultados[6,] <- TransfTotalPais
+Resultados[7,] <- ProdutoTotalTPais
+Resultados[8,] <- ProdutoTotalMPais
+Resultados[9,] <- FatorDINN
+Resultados[10,] <- FatorDemanda
+Resultados[11,] <- PIBTPais
+Resultados[12,] <- PIBMPais
+Resultados[13,] <- TrabalhadoresPais
+Resultados[14,] <- RemuneracaoTPais
+Resultados[15,] <- RemuneracaoMPais
+Resultados[16,] <- RemuneracaoRealPais
+Resultados[17,] <- JornadaTotalPais
+Resultados[18,] <- AssalariadosPais
+Resultados[19,] <- SalarioTPais
+Resultados[20,] <- SalarioMPais
+Resultados[21,] <- SalarioRealPais
+Resultados[22,] <- LucroMPais
+Resultados[23,] <- CapitalMPais
+Resultados[24,] <- ConsumoIntermediarioPPais
+Resultados[25,] <- COXK
+Resultados[26,] <- COXT
+Resultados[27,] <- COIK
+Resultados[28,] <- COIT
+Resultados= t(Resultados)

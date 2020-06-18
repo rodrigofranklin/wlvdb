@@ -1,25 +1,24 @@
-#Genera vector de combinación de países ysectores según lo necesario para la asociación de la matriz de IO
+#Genera vector de combinación de países y sectores según lo necesario para la asociación de la matriz de IO
 #a los mismos
 
 # Lista dos países
-paises <- read.csv2(file = paste0(getwd(),"/sourcedata/",versao,"/paises.csv"), row.names = 1)
-num_paises <- dim(paises)[1]
+paises <- read.csv2(file = paste0(getwd(),"/sourcedata/",versao,"/paises.csv"), row.names = 1, check.names = F)
+num.paises <- dim(paises)[1]
 
-# Obtém a informação dos setores produtivos e prepara as variávels linprods, colprods e paislins
-setores<-read.csv2(paste0(getwd(),"/sourcedata/",versao,"/setores.csv"))
-num_setores <- dim(setores)[1]
-linprods <- NULL
-paislins <- NULL
-w=1
-for (x in paises[,2]) {
-  for (y in 1:num_setores){
-    paislins <- c(paislins, X)
-    if (setores[Y,4]==1)  {linprods <- c(linprods,w)}
-    w<-w+1
+# Obtém a informação dos setores produtivos e prepara as variávels lin.prods, col.prods e pais.lins
+setores<-read.csv2(paste0(getwd(),"/sourcedata/",versao,"/setores.csv"),check.names = F)
+num.setores <- dim(setores)[1]
+lin.prods <- NULL
+pais.lins <- NULL
+W=1
+for (X in paises[,2]) {
+  for (Y in 1:num.setores){
+    pais.lins <- c(pais.lins, X)
+    if (setores[Y,4]==1)  {lin.prods <- c(lin.prods,W)}
+    W<-W+1
   }
 }
-linprods <- t(linprods)
-colprods <- linprods
-linconsumoIntermediario <- num_paises*num_setores + 1
-
+lin.prods <- t(lin.prods)
+col.prods <- lin.prods
+lin.consumo.intermediario <- num.paises*num.setores + 1
 
