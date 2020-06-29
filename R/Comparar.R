@@ -17,7 +17,7 @@ Resultados14 <- array(data = 0,dim = c(17,41,28), dimnames = list(c(1995:2011),
                                                                   "LucroMPais","CapitalMPais","ConsumoIntermediarioPPais","COXK","COXT","COIK","COIT")))
 # Lê os resultados dos arquivos .csv
 for (Z in 1995:2011) {
-  Resultados14[as.character(Z),,] <- as.matrix(read.csv2(file = paste0(getwd(),"/Resultados/July14_Resultados",as.character(Z),".csv"), row.names = 1))
+  Resultados14[as.character(Z),,] <- as.matrix(read.csv2(file = paste0(getwd(),"/resultados/July14_1001/resultados_",as.character(Z),".csv"), row.names = 1))
 }
 #####
 
@@ -41,12 +41,12 @@ Resultados16 <- array(data = 0,dim = c(15,44,28), dimnames = list(c(2000:2014),
                                                                   "LucroMPais","CapitalMPais","ConsumoIntermediarioPPais","COXK","COXT","COIK","COIT")))
 # Lê os resultados dos arquivos .csv
 for (Z in 2000:2014) {
-  Resultados16[as.character(Z),,] <- as.matrix(read.csv2(file = paste0(getwd(),"/Resultados/Nov16_Resultados",as.character(Z),".csv"), row.names = 1))
+  Resultados16[as.character(Z),,] <- as.matrix(read.csv2(file = paste0(getwd(),"/resultados/Nov16_1001/resultados_",as.character(Z),".csv"), row.names = 1))
 }
 
 for (Pais in Paises14) {
 Transferencias16 <- c(NA,NA,NA,NA,NA,Resultados16[,Pais,"TransfTotalPais"]/1000)
-Transferencias14 <- c(Resultados14[,Pais,"TransfTotalPais"]/1000)
+Transferencias14 <- c(Resultados14[1:15,Pais,"TransfTotalPais"]/1000)
 plot(Transferencias16,
      type = "l",
      ylim = c(min(Transferencias16[!is.na(Transferencias16)],Transferencias14,0),max(Transferencias16[!is.na(Transferencias16)],Transferencias14,0)),     

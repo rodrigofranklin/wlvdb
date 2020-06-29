@@ -19,11 +19,12 @@ library(dplyr)
 ## Instruções para leitura de dados já baixados
 euklems <- readRDS(paste0(getwd(),'/sourcedata/euklems.rds'))
 euklems.na <- readRDS(paste0(getwd(),'/sourcedata/euklems-na.rds'))
+tx.dep <- as.data.frame(read.csv2(paste0(getwd(),"/sourcedata/euklems/taxas.csv"),header = TRUE))
 
 paises.euklems <- unique(euklems[,1])
 setores.euklems <- unique(euklems[,c(5,6)])
 paises.setores <- data.frame(cbind(country=rep(paises.euklems,each=length(setores.euklems[,2])),code=setores.euklems[,2],agg=setores.euklems[,1]))
-ek.va = ek.i = ek.k <- paises.setores[,c(1,2)]
+ek.va = ek.tx.dep = ek.k <- paises.setores[,c(1,2)]
 
 ek.va$va <- left_join(paises.setores[,c(1,2)],euklems.na[which(euklems.na[,3]=="VA" & euklems.na[,7]==ano),c(1,6,8)], by = c("country", "code"))[,3]
 
@@ -37,10 +38,26 @@ ek.k$omach <- left_join(paises.setores[,c(1,2)],euklems[which(euklems[,3]=="K_OM
 ek.k$ocon <- left_join(paises.setores[,c(1,2)],euklems[which(euklems[,3]=="K_OCon"& euklems[,7]==ano),c(1,6,8)], by = c("country", "code"))[,3]
 ek.k$rstruc <- left_join(paises.setores[,c(1,2)],euklems[which(euklems[,3]=="K_RStruc"& euklems[,7]==ano),c(1,6,8)], by = c("country", "code"))[,3]
 ek.k$oipp <- left_join(paises.setores[,c(1,2)],euklems[which(euklems[,3]=="K_OIPP"& euklems[,7]==ano),c(1,6,8)], by = c("country", "code"))[,3]
-ek.k$rd <- left_join(paises.setores[,c(1,2)],euklems[which(euklems[,3]=="K_RD"& euklems[,7]==ano),c(1,6,8)], by = c("country", "code"))[,3]
 ek.k$cult <- left_join(paises.setores[,c(1,2)],euklems[which(euklems[,3]=="K_Cult"& euklems[,7]==ano),c(1,6,8)], by = c("country", "code"))[,3]
+ek.k$rd <- left_join(paises.setores[,c(1,2)],euklems[which(euklems[,3]=="K_RD"& euklems[,7]==ano),c(1,6,8)], by = c("country", "code"))[,3]
 ek.k$soma <- rowSums(ek.k[,4:13], na.rm = TRUE)
 
+ek.tx.dep <- left_join(paises.setores[,c(1,2)],tx.dep[2:12], by = c("code"))
+
+###Eliminar países sem dados adequados
+
+# Esse método seleciona para a exclusão os países sem dados para o "total da indústria"
+ek.k$soma <- rowSums(ek.k[,4:13], na.rm = FALSE)
+paises.para.excluir <- (ek.k[ek.k[,2]=="TOT_IND" & is.na(ek.k[,14]),1])
+paises.para.excluir <- c(as.character(paises.para.excluir), "LU", "SE") #países que não consegui filtrar
+
+# Esse método seleciona os países conforme as informações na documentação do euklems. (NÃO USAR ESSE MÉTODO: DOCUMENTAÇÃO NÃO ESTÁ ADEQUADA)
+#paises.para.excluir <- c("BG", "CY", "EE", "EL", "HR", "HU", "IE", "LT", "LU", "LV", "MT", "PL", "PT", "SE", "SI", "US")
+
+# Exckui os países selecionados
+ek.k <- ek.k[!(ek.k[,1] %in% paises.para.excluir),]
+ek.tx.dep <-  ek.tx.dep[!(ek.tx.dep[,1] %in% paises.para.excluir),]
+ek.va <-  ek.va[!(ek.va[,1] %in% paises.para.excluir),]
 
 ##Resolver desagregações
 
@@ -65,10 +82,9 @@ agregacao.setores <- read.csv2(paste0(getwd(),'/sourcedata/agregacao-euklems.csv
 
 #Primeiro, desagrega pelo nível de ek.va.prop2
 for (x in 1:4) {
-  filtro1 <- ek.k[,2]==as.character(agregacao.setores[x,1]) & ek.k[,14]==0
+  filtro1 <- ek.k[,2]==as.character(agregacao.setores[x,1]) & is.na(ek.k[,14])
   filtro2 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]==as.character(agregacao.setores[x,2])
   ek.k[filtro1,4:13] <- ek.k[filtro2,4:13] * ek.va.prop2[filtro1,]
-  #ek.k[filtro1,14] <- rowSums(ek.k[filtro1,4:13], na.rm = TRUE)
 }
 
 ek.k$soma <- rowSums(ek.k[,4:13], na.rm = TRUE) #soma os dados disponíveis para saber quais foram alterados
@@ -82,66 +98,105 @@ for (x in 5:nrow(agregacao.setores)) {
 
 ##Preparar proporções
 
+##Resolver a falta de agregações
+ek.k[is.na(ek.k)] <- 0
+
+filtro1 <- ek.k[,2]=="C20_C21" & ek.k[,3]==0
+filtro2 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C20"
+filtro3 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C21"
+ek.k[filtro1, 4:14] <- ek.k[filtro2,4:14]+ek.k[filtro3,4:14]
+
+filtro1 <- ek.k[,2]=="C26_C27" & ek.k[,3]==0
+filtro2 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C26"
+filtro3 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C27"
+ek.k[filtro1, 4:14] <- ek.k[filtro2,4:14]+ek.k[filtro3,4:14]
+
+filtro1 <- ek.k[,2]=="D_E" & ek.k[,3]==0
+filtro2 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="D"
+filtro3 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="E"
+ek.k[filtro1, 4:14] <- ek.k[filtro2,4:14]+ek.k[filtro3,4:14]
+
+ek.k.rsu = ek.k.53_63 <- ek.k[ek.k[,2]=="R",]
+
+ek.k.rsu$code <- "R_S_U"
+filtro1 <- ek.k[,2]=="R_S" & ek.k[,3]==0
+filtro2 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="R"
+filtro3 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="S"
+ek.k[filtro1, 4:14] <- ek.k[filtro2,4:14]+ek.k[filtro3,4:14]
+ek.k.rsu[4:14] <- ek.k[ek.k[,2]=="R_S",4:14] + ek.k[ek.k[,2]=="U",4:14]
+
+ek.k.53_63$code <- "H53-J63"
+ek.k.53_63[4:14] <- ek.k[ek.k[,2]=="H53",4:14] + ek.k[ek.k[,2]=="J58-J60",4:14] + ek.k[ek.k[,2]=="J61",4:14] + ek.k[ek.k[,2]=="J62_J63",4:14]
+
+ek.k <- rbind(ek.k, ek.k.rsu, ek.k.53_63)
+
+# Agregar taxas de depreciação ponderadas pelos estoques de capital
+ek.tx.dep[is.na(ek.tx.dep)] <- 0
+ek.tx.dep <- rbind(ek.tx.dep, ek.k.rsu[,c(1, 2, 4:13)], ek.k.53_63[,c(1, 2, 4:13)])
+
+filtro1 <- ek.k[,2]=="C20_C21"
+filtro2 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C20"
+filtro3 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C21"
+ek.tx.dep[filtro1, 3:12] <- (ek.tx.dep[filtro2,3:12]*ek.k[filtro2,4:13]+ek.tx.dep[filtro3,3:12]*ek.k[filtro3,4:13])/ek.k[filtro1, 4:13]
+
+filtro1 <- ek.k[,2]=="C26_C27"
+filtro2 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C26"
+filtro3 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C27"
+ek.tx.dep[filtro1, 3:12] <- (ek.tx.dep[filtro2,3:12]*ek.k[filtro2,4:13]+ek.tx.dep[filtro3,3:12]*ek.k[filtro3,4:13])/ek.k[filtro1, 4:13]
+
+filtro1 <- ek.k[,2]=="D_E"
+filtro2 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="D"
+filtro3 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="E"
+ek.tx.dep[filtro1, 3:12] <- (ek.tx.dep[filtro2,3:12]*ek.k[filtro2,4:13]+ek.tx.dep[filtro3,3:12]*ek.k[filtro3,4:13])/ek.k[filtro1, 4:13]
+
+filtro1 <- ek.k[,2]=="R_S_U"
+filtro2 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="R_S"
+filtro3 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="U"
+ek.tx.dep[filtro1, 3:12] <- (ek.tx.dep[filtro2,3:12]*ek.k[filtro2,4:13]+ek.tx.dep[filtro3,3:12]*ek.k[filtro3,4:13])/ek.k[filtro1, 4:13]
+
+filtro1 <- ek.k[,2]=="H53-J63"
+filtro2 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="H53"
+filtro3 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="J58-J60"
+filtro4 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="J61"
+filtro5 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="J62_J63"
+ek.tx.dep[filtro1, 3:12] <- (ek.tx.dep[filtro2,3:12]*ek.k[filtro2,4:13]+ek.tx.dep[filtro3,3:12]*ek.k[filtro3,4:13]+ek.tx.dep[filtro4,3:12]*ek.k[filtro4,4:13]+ek.tx.dep[filtro5,3:12]*ek.k[filtro5,4:13])/ek.k[filtro1, 4:13]
+
+ek.tx.dep[is.na(ek.tx.dep)] <- 0
+
 #Criar colunas de tipos de capital faltando
 ek.k$itct <- ek.k$it + ek.k$ct
 ek.k$rsoc <- ek.k$rstruc + ek.k$ocon
 ek.k$softipp <- ek.k$soft + ek.k$oipp
 ek.k$rdetc <- ek.k$rd + ek.k$softipp
 
+ek.tx.dep$soma <- 0 #para manter o mesmo número de colunas que ek.k
+ek.tx.dep$itct <- (ek.tx.dep$it*ek.k$it + ek.tx.dep$ct*ek.k$ct)/ek.k$itct
+ek.tx.dep$rsoc <- (ek.tx.dep$rstruc*ek.k$rstruc + ek.tx.dep$ocon*ek.k$ocon)/ek.k$rsoc
+ek.tx.dep$softipp <- (ek.tx.dep$soft*ek.k$soft + ek.tx.dep$oipp*ek.k$oipp)/ek.k$softipp
+ek.tx.dep$rdetc <- (ek.tx.dep$rd*ek.k$rd + ek.tx.dep$soft*ek.k$soft + ek.tx.dep$oipp*ek.k$oipp)/ek.k$rdetc
+
+ek.tx.dep[is.na(ek.tx.dep)] <- 0
+
 #Calcula as proporções
 for (x in 4:18) {
-  ek.k[,x] <- ek.k[,x]/rep(ek.k[ek.k[,2]=="TOT",x], each=length(setores.euklems[,2]))
+  totais <- ek.k[ek.k[,2]=="TOT",c(1, x)]
+  totais <- totais[match(ek.k[,1],totais[,1]),2]
+  ek.k[,x] <- ek.k[,x]/totais
 }
 
-###Eliminar países sem dados adequados
-
-# Esse método seleciona para a exclusão os países sem dados para o "total da indústria"
-ek.k$soma <- rowSums(ek.k[,4:13], na.rm = FALSE)
-paises.para.excluir <- (ek.k[ek.k[,2]=="TOT_IND" & is.na(ek.k[,14]),1])
-
-# Esse método seleciona os países conforme as informações na documentação do euklems. (NÃO USAR ESSE MÉTODO: DOCUMENTAÇÃO NÃO ESTÁ ADEQUADA)
-#paises.para.excluir <- c("BG", "CY", "EE", "EL", "HR", "HU", "IE", "LT", "LU", "LV", "MT", "PL", "PT", "SE", "SI", "US")
-
-# Exckui os países selecionados
-ek.k <- ek.k[!(ek.k[,1] %in% paises.para.excluir),]
-
-paises.para.excluir <- c("LU", "SE") #países que não consegui filtrar
-ek.k <- ek.k[!(ek.k[,1] %in% paises.para.excluir),]
-
-##Resolver a falta de agregações
-ek.k[is.na(ek.k)] <- 0
-
-filtro1 = ek.k[,2]=="C20_C21" & ek.k[,3]==0
-ek.k[filtro1, 4:18] <- ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C20",4:18]+ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C21",4:18]
-
-filtro1 = ek.k[,2]=="C26_C27" & ek.k[,3]==0
-ek.k[filtro1, 4:18] <- ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C26",4:18]+ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C27",4:18]
-
-filtro1 = ek.k[,2]=="D_E" & ek.k[,3]==0
-ek.k[filtro1, 4:18] <- ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="D",4:18]+ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="E",4:18]
-
-ek.k.rsu = ek.k.53_63 <- ek.k[ek.k[,2]=="R",]
-
-ek.k.rsu$code <- "R_S_U"
-filtro1 = ek.k[,2]=="R_S" & ek.k[,3]==0
-ek.k[filtro1, 4:18] <- ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="R",4:18]+ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="S",4:18]
-ek.k.rsu[4:18] <- ek.k[ek.k[,2]=="R_S",4:18] + ek.k[ek.k[,2]=="U",4:18]
-
-ek.k.53_63$code <- "H53-J63"
-ek.k.53_63[4:18] <- ek.k[ek.k[,2]=="H53",4:18] + ek.k[ek.k[,2]=="J58-J60",4:18] + ek.k[ek.k[,2]=="J61",4:18] + ek.k[ek.k[,2]=="J62_J63",4:18]
-
-ek.k <- rbind(ek.k, ek.k.rsu, ek.k.53_63)
-
 ek.k <- ek.k[,c(1,2,4:13,15:18)]
+ek.tx.dep <- ek.tx.dep[,c(1:12,14:17)]
 
 ## Acrescentar um "país média" (MD)
 
 ek.k.md <- ek.k[ek.k[,1]=="AT",]
 ek.k.md[,1] <- "MD"
+ek.tx.dep.md <- ek.k.md
 
 for (x in 3:16) {
   ek.k.md[,x] <- tapply(ek.k[,x], match(ek.k[,2], ek.k.md[,2]), mean, na.rm = TRUE)
+  ek.tx.dep.md[,x] <- tapply(ek.tx.dep[,x], match(ek.tx.dep[,2], ek.tx.dep.md[,2]), mean, na.rm = TRUE)
 }
 
 ek.k <- rbind(ek.k, ek.k.md)
-
+ek.tx.dep <- rbind(ek.tx.dep, ek.tx.dep.md)

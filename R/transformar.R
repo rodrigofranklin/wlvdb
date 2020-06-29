@@ -17,7 +17,7 @@ lins <- length(lin.prods)
 coeficientes <- matrix(0, nrow = length(lin.prods), ncol = length(col.prods))
 
 
-# Calcula a matriz de coeficientes técnicos (Repare na diferença entre x,y e X,Y)
+# Calcula a matriz de coeficientes técnicos
 x<- seq(1,lins)
 coeficientes[x,x] <- m.wio[col.prods,lin.prods]/matrix(m.wio[lin.produto.total,lin.prods], nrow = cols, ncol=cols, byrow = TRUE)
 coeficientes[is.infinite(coeficientes)] <- 0

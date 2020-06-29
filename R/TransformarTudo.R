@@ -7,14 +7,18 @@ library(readxl)
 library(beepr)
 
 # Define a versão do WIOD que será utilizada: July14 ou Nov16
-versao <- 'July14'
-#versao <- 'Nov16'
+#versao <- 'July14'
+versao <- 'Nov16'
 
-# 
+# Define a variável que será utilizada para o cálculo dos valores
 variavel_trabalho <- 'h.emp'
 #variavel_trabalho <- 'emp'
 #variavel_trabalho <- 'h.emp_alternativo'
 
+# Cria o diretório para salvar os resultados
+ver.num <- readRDS("resultados/ver_num.rds")
+caminho <- paste0("resultados/", versao, "_" , ver.num)
+dir.create(caminho)
 
 #paises y sectores - Inicialmente LinProds ColProds pais.lins pasado a módulo propio
 source('R/sectorespaises.R')
@@ -144,13 +148,16 @@ for (z in anos) {
   source(paste0(getwd(),"/R/transformar.R"))
 
   source(paste0(getwd(),"/R/estimar-vars.R"))
+
   
-  saveRDS(m.t, file = paste0(getwd(),"/Resultados/",versao,"_",variavel_trabalho,"_WIOD_HORAS_",as.character(z),".rds"))
-  write.csv2(Resultados, file = paste0(getwd(),"/Resultados/",versao,"_",variavel_trabalho,"_Resultados",as.character(z),".csv"))
+  saveRDS(m.t, file = paste0(caminho, "/wiod_horas_",as.character(z),".rds"))
+  write.csv2(Resultados, file = paste0(caminho, "/resultados_",as.character(z),".csv"))
   write.csv2(TransferenciaPais,
-             file = paste0(getwd(),"/Resultados/",versao,"_",variavel_trabalho,"_Transferencias",as.character(z),".csv"),
+             file = paste0(caminho, "/transferencias_",as.character(z),".csv"),
              row.names = paises[,1])
   beep(sound=2)
 }
-beep(sound=3)
 
+ver.num <- ver.num+1
+saveRDS(ver.num, file = "resultados/ver_num.rds")
+beep(sound=3)

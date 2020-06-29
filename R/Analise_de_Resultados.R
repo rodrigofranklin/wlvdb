@@ -93,3 +93,4 @@ for (Pais in Paises) {
   axis(side=1,1:17,as.character(1995:2011))
   polygon(c(1:17,17:1),c(Transferencias,rep(0,times=17)),col="gray")
 }
+<- <- <- <- <- <- <- 
