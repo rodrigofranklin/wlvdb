@@ -63,7 +63,8 @@ ek.va.prop2 <- do.call("cbind", replicate(10, ek.va$prop2, simplify=FALSE))
 
 agregacao.setores <- read.csv2(paste0(getwd(),'/sourcedata/agregacao-euklems.csv'))
 
-for (x in 1:nrow(agregacao.setores)) {
+#Primeiro, desagrega pelo nível de ek.va.prop2
+for (x in 1:4) {
   filtro1 <- ek.k[,2]==as.character(agregacao.setores[x,1]) & ek.k[,14]==0
   filtro2 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]==as.character(agregacao.setores[x,2])
   ek.k[filtro1,4:13] <- ek.k[filtro2,4:13] * ek.va.prop2[filtro1,]
@@ -72,7 +73,8 @@ for (x in 1:nrow(agregacao.setores)) {
 
 ek.k$soma <- rowSums(ek.k[,4:13], na.rm = TRUE) #soma os dados disponíveis para saber quais foram alterados
 
-for (x in 1:nrow(agregacao.setores)) {
+#Segundo, desagrega pelo nível de ek.va.prop
+for (x in 5:nrow(agregacao.setores)) {
   filtro1 <- ek.k[,2]==as.character(agregacao.setores[x,1]) & ek.k[,14]==0
   filtro2 <- ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]==as.character(agregacao.setores[x,2])
   ek.k[filtro1,4:13] <- ek.k[filtro2,4:13] * ek.va.prop[filtro1,]
@@ -91,33 +93,55 @@ for (x in 4:18) {
   ek.k[,x] <- ek.k[,x]/rep(ek.k[ek.k[,2]=="TOT",x], each=length(setores.euklems[,2]))
 }
 
-##Eliminar países sem dados adequados
+###Eliminar países sem dados adequados
+
+# Esse método seleciona para a exclusão os países sem dados para o "total da indústria"
 ek.k$soma <- rowSums(ek.k[,4:13], na.rm = FALSE)
-paises.para.excluir <- (ek.k[ek.k[,2]=="TOT_IND" & is.na(ek.k[,14]),1]) #como vou retirar as agregações agora, registro quais países devem ser mantidos (para excluir os demais futuramente)
+paises.para.excluir <- (ek.k[ek.k[,2]=="TOT_IND" & is.na(ek.k[,14]),1])
+
+# Esse método seleciona os países conforme as informações na documentação do euklems. (NÃO USAR ESSE MÉTODO: DOCUMENTAÇÃO NÃO ESTÁ ADEQUADA)
+#paises.para.excluir <- c("BG", "CY", "EE", "EL", "HR", "HU", "IE", "LT", "LU", "LV", "MT", "PL", "PT", "SE", "SI", "US")
+
+# Exckui os países selecionados
+ek.k <- ek.k[!(ek.k[,1] %in% paises.para.excluir),]
+
+paises.para.excluir <- c("LU", "SE") #países que não consegui filtrar
 ek.k <- ek.k[!(ek.k[,1] %in% paises.para.excluir),]
 
 ##Resolver a falta de agregações
 ek.k[is.na(ek.k)] <- 0
 
 filtro1 = ek.k[,2]=="C20_C21" & ek.k[,3]==0
-ek.k[filtro1, 4:13] <- ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C20",4:13]+ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C21",4:13]
+ek.k[filtro1, 4:18] <- ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C20",4:18]+ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C21",4:18]
 
 filtro1 = ek.k[,2]=="C26_C27" & ek.k[,3]==0
-ek.k[filtro1, 4:13] <- ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C26",4:13]+ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C27",4:13]
+ek.k[filtro1, 4:18] <- ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C26",4:18]+ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="C27",4:18]
 
 filtro1 = ek.k[,2]=="D_E" & ek.k[,3]==0
-ek.k[filtro1, 4:13] <- ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="D",4:13]+ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="E",4:13]
+ek.k[filtro1, 4:18] <- ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="D",4:18]+ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="E",4:18]
 
 ek.k.rsu = ek.k.53_63 <- ek.k[ek.k[,2]=="R",]
 
 ek.k.rsu$code <- "R_S_U"
 filtro1 = ek.k[,2]=="R_S" & ek.k[,3]==0
-ek.k[filtro1, 4:13] <- ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="R",4:13]+ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="S",4:13]
-ek.k.rsu[4:13] <- ek.k[ek.k[,2]=="R_S",4:13] + ek.k[ek.k[,2]=="U",4:13]
+ek.k[filtro1, 4:18] <- ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="R",4:18]+ek.k[ek.k[,1] %in% ek.k[filtro1,1] & ek.k[,2]=="S",4:18]
+ek.k.rsu[4:18] <- ek.k[ek.k[,2]=="R_S",4:18] + ek.k[ek.k[,2]=="U",4:18]
 
 ek.k.53_63$code <- "H53-J63"
-ek.k.53_63[4:13] <- ek.k[ek.k[,2]=="H53",4:13] + ek.k[ek.k[,2]=="J58-J60",4:13] + ek.k[ek.k[,2]=="J61",4:13] + ek.k[ek.k[,2]=="J62_J63",4:13]
+ek.k.53_63[4:18] <- ek.k[ek.k[,2]=="H53",4:18] + ek.k[ek.k[,2]=="J58-J60",4:18] + ek.k[ek.k[,2]=="J61",4:18] + ek.k[ek.k[,2]=="J62_J63",4:18]
 
 ek.k <- rbind(ek.k, ek.k.rsu, ek.k.53_63)
 
 ek.k <- ek.k[,c(1,2,4:13,15:18)]
+
+## Acrescentar um "país média" (MD)
+
+ek.k.md <- ek.k[ek.k[,1]=="AT",]
+ek.k.md[,1] <- "MD"
+
+for (x in 3:16) {
+  ek.k.md[,x] <- tapply(ek.k[,x], match(ek.k[,2], ek.k.md[,2]), mean, na.rm = TRUE)
+}
+
+ek.k <- rbind(ek.k, ek.k.md)
+
