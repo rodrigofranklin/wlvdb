@@ -35,8 +35,8 @@ paises.setores[!(paises.setores$p.ek %in% unique(ek.k$country)),"p.ek"] <- facto
 paises.setores$ps.ek <- paste0(paises.setores$p.ek, paises.setores$s.ek)
 
 #desagregar
-for (x in 1:tamanho) {
-  k.composicao[x,] <- k.composicao[x,]*ek.k[match(paises.setores$ps.ek, ek.k$ps),as.character(paises.setores$k.ek[x])]
+for (t in 1:tamanho) {
+  k.composicao[t,] <- k.composicao[t,]*ek.k[match(paises.setores$ps.ek, ek.k$ps),as.character(paises.setores$k.ek[t])]
 }
 
 ##Aplicar
