@@ -27,7 +27,7 @@ Resultados <- array(data = 0,dim = c(17,41,28), dimnames = list(c(1995:2011),
                                                     "LucroMPais","CapitalMPais","ConsumoIntermediarioPPais","COXK","COXT","COIK","COIT")))
 # Lê os resultados dos arquivos .csv
 for (Z in 1995:2011) {
-  Resultados[as.character(Z),,] <- as.matrix(read.csv2(file = paste0(getwd(),"/Resultados/July14_h.emp_Resultados",as.character(Z),".csv"), row.names = 1))
+  Resultados[as.character(Z),,] <- as.matrix(read.csv2(file = paste0(getwd(),"/resultados/July14_1001/resultados_",as.character(Z),".csv"), row.names = 1))
 }
 #####
 
@@ -93,4 +93,4 @@ for (Pais in Paises) {
   axis(side=1,1:17,as.character(1995:2011))
   polygon(c(1:17,17:1),c(Transferencias,rep(0,times=17)),col="gray")
 }
-<- <- <- <- <- <- <- 
+ 
