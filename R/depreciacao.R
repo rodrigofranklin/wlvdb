@@ -1,6 +1,4 @@
-#K Depreciation - Depreciación de Capit
-#version inicial, sin depreciación
-#remover ) and -Depreciation)
+#K Depreciation - Depreciación de Capital
 
 ###Distribui o capital presente nas SEA em seus diversos tipos
 #k.composicao <- matrix(rep(t(prop.table(m.wio[1:(tamanho),col.fbcf],2)),each=num.setores), ncol = tamanho, nrow = tamanho, byrow = TRUE)*matrix(k.usd,nrow=tamanho,ncol=tamanho, byrow= TRUE)
