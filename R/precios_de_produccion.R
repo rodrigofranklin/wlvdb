@@ -16,3 +16,20 @@ t <- rotacion()
 #### El problema es de máximo autovalor para auto-vector positivo (único que tiene sentido económico, precios >0) de la siguiente matriz:
 
 #[K + (A +b.ao)<t>] (I - A - b'.ao - D)-1
+
+#H transpuesta
+#H = [M(I-N)^-1]
+#M = A + D + B
+#M = K + A + B
+  
+#matriz.b <- 
+#matriz.m <- coeficientes+m.depreciacao+matriz.b
+
+matriz.n <- k.composicao+coeficientes+matriz.b
+
+matriz.h <- solve(matriz.m*(diag(1,nrow = cols)-matriz.n))
+
+matriz.ht <- transpose(matriz.h)
+
+pre_prod <- eigen(matriz.ht)
+
