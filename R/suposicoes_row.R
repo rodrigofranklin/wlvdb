@@ -5,7 +5,8 @@
 
 pos.row <- (num.paises-1)*num.setores
 posicao.row <- which(pais.lins==paises[paises[,3]=="ROW",2])
-tamanho <- dim(emp)
+
+tamanho <- length(emp)
 
 #Cálculo do emprego e das horas trabalhadas
 emp.row.total <- row.emp[which(row.emp==versao),as.character(z)]

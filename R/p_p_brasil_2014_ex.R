@@ -90,7 +90,7 @@ k.bra.completa <- matrix(k.bra.completa, nrow = 56,ncol = 56)
 
 k.bra <- k.bra.completa[sec_prod, sec_prod]
 
-k.bra[is.na(k.bra)] <- 0
+k.bra[is.na(k.bra)] <- 1
 
 
 ###Vamos a construir B
@@ -148,11 +148,20 @@ wiot.bra.go <- wiot.bra.go[seq_completos]
 
 wiot.bra.go <- wiot.bra.go[sec_prod]
 
-B <- E%*%pinv(diag(wiot.bra.go))
+##Evitar división por 0
+wiot.bra.go[wiot.bra.go == 0] <- 1
 
-k.bra <- lapply(e)
+B <- E%*%solve(diag(wiot.bra.go))
 
-M <- coeficientes.bra+k.bra+B
+
+##Matriz de Capital <- dividida por producción bruta
+
+k.bra.go <- mapply("/",data.frame(t(k.bra)),t(wiot.bra.go))
+
+k.bra.go.loc <- k.bra.go*max(cambio.bra)
+
+
+M <- coeficientes.bra+k.bra.go.loc+B
 
 
 N <- coeficientes.bra+B+d.bra
@@ -161,4 +170,7 @@ H <- M*solve(diag(1,32)-N)
 
 prec_prod <- eigen(t(H))
 
+#max(prec_prod$values)
+
+1/prec_prod$values[1]
 
