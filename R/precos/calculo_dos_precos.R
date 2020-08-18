@@ -1,17 +1,3 @@
-if (versao == "July14") {
-  m.wio <- readRDS(paste0(getwd(),"/sourcedata/",versao,"/WIOT_",as.character(ano),".rds"))
-  m.t <- readRDS(paste0(getwd(),"/resultados/",versao_resultado,"/wiod_horas_",as.character(ano),".rds"))
-  lin.produto.total <- nrow(m.wio)
-} else {
-  load(paste0(getwd(),"/sourcedata/Nov16/WIOT",as.character(ano),"_October16_ROW.RData"))
-  m.wio <- as.matrix(wiot[,6:ncol(wiot)])
-  m.t <- readRDS(paste0(getwd(),"/resultados/",versao_resultado,"/wiod_horas_",as.character(ano),".rds"))
-  lin.produto.total <- which(wiot[,'IndustryCode'] == 'GO')
-}  
-
-
-tamanho <- num.paises*num.setores
-
 valores <- m.t[lin.produto.total, 1:tamanho]
 precos_mercado <- m.wio[lin.produto.total, col.prods]
 k <- sum(precos_mercado)/sum(valores)

@@ -100,7 +100,7 @@ for (z in anos) {
       linhas.setor.pais.gfcf <- linhas.pais.gfcf[which(sea[linhas.pais.gfcf,'code'] == as.character(setores[y,1]))]
       linhas.setor.pais.gfcf.p <- linhas.pais.gfcf.p[which(sea[linhas.pais.gfcf.p,'code'] == as.character(setores[y,1]))]
       linhas.setor.pais.k <- linhas.pais.k[which(sea[linhas.pais.k,'code'] == as.character(setores[y,1]))]
-     
+      
       cambio[w] <- ifelse(as.numeric(sea[linhas.setor.pais.va,coluna.sea]) !=0,m.wio[lin.va,w]/as.numeric(sea[linhas.setor.pais.va,coluna.sea]),0)
       h.empe[w]<-as.numeric(sea[linhas.setor.pais.h.empe,coluna.sea])*1000000
       emp[w]<-as.numeric(sea[linhas.setor.pais.emp,coluna.sea])*1000
@@ -149,7 +149,14 @@ for (z in anos) {
 
   source(paste0(getwd(),"/R/estimar-vars.R"))
 
+  source('R/precos/calculo_dos_precos.R')
   
+  #Variáveis para salvar: k.dep, h.emp, h.empe, k.usd, cambio, emp, empe, comp.real, lab.real, cap.usd, lab.usd, comp.usd,
+  #Matrizes para salvar: k.composicao, m.depreciacao
+  saveRDS(rbind(emp, empe, h.emp, h.empe, cambio, comp.real, comp.usd, lab.real, lab.usd, cap.usd, k.usd, k.dep, valores, precos_diretos, precos_diretos_n, precos_mercado),
+             file = paste0(caminho, "/socioeconomicas_",as.character(z),".rds"))
+  saveRDS(m.depreciacao, file = paste0(caminho, "/m_depreciacao_",as.character(z),".rds"))
+  saveRDS(k.composicao, file = paste0(caminho, "/k_composicao_",as.character(z),".rds"))
   saveRDS(m.t, file = paste0(caminho, "/wiod_horas_",as.character(z),".rds"))
   write.csv2(Resultados, file = paste0(caminho, "/resultados_",as.character(z),".csv"))
   write.csv2(TransferenciaPais,
