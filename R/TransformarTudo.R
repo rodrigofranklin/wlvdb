@@ -155,9 +155,9 @@ for (z in anos) {
   write.csv2(TransferenciaPais,
              file = paste0(caminho, "/transferencias_",as.character(z),".csv"),
              row.names = paises[,1])
-  beep(sound=2)
+  beepr::beep(sound=2)
 }
 
 ver.num <- ver.num+1
 saveRDS(ver.num, file = "resultados/ver_num.rds")
-beep(sound=3)
+beepr::beep(sound=3)
