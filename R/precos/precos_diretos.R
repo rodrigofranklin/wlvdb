@@ -4,7 +4,7 @@
 # versao_resultado <- "July14_1006"
 # anos <- 1995:2009
 versao = versao_fonte <- "Nov16"
-versao_resultado <- "Nov16_1007"
+versao_resultado <- "Nov16_1008"
 anos <- 2000:2014
 
 source("R/precos/turnover-rotacion.R")

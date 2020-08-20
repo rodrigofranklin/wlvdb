@@ -36,6 +36,7 @@ for (p in 1:tamanho) {
 
 fbcf <- as.data.frame(m.wio[1:tamanho,col.fbcf]) # Cria uma matrix NxN com a fbcf de cada país
 fbcf <- as.matrix(fbcf[rep(names(fbcf), each = num.setores)])
+fbcf[fbcf<0] <- 0
 
 k.composicao <- k.composicao * fbcf # primeiro, distribui a fbcf de cada país conforme a composição do capital euklems
 k.composicao <- prop.table(k.composicao, margin = 2)*matrix(k.usd,nrow=tamanho,ncol=tamanho, byrow= TRUE) #depois, distribui o estoque de capital pelas proporções da fbcf distribuida
