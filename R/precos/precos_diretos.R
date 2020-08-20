@@ -62,6 +62,9 @@ for (ano in anos) {
   resultado$temp <- t(cbind(t(valores), t(precos_diretos), t(precos_diretos_n), t(precos_mercado), t(prec_prod)))
   names(resultado)[names(resultado) == "temp"] <- ano
   taxa_lucro_media_mundo <- c(taxa_lucro_media_mundo, ro)
+  print(paste("Ano",ano,"processado, 
+              com taxa de lucro média mundial de",
+              taxa_lucro_media_mundo))
 }
 
 write.csv2(resultado, file = paste0("resultados/",versao_resultado,"/precos_",versao_resultado,".csv"))
