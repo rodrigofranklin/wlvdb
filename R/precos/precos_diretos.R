@@ -1,13 +1,13 @@
 # Script para leitura dos preços diretos, preços de produção e valores
 
-# versao = versao_fonte <- "July14"
+# versao = versao_fonte  <- "July14"
 # versao_resultado <- "July14_1006"
 # anos <- 1995:2009
 versao = versao_fonte <- "Nov16"
 versao_resultado <- "Nov16_1007"
 anos <- 2000:2014
 
-source("R/turnover-rotacion.R")
+source("R/precos/turnover-rotacion.R")
 
 source('R/sectorespaises.R')
 pais.cols <- pais.lins
@@ -40,6 +40,7 @@ resultado <- rbind(resultado, resultado_temp)
 taxa_lucro_media_mundo <- NULL
 
 for (ano in anos) {
+  print(paste0("Lendo dados do ano ",as.character(ano)))
   if (versao == "July14") {
     m.wio <- readRDS(paste0(getwd(),"/sourcedata/",versao,"/WIOT_",as.character(ano),".rds"))
     m.t <- readRDS(paste0(getwd(),"/resultados/",versao_resultado,"/wiod_horas_",as.character(ano),".rds"))
@@ -56,7 +57,7 @@ for (ano in anos) {
     sea <- readRDS(paste0(getwd(),"/resultados/",versao_resultado,"/socioeconomicas_",as.character(ano),".rds"))
     lin.produto.total <- which(wiot[,'IndustryCode'] == 'GO')
   }  
-  
+  print("Fim da leitura")
   source('R/precos/calculo_dos_precos.R')
   
   resultado$temp <- t(cbind(t(valores), t(precos_diretos), t(precos_diretos_n), t(precos_mercado), t(prec_prod)))
