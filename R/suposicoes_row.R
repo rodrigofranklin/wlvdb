@@ -1,7 +1,7 @@
 #######################################################################
 #
 # Calcula emprego e capital para o resto do mundo
-#
+# + Salários
 
 pos.row <- (num.paises-1)*num.setores
 posicao.row <- which(pais.lins==paises[paises[,3]=="ROW",2])
@@ -26,6 +26,12 @@ emp[is.na(emp)] <- 0
 h.emp[is.na(h.emp)] <- 0
 empe[is.na(empe)] <- 0
 h.empe[is.na(h.empe)] <- 0
+
+#Cálculo dos salários
+lab.row.total <- (sum(sea["lab.usd",]))/sum(m.wio[1441,1:(tamanho-num.setores)])*sum(m.wio[lin.va,posicao.row])
+soma.lab.setor <- tapply(lab.usd[1:pos.row], rep(1:num.setores,times = num.paises-1), sum)
+soma.emp.setor <- tapply(emp[1:pos.row], rep(1:num.setores,times = num.paises-1), sum)
+lab.usd[posicao.row] <- lab.row.total*prop.table(m.wio[lin.va,posicao.row]*soma.lab.setor/soma.emp.setor)
 
 #Cálculo do capital a partir da intensidade de k dos países pobres
 paises.pobres <- c(17, 18, 4, 5, 37, 27, 7, 32, 31, 29, 16, 23, 24, 33, 11, 9)

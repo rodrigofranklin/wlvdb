@@ -40,6 +40,7 @@ resultado <- rbind(resultado, resultado_temp)
 taxa_lucro_media_mundo <- NULL
 
 for (ano in anos) {
+  print(paste0("Lendo dados do ano ",as.character(ano)))
   if (versao == "July14") {
     m.wio <- readRDS(paste0(getwd(),"/sourcedata/",versao,"/WIOT_",as.character(ano),".rds"))
     m.t <- readRDS(paste0(getwd(),"/resultados/",versao_resultado,"/wiod_horas_",as.character(ano),".rds"))
@@ -56,7 +57,7 @@ for (ano in anos) {
     sea <- readRDS(paste0(getwd(),"/resultados/",versao_resultado,"/socioeconomicas_",as.character(ano),".rds"))
     lin.produto.total <- which(wiot[,'IndustryCode'] == 'GO')
   }  
-  
+  print("Fim da leitura")
   source('R/precos/calculo_dos_precos.R')
   
   resultado$temp <- t(cbind(t(valores), t(precos_diretos), t(precos_diretos_n), t(precos_mercado), t(prec_prod)))

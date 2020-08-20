@@ -6,6 +6,7 @@ precos_diretos <-  k * valores
 
 #### Preços de produção
 #[K + (A + b.a0)<t>] (I - A - b.a0 - D)-1
+print(paste0("calculando precos de producao do ano ",as.character(ano)))
 A <- m.wio[1:tamanho,1:tamanho]/matrix(m.wio[lin.produto.total,1:tamanho], nrow = tamanho, ncol=tamanho, byrow = TRUE)
 A[is.infinite(A)] <- 0
 A[is.nan(A)] <- 0
@@ -31,13 +32,14 @@ b.a0[is.infinite(b.a0)] <- 0
 b.a0[is.nan(b.a0)] <- 0
 
 #[K + (A + b.a0)<t>] (I - A - b.a0 - D)-1
-prec_prod <- eigen(t((K + (A+b.a0)%*%t ) * solve(I -A -b.a0 -D)))
+prec_prod <- eigen(t((K + (A+b.a0)%*%t ) %*% solve(I -A -b.a0 -D)))
 
 ro <- 1/Re(prec_prod[["values"]][1])
 prec_prod <- Re(prec_prod[["vectors"]][,1])
 
 k <- sum(m.wio[lin.produto.total,1:tamanho])/sum(m.wio[lin.produto.total,1:tamanho]*prec_prod)
 prec_prod <- k*prec_prod*m.wio[lin.produto.total,1:tamanho]
+print("Fim do calculo")
 
 #### Preços diretos com base nacional
 k_n = produto_total_t_pais = produto_total_m_pais <- matrix(0,1,num.paises)
