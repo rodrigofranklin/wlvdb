@@ -1,13 +1,13 @@
 # Script para leitura dos preços diretos, preços de produção e valores
 
-# versao = versao_fonte <- "July14"
+# versao = versao_fonte  <- "July14"
 # versao_resultado <- "July14_1006"
 # anos <- 1995:2009
 versao = versao_fonte <- "Nov16"
 versao_resultado <- "Nov16_1007"
 anos <- 2000:2014
 
-source("R/turnover-rotacion.R")
+source("R/precos/turnover-rotacion.R")
 
 source('R/sectorespaises.R')
 pais.cols <- pais.lins
