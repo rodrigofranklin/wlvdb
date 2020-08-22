@@ -4,7 +4,7 @@
 # versao_resultado <- "July14_1006"
 # anos <- 1995:2009
 versao = versao_fonte <- "Nov16"
-versao_resultado <- "Nov16_1008"
+versao_resultado <- "Nov16_1010"
 anos <- 2000:2014
 
 source("R/precos/turnover-rotacion.R")
@@ -21,6 +21,8 @@ for (x in paises[,2]) {
   col.demanda.final <- c(col.demanda.final, (tamanho) + demanda[demanda == 'Final consumption expenditure by households',3] + (num.demanda*(x-1)))
 }
 
+source('R/precos/sem_taiwan_variaveis.R')
+
 paises.setores <- data.frame(country=rep(paises$Legenda,each=num.setores))
 paises.setores$description <- setores$Setor
 paises.setores$code <- setores$Code
@@ -35,6 +37,8 @@ resultado <- rbind(resultado, resultado_temp)
 resultado_temp$variable <- 'precos_mercado'
 resultado <- rbind(resultado, resultado_temp)
 resultado_temp$variable <- 'precos_producao'
+resultado <- rbind(resultado, resultado_temp)
+resultado_temp$variable <- 'precos_producao2'
 resultado <- rbind(resultado, resultado_temp)
 
 taxa_lucro_media_mundo <- NULL
@@ -57,10 +61,14 @@ for (ano in anos) {
     sea <- readRDS(paste0(getwd(),"/resultados/",versao_resultado,"/socioeconomicas_",as.character(ano),".rds"))
     lin.produto.total <- which(wiot[,'IndustryCode'] == 'GO')
   }  
+  lab.usd <- sea["lab.usd",]
+
   print("Fim da leitura")
+  
+  source('R/precos/sem_taiwan_dados.R')
   source('R/precos/calculo_dos_precos.R')
   
-  resultado$temp <- t(cbind(t(valores), t(precos_diretos), t(precos_diretos_n), t(precos_mercado), t(prec_prod)))
+  resultado$temp <- t(cbind(t(valores), t(precos_diretos), t(precos_diretos_n), t(precos_mercado), t(prec_prod), t(prec_prod2)))
   names(resultado)[names(resultado) == "temp"] <- ano
   taxa_lucro_media_mundo <- c(taxa_lucro_media_mundo, ro)
 }
