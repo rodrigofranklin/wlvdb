@@ -1,11 +1,11 @@
 # Script para leitura dos preços diretos, preços de produção e valores
 
-# versao = versao_fonte  <- "July14"
-# versao_resultado <- "July14_1006"
-# anos <- 1995:2009
-versao = versao_fonte <- "Nov16"
-versao_resultado <- "Nov16_1010"
-anos <- 2000:2014
+versao = versao_fonte  <- "July14"
+versao_resultado <- "July14_1011"
+anos <- 1995:2009
+# versao = versao_fonte <- "Nov16"
+# versao_resultado <- "Nov16_1010"
+# anos <- 2000:2014
 
 source("R/precos/turnover-rotacion.R")
 
@@ -42,6 +42,7 @@ resultado_temp$variable <- 'precos_producao2'
 resultado <- rbind(resultado, resultado_temp)
 
 taxa_lucro_media_mundo <- NULL
+taxa_lucro_media_mundo2 <- NULL
 
 for (ano in anos) {
   print(paste0("Lendo dados do ano ",as.character(ano)))
@@ -71,8 +72,10 @@ for (ano in anos) {
   resultado$temp <- t(cbind(t(valores), t(precos_diretos), t(precos_diretos_n), t(precos_mercado), t(prec_prod), t(prec_prod2)))
   names(resultado)[names(resultado) == "temp"] <- ano
   taxa_lucro_media_mundo <- c(taxa_lucro_media_mundo, ro)
+  taxa_lucro_media_mundo2 <- c(taxa_lucro_media_mundo2, ro2)
 }
 
 write.csv2(resultado, file = paste0("resultados/",versao_resultado,"/precos_",versao_resultado,".csv"))
 write.csv2(taxa_lucro_media_mundo, file = paste0("resultados/",versao_resultado,"/tx_lucro_",versao_resultado,".csv"))
+write.csv2(taxa_lucro_media_mundo2, file = paste0("resultados/",versao_resultado,"/tx_lucro2_",versao_resultado,".csv"))
 

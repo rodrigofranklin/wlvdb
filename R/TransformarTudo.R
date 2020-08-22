@@ -7,8 +7,8 @@ library(readxl)
 library(beepr)
 
 # Define a versão do WIOD que será utilizada: July14 ou Nov16
-#versao <- 'July14'
-versao <- 'Nov16'
+versao <- 'July14'
+#versao <- 'Nov16'
 
 # Define a variável que será utilizada para o cálculo dos valores
 variavel_trabalho <- 'h.emp'

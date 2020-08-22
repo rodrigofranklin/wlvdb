@@ -31,9 +31,10 @@ b.a0 <- (matrix(lab.usd, ncol = tamanho, nrow = tamanho, byrow = TRUE)*prop_dema
 b.a0[is.infinite(b.a0)] <- 0
 b.a0[is.nan(b.a0)] <- 0
 
+inversa <- solve(I -A -b.a0 -D)
 #[K + (A + b.a0)<t>] (I - A - b.a0 - D)-1 -> turnover => 1 por ano
 t <- diag(tamanho)
-prec_prod <- eigen(t((K + (A+b.a0)%*%t ) %*% solve(I -A -b.a0 -D)))
+prec_prod <- eigen(t((K + (A+b.a0)%*%t ) %*% inversa))
 
 ro <- 1/Re(prec_prod[["values"]][1])
 prec_prod <- Re(prec_prod[["vectors"]][,1])
@@ -44,9 +45,9 @@ prec_prod <- k*prec_prod*m.wio[lin.produto.total,1:tamanho]
 
 #[K + (A + b.a0)<t>] (I - A - b.a0 - D)-1 -> turnover => 2 por ano
 t <- diag(0.5, tamanho)
-prec_prod2 <- eigen(t((K + (A+b.a0)%*%t ) %*% solve(I -A -b.a0 -D)))
+prec_prod2 <- eigen(t((K + (A+b.a0)%*%t ) %*% inversa))
 
-ro <- 1/Re(prec_prod2[["values"]][1])
+ro2 <- 1/Re(prec_prod2[["values"]][1])
 prec_prod2 <- Re(prec_prod2[["vectors"]][,1])
 
 k <- sum(m.wio[lin.produto.total,1:tamanho])/sum(m.wio[lin.produto.total,1:tamanho]*prec_prod2)
