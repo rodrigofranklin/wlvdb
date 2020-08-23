@@ -154,10 +154,10 @@ for (z in anos) {
   #Variáveis para salvar: k.dep, h.emp, h.empe, k.usd, cambio, emp, empe, comp.real, lab.real, cap.usd, lab.usd, comp.usd,
   #Matrizes para salvar: k.composicao, m.depreciacao
   saveRDS(rbind(emp, empe, h.emp, h.empe, cambio, comp.real, comp.usd, lab.real, lab.usd, cap.usd, k.usd, k.dep, valores, precos_diretos, precos_diretos_n, precos_mercado),
-             file = paste0(caminho, "/socioeconomicas_",as.character(z),".rds"))
-  saveRDS(m.depreciacao, file = paste0(caminho, "/m_depreciacao_",as.character(z),".rds"))
-  saveRDS(k.composicao, file = paste0(caminho, "/k_composicao_",as.character(z),".rds"))
-  saveRDS(m.t, file = paste0(caminho, "/wiod_horas_",as.character(z),".rds"))
+             file = paste0(caminho, "/socioeconomicas_",as.character(z),".rds"), compress = T)
+  saveRDS(m.depreciacao, file = paste0(caminho, "/m_depreciacao_",as.character(z),".rds"), compress = T)
+  saveRDS(k.composicao, file = paste0(caminho, "/k_composicao_",as.character(z),".rds"), compress = T)
+  saveRDS(m.t, file = paste0(caminho, "/wiod_horas_",as.character(z),".rds"), compress = T)
   write.csv2(Resultados, file = paste0(caminho, "/resultados_",as.character(z),".csv"))
   write.csv2(TransferenciaPais,
              file = paste0(caminho, "/transferencias_",as.character(z),".csv"),
