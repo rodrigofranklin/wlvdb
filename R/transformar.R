@@ -31,6 +31,8 @@ leontief <- solve(diag(tamanho)+((-coeficientes-depreciacao)*filtro_produtivo_ma
 
 # Calcula a relação trabalho/produto de cada setor (i.e., requerimentos diretos de trabalho)
 requerimentos_diretos <- (trabalho/m.wio[lin.produto.total,1:tamanho])*filtro_produtivo
+requerimentos_diretos[is.infinite(requerimentos_diretos)] <- 0
+requerimentos_diretos[is.na(requerimentos_diretos)] <- 0
 
 # Calcula o Fator Trabalho
 fator.t <- requerimentos_diretos%*%leontief
