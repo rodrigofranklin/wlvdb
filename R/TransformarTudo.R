@@ -12,10 +12,11 @@ versao <- 'July14'
 
 # Define a variável que será utilizada para o cálculo dos valores
 variavel_trabalho <- 'h.emp'
+#variavel_trabalho <- 'Tciz'
 #variavel_trabalho <- 'emp'
 #variavel_trabalho <- 'h.emp_alternativo'
 
-# Cria o diretório para salvar os resultados
+#Cria o diretório para salvar os resultados
 ver.num <- readRDS("resultados/ver_num.rds")
 caminho <- paste0("resultados/", versao, "_" , ver.num)
 dir.create(caminho)
@@ -57,12 +58,16 @@ for (z in anos) {
     m.wio <- readRDS(paste0(getwd(),"/sourcedata/",versao,"/WIOT_",as.character(z),".rds"))
     lin.produto.total <- nrow(m.wio)
     lin.va <- 1441
+    tamanho_completo <- ncol(m.wio)
   } else {
     load(paste0(getwd(),"/sourcedata/Nov16/WIOT",as.character(z),"_October16_ROW.RData"))
     m.wio <- as.matrix(wiot[,6:ncol(wiot)])
     lin.produto.total <- which(wiot[,'IndustryCode'] == 'GO')
     lin.va <- which(wiot[,'IndustryCode'] == 'VA')
+    tamanho_completo <- ncol(m.wio)
   }
+
+  produto_bruto_matriz <- matrix(m.wio[lin.produto.total,1:tamanho], nrow = tamanho, ncol=tamanho, byrow = TRUE)
   
   # Separa as variáveis desejadas da tabela de contas socioeconômicas
   i.usd = cambio2 = k.usd2 = cambio = h.emp = h.empe = emp = empe = comp.real = lab.real = k.usd = cap.usd = lab.usd = comp.usd <- array(data = 0, dim = num.paises*num.setores)
@@ -140,6 +145,11 @@ for (z in anos) {
     trabalho <- h.emp
   } else if (variavel_trabalho == "emp") {
     trabalho <- emp
+  } else if (variavel_trabalho == "Tciz") {
+    salario_medio <- lab.usd/emp
+    salario_medio[is.na(salario_medio)] <- 0
+    salario_medio[is.infinite(salario_medio)] <- 0
+    trabalho <- h.emp * salario_medio/min(salario_medio[salario_medio>0])
   } else {
     trabalho <- h.empe/empe*emp
     trabalho[is.na(trabalho)] <- 0
@@ -149,15 +159,16 @@ for (z in anos) {
 
   source(paste0(getwd(),"/R/estimar-vars.R"))
 
+  calcular_precos_producao = FALSE
   source('R/precos/calculo_dos_precos.R')
   
   #Variáveis para salvar: k.dep, h.emp, h.empe, k.usd, cambio, emp, empe, comp.real, lab.real, cap.usd, lab.usd, comp.usd,
   #Matrizes para salvar: k.composicao, m.depreciacao
   saveRDS(rbind(emp, empe, h.emp, h.empe, cambio, comp.real, comp.usd, lab.real, lab.usd, cap.usd, k.usd, k.dep, valores, precos_diretos, precos_diretos_n, precos_mercado),
-             file = paste0(caminho, "/socioeconomicas_",as.character(z),".rds"))
-  saveRDS(m.depreciacao, file = paste0(caminho, "/m_depreciacao_",as.character(z),".rds"))
-  saveRDS(k.composicao, file = paste0(caminho, "/k_composicao_",as.character(z),".rds"))
-  saveRDS(m.t, file = paste0(caminho, "/wiod_horas_",as.character(z),".rds"))
+             file = paste0(caminho, "/socioeconomicas_",as.character(z),".rds"), compress = T)
+  saveRDS(m.depreciacao, file = paste0(caminho, "/m_depreciacao_",as.character(z),".rds"), compress = T)
+  saveRDS(k.composicao, file = paste0(caminho, "/k_composicao_",as.character(z),".rds"), compress = T)
+  saveRDS(m.t, file = paste0(caminho, "/wiod_horas_",as.character(z),".rds"), compress = T)
   write.csv2(Resultados, file = paste0(caminho, "/resultados_",as.character(z),".csv"))
   write.csv2(TransferenciaPais,
              file = paste0(caminho, "/transferencias_",as.character(z),".csv"),

@@ -62,11 +62,15 @@ for (ano in anos) {
     sea <- readRDS(paste0(getwd(),"/resultados/",versao_resultado,"/socioeconomicas_",as.character(ano),".rds"))
     lin.produto.total <- which(wiot[,'IndustryCode'] == 'GO')
   }  
+  
+  produto_bruto_matriz <- matrix(m.wio[lin.produto.total,1:tamanho], nrow = tamanho, ncol=tamanho, byrow = TRUE)
+  
   lab.usd <- sea["lab.usd",]
 
   print("Fim da leitura")
   
   source('R/precos/sem_taiwan_dados.R')
+  calcular_precos_producao = TRUE
   source('R/precos/calculo_dos_precos.R')
   
   resultado$temp <- t(cbind(t(valores), t(precos_diretos), t(precos_diretos_n), t(precos_mercado), t(prec_prod), t(prec_prod2)))

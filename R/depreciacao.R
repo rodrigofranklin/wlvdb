@@ -45,8 +45,7 @@ k.composicao <- prop.table(k.composicao, margin = 2)*matrix(k.usd,nrow=tamanho,n
 m.depreciacao <- k.composicao*tx.depreciacao
 
 #Separa a depreciacao apenas dos capitais provenientes de setores produtivos
-depreciacao <- matrix(0, nrow = length(lin.prods), ncol = length(col.prods))
-depreciacao[x,x] <- m.depreciacao[col.prods,lin.prods]/matrix(m.wio[lin.produto.total,lin.prods], nrow = cols, ncol=cols, byrow = TRUE)
+depreciacao <- m.depreciacao/produto_bruto_matriz
 depreciacao[is.infinite(depreciacao)] <- 0
 depreciacao[is.nan(depreciacao)] <- 0
 
