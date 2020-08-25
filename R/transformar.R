@@ -11,15 +11,9 @@
 # Calcula coeficientes e leontief
 ##########################################
   
-# Aloca espaços da matriz de coeficientes técnicos
-cols <- length(col.prods)
-lins <- length(lin.prods)
-coeficientes <- matrix(0, nrow = length(lin.prods), ncol = length(col.prods))
-
-
 # Calcula a matriz de coeficientes técnicos
-x<- seq(1,lins)
-coeficientes[x,x] <- m.wio[col.prods,lin.prods]/matrix(m.wio[lin.produto.total,lin.prods], nrow = cols, ncol=cols, byrow = TRUE)
+
+coeficientes <- m.wio[1:tamanho,1:tamanho]/produto_bruto_matriz
 coeficientes[is.infinite(coeficientes)] <- 0
 coeficientes[is.nan(coeficientes)] <- 0
 
@@ -28,18 +22,17 @@ source("R/depreciacao.R")
 
 #Added depreciation matrix to Leontief's inverse calculus
 # Calcula a matriz leontief
-leontief <- solve(diag(1,nrow = cols)-coeficientes-depreciacao)
+leontief <- solve(diag(tamanho)+((-coeficientes-depreciacao)*filtro_produtivo_matriz))
 
 #############################
 # Calcula o Fator Trabalho (o parâmetro de multiplicação de cada setor para
 # o cálculo do Produto Total em Trabalho - ProdutoTotalT)
 ##############################
-  
-# Aloca espaço em matriz temporária
-requerimentos_diretos <- matrix(0, nrow=1,ncol=cols)
 
 # Calcula a relação trabalho/produto de cada setor (i.e., requerimentos diretos de trabalho)
-requerimentos_diretos[1,x] <- ifelse(m.wio[lin.produto.total,col.prods]==0, 0 , trabalho[col.prods]/m.wio[lin.produto.total,col.prods])
+requerimentos_diretos <- (trabalho/m.wio[lin.produto.total,1:tamanho])*filtro_produtivo
+requerimentos_diretos[is.infinite(requerimentos_diretos)] <- 0
+requerimentos_diretos[is.na(requerimentos_diretos)] <- 0
 
 # Calcula o Fator Trabalho
 fator.t <- requerimentos_diretos%*%leontief
@@ -48,8 +41,7 @@ fator.t <- requerimentos_diretos%*%leontief
 # Calcula tudo em termos de trabalho
 #####################################
 
-m.t <- matrix(0, ncol=ncol(m.wio), nrow=nrow(m.wio))
+m.t <- matrix(0, ncol=tamanho_completo, nrow=tamanho_completo)
 
-y<- seq(1:ncol(m.wio))
-m.t[lin.prods,y] <- m.wio[lin.prods,y]*fator.t[1,x]
-m.t[lin.produto.total,col.prods] <- m.wio[lin.produto.total,col.prods]*fator.t[1,x]
+m.t[1:tamanho, 1:tamanho_completo] <- m.wio[1:tamanho,1:tamanho_completo]*matrix(fator.t, ncol = tamanho_completo, nrow = tamanho, byrow = FALSE)
+m.t[lin.produto.total,1:tamanho] <- m.wio[lin.produto.total,1:tamanho]*fator.t

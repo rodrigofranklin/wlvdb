@@ -22,3 +22,7 @@ lin.prods <- t(lin.prods)
 col.prods <- lin.prods
 lin.consumo.intermediario <- num.paises*num.setores + 1
 
+tamanho <- num.setores*num.paises
+
+filtro_produtivo <- rep(setores$produtivo, times = num.paises)
+filtro_produtivo_matriz <- matrix(filtro_produtivo, nrow = tamanho, ncol = tamanho, byrow = TRUE ) * filtro_produtivo
