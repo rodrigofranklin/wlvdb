@@ -7,14 +7,18 @@ library(readxl)
 library(beepr)
 
 # Define a versão do WIOD que será utilizada: July14 ou Nov16
-versao <- 'July14'
-#versao <- 'Nov16'
+# versao <- 'July14'
+versao <- 'Nov16'
 
 # Define a variável que será utilizada para o cálculo dos valores
-variavel_trabalho <- 'h.emp'
-#variavel_trabalho <- 'Tciz'
+#variavel_trabalho <- 'h.emp'
+variavel_trabalho <- 'Tciz'
 #variavel_trabalho <- 'emp'
 #variavel_trabalho <- 'h.emp_alternativo'
+# variavel_trabalho  <- "h.emp_ponderado"
+# potencia_h <- 4
+# potencia_m <- 2
+  
 
 #Cria o diretório para salvar os resultados
 ver.num <- readRDS("resultados/ver_num.rds")
@@ -50,6 +54,8 @@ was_w_china <- as.data.frame(read_xlsx(paste0(getwd(),"/sourcedata/china/was_w.x
 jornada_media_china <- read.csv2(file = paste0(getwd(),"/sourcedata/Nov16/China H_EMPE-EMPE.csv"), row.names = 1)
 colnames(jornada_media_china) <- tolower(gsub("X","",colnames(jornada_media_china)))
 
+taxa_exploracao_media_mundo <- NULL
+
 
 for (z in anos) {
 
@@ -70,7 +76,7 @@ for (z in anos) {
   produto_bruto_matriz <- matrix(m.wio[lin.produto.total,1:tamanho], nrow = tamanho, ncol=tamanho, byrow = TRUE)
   
   # Separa as variáveis desejadas da tabela de contas socioeconômicas
-  i.usd = cambio2 = k.usd2 = cambio = h.emp = h.empe = emp = empe = comp.real = lab.real = k.usd = cap.usd = lab.usd = comp.usd <- array(data = 0, dim = num.paises*num.setores)
+  h.hs = h.ms = h.ls = cambio = h.emp = h.empe = emp = empe = comp.real = lab.real = k.usd = cap.usd = lab.usd = comp.usd <- array(data = 0, dim = num.paises*num.setores)
 
   w <- 1
   for (x in 1:(num.paises-1)) {
@@ -88,6 +94,9 @@ for (z in anos) {
     linhas.pais.gfcf <- linhas.gfcf[which(sea[linhas.gfcf,'country'] == as.character(paises[x,3]))]
     linhas.pais.gfcf.p <- linhas.gfcf.p[which(sea[linhas.gfcf.p,'country'] == as.character(paises[x,3]))]
     linhas.pais.k <- linhas.k[which(sea[linhas.k,'country'] == as.character(paises[x,3]))]
+    linhas.pais.h.hs <- linhas.h.hs[which(sea[linhas.h.hs,'country'] == as.character(paises[x,3]))]
+    linhas.pais.h.ms <- linhas.h.ms[which(sea[linhas.h.ms,'country'] == as.character(paises[x,3]))]
+    linhas.pais.h.ls <- linhas.h.ls[which(sea[linhas.h.ls,'country'] == as.character(paises[x,3]))]
     
     
     for (y in 1:num.setores) {
@@ -105,6 +114,9 @@ for (z in anos) {
       linhas.setor.pais.gfcf <- linhas.pais.gfcf[which(sea[linhas.pais.gfcf,'code'] == as.character(setores[y,1]))]
       linhas.setor.pais.gfcf.p <- linhas.pais.gfcf.p[which(sea[linhas.pais.gfcf.p,'code'] == as.character(setores[y,1]))]
       linhas.setor.pais.k <- linhas.pais.k[which(sea[linhas.pais.k,'code'] == as.character(setores[y,1]))]
+      linhas.setor.pais.h.hs <- linhas.pais.h.hs[which(sea[linhas.pais.h.hs,'code'] == as.character(setores[y,1]))]
+      linhas.setor.pais.h.ms <- linhas.pais.h.ms[which(sea[linhas.pais.h.ms,'code'] == as.character(setores[y,1]))]
+      linhas.setor.pais.h.ls <- linhas.pais.h.ls[which(sea[linhas.pais.h.ls,'code'] == as.character(setores[y,1]))]
       
       cambio[w] <- ifelse(as.numeric(sea[linhas.setor.pais.va,coluna.sea]) !=0,m.wio[lin.va,w]/as.numeric(sea[linhas.setor.pais.va,coluna.sea]),0)
       h.empe[w]<-as.numeric(sea[linhas.setor.pais.h.empe,coluna.sea])*1000000
@@ -116,11 +128,11 @@ for (z in anos) {
       lab.usd[w] <- as.numeric(sea[linhas.setor.pais.lab,coluna.sea])*cambio[w]
       comp.usd[w] <- as.numeric(sea[linhas.setor.pais.comp,coluna.sea])*cambio[w]
       if (versao == 'July14') {
+        h.hs[w] <- as.numeric(sea[linhas.setor.pais.h.hs,coluna.sea])
+        h.ms[w] <- as.numeric(sea[linhas.setor.pais.h.ms,coluna.sea])
+        h.ls[w] <- as.numeric(sea[linhas.setor.pais.h.ls,coluna.sea])
         h.emp[w] <- as.numeric(sea[linhas.setor.pais.h.emp,coluna.sea])*1000000
         k.usd[w] <- as.numeric(sea[linhas.setor.pais.k.gfcf,coluna.sea])*as.numeric(sea[linhas.setor.pais.gfcf.p,coluna.sea])/100*cambio[w]
-        #i.usd[w] <- as.numeric(sea[linhas.setor.pais.gfcf,coluna.sea])/100*cambio[w]
-        #cambio2[w] <- ifelse(as.numeric(sea[linhas.setor.pais.va,coluna.sea]) !=0,m.wio[lin.va,w]/as.numeric(sea[linhas.setor.pais.va,coluna.sea]),0)
-        #k2.usd
       } else {
         k.usd[w] <- as.numeric(sea[linhas.setor.pais.k,coluna.sea])*cambio[w]
       }
@@ -150,6 +162,8 @@ for (z in anos) {
     salario_medio[is.na(salario_medio)] <- 0
     salario_medio[is.infinite(salario_medio)] <- 0
     trabalho <- h.emp * salario_medio/min(salario_medio[salario_medio>0])
+  } else if (variavel_trabalho == "h.emp_ponderado") {
+    trabalho <- h.emp * ((potencia_h * h.hs) + (potencia_m * h.ms) + h.ls)
   } else {
     trabalho <- h.empe/empe*emp
     trabalho[is.na(trabalho)] <- 0
@@ -162,9 +176,9 @@ for (z in anos) {
   calcular_precos_producao = FALSE
   source('R/precos/calculo_dos_precos.R')
   
-  #Variáveis para salvar: k.dep, h.emp, h.empe, k.usd, cambio, emp, empe, comp.real, lab.real, cap.usd, lab.usd, comp.usd,
-  #Matrizes para salvar: k.composicao, m.depreciacao
-  saveRDS(rbind(emp, empe, h.emp, h.empe, cambio, comp.real, comp.usd, lab.real, lab.usd, cap.usd, k.usd, k.dep, valores, precos_diretos, precos_diretos_n, precos_mercado),
+  saveRDS(rbind(trabalho, emp, empe, h.emp, h.empe, cambio, comp.real, comp.usd, lab.real, 
+                lab.usd, cap.usd, k.usd, k.dep, valores, precos_diretos, precos_diretos_n, 
+                precos_mercado, valor_forca_trabalho, taxa_exploracao),
              file = paste0(caminho, "/socioeconomicas_",as.character(z),".rds"), compress = T)
   saveRDS(m.depreciacao, file = paste0(caminho, "/m_depreciacao_",as.character(z),".rds"), compress = T)
   saveRDS(k.composicao, file = paste0(caminho, "/k_composicao_",as.character(z),".rds"), compress = T)
@@ -175,6 +189,8 @@ for (z in anos) {
              row.names = paises[,1])
   beepr::beep(sound=2)
 }
+
+write.csv2(taxa_exploracao_media_mundo, file = paste0(caminho,"/tx_exploracao_mundo_",versao, "_" , ver.num,".csv"))
 
 ver.num <- ver.num+1
 saveRDS(ver.num, file = "resultados/ver_num.rds")

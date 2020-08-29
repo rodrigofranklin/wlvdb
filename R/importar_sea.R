@@ -16,6 +16,12 @@ linhas.k.gfcf <- which(sea[,'variable'] == 'K_GFCF')
 linhas.gfcf <- which(sea[,'variable'] == 'GFCF')
 linhas.gfcf.p <- which(sea[,'variable'] == 'GFCF_P')
 linhas.k <- which(sea[,'variable'] == 'K')
+linhas.h.hs <- which(sea[,'variable'] == 'H_HS')
+linhas.h.ms <- which(sea[,'variable'] == 'H_MS')
+linhas.h.ls <- which(sea[,'variable'] == 'H_LS')
+linhas.lab.hs <- which(sea[,'variable'] == 'LABHS')
+linhas.lab.ms <- which(sea[,'variable'] == 'LABMS')
+linhas.lab.ls <- which(sea[,'variable'] == 'LABLS')
 coluna.sea <- 5
 anos <- as.numeric(colnames(sea)[5:dim(sea)[2]])
 

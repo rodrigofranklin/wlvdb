@@ -1,13 +1,17 @@
-# Script para leitura dos preços diretos, preços de produção e valores
+# Script para leitura das taxas de exploração
 
-versao = versao_fonte  <- "July14"
-versao_resultado <- "July14_1013"
-anos <- 1995:2009
-# versao = versao_fonte <- "Nov16"
-# versao_resultado <- "Nov16_1010"
-# anos <- 2000:2014
+# versao = versao_fonte  <- "July14"
+# versao_resultado <- "July14_1015"
+# anos <- 1995:2009
+versao = versao_fonte <- "Nov16"
+versao_resultado <- "Nov16_1016"
+anos <- 2000:2014
 
-source("R/precos/turnover-rotacion.R")
+# Define a variável que será utilizada para o cálculo dos valores
+variavel_trabalho <- 'h.emp'
+# variavel_trabalho <- 'Tciz'
+#variavel_trabalho <- 'emp'
+#variavel_trabalho <- 'h.emp_alternativo'
 
 source('R/sectorespaises.R')
 pais.cols <- pais.lins
@@ -21,30 +25,18 @@ for (x in paises[,2]) {
   col.demanda.final <- c(col.demanda.final, (tamanho) + demanda[demanda == 'Final consumption expenditure by households',3] + (num.demanda*(x-1)))
 }
 
-source('R/precos/sem_taiwan_variaveis.R')
-
 paises.setores <- data.frame(country=rep(paises$Legenda,each=num.setores))
 paises.setores$description <- setores$Setor
 paises.setores$code <- setores$Code
 
 resultado_temp <- paises.setores
-resultado_temp$variable <- 'valores'
+resultado_temp$variable <- 'taxa_exploracao'
 resultado <- resultado_temp
-resultado_temp$variable <- 'precos_diretos'
-resultado <- rbind(resultado, resultado_temp)
-resultado_temp$variable <- 'precos_diretos_n'
-resultado <- rbind(resultado, resultado_temp)
-resultado_temp$variable <- 'precos_mercado'
-resultado <- rbind(resultado, resultado_temp)
-resultado_temp$variable <- 'precos_producao'
-resultado <- rbind(resultado, resultado_temp)
-resultado_temp$variable <- 'precos_producao2'
-resultado <- rbind(resultado, resultado_temp)
 
-taxa_lucro_media_mundo <- NULL
-taxa_lucro_media_mundo2 <- NULL
+taxa_exploracao_media_mundo <-  NULL
 
 for (ano in anos) {
+
   print(paste0("Lendo dados do ano ",as.character(ano)))
   if (versao == "July14") {
     m.wio <- readRDS(paste0(getwd(),"/sourcedata/",versao,"/WIOT_",as.character(ano),".rds"))
@@ -62,25 +54,23 @@ for (ano in anos) {
     sea <- readRDS(paste0(getwd(),"/resultados/",versao_resultado,"/socioeconomicas_",as.character(ano),".rds"))
     lin.produto.total <- which(wiot[,'IndustryCode'] == 'GO')
   }  
-  
-  lab.usd <- sea["lab.usd",]
-
-  print("Fim da leitura")
-  
-  source('R/precos/sem_taiwan_dados.R')
 
   produto_bruto_matriz <- matrix(m.wio[lin.produto.total,1:tamanho], nrow = tamanho, ncol=tamanho, byrow = TRUE)
   
-  calcular_precos_producao = TRUE
-  source('R/precos/calculo_dos_precos.R')
+  lab.usd <- sea["lab.usd",]
+  h.emp <- sea["h.emp",]
+  emp <- sea["emp",]
+  trabalho <- sea["trabalho",]
+  vft <- sea["valor_forca_trabalho",]
   
-  resultado$temp <- t(cbind(t(valores), t(precos_diretos), t(precos_diretos_n), t(precos_mercado), t(prec_prod), t(prec_prod2)))
+  print("Fim da leitura")
+  
+  resultado$temp <- sea["taxa_exploracao"]
   names(resultado)[names(resultado) == "temp"] <- ano
-  taxa_lucro_media_mundo <- c(taxa_lucro_media_mundo, ro)
-  taxa_lucro_media_mundo2 <- c(taxa_lucro_media_mundo2, ro2)
+
+  paises$exp <- tapply(trabalho, pais.cols, sum, na.rm = TRUE)/tapply(vft, pais.cols, sum, na.rm = TRUE) -1
+  names(paises)[names(paises) == "exp"] <- ano
 }
 
-write.csv2(resultado, file = paste0("resultados/",versao_resultado,"/precos_",versao_resultado,".csv"))
-write.csv2(taxa_lucro_media_mundo, file = paste0("resultados/",versao_resultado,"/tx_lucro_",versao_resultado,".csv"))
-write.csv2(taxa_lucro_media_mundo2, file = paste0("resultados/",versao_resultado,"/tx_lucro2_",versao_resultado,".csv"))
-
+write.csv2(resultado, file = paste0("resultados/",versao_resultado,"/tx_exploracao_setores_",versao_resultado,".csv"))
+write.csv2(paises, file = paste0("resultados/",versao_resultado,"/tx_exploracao_paises_",versao_resultado,".csv"))

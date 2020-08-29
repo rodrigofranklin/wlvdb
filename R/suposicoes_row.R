@@ -25,6 +25,10 @@ h.emp[is.na(h.emp)] <- 0
 empe[is.na(empe)] <- 0
 h.empe[is.na(h.empe)] <- 0
 
+h.hs[posicao.row] <- tapply(h.hs[1:pos.row], rep(1:num.setores,times = num.paises-1), mean, na.rm = TRUE)
+h.ms[posicao.row] <- tapply(h.ms[1:pos.row], rep(1:num.setores,times = num.paises-1), mean, na.rm = TRUE)
+h.ls[posicao.row] <- 1 - h.hs[posicao.row] - h.ms[posicao.row]
+
 #Cálculo dos salários
 lab.row.total <- (sum(lab.usd))/sum(m.wio[lin.va,1:(tamanho-num.setores)])*sum(m.wio[lin.va,posicao.row])
 soma.lab.setor <- tapply(lab.usd[1:pos.row], rep(1:num.setores,times = num.paises-1), sum)

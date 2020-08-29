@@ -40,6 +40,19 @@ ConsumoIntermediarioPPais <- matrix(0,1,Cols)
 CapitalConstanteTotalPais <- matrix(0,1,Cols)
 InsumosProdutivosPais <- matrix(0,Cols,Cols)
 
+
+prop_demanda_familias <- as.data.frame(prop.table(m.wio[1:tamanho,col.demanda.final], margin = 2))
+prop_demanda_familias <- as.matrix(prop_demanda_familias[rep(names(prop_demanda_familias), each = num.setores)])
+cesta_consumo <- (matrix(lab.usd, ncol = tamanho, nrow = tamanho, byrow = TRUE)*prop_demanda_familias)
+cesta_consumo[is.infinite(cesta_consumo)] <- 0
+cesta_consumo[is.nan(cesta_consumo)] <- 0
+
+valor_forca_trabalho <- colSums(cesta_consumo*matrix(fator.t, ncol = tamanho, nrow = tamanho, byrow = FALSE))
+taxa_exploracao <- (trabalho/valor_forca_trabalho) - 1 
+taxa_exploracao_pais <- tapply(trabalho, pais.lins, sum, na.rm = TRUE)/tapply(valor_forca_trabalho, pais.lins, sum, na.rm = TRUE) -1
+taxa_exploracao_media_mundo <- c(taxa_exploracao_media_mundo, sum(trabalho)/sum(valor_forca_trabalho))
+taxa_exploracao_pais_produtivos <-  tapply(trabalho, pais.lins*filtro_produtivo, sum, na.rm = TRUE)/tapply(valor_forca_trabalho, pais.lins*filtro_produtivo, sum, na.rm = TRUE) -1
+
 for (X in 1:num.paises){
   #Produto total em horas de trabalho e em moeda (soma dos setores produtivos)
   x <- col.prods[which(pais.cols[col.prods]==X)]
@@ -190,12 +203,12 @@ COI <- matrix(0,nrow = 1, ncol = num.paises)
 #COREL = CORELK./CORELT
 
 # Formatação do resultado
-Resultados <- matrix(0, nrow = 28, ncol = num.paises, dimnames = list(c("","ExpoTTotalPais",
+Resultados <- matrix(0, nrow = 28, ncol = num.paises, dimnames = list(c("Tx_Exploracao","ExpoTTotalPais",
                                                                         "Expom.totalPais","ImpoTTotalPais","Impom.totalPais","TransfTotalPais","ProdutoTotalTPais","ProdutoTotalMPais",
                                                                         "FatorDINN","FatorDemanda","PIBTPais","PIBMPais","TrabalhadoresPais","RemuneracaoTPais","RemuneracaoMPais",
                                                                         "RemuneracaoRealPais","JornadaTotalPais","AssalariadosPais","SalarioTPais","SalarioMPais","SalarioRealPais",
-                                                                        "LucroMPais","CapitalMPais","ConsumoIntermediarioPPais","COXK","COXT","COIK","COIT"),paises[,1]))
-#Resultados[1,] <- 
+                                                                        "LucroMPais","CapitalMPais","ConsumoIntermediarioPPais","taxa_exploracao_pais_produtivos","COXT","COIK","COIT"),paises[,1]))
+Resultados[1,] <- taxa_exploracao_pais
 Resultados[2,] <- ExpoTTotalPais
 Resultados[3,] <- Expom.totalPais
 Resultados[4,] <- ImpoTTotalPais
@@ -219,7 +232,7 @@ Resultados[21,] <- SalarioRealPais
 Resultados[22,] <- LucroMPais
 Resultados[23,] <- CapitalMPais
 Resultados[24,] <- ConsumoIntermediarioPPais
-Resultados[25,] <- COXK
+Resultados[25,] <- taxa_exploracao_pais_produtivos[2:(num.paises+1)]
 Resultados[26,] <- COXT
 Resultados[27,] <- COIK
 Resultados[28,] <- COIT
