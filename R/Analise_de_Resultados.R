@@ -18,7 +18,7 @@ Paises <- c("Austrália","Áustria",
             "Portugal","Romênia","Federação Russa","Eslováquia","Eslovênia","Suécia","Turquia","Taiwan",
             "Estados Unidos","Mundo")
 # Aloca a matriz de resultados
-Resultados <- array(data = 0,dim = c(17,41,28), dimnames = list(c(1995:2011),
+Resultados2 = Resultados <- array(data = 0,dim = c(17,41,28), dimnames = list(c(1995:2011),
                                                   Paises,
                                                   c("","ExpoTTotalPais",
                                                     "ExpoMTotalPais","ImpoTTotalPais","ImpoMTotalPais","TransfTotalPais","ProdutoTotalTPais","ProdutoTotalMPais",
@@ -27,7 +27,8 @@ Resultados <- array(data = 0,dim = c(17,41,28), dimnames = list(c(1995:2011),
                                                     "LucroMPais","CapitalMPais","ConsumoIntermediarioPPais","COXK","COXT","COIK","COIT")))
 # Lê os resultados dos arquivos .csv
 for (Z in 1995:2011) {
-  Resultados[as.character(Z),,] <- as.matrix(read.csv2(file = paste0(getwd(),"/resultados/July14_1001/resultados_",as.character(Z),".csv"), row.names = 1))
+  Resultados[as.character(Z),,] <- as.matrix(read.csv2(file = paste0(getwd(),"/resultados/July14_1011/resultados_",as.character(Z),".csv"), row.names = 1))
+  Resultados2[as.character(Z),,] <- as.matrix(read.csv2(file = paste0(getwd(),"/resultados/July14_1013/resultados_",as.character(Z),".csv"), row.names = 1))
 }
 #####
 
@@ -94,3 +95,18 @@ for (Pais in Paises) {
   polygon(c(1:17,17:1),c(Transferencias,rep(0,times=17)),col="gray")
 }
  
+for (Pais in Paises) {
+  Versao1 <- Resultados[,Pais,'JornadaTotalPais']/Resultados[,Pais,'SalarioTPais'] - 1
+  #Versao2 <- Resultados2[,Pais,'JornadaTotalPais']/Resultados2[,Pais,'SalarioTPais'] - 1
+  Versao1[is.na(Versao1)] <- 0
+  #Versao2[is.na(Versao2)] <- 0
+  plot(Versao1[1:15],
+       type = "l",
+       ylim = c(min(Versao1,0),max(Versao1,0)),
+       main = paste('Tx Exploracao -',Pais,'\n(em milhões de horas de trabalho)'),
+       xaxt="n",
+       lty="solid", lwd=3,
+  )
+#  lines(Versao2, col="red", lty="solid", lwd=3)
+  axis(side=1,1:15,as.character(1995:2009))
+}

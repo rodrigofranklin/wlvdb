@@ -40,7 +40,6 @@ ConsumoIntermediarioPPais <- matrix(0,1,Cols)
 CapitalConstanteTotalPais <- matrix(0,1,Cols)
 InsumosProdutivosPais <- matrix(0,Cols,Cols)
 
-
 prop_demanda_familias <- as.data.frame(prop.table(m.wio[1:tamanho,col.demanda.final], margin = 2))
 prop_demanda_familias <- as.matrix(prop_demanda_familias[rep(names(prop_demanda_familias), each = num.setores)])
 cesta_consumo <- (matrix(lab.usd, ncol = tamanho, nrow = tamanho, byrow = TRUE)*prop_demanda_familias)
@@ -237,3 +236,6 @@ Resultados[26,] <- COXT
 Resultados[27,] <- COIK
 Resultados[28,] <- COIT
 Resultados= t(Resultados)
+
+calcular_precos_producao = FALSE
+source('R/calculos/precos/calculo_dos_precos.R')
