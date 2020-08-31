@@ -55,5 +55,5 @@ for (ano in anos) {
 ### Área para registro das informações
 ###
 
-write.csv2(resultado, file = paste0("resultados/",versao_resultado,"/tx_exploracao_setores_",versao_resultado,".csv"))
-write.csv2(paises, file = paste0("resultados/",versao_resultado,"/tx_exploracao_paises_",versao_resultado,".csv"))
+write.csv2(resultado, file = paste0("resultados/",versao_resultado,"/tx_exploracao_setores_",versao_resultado,".csv"), row.names = FALSE)
+write.csv2(paises, file = paste0("resultados/",versao_resultado,"/tx_exploracao_paises_",versao_resultado,".csv"), row.names = FALSE)

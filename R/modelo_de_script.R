@@ -21,12 +21,14 @@ source('R/lib/variaveis_controle.R')
 ### Área para inicialização das variáveis de resultado
 ###
 
-# paises.setores <- data.frame(country=rep(paises$Legenda,each=num.setores))
-# paises.setores$description <- setores$Setor
-# paises.setores$code <- setores$Code
-# resultado_temp <- paises.setores
-# resultado_temp$variable <- 'EXEMPLO'
+# paises_setores <- data.frame(country=rep(paises$Legenda,each=num_setores))
+# paises_setores$description <- setores$Setor
+# paises_setores$code <- setores$Code
+# resultado_temp <- paises_setores
+# resultado_temp$variable <- 'EXEMPLO1'
 # resultado <- resultado_temp
+# resultado_temp$variable <- 'EXEMPLO2'
+#resultado <- rbind(resultado, resultado_temp)
 
 for (ano in anos) {
   
@@ -40,7 +42,7 @@ for (ano in anos) {
   ### Área para os cálculos desejados
   ###
   
-  # resultado$temp <- 'EXEMPLO'
+  # resultado$temp <- t(cbind(sea$EXEMPLO1, sea$EXEMPLO2))
   # names(resultado)[names(resultado) == "temp"] <- ano
 
 }

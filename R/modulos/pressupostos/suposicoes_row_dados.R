@@ -28,12 +28,20 @@ if (versao == "July14") {
   sea$h_hs[posicao_row] <- tapply(sea$h_hs[1:pos_row], rep(1:num_setores,times = num_paises-1), mean, na.rm = TRUE)
   sea$h_ms[posicao_row] <- tapply(sea$h_ms[1:pos_row], rep(1:num_setores,times = num_paises-1), mean, na.rm = TRUE)
   sea$h_ls[posicao_row] <- 1 - sea$h_hs[posicao_row] - sea$h_ms[posicao_row]
+
+  sea$labhs[posicao_row] <- tapply(sea$labhs[1:pos_row], rep(1:num_setores,times = num_paises-1), mean, na.rm = TRUE)
+  sea$labms[posicao_row] <- tapply(sea$labms[1:pos_row], rep(1:num_setores,times = num_paises-1), mean, na.rm = TRUE)
+  sea$labls[posicao_row] <- 1 - sea$labhs[posicao_row] - sea$labms[posicao_row]
 }
 
 #Cálculo dos salários
 lab_row_total <- (sum(sea$lab_usd))/sum(m_wio[lin_va,1:(tamanho-num_setores)])*sum(m_wio[lin_va,posicao_row])
 soma_lab_setor <- tapply(sea$lab_usd[1:pos_row], rep(1:num_setores,times = num_paises-1), sum)
 sea$lab_usd[posicao_row] <- lab_row_total*prop.table(m_wio[lin_va,posicao_row]*soma_lab_setor/soma_emp_setor)
+
+comp_row_total <- (sum(sea$comp_usd))/sum(m_wio[lin_va,1:(tamanho-num_setores)])*sum(m_wio[lin_va,posicao_row])
+soma_comp_setor <- tapply(sea$comp_usd[1:pos_row], rep(1:num_setores,times = num_paises-1), sum)
+sea$comp_usd[posicao_row] <- comp_row_total*prop.table(m_wio[lin_va,posicao_row]*soma_comp_setor/soma_emp_setor)
 
 #Cálculo do capital a partir da intensidade de k dos países pobres
 paises_pobres <- c(17, 18, 4, 5, 37, 27, 7, 32, 31, 29, 16, 23, 24, 33, 11, 9)

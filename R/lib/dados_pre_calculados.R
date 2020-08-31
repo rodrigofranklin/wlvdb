@@ -6,5 +6,6 @@ m_t <- readRDS(paste0(getwd(),"/resultados/",versao_resultado,"/wiod_horas_",as.
 k_composicao <- readRDS(paste0(getwd(),"/resultados/",versao_resultado,"/k_composicao_",as.character(ano), " - ", versao_resultado, ".rds"))
 m_depreciacao <- readRDS(paste0(getwd(),"/resultados/",versao_resultado,"/m_depreciacao_",as.character(ano), " - ", versao_resultado, ".rds"))
 sea <- readRDS(paste0(getwd(),"/resultados/",versao_resultado,"/socioeconomicas_",as.character(ano), " - ", versao_resultado, ".rds"))
+pais <- read.csv2(file = paste0(getwd(),"/resultados/",versao_resultado,"/resultados_",as.character(ano), " - ", versao_resultado, ".csv"), row.names = 1)
 
 print("Fim da leitura")
