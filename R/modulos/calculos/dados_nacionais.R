@@ -27,3 +27,6 @@ pais$lucro_bruto_precos_mercado <- tapply(sea$cap_usd, pais_lins, sum, na.rm = T
 pais$capital_depreciacao_preco_mercado <- tapply(sea$k_dep, pais_lins, sum, na.rm = TRUE)
 pais$capital_estoque_preco_mercado <- tapply(sea$k_usd, pais_lins, sum, na.rm = TRUE)
 pais$lucro_liquido_precos_mercado <- pais$lucro_bruto_precos_mercado - pais$capital_depreciacao_preco_mercado
+
+pais$consumo_intermediario_preco_mercado <- tapply(m_wio[tamanho+1, 1:tamanho], pais_lins, sum, na.rm = TRUE)
+pais$va_usd <- tapply(m_wio[lin_va, 1:tamanho], pais_lins, sum, na.rm = TRUE)

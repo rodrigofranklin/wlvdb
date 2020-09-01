@@ -109,22 +109,26 @@ for (ano in anos) {
   
   source("R/modulos/calculos/precos/precos_diretos.R")
   
-  rotacao <- 1
-  source("R/modulos/calculos/precos/precos_producao.R")
-  taxas_lucro_media_mundo <- c(taxas_lucro_media_mundo, ro)
-
+  # rotacao <- 1
+  # source("R/modulos/calculos/precos/precos_producao.R")
+  # taxas_lucro_media_mundo <- c(taxas_lucro_media_mundo, ro)
+  taxas_lucro_media_mundo <- c(taxas_lucro_media_mundo, 0)
   
+  print("Calculando transferencias...")
+  source("R/modulos/calculos/transferencias.R")
+
   ###
   ### Área de gravação de dados anuais
   ###
+  print("Gravando...")
   saveRDS(sea, file = paste0(caminho, "/socioeconomicas_",as.character(ano), " - ", versao_resultado, ".rds"), compress = T)
   saveRDS(m_depreciacao, file = paste0(caminho, "/m_depreciacao_",as.character(ano)," - ", versao_resultado, ".rds"), compress = T)
   saveRDS(k_composicao, file = paste0(caminho, "/k_composicao_",as.character(ano)," - ", versao_resultado, ".rds"), compress = T)
   saveRDS(m_t, file = paste0(caminho, "/wiod_horas_",as.character(ano)," - ", versao_resultado, ".rds"), compress = T)
   write.csv2(pais, file = paste0(caminho, "/resultados_",as.character(ano)," - ", versao_resultado, ".csv"), row.names = FALSE)
-  # write.csv2(TransferenciaPais,
-  #            file = paste0(caminho, "/transferencias_",as.character(ano),".csv"),
-  #            row.names = paises[,1])
+  write.csv2(transferencias,
+             file = paste0(caminho, "/transferencias_",as.character(ano),".csv"),
+             row.names = paises[,1])
 }
 
 ###
@@ -132,7 +136,7 @@ for (ano in anos) {
 ###
 
 write.csv2(t(cbind(anos, taxas_exploracao_mundo, taxas_exploracao_nao_assalariado_mundo, 
-                 taxas_exploracao_total_mundo, taxas_lucro_media_mundo)),
+                 taxas_exploracao_total_mundo, taxas_lucro_media_mundo, deparse.level = 0 )),
            file = paste0(caminho,"/__dados_mundiais_",versao_resultado,".csv"), row.names = FALSE)
 
 ver_num <- ver_num+1
