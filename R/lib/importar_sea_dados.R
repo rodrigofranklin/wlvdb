@@ -32,6 +32,9 @@ if (versao == 'July14') {
   sea$comp_real <- sea$comp/sea$va_pi*100
   sea$lab_real <- sea$lab/sea$va_pi*100
   sea$k_usd <- sea$k*sea$cambio
+  sea$h_emp <- sea$h_empe/sea$empe*sea$emp
+  sea$h_emp[is.na(sea$h_emp)] <- 0
+  sea$h_emp[is.infinite(sea$h_emp)] <- 0
 }
 
 sea[is.na(sea)] <- 0

@@ -17,7 +17,7 @@ b.a0 <- cesta_consumo/producao_bruta_pm_matriz
 b.a0[is.infinite(b.a0)] <- 0
 b.a0[is.nan(b.a0)] <- 0
 
-t <- diag(rotacao, tamanho)
+t <- diag(1/rotacao, tamanho)
 t[is.infinite(t)] <- 0
 t[is.nan(t)] <- 0
 

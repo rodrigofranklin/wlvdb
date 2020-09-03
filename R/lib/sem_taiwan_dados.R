@@ -1,6 +1,5 @@
 #Junta os dados de Taiwan com os do resto do mundo
 
-#m_wio[,row_demanda] <- m_wio[,row_demanda] + m_wio[,twn_demanda]
 m_wio[,row_cols] <- m_wio[,row_cols] + m_wio[,twn_cols]
 m_wio[row_lins,] <- m_wio[row_lins,] + m_wio[twn_lins,]
 m_wio <- m_wio[c(twn_n_lins,(last(twn_n_lins)+1):nrow(m_wio)),c(twn_n_cols,(last(twn_n_cols)+1):ncol(m_wio))]
@@ -20,6 +19,11 @@ m_depreciacao <- m_depreciacao[twn_n_lins,twn_n_lins]
 sea[row_lins,4:ncol(sea)] <- sea[row_lins,4:ncol(sea)] + sea[twn_lins,4:ncol(sea)]
 
 sea <- sea[twn_n_lins,]
+
+# SOMAR TWN EM ROW NA VARIAVEL PAIS E RETIRAR TWN DA VARIAVEL PAIS
+pais[row_pais,] <- pais[row_pais,] + pais[twn_pais,]
+# paises[which(paises[,3]!="TWN"),]
+pais <- pais[twn_n_pais,]
 
 lin_produto_total <- lin_produto_total - num_setores
 producao_bruta_pm_matriz <- matrix(sea$producao_bruta_precos_mercado, nrow = tamanho, ncol=tamanho, byrow = TRUE)

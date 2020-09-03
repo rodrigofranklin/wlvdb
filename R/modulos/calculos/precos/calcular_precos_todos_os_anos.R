@@ -7,12 +7,12 @@
 ###
 ### Variáveis de versão
 ###
-versao = versao_fonte  <- "July14"
-versao_resultado <- "July14_1018"
-anos <- 1995:2009
-# versao = versao_fonte <- "Nov16"
-# versao_resultado <- "Nov16_1016"
-# anos <- 2000:2014
+# versao = versao_fonte  <- "July14"
+# versao_resultado <- "July14_1011"
+# anos <- 1995:2009
+versao = versao_fonte <- "Nov16"
+versao_resultado <- "Nov16_1010"
+anos <- 2000:2014
 
 # Carrega variáveis de controle
 source('R/lib/variaveis_controle.R')
@@ -73,7 +73,7 @@ for (ano in anos) {
   rotacao <- 2
   source("R/modulos/calculos/precos/precos_producao.R")
   prec_prod2 <- sea$producao_bruta_precos_producao
-  taxa_lucro_media_mundo2 <- c(taxa_lucro_media_mundo, ro)
+  taxa_lucro_media_mundo2 <- c(taxa_lucro_media_mundo2, ro)
   
   resultado$temp <- t(cbind(t(sea$producao_bruta_valores), t(sea$producao_bruta_precos_diretos), t(sea$producao_bruta_precos_diretos_nacionais), t(sea$producao_bruta_precos_mercado), t(prec_prod), t(prec_prod2)))
   names(resultado)[names(resultado) == "temp"] <- ano

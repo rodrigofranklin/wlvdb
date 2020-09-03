@@ -12,12 +12,13 @@ versao <- 'July14'
 
 # Define a variável que será utilizada para o cálculo dos valores
 variavel_trabalho <- 'sea$h_emp'
-#variavel_trabalho <- 'Tciz'
+# variavel_trabalho <- 'Tciz'
+# variavel_trabalho <- 'Tciz_n'
 #variavel_trabalho <- 'sea$emp'
 #variavel_trabalho <- 'sea$h_emp_alternativo'
 # variavel_trabalho  <- "sea$h_emp_ponderado"
-# potencia_h <- 4
-# potencia_m <- 2
+# potencia_h <- 10
+# potencia_m <- 3
   
 #Cria o diretório para salvar os resultados
 ver_num <- readRDS("resultados/ver_num.rds")
@@ -42,6 +43,9 @@ taxas_exploracao_mundo <- NULL
 taxas_exploracao_produtivo_mundo <- NULL
 taxas_exploracao_nao_assalariado_mundo <- NULL
 taxas_exploracao_total_mundo <- NULL
+taxas_exploracao_total_hs_mundo <- NULL
+taxas_exploracao_total_ms_mundo <- NULL
+taxas_exploracao_total_ls_mundo <- NULL
 taxas_lucro_media_mundo <- NULL
 
 for (ano in anos) {
@@ -52,21 +56,21 @@ for (ano in anos) {
   # Carrega as informações das contas socioeconômicas
   source("R/lib/importar_sea_dados.R")
 
-  print("Carregando suposicoes...")
+  print(paste0(as.character(ano)," - Carregando suposicoes..."))
   # Estimativas da distribuição do capital fixo e depreciacao
-  print("China...")
+  print(paste0(as.character(ano)," - China..."))
   # Estimativa de variáveis para a China
   source(paste0(getwd(),"/R/modulos/pressupostos/suposicoes_china_dados.R"))
     
-  print("RoW...")
+  print(paste0(as.character(ano)," - RoW..."))
   # Estimativa de variáveis para o RoW
   source(paste0(getwd(),"/R/modulos/pressupostos/suposicoes_row_dados.R"))
 
-  print("Capital fixo...")
+  print(paste0(as.character(ano)," - Capital fixo..."))
   source("R/modulos/pressupostos/depreciacao.R")
 
   # Define qual a variável que será utilizada para o cálculo do valor
-  print("Definindo variavel quantidade de trabalho")
+  print(paste0(as.character(ano)," - Definindo variavel quantidade de trabalho"))
   if (variavel_trabalho == "sea$h_emp") {
     sea$trabalho <- sea$h_emp
     sea$trabalho_assalariado <- sea$h_empe
@@ -84,15 +88,33 @@ for (ano in anos) {
     salario_medio[is.na(salario_medio)] <- 0
     salario_medio[is.infinite(salario_medio)] <- 0
     sea$trabalho_assalariado <- sea$h_empe * salario_medio/min(salario_medio[salario_medio>0])
+  } else if (variavel_trabalho == "Tciz_n") {
+    # Pessoas engajadas
+    remuneracao_media <- sea$lab_usd/sea$emp
+    remuneracao_media[is.na(remuneracao_media)] <- Inf
+    remuneracao_media[remuneracao_media==0] <- Inf
+    remuneracao_minima_nacional <- tapply(remuneracao_media, pais_lins, min, na.rn = TRUE)
+    remuneracao_media[is.infinite(remuneracao_media)] <- 0
+    sea$trabalho <- sea$h_emp * remuneracao_media/rep(remuneracao_minima_nacional, each = num_setores)
+    # Pessoas assalariadas
+    salario_medio <- sea$comp_usd/sea$empe
+    salario_medio[is.na(salario_medio)] <- Inf
+    salario_medio[salario_medio==0] <- Inf
+    salario_minimo_nacional <- tapply(salario_medio, pais_lins, min, na.rn = TRUE)
+    salario_medio[is.infinite(salario_medio)] <- 0
+    sea$trabalho_assalariado <- sea$h_empe * salario_medio/rep(salario_minimo_nacional, each = num_setores)
   } else if (variavel_trabalho == "sea$h_emp_ponderado") {
     sea$trabalho <- sea$h_emp * ((potencia_h * sea$h_hs) + (potencia_m * sea$h_ms) + sea$h_ls)
     sea$trabalho_assalariado <- sea$h_empe * ((potencia_h * sea$h_hs) + (potencia_m * sea$h_ms) + sea$h_ls)
   } else {
     sea$trabalho <- sea$h_empe/sea$empe*sea$emp
-    trabalho[is.na(trabalho)] <- 0
     sea$trabalho_assalariado <- sea$h_empe
   }
-
+  sea$trabalho[is.na(sea$trabalho)] <- 0
+  sea$trabalho[is.infinite(sea$trabalho)] <- 0
+  sea$trabalho_assalariado[is.na(sea$trabalho_assalariado)] <- 0
+  sea$trabalho_assalariado[is.infinite(sea$trabalho_assalariado)] <- 0
+  
   ###
   ### Área dos cálculos
   ###
@@ -106,7 +128,11 @@ for (ano in anos) {
   taxas_exploracao_produtivo_mundo <- c(taxas_exploracao_produtivo_mundo, taxa_exploracao_produtivo_mundo)
   taxas_exploracao_nao_assalariado_mundo <- c(taxas_exploracao_nao_assalariado_mundo, taxa_exploracao_nao_assalariado_mundo)
   taxas_exploracao_total_mundo <- c(taxas_exploracao_total_mundo, taxa_exploracao_total_mundo)
-  
+  if (versao == 'July14') {
+    taxas_exploracao_total_hs_mundo <- c(taxas_exploracao_total_hs_mundo, taxa_exploracao_total_hs_mundo)
+    taxas_exploracao_total_ms_mundo <- c(taxas_exploracao_total_ms_mundo, taxa_exploracao_total_ms_mundo)
+    taxas_exploracao_total_ls_mundo <- c(taxas_exploracao_total_ls_mundo, taxa_exploracao_total_ls_mundo)
+  }
   source("R/modulos/calculos/precos/precos_diretos.R")
   
   # rotacao <- 1
@@ -114,20 +140,20 @@ for (ano in anos) {
   # taxas_lucro_media_mundo <- c(taxas_lucro_media_mundo, ro)
   taxas_lucro_media_mundo <- c(taxas_lucro_media_mundo, 0)
   
-  print("Calculando transferencias...")
+  print(paste0(as.character(ano)," - Calculando transferencias..."))
   source("R/modulos/calculos/transferencias.R")
 
   ###
   ### Área de gravação de dados anuais
   ###
-  print("Gravando...")
+  print(paste0(as.character(ano)," - Gravando..."))
   saveRDS(sea, file = paste0(caminho, "/socioeconomicas_",as.character(ano), " - ", versao_resultado, ".rds"), compress = T)
   saveRDS(m_depreciacao, file = paste0(caminho, "/m_depreciacao_",as.character(ano)," - ", versao_resultado, ".rds"), compress = T)
   saveRDS(k_composicao, file = paste0(caminho, "/k_composicao_",as.character(ano)," - ", versao_resultado, ".rds"), compress = T)
   saveRDS(m_t, file = paste0(caminho, "/wiod_horas_",as.character(ano)," - ", versao_resultado, ".rds"), compress = T)
   write.csv2(pais, file = paste0(caminho, "/resultados_",as.character(ano)," - ", versao_resultado, ".csv"), row.names = FALSE)
   write.csv2(transferencias,
-             file = paste0(caminho, "/transferencias_",as.character(ano),".csv"),
+             file = paste0(caminho, "/transferencias_",as.character(ano)," - ", versao_resultado, ".csv"),
              row.names = paises[,1])
 }
 
@@ -135,9 +161,13 @@ for (ano in anos) {
 ### Área de gravação de dados gerais
 ###
 
-write.csv2(t(cbind(anos, taxas_exploracao_mundo, taxas_exploracao_nao_assalariado_mundo, 
-                 taxas_exploracao_total_mundo, taxas_lucro_media_mundo, deparse.level = 0 )),
-           file = paste0(caminho,"/__dados_mundiais_",versao_resultado,".csv"), row.names = FALSE)
+mundo <- t(cbind(taxas_exploracao_mundo, taxas_exploracao_nao_assalariado_mundo, 
+                 taxas_exploracao_total_mundo, taxas_exploracao_total_hs_mundo,
+                 taxas_exploracao_total_ms_mundo, taxas_exploracao_total_ls_mundo,
+                 taxas_lucro_media_mundo))
+colnames(mundo) <- anos
+write.csv2(mundo,
+           file = paste0(caminho,"/__dados_mundiais_",versao_resultado,".csv"))
 
 ver_num <- ver_num+1
 saveRDS(ver_num, file = "resultados/ver_num.rds")
