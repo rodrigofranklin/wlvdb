@@ -7,12 +7,12 @@
 ###
 ### Variáveis de versão
 ###
-# versao = versao_fonte  <- "July14"
-# versao_resultado <- "July14_1011"
-# anos <- 1995:2009
-versao = versao_fonte <- "Nov16"
-versao_resultado <- "Nov16_1010"
-anos <- 2000:2014
+versao = versao_fonte  <- "July14"
+versao_resultado <- "July14_1021"
+anos <- 1995:2009
+# versao = versao_fonte <- "Nov16"
+# versao_resultado <- "Nov16_1016"
+# anos <- 2000:2014
 
 # Carrega variáveis de controle
 source('R/lib/variaveis_controle.R')

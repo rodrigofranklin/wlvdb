@@ -16,12 +16,25 @@ pais$trabalhadores <- tapply(sea$emp, pais_lins, sum, na.rm = TRUE)
 pais$remuneracao_precos_mercado <- tapply(sea$lab_usd, pais_lins, sum, na.rm = TRUE)
 pais$remuneracao_real <- tapply(sea$lab_real, pais_lins, sum, na.rm = TRUE)
 
+pais$trabalho_produtivo <-  tapply(sea$trabalho, pais_lins*filtro_produtivo, sum, na.rm = TRUE)[2:(num_paises+1)]
+pais$horas_trabalhadas_produtivo <-  tapply(sea$h_emp, pais_lins*filtro_produtivo, sum, na.rm = TRUE)[2:(num_paises+1)]
+pais$trabalhadores_produtivo <- tapply(sea$emp, pais_lins*filtro_produtivo, sum, na.rm = TRUE)[2:(num_paises+1)]
+pais$remuneracao_produtivo_precos_mercado <- tapply(sea$lab_usd, pais_lins*filtro_produtivo, sum, na.rm = TRUE)[2:(num_paises+1)]
+pais$remuneracao_produtivo_real <- tapply(sea$lab_real, pais_lins*filtro_produtivo, sum, na.rm = TRUE)[2:(num_paises+1)]
+
 pais$trabalho_assalariado <- tapply(sea$trabalho_assalariado, pais_lins, sum, na.rm = TRUE)
 pais$jornada_total <- tapply(sea$h_empe, pais_lins, sum, na.rm = TRUE)
 pais$assalariados <- tapply(sea$empe, pais_lins, sum, na.rm = TRUE)
 pais$salario_precos_mercado <- tapply(sea$comp_usd, pais_lins, sum, na.rm = TRUE)
 pais$salario_real <- tapply(sea$comp_real, pais_lins, sum, na.rm = TRUE)
 pais$salario_medio <- pais$salario_precos_mercado/pais$assalariados
+
+pais$trabalho_assalariado_produtivo <- tapply(sea$trabalho_assalariado, pais_lins*filtro_produtivo, sum, na.rm = TRUE)[2:(num_paises+1)]
+pais$jornada_total_produtivo <- tapply(sea$h_empe, pais_lins*filtro_produtivo, sum, na.rm = TRUE)[2:(num_paises+1)]
+pais$assalariados_produtivo <- tapply(sea$empe, pais_lins*filtro_produtivo, sum, na.rm = TRUE)[2:(num_paises+1)]
+pais$salario_produtivo_precos_mercado <- tapply(sea$comp_usd, pais_lins*filtro_produtivo, sum, na.rm = TRUE)[2:(num_paises+1)]
+pais$salario_produtivo_real <- tapply(sea$comp_real, pais_lins*filtro_produtivo, sum, na.rm = TRUE)[2:(num_paises+1)]
+pais$salario_produtivo_medio <- pais$salario_produtivo_precos_mercado/pais$assalariados_produtivo
 
 pais$lucro_bruto_precos_mercado <- tapply(sea$cap_usd, pais_lins, sum, na.rm = TRUE)
 pais$capital_depreciacao_preco_mercado <- tapply(sea$k_dep, pais_lins, sum, na.rm = TRUE)

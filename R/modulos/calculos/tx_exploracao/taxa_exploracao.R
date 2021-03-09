@@ -20,13 +20,23 @@ taxa_exploracao_nao_assalariado_mundo <- sum(sea$trabalho - sea$trabalho_assalar
 taxa_exploracao_total_mundo <- sum(sea$trabalho)/sum(sea$remuneracao_valor) -1
 
 if (versao == 'July14') {
-  sea$taxa_exploracao_total_hs <- (sea$trabalho*sea$h_hs)/(sea$remuneracao_valor*sea$labhs) -1
-  sea$taxa_exploracao_total_ms <- (sea$trabalho*sea$h_ms)/(sea$remuneracao_valor*sea$labms) -1
-  sea$taxa_exploracao_total_ls <- (sea$trabalho*sea$h_ls)/(sea$remuneracao_valor*sea$labls) -1
-  pais$taxa_exploracao_total_hs <- tapply(sea$trabalho*sea$h_hs, pais_lins, sum, na.rm = TRUE)/tapply(sea$remuneracao_valor*sea$labhs, pais_lins, sum, na.rm = TRUE) -1
-  pais$taxa_exploracao_total_ms <- tapply(sea$trabalho*sea$h_ms, pais_lins, sum, na.rm = TRUE)/tapply(sea$remuneracao_valor*sea$labms, pais_lins, sum, na.rm = TRUE) -1
-  pais$taxa_exploracao_total_ls <- tapply(sea$trabalho*sea$h_ls, pais_lins, sum, na.rm = TRUE)/tapply(sea$remuneracao_valor*sea$labls, pais_lins, sum, na.rm = TRUE) -1
-  taxa_exploracao_total_hs_mundo <- sum(sea$trabalho*sea$h_hs)/sum(sea$remuneracao_valor*sea$labhs) -1
-  taxa_exploracao_total_ms_mundo <- sum(sea$trabalho*sea$h_ms)/sum(sea$remuneracao_valor*sea$labms) -1
-  taxa_exploracao_total_ls_mundo <- sum(sea$trabalho*sea$h_ls)/sum(sea$remuneracao_valor*sea$labls) -1
+  sea$taxa_exploracao_hs <- (sea$trabalho_assalariado*sea$h_empe_hs)/(sea$valor_forca_trabalho*sea$labhs) -1
+  sea$taxa_exploracao_ms <- (sea$trabalho_assalariado*sea$h_empe_ms)/(sea$valor_forca_trabalho*sea$labms) -1
+  sea$taxa_exploracao_ls <- (sea$trabalho_assalariado*sea$h_empe_ls)/(sea$valor_forca_trabalho*sea$labls) -1
+  pais$taxa_exploracao_hs <- tapply(sea$trabalho_assalariado*sea$h_empe_hs, pais_lins, sum, na.rm = TRUE)/tapply(sea$valor_forca_trabalho*sea$labhs, pais_lins, sum, na.rm = TRUE) -1
+  pais$taxa_exploracao_ms <- tapply(sea$trabalho_assalariado*sea$h_empe_ms, pais_lins, sum, na.rm = TRUE)/tapply(sea$valor_forca_trabalho*sea$labms, pais_lins, sum, na.rm = TRUE) -1
+  pais$taxa_exploracao_ls <- tapply(sea$trabalho_assalariado*sea$h_empe_ls, pais_lins, sum, na.rm = TRUE)/tapply(sea$valor_forca_trabalho*sea$labls, pais_lins, sum, na.rm = TRUE) -1
+  taxa_exploracao_hs_mundo <- sum(sea$trabalho_assalariado*sea$h_empe_hs, na.rm = TRUE)/sum(sea$valor_forca_trabalho*sea$labhs) -1
+  taxa_exploracao_ms_mundo <- sum(sea$trabalho_assalariado*sea$h_empe_ms, na.rm = TRUE)/sum(sea$valor_forca_trabalho*sea$labms) -1
+  taxa_exploracao_ls_mundo <- sum(sea$trabalho_assalariado*sea$h_empe_ls, na.rm = TRUE)/sum(sea$valor_forca_trabalho*sea$labls) -1
+  
+  sea$taxa_exploracao_total_hs <- (sea$trabalho*sea$h_emp_hs)/(sea$remuneracao_valor*sea$labhs) -1
+  sea$taxa_exploracao_total_ms <- (sea$trabalho*sea$h_emp_ms)/(sea$remuneracao_valor*sea$labms) -1
+  sea$taxa_exploracao_total_ls <- (sea$trabalho*sea$h_emp_ls)/(sea$remuneracao_valor*sea$labls) -1
+  pais$taxa_exploracao_total_hs <- tapply(sea$trabalho*sea$h_emp_hs, pais_lins, sum, na.rm = TRUE)/tapply(sea$remuneracao_valor*sea$labhs, pais_lins, sum, na.rm = TRUE) -1
+  pais$taxa_exploracao_total_ms <- tapply(sea$trabalho*sea$h_emp_ms, pais_lins, sum, na.rm = TRUE)/tapply(sea$remuneracao_valor*sea$labms, pais_lins, sum, na.rm = TRUE) -1
+  pais$taxa_exploracao_total_ls <- tapply(sea$trabalho*sea$h_emp_ls, pais_lins, sum, na.rm = TRUE)/tapply(sea$remuneracao_valor*sea$labls, pais_lins, sum, na.rm = TRUE) -1
+  taxa_exploracao_total_hs_mundo <- sum(sea$trabalho*sea$h_emp_hs, na.rm = TRUE)/sum(sea$remuneracao_valor*sea$labhs) -1
+  taxa_exploracao_total_ms_mundo <- sum(sea$trabalho*sea$h_emp_ms, na.rm = TRUE)/sum(sea$remuneracao_valor*sea$labms) -1
+  taxa_exploracao_total_ls_mundo <- sum(sea$trabalho*sea$h_emp_ls, na.rm = TRUE)/sum(sea$remuneracao_valor*sea$labls) -1
 }

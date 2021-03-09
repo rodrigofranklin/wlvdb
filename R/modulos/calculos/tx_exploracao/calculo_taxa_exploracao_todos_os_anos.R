@@ -8,11 +8,13 @@
 ### Variáveis de versão
 ###
 versao = versao_fonte  <- "July14"
-versao_resultado <- "July14_1011"
+versao_resultado <- "July14_1015"
 anos <- 1995:2011
 # versao = versao_fonte <- "Nov16"
 # versao_resultado <- "Nov16_1016"
 # anos <- 2000:2014
+variavel_trabalho <- ''
+
 
 caminho <- paste0("resultados/", versao_resultado)
 
@@ -32,6 +34,9 @@ resultado_temp$variable <- 'taxa_exploracao'
 resultado <- resultado_temp
 
 taxas_exploracao_mundo <- NULL
+taxas_exploracao_hs_mundo <- NULL
+taxas_exploracao_ms_mundo <- NULL
+taxas_exploracao_ls_mundo <- NULL
 taxas_exploracao_produtivo_mundo <- NULL
 taxas_exploracao_nao_assalariado_mundo <- NULL
 taxas_exploracao_total_mundo <- NULL
@@ -48,12 +53,19 @@ for (ano in anos) {
   #Carrega os dados pré-calculados da versão especificada
   source("R/lib/dados_pre_calculados.R")
   
+
   ###
   ### Área para os cálculos desejados
   ###
   
 #  resultado$temp <- sea$taxa_exploracao
 #  names(resultado)[names(resultado) == "temp"] <- ano
+
+  if (versao == 'July14') {
+    sea$h_empe_hs = sea$h_emp_hs <- sea$h_hs
+    sea$h_empe_ms = sea$h_emp_ms <- sea$h_ms
+    sea$h_empe_ls = sea$h_emp_ls <- sea$h_ls
+  }
 
   producao_bruta_pm_matriz <- matrix(sea$producao_bruta_precos_mercado, nrow = tamanho, ncol=tamanho, byrow = TRUE)
   source(paste0(getwd(),"/R/modulos/calculos/transformar.R"))
@@ -66,6 +78,10 @@ for (ano in anos) {
   taxas_exploracao_nao_assalariado_mundo <- c(taxas_exploracao_nao_assalariado_mundo, taxa_exploracao_nao_assalariado_mundo)
   taxas_exploracao_total_mundo <- c(taxas_exploracao_total_mundo, taxa_exploracao_total_mundo)
   if (versao == 'July14') {
+    taxas_exploracao_hs_mundo <- c(taxas_exploracao_hs_mundo, taxa_exploracao_hs_mundo)
+    taxas_exploracao_ms_mundo <- c(taxas_exploracao_ms_mundo, taxa_exploracao_ms_mundo)
+    taxas_exploracao_ls_mundo <- c(taxas_exploracao_ls_mundo, taxa_exploracao_ls_mundo)
+
     taxas_exploracao_total_hs_mundo <- c(taxas_exploracao_total_hs_mundo, taxa_exploracao_total_hs_mundo)
     taxas_exploracao_total_ms_mundo <- c(taxas_exploracao_total_ms_mundo, taxa_exploracao_total_ms_mundo)
     taxas_exploracao_total_ls_mundo <- c(taxas_exploracao_total_ls_mundo, taxa_exploracao_total_ls_mundo)
@@ -75,7 +91,9 @@ for (ano in anos) {
   write.csv2(pais, file = paste0(caminho, "/resultados_",as.character(ano)," - ", versao_resultado, ".csv"))
 }
 
-mundo <- t(cbind(taxas_exploracao_mundo, taxas_exploracao_nao_assalariado_mundo, 
+mundo <- t(cbind(taxas_exploracao_mundo, taxas_exploracao_hs_mundo, 
+                 taxas_exploracao_ms_mundo, taxas_exploracao_ls_mundo, 
+                 taxas_exploracao_nao_assalariado_mundo, 
                  taxas_exploracao_total_mundo, taxas_exploracao_total_hs_mundo,
                  taxas_exploracao_total_ms_mundo, taxas_exploracao_total_ls_mundo,
                  taxas_lucro_media_mundo))
