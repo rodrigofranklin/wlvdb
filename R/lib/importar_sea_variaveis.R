@@ -1,5 +1,5 @@
 #sea_completo IMPORT
-sea_completo <- as.data.frame(read_xlsx(paste0(getwd(),"/sourcedata/",versao,"/WIOD_sea_",versao,".xlsx"), sheet = "DATA", col_names = T, na = 'NA'))
+sea_completo <- as.data.frame(read_xlsx(paste0(getwd(),"/sourcedata/",versao,"/WIOD_SEA_",versao,".xlsx"), sheet = "DATA", col_names = T, na = 'NA'))
 sea_completo[is.na(sea_completo)] <- 0
 colnames(sea_completo) <- tolower(gsub("_","",colnames(sea_completo)))
 
