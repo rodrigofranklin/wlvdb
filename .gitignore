@@ -5,7 +5,12 @@
 .rds
 .xls
 .xlsx
-/Resultados/*
-/Sourcedata/*
-/resultados/*
-/sourcedata/*
+/Resultados
+/Sourcedata
+/resultados
+/sourcedata
+R/utils/painel/dados
+Resultados
+Sourcedata
+resultados
+sourcedata
