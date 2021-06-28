@@ -50,7 +50,12 @@ ui <- fluidPage(
                            tableOutput("saldo_transferencias"),
                   ),
                   tabPanel("Transferências",
-
+                           tableOutput("td_envios_recebimentos"),
+                           tableOutput("td_envios_recebimentos_saldo"),
+                           tableOutput("improdutivos_envios_recebimentos"),
+                           tableOutput("improdutivos_envios_recebimentos_saldo"),
+                           textOutput("proporcao_td_transferencias"),
+                           textOutput("proporcao_td_transferencias_saldo")
                   )
                ),
                selectInput(inputId = "pais_transacoes",
