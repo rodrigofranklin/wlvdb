@@ -1,4 +1,4 @@
-require(tidyverse)
-require(shinydashboard)
-#require(data.table)
-require(rnaturalearth)
+library(tidyverse)
+library(shinydashboard)
+#library(data.table)
+library(rnaturalearth)

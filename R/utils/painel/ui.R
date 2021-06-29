@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-source("requ.R")
-=======
-require(tidyverse)
->>>>>>> 757cbdcfa499461039709e8725685e5921cbcb59
-
 ui <- fillPage(
   # theme = "bootstrap.css",
   tabsetPanel(
