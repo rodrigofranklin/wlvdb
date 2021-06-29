@@ -1,3 +1,5 @@
+source("requ.R")
+
 server <- function(input, output, session) {
 
   output$pais <- renderTable(
