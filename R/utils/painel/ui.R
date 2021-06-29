@@ -1,3 +1,5 @@
+require(tidyverse)
+
 ui <- fillPage(
   # theme = "bootstrap.css",
   tabsetPanel(
