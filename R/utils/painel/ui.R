@@ -5,7 +5,7 @@ ui <- fillPage(
       "Países",
       fluidRow(
         HTML("<center>"),
-        sliderInput(inputId = "ano",
+        sliderInput(inputId = "ano_pais",
                     label = NULL,
                     min = ano_min,
                     max = ano_max,
@@ -54,7 +54,7 @@ ui <- fillPage(
       "Indicadores",
       fluidRow(
         HTML("<center>"),
-        sliderInput(inputId = "ano",
+        sliderInput(inputId = "ano_indicador",
                     label = NULL,
                     min = ano_min,
                     max = ano_max,
@@ -100,37 +100,70 @@ ui <- fillPage(
         )
       )
     ),
-    tabPanel("Transações Internacionais",
-             navlistPanel(
-                tabPanel("Exportações",
-                  tableOutput("exportacoes_monetarias"),
-                  tableOutput("exportacoes_valores"),
-                  tableOutput("exportacoes_transferencias"),
-                ),
-                tabPanel("Importações",
-                  tableOutput("importacoes_monetarias"),
-                  tableOutput("importacoes_valores"),
-                  tableOutput("importacoes_transferencias"),
-                ),
-                tabPanel("Saldo",
-                         tableOutput("saldo_monetarias"),
-                         tableOutput("saldo_valores"),
-                         tableOutput("saldo_transferencias"),
-                ),
-                tabPanel("Transferências",
-                         tableOutput("td_envios_recebimentos"),
-                         tableOutput("td_envios_recebimentos_saldo"),
-                         tableOutput("improdutivos_envios_recebimentos"),
-                         tableOutput("improdutivos_envios_recebimentos_saldo"),
-                         textOutput("proporcao_td_transferencias"),
-                         textOutput("proporcao_td_transferencias_saldo")
-                )
-             ),
-             selectInput(inputId = "pais_transacoes",
-                         label = "País:",
-                         choices = lista_paises),
-             radioButtons(inputId = "transacoes_agregacao", choices = c("Agregado", "Por setor de origem", "Por setor de destino"), selected = "Agregado", label = ""),
-             radioButtons(inputId = "transacoes_versao", choices = c("WIOD13", "WIOD16"), selected = "WIOD13", label = ""),
+    tabPanel(
+      "Transações Internacionais",
+      fluidRow(
+        HTML("<center>"),
+        sliderInput(inputId = "ano_transacoes",
+                    label = NULL,
+                    min = ano_min,
+                    max = ano_max,
+                    value = 2009,
+                    ticks = FALSE,
+                    width = "95%",
+                    sep = ""),
+        HTML("</center>")
+      ),
+      navlistPanel(
+        tabPanel(
+          "Exportações",
+          fluidRow(
+            column(
+              width = 6,
+              selectInput(inputId = "pais_transacoes",
+                          label = "País:",
+                          choices = lista_paises)
+            ),
+            column(
+              width = 6,
+              plotOutput("exportacoes_monetarias")
+            )
+          ),
+          fluidRow(
+            column(
+              width = 6,
+              plotOutput("exportacoes_valores")
+            ),
+            column(
+              width = 6,
+              plotOutput("exportacoes_transferencias")
+            )
+          )
+        ),
+        tabPanel("Importações",
+          tableOutput("importacoes_monetarias"),
+          tableOutput("importacoes_valores"),
+          tableOutput("importacoes_transferencias"),
+        ),
+        tabPanel("Saldo",
+                 tableOutput("saldo_monetarias"),
+                 tableOutput("saldo_valores"),
+                 tableOutput("saldo_transferencias"),
+        ),
+        tabPanel("Transferências",
+                 tableOutput("td_envios_recebimentos"),
+                 tableOutput("td_envios_recebimentos_saldo"),
+                 tableOutput("improdutivos_envios_recebimentos"),
+                 tableOutput("improdutivos_envios_recebimentos_saldo"),
+                 textOutput("proporcao_td_transferencias"),
+                 textOutput("proporcao_td_transferencias_saldo")
+        )
+      ),
+      selectInput(inputId = "pais_transacoes",
+                 label = "País:",
+                 choices = lista_paises),
+      radioButtons(inputId = "transacoes_agregacao", choices = c("Agregado", "Por setor de origem", "Por setor de destino"), selected = "Agregado", label = ""),
+      radioButtons(inputId = "transacoes_versao", choices = c("WIOD13", "WIOD16"), selected = "WIOD13", label = ""),
     ))
 )
 
