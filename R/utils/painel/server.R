@@ -1,31 +1,92 @@
 server <- function(input, output, session) {
 
-  output$pais <- renderTable(t(sea_paises[,as.character(input$ano),,
-                                            input$pais]), rownames = TRUE)
+  output$pais <- renderTable(
+    t(sea_paises[,as.character(input$ano),,input$pais])[1:10,],
+    rownames = TRUE,
+    spacing = "xs",
+    striped = TRUE,
+    hover = TRUE,
+    width = "100%"
+  )
   
-  output$serie_pais <- renderTable(sea_paises[,,input$indicador_pais,
-                                                input$pais],rownames = TRUE)
+  output$serie_pais <- renderPlot({
+    dados <- sea_paises[,,input$indicador_pais,input$pais]
+    lmax <- max(dados, na.rm = TRUE)
+    lmin <- min(dados, na.rm = TRUE)
+    plot(
+      dados[1,],
+      type = "l",
+      ylim = c(lmin, lmax)
+    )
+    axis(side=1, 1:20, labels = as.character(lista_anos))
+    lines(
+      col = "red",
+      dados[2,]
+    )
+  })
   
-  output$setores_pais_13 <- renderTable(sea_setores_13[as.character(input$ano),
-                                                         input$indicador_pais,
-                                                         grep(input$pais,
-                                                              colnames(sea_setores_13[1,,]))]
-                                          ,rownames = TRUE)
+  output$setores_pais_13 <- renderTable(
+    sea_setores_13[as.character(input$ano),
+                   input$indicador_pais,
+                   grep(input$pais, colnames(sea_setores_13[1,,]))],
+    rownames = TRUE,
+    spacing = "xs",
+    striped = TRUE,
+    hover = TRUE,
+    width = "100%"
+  )
 
-  output$setores_pais_16 <- renderTable(sea_setores_16[as.character(input$ano),
-                                                       input$indicador_pais,
-                                                       grep(input$pais,
-                                                            colnames(sea_setores_16[1,,]))]
-                                        ,rownames = TRUE)
+  output$setores_pais_16 <- renderTable(
+    sea_setores_16[as.character(input$ano),
+                   input$indicador_pais,
+                   grep(input$pais, colnames(sea_setores_16[1,,]))],
+    rownames = TRUE,
+    spacing = "xs",
+    striped = TRUE,
+    hover = TRUE,
+    width = "100%"
+  )
   
-  output$indicadores <- renderTable(t(sea_paises[,as.character(input$ano),
-                                               input$indicador,]),
-                                    rownames = TRUE)
+  output$indicadores1 <- 
+    renderTable({
+      t(sea_paises[,as.character(input$ano),input$indicador,])[1:(num_paises/2),]
+    },
+    rownames = TRUE,
+    spacing = "xs",
+    striped = TRUE,
+    hover = TRUE,
+    width = "100%"
+    )
 
-  output$serie <- renderTable(sea_paises[input$versao_indicadores,,
-                                         input$indicador,
-                                         input$paises_indicadores],
-                              rownames = TRUE)
+  output$indicadores2 <- 
+    renderTable({
+      t(sea_paises[,as.character(input$ano),input$indicador,])[((num_paises/2)+1):num_paises,]
+    },
+    rownames = TRUE,
+    spacing = "xs",
+    striped = TRUE,
+    hover = TRUE,
+    width = "100%"
+    )
+
+  output$serie <- renderPlot({
+    dados <- sea_paises[input$versao_indicadores,,
+                        input$indicador,
+                        input$paises_indicadores]
+    lmax <- max(dados, na.rm = TRUE)
+    lmin <- min(dados, na.rm = TRUE)
+    plot(
+      dados[1,,],
+      type = "l",
+      ylim = c(lmin, lmax)
+    )
+    axis(side=1, 1:20, labels = as.character(lista_anos))
+    # dim(dados)
+    # for (x in 2:10) {
+    #   lines( col = "red", dados[x,])
+    # }
+    
+  })
   
   
 ### sobre esses outputs que se seguem: é preciso melhorar. Seria possível ter 
