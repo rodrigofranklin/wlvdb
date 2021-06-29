@@ -5,6 +5,9 @@
 ## - Preparação das variáveis para exibição
 #####
 
+## Carrega pacotes
+source("requ.R")
+
 ## Carrega os dados
 #####
 paises <- read.csv2(file = "dados/paises.csv", row.names = 1, check.names = F)
