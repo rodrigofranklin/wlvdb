@@ -3,8 +3,6 @@ server <- function(input, output, session) {
   plotaserie <- function(dados,perc=F) {
     ##produz data.frame com cada versão para juntar
     
-    bds <- names(dados[,1])
-    anos <- names(dados[1,])
     if(length(dim(dados))>2){
       dados <- as.data.table(dados)
       names(dados) <- c("bd","ano","indicador","pais","valor")
@@ -12,12 +10,13 @@ server <- function(input, output, session) {
                                               tryFormats="%d/%m/%Y"),
                                 across(c(-ano,-valor),as.factor))
     }else{
-     
-     dados <- as.data.table(t(dados))
-     dados$ano <- as.Date(paste0("01/01/",anos),
+      bds <- names(dados[,1])
+      anos <- names(dados[1,])
+      dados <- as.data.table(t(dados))
+      dados$ano <- as.Date(paste0("01/01/",anos),
                                  tryFormats="%d/%m/%Y")
-     dados <- dados%>%pivot_longer(-ano,names_to = "bd",values_to="valor")%>%
-       mutate(bd=as.factor(bd))
+      dados <- dados%>%pivot_longer(-ano,names_to = "bd",values_to="valor")%>%
+        mutate(bd=as.factor(bd))
     }
     
     ifelse(ncol(dados)==3,

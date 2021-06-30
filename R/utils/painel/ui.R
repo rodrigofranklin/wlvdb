@@ -96,7 +96,7 @@ ui <- fillPage(
           )
         ),
         fluidRow(
-          plotOutput("serie")
+          plotlyOutput("serie")
         )
       )
     ),
