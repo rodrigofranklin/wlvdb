@@ -9,20 +9,37 @@ server <- function(input, output, session) {
     width = "100%"
   )
   
-  output$serie_pais <- renderPlot({
+  output$serie_pais <- renderPlotly({
     dados <- sea_paises[,,input$indicador_pais,input$pais]
     lmax <- max(dados, na.rm = TRUE)
     lmin <- min(dados, na.rm = TRUE)
-    plot(
-      dados[1,],
-      type = "l",
-      ylim = c(lmin, lmax)
-    )
-    axis(side=1, 1:20, labels = as.character(lista_anos))
-    lines(
-      col = "red",
-      dados[2,]
-    )
+    ##produz data.frame com cada versão para juntar
+    verte <- function(x, dt=dados,nome="wiod13"){
+      b <- dt[x,]
+      a <- data.frame(valor = b,
+                      ano = as.Date(paste0("30/06/",as.numeric(names(b))),tryFormats="%d/%m/%Y"),
+                      bd = nome)
+    }
+ 
+    dwiod <- bind_rows(verte(1),verte(2,nome="wiod16"))
+    dwiod$bd <- as.factor(dwiod$bd)
+    ggplot(dwiod,aes(x=ano,y=valor,col=bd))+
+      geom_line(size = 1) +
+      scale_y_continuous(labels = comma_format(big.mark = ".", decimal.mark = ","))+
+      theme_minimal()
+    
+    ggplotly()
+    
+    # plot(
+    #   dados[1,],
+    #   type = "l",
+    #   ylim = c(lmin, lmax)
+    # )
+    # axis(side=1, 1:20, labels = as.character(lista_anos))
+    # lines(
+    #   col = "red",
+    #   dados[2,]
+    # )
   })
   
   output$setores_pais_13 <- renderTable(

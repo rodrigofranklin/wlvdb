@@ -36,7 +36,7 @@ ui <- fillPage(
           )
         ),
         fluidRow(tableOutput("pais")),
-        fluidRow(plotOutput("serie_pais"))
+        fluidRow(plotlyOutput("serie_pais"))
       ),
       column(
         width = 4,
