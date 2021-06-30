@@ -36,3 +36,26 @@ ano_max <- as.numeric(last(lista_anos))
 
 
 
+## Funções a reutilizar
+plotaserie <- function(dados,bdlim=F,perc=F) {
+  ##produz data.frame com cada versão para juntar
+  verte <- function(x, dt=dados,nome="wiod13"){
+    b <- dt[x,]
+    a <- data.frame(valor = b,
+                    ano = as.Date(paste0("30/06/",as.numeric(names(b))),tryFormats="%d/%m/%Y"),
+                    bd = nome)
+  }
+  
+  dwiod <- bind_rows(verte(1),verte(2,nome="wiod16"))
+  dwiod$bd <- as.factor(dwiod$bd)
+  if(bdlim == T) {
+    dwiod <- dwiod[dwiod$bd==input$versao_indicadores,]
+  }
+  ggplot(dwiod,aes(x=ano,y=valor,col=ifelse(bdlim=F,bd,pais)))+
+    geom_line(size = 1) +
+    scale_y_continuous(labels = comma_format(big.mark = ".", decimal.mark = ","))+
+    theme_minimal()
+  
+  ggplotly()
+  
+}
