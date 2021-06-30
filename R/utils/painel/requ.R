@@ -1,6 +1,6 @@
 library(tidyverse)
 library(shinydashboard)
-#library(data.table)
+library(data.table)
 library(shinyjs)
 library(rnaturalearth)
 library(treemap)
