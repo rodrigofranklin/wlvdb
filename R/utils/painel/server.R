@@ -5,7 +5,10 @@ server <- function(input, output, session) {
     
     if(length(dim(dados))>2){
       dados <- as.data.table(dados)
-      names(dados) <- c("bd","ano","indicador","pais","valor")
+      ifelse(ncol(dados)==5,
+      names(dados) <- c("bd","ano","indicador","pais","valor"),
+      names(dados) <- c("bd","ano","pais","valor")
+      )
       dados <- dados %>% mutate(ano = as.Date(paste0("01/01/",ano),
                                               tryFormats="%d/%m/%Y"),
                                 across(c(-ano,-valor),as.factor))
