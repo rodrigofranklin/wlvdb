@@ -51,7 +51,7 @@ plotaserie <- function(dados,bdlim=F,perc=F) {
   if(bdlim == T) {
     dwiod <- dwiod[dwiod$bd==input$versao_indicadores,]
   }
-  ggplot(dwiod,aes(x=ano,y=valor,col=ifelse(bdlim=F,bd,pais)))+
+  ggplot(dwiod,aes(x=ano,y=valor,col=ifelse(bdlim==F,bd,pais)))+
     geom_line(size = 1) +
     scale_y_continuous(labels = comma_format(big.mark = ".", decimal.mark = ","))+
     theme_minimal()
