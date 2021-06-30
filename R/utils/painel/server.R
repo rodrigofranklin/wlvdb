@@ -1,5 +1,40 @@
 server <- function(input, output, session) {
+  ## Funções a reutilizar
+  plotaserie <- function(dados,perc=F) {
+    ##produz data.frame com cada versão para juntar
+    
+    if(length(dim(dados))>2){
+      dados <- as.data.table(dados)
+      ifelse(ncol(dados)==5,
+      names(dados) <- c("bd","ano","indicador","pais","valor"),
+      names(dados) <- c("bd","ano","pais","valor")
+      )
+      dados <- dados %>% mutate(ano = as.Date(paste0("01/01/",ano),
+                                              tryFormats="%d/%m/%Y"),
+                                across(c(-ano,-valor),as.factor))
+    }else{
+      bds <- names(dados[,1])
+      anos <- names(dados[1,])
+      dados <- as.data.table(t(dados))
+      dados$ano <- as.Date(paste0("01/01/",anos),
+                                 tryFormats="%d/%m/%Y")
+      dados <- dados%>%pivot_longer(-ano,names_to = "bd",values_to="valor")%>%
+        mutate(bd=as.factor(bd))
+    }
+    
+    ifelse(ncol(dados)==3,
+           p <- ggplot(dados,aes(x=ano,y=valor,col=bd)),
+           p <- ggplot(dados,aes(x=ano,y=valor,col=pais,linetype=bd)))
+      p+geom_line(size = 1) +
+      scale_y_continuous(labels = comma_format(big.mark = ".", decimal.mark = ","))+
+      theme_minimal()
+    
+    ggplotly()
+    
+  }
 
+  
+  
   output$pais <- renderTable(
     t(sea_paises[,as.character(input$ano_pais),,input$pais])[1:10,],
     rownames = TRUE,
@@ -62,7 +97,7 @@ server <- function(input, output, session) {
     dados <- sea_paises[input$versao_indicadores,,
                         input$indicador,
                         input$paises_indicadores]
-   plotaserie(dados,bdlim=T)
+  plotaserie(dados)  
   })
   
   
