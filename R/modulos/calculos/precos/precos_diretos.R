@@ -28,3 +28,12 @@ pais$mad <- (sea%>%
   summarize(mad=MAPE(producao_bruta_precos_diretos_nacionais_pr,
                      producao_bruta_precos_mercado)))[[2]]
 
+# sea%>%filter(producao_bruta_valores>0)%>%
+#   group_by(pais)%>%
+#   summarize(mad=MAPE(producao_bruta_precos_diretos,
+#                      producao_bruta_precos_mercado))
+# 
+# 
+# sea%>%filter(producao_bruta_valores>0)%>%
+#   group_by(pais)%>%
+#   summarize(igual = sum(producao_bruta_precos_mercado) == sum(producao_bruta_precos_diretos_nacionais))

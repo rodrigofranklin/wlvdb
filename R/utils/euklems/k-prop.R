@@ -23,7 +23,7 @@ tx.dep <- as.data.frame(read.csv2(paste0(getwd(),"/sourcedata/euklems/taxas.csv"
 
 paises.euklems <- unique(euklems[,1])
 setores.euklems <- unique(euklems[,c(5,6)])
-paises.setores <- data.frame(cbind(country=rep(paises.euklems,each=length(setores.euklems[,2])),code=setores.euklems[,2],agg=setores.euklems[,1]))
+paises.setores <- data.frame(cbind(country=rep(paises.euklems$country,each=length(setores.euklems$code)),code=setores.euklems$code,agg=setores.euklems[,1]))
 ek.va = ek.tx.dep = ek.k <- paises.setores[,c(1,2)]
 
 ek.va$va <- left_join(paises.setores[,c(1,2)],euklems.na[which(euklems.na[,3]=="VA" & euklems.na[,7]==ano),c(1,6,8)], by = c("country", "code"))[,3]
