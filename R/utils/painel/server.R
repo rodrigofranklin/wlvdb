@@ -107,6 +107,8 @@ server <- function(input, output, session) {
   # Problema: os dados de exportações, importações e saldo são distintos.
   # Mas são os mesmos dados conforme o tipo de variável (monetário, valor transf)
   # No entanto, os gráficos conforme tipo de variábel são concomitantes.
+
+### Sim certamente possível
   output$exportacoes_monetarias <- renderPlot({
     selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
                       "WIOD13Agregado" = 1,
