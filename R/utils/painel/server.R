@@ -73,7 +73,7 @@ server <- function(input, output, session) {
 #    striped = TRUE,
     #hover = TRUE,
     #width = "100%",
-options = list(pageLength = 20, info = FALSE, lengthMenu = list(c(20, -1), c("20", "All")) )
+options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30", "All")) )
   )
 
   output$setores_pais_16 <- renderDataTable(
@@ -87,7 +87,7 @@ options = list(pageLength = 20, info = FALSE, lengthMenu = list(c(20, -1), c("20
 #    striped = TRUE,
     #hover = TRUE,
     #width = "100%",
-options = list(pageLength = 20, info = FALSE, lengthMenu = list(c(20, -1), c("20", "All")) )
+options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30", "All")) )
 
   )
 
