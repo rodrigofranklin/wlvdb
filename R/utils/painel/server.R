@@ -46,7 +46,9 @@ server <- function(input, output, session) {
     glimpse(d())
     })
   output$pais <- renderDataTable(
-    tabmil(t(sea_paises[,as.character(input$ano_pais),,input$pais])[1:10,]),
+    tabmil(t(sea_paises[,as.character(input$ano_pais),,input$pais])[1:10,])%>%
+      left_join(varst)%>%
+      select(var=pt,2:3),
  #   rownames = TRUE,
 #    spacing = "xs",
 #    striped = TRUE,
@@ -63,7 +65,9 @@ server <- function(input, output, session) {
   output$setores_pais_13 <- renderDataTable(
     tabmil(sea_setores_13[as.character(input$ano_pais),
                    input$indicador_pais,
-                   grep(input$pais, colnames(sea_setores_13[1,,]))]),
+                   grep(input$pais, colnames(sea_setores_13[1,,]))])%>%
+      separate(var,c("Legenda","Code"),sep="\\.")%>%left_join(setorest)%>%left_join(paises)%>%
+      select(pais=`Países`,setor=pt,value = x),
 #    rownames = TRUE,
 #    spacing = "xs",
 #    striped = TRUE,
@@ -72,15 +76,19 @@ server <- function(input, output, session) {
 options = list(pageLength = 20, info = FALSE, lengthMenu = list(c(20, -1), c("20", "All")) )
   )
 
-  output$setores_pais_16 <- renderTable(
+  output$setores_pais_16 <- renderDataTable(
     tabmil(sea_setores_16[as.character(input$ano_pais),
                    input$indicador_pais,
-                   grep(input$pais, colnames(sea_setores_16[1,,]))]),
+                   grep(input$pais, colnames(sea_setores_16[1,,]))])%>%
+      separate(var,c("Legenda","Code"),sep="\\.")%>%left_join(setorest)%>%left_join(paises)%>%
+      select(pais=`Países`,setor=pt,value = x),
     #rownames = TRUE,
-    spacing = "xs",
-    striped = TRUE,
-    hover = TRUE,
-    width = "100%"
+#    spacing = "xs",
+#    striped = TRUE,
+    #hover = TRUE,
+    #width = "100%",
+options = list(pageLength = 20, info = FALSE, lengthMenu = list(c(20, -1), c("20", "All")) )
+
   )
 
   output$indicadores1 <-

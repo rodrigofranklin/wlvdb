@@ -23,6 +23,8 @@ sea_setores_16 <- readRDS(file = "dados/sea_setores_16.RDS")
 m_io_13 <- readRDS(file = "dados/m_io_13.RDS")
 m_io_16 <- readRDS(file = "dados/m_io_16.RDS")
 
+varst <- read_csv2("dados/vars.csv")
+setorest <- read_csv2("dados/setores_t.csv")
 ## Cria demais variáveis
 
 lista_versoes <- rownames(sea_paises[,,1,1])
