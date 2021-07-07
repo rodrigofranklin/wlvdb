@@ -1,60 +1,65 @@
 
 ui <- fluidPage(
-  navbarPage(theme=shinytheme("united"), lang="es",footer="Venceremos!",
+  navbarPage(theme="painel.css", lang="es",footer=tags$div(tags$i(class="fa fa-copyright fa-flip-horizontal"),
+                                                         tags$a(href="https://gitlab.com/rodrigoesborges/worldlabourvalues",icon("creative-commons")),"Por: World Labour Values Task Force - ",
+                                                                  tags$a(href="https://worldlabourvalues.org","Grupo de Estudos Concretos sobre Teoria do Valor")),
              header="",id="mainpanel",
-             title=tags$div(tags$a(href="#", class="sidebar-toggle",
+             title=tags$div(style="margin-bottom: 0px !important;",tags$a(href="#", class="sidebar-toggle",
                                    `data-toggle`="offcanvas",role="button",
                                    tags$span(class="sr-only","Toggle navigation") , 
                                    style='color: #ffffff;',
                                   icon("bars",class = )
              ),"World Labour Values Database"), windowTitle ="World Labour Values App", selected = "Pais/Country",
              tabPanel("Pais/Country",icon = icon("globe-americas"),
-                      tags$body(class="skin-red sidebar-mini control-sidebar-closed",
+#                      tags$body(class="skin-red sidebar-mini control-sidebar-closed",
                                 dashboardPage(skin="red",
                                   dashboardHeader(disable = T),
-                                  dashboardSidebar(
-                                    sliderInput(inputId = "ano_pais",
-                                                label = NULL,
-                                                min = ano_min,
-                                                max = ano_max,
-                                                value = 2009,
-                                                ticks = FALSE,
-                                                width = "95%",
-                                                sep = ""
-                                    ),
-                                    selectInput(inputId = "pais",
-                                                label = NULL,
-                                                choices = lista_paises
-                                    ),
-                                    selectInput(inputId = "indicador_pais",
-                                                label = NULL,
-                                                choices = lista_variaveis_sea
-                                    )
+                                  dashboardSidebar(disable = T
                                   ),
                                   dashboardBody(
                                     ### changing theme
                                     shinyDashboardThemes(
-                                      theme = "flat_red"
+                                      theme = "grey_light"
                                     ),
-                                    box(tableOutput("pais")),
-                                    box(plotlyOutput("serie_pais"),width=12,collapsible = T),
-                                    box(
+                                    fluidRow(shinydashboard::box(width=3,
+                                      selectInput(inputId = "pais",
+                                                  label = NULL,
+                                                  choices = lista_paises
+                                      )),
+                                      shinydashboard::box(width=3,selectInput(inputId = "indicador_pais",
+                                                  label = NULL,
+                                                  choices = lista_variaveis_sea
+                                      )),
+                                      shinydashboard::box(width=6,sliderInput(inputId = "ano_pais",
+                                                  label = NULL,
+                                                  min = ano_min,
+                                                  max = ano_max,
+                                                  value = 2009,
+                                                  ticks = FALSE,
+                                                  width = "95%",
+                                                  sep = ""
+                                      )
+                                    )
+                                    ),
+                                    shinydashboard::box(dataTableOutput("pais"),
+                                                        plotlyOutput("serie_pais")),
+                                    shinydashboard::box(
                                       tabsetPanel(
                                         tabPanel("WIOD.13",
-                                                 tableOutput("setores_pais_13")
+                                                 dataTableOutput("setores_pais_13")
                                         ),
                                         tabPanel("WIOD.16",
-                                                 tableOutput("setores_pais_16")
+                                                 dataTableOutput("setores_pais_16")
                                         )
                                       )
                                     ),
-                                    box(tableOutput("debuga"))
+#                                    shinydashboard::box(tableOutput("debuga"))
                                   )
                                 )
-                      )
+#                      )
              ),
              tabPanel("Indicador",icon = icon("chart-line"),
-                      tags$body(class="skin-yellow sidebar-mini control-sidebar-closed",
+#                      tags$body(class="skin-yellow sidebar-mini control-sidebar-closed",
                                 dashboardPage(
                                   dashboardHeader(disable = T),
                                   dashboardSidebar(
@@ -85,21 +90,21 @@ ui <- fluidPage(
                                       theme = "grey_light"
                                     ),
                                    
-                                    box(
+                                    shinydashboard::box(
                                       tableOutput("indicadores1")
                                       ),
-                                     box(
+                                     shinydashboard::box(
                                         tableOutput("indicadores2")
                                     ),
-                                    box(
+                                    shinydashboard::box(
                                       plotlyOutput("serie")
                                     )
                                   )
                                 )
-                      )
+ #                     )
              ),
              tabPanel("Unequal Exchange",icon = icon("globe"),
-                      tags$body(class="skin-blue sidebar-mini control-sidebar-closed",
+  #                    tags$body(class="skin-blue sidebar-mini control-sidebar-closed",
                                 dashboardPage(
                                   dashboardHeader(disable = T),
                                   dashboardSidebar(
@@ -126,28 +131,28 @@ ui <- fluidPage(
                                     )
                                   ),
                                   dashboardBody(
-                                    box(
+                                    shinydashboard::box(
                                       plotOutput("exportacoes_monetarias")
                                       
                                     ),
                                     # 
-                                    # box(
+                                    # shinydashboard::box(
                                     #   plotOutput("exportacoes_valores")
                                     # ),
-                                    # box(
+                                    # shinydashboard::box(
                                     #   plotOutput("exportacoes_transferencias")
                                     # ),
-                                    # box(
+                                    # shinydashboard::box(
                                     #   tableOutput("importacoes_monetarias"),
                                     #   tableOutput("importacoes_valores"),
                                     #   tableOutput("importacoes_transferencias"),
                                     # ),
-                                    # box(
+                                    # shinydashboard::box(
                                     #   tableOutput("saldo_monetarias"),
                                     #   tableOutput("saldo_valores"),
                                     #   tableOutput("saldo_transferencias"),
                                     # ),
-                                    # box(
+                                    # shinydashboard::box(
                                     #   tableOutput("td_envios_recebimentos"),
                                     #   tableOutput("td_envios_recebimentos_saldo"),
                                     #   tableOutput("improdutivos_envios_recebimentos"),
@@ -159,7 +164,7 @@ ui <- fluidPage(
                                   )
                                 )
                       )
-             )             
+#             )             
              
   )
   )

@@ -45,13 +45,14 @@ server <- function(input, output, session) {
   output$debuga <- renderTable({
     glimpse(d())
     })
-  output$pais <- renderTable(
+  output$pais <- renderDataTable(
     tabmil(t(sea_paises[,as.character(input$ano_pais),,input$pais])[1:10,]),
  #   rownames = TRUE,
-    spacing = "xs",
-    striped = TRUE,
-    hover = TRUE,
-    width = "100%"
+#    spacing = "xs",
+#    striped = TRUE,
+ #   hover = TRUE,
+#    width = "100%",
+    options = list(pageLength = 10, info = FALSE, lengthMenu = list(c(10, -1), c("10", "All")) )
   )
 
   output$serie_pais <- renderPlotly({
@@ -59,15 +60,16 @@ server <- function(input, output, session) {
     plotaserie(dados)
   })
 
-  output$setores_pais_13 <- renderTable(
+  output$setores_pais_13 <- renderDataTable(
     tabmil(sea_setores_13[as.character(input$ano_pais),
                    input$indicador_pais,
                    grep(input$pais, colnames(sea_setores_13[1,,]))]),
 #    rownames = TRUE,
-    spacing = "xs",
-    striped = TRUE,
-    hover = TRUE,
-    width = "100%"
+#    spacing = "xs",
+#    striped = TRUE,
+    #hover = TRUE,
+    #width = "100%",
+options = list(pageLength = 20, info = FALSE, lengthMenu = list(c(20, -1), c("20", "All")) )
   )
 
   output$setores_pais_16 <- renderTable(
