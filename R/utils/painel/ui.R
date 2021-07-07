@@ -21,12 +21,12 @@ ui <- fluidPage(
                                     shinyDashboardThemes(
                                       theme = "grey_light"
                                     ),
-                                    fluidRow(shinydashboard::box(width=3,
+                                    fluidRow(shinydashboard::box(width=1,
                                       selectInput(inputId = "pais",
                                                   label = NULL,
                                                   choices = lista_paises
                                       )),
-                                      shinydashboard::box(width=3,selectInput(inputId = "indicador_pais",
+                                      shinydashboard::box(width=5,selectInput(inputId = "indicador_pais",
                                                   label = NULL,
                                                   choices = lista_variaveis_sea
                                       )),
