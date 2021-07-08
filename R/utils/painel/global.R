@@ -23,6 +23,8 @@ sea_setores_16 <- readRDS(file = "dados/sea_setores_16.RDS")
 m_io_13 <- readRDS(file = "dados/m_io_13.RDS")
 m_io_16 <- readRDS(file = "dados/m_io_16.RDS")
 
+varst <- read_csv2("dados/vars.csv")
+setorest <- read_csv2("dados/setores_t.csv")
 ## Cria demais variáveis
 
 lista_versoes <- rownames(sea_paises[,,1,1])
@@ -30,6 +32,8 @@ lista_anos <- rownames(sea_paises[1,,,1])
 lista_variaveis_sea <- rownames(sea_paises[1,1,,])
 lista_paises <- paises[,3]
 names(lista_paises) <- paises[match(paises[,3], lista_paises),1]
+
+names(lista_variaveis_sea) <- (tibble(var=lista_variaveis_sea)%>%left_join(varst)%>%select(pt))[[1]]
 
 ano_min <- as.numeric(lista_anos[1])
 ano_max <- as.numeric(last(lista_anos))
