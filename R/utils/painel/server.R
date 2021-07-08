@@ -38,15 +38,17 @@ server <- function(input, output, session) {
     x <- as.data.table(x,keep.rownames="var")%>%mutate(across(where(is.numeric),milhares))
   }
   d <- reactive({ 
-    d <- t(sea_paises[,as.character(input$ano_pais),,input$pais])[1:10,]
-    print(tabmil(d)) # print from within
+    d <- as.data.table(m_paises_13[as.character(input$ano_transacoes),
+                     "exportações.pm",
+                     input$pais_transacoes,],keep.rownames = "pais")
+    print(d) # print from within
     return(d)
   })
   output$debuga <- renderTable({
     glimpse(d())
     })
   output$pais <- renderDataTable(
-    tabmil(t(sea_paises[,as.character(input$ano_pais),,input$pais])[1:10,])%>%
+    tabmil(t(sea_paises[,as.character(input$ano_pais),,input$pais]))%>%
       left_join(varst)%>%
       select(var=pt,2:3),
  #   rownames = TRUE,
@@ -138,10 +140,10 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                       "WIOD16Por setor de origem" = 5,
                       "WIOD16Por setor de destino" = 6)
     if (selecao == 1) {
-      temp <- m_paises_13[as.character(input$ano_transacoes),
-                          "exportações.pm",
-                          input$pais_transacoes,]
-      dados <- data.frame(valor = temp, pais = names(temp))
+      dados <- as.data.table(m_paises_13[as.character(input$ano_transacoes),
+                                         "exportações.pm",
+                                         input$pais_transacoes,],keep.rownames = "pais")
+      names(dados) <- c("pais","valor")
       treemap(dados, index="pais", vSize = "valor", type = "value")
     } else if (selecao == 2) {
       rowSums(m_io_13[as.character(input$ano_transacoes),
@@ -165,8 +167,8 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                       "exportações.pm",
                       grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
                       -grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
-    }},
-    rownames = TRUE)
+    }
+    })
 
   output$exportacoes_valores <- renderPlot({
     selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
@@ -177,10 +179,9 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                       "WIOD16Por setor de origem" = 5,
                       "WIOD16Por setor de destino" = 6)
     if (selecao == 1) {
-      temp <- m_paises_13[as.character(input$ano_transacoes),
+      dados <- as.data.table(m_paises_13[as.character(input$ano_transacoes),
                           "exportações.valores",
-                          input$pais_transacoes,]
-      dados <- data.frame(valor = temp, pais = names(temp))
+                          input$pais_transacoes,],keep.rownames = "pais")
       treemap(dados, index="pais", vSize = "valor", type = "value")
     } else if (selecao == 2) {
       rowSums(m_io_13[as.character(input$ano_transacoes),
@@ -205,8 +206,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                       "exportações.valores",
                       grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
                       -grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
-    }},
-    rownames = TRUE)
+    }})
 
   output$exportacoes_transferencias <- renderPlot({
     selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),

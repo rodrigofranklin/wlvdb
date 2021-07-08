@@ -8,6 +8,10 @@
 .wrapper {
   background-color: indianred !important;
 }
+.skin-red .left-side, .skin-red .main-sidebar, .skin-red .wrapper {
+	background-color: #ffffff !important;
+}
+
 .container-fluid {
 	padding-right: 1px;
 	padding-left: 1px;

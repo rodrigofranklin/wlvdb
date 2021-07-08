@@ -11,16 +11,27 @@ ui <- fluidPage(
                                   icon("bars",class = )
              ),"World Labour Values Database"), windowTitle ="World Labour Values App", selected = "Pais/Country",
              tabPanel("Pais/Country",icon = icon("globe-americas"),
-#                      tags$body(class="skin-red sidebar-mini control-sidebar-closed",
                                 dashboardPage(skin="red",
                                   dashboardHeader(disable = T),
                                   dashboardSidebar(disable = T
                                   ),
                                   dashboardBody(
-                                    ### changing theme
-                                    shinyDashboardThemes(
-                                      theme = "grey_light"
-                                    ),
+                                     ### changing theme
+                                     shinyDashboardThemes(
+                                       theme = "grey_light"
+                                     ),
+                                     tags$head(tags$style(HTML('
+
+                                /* main sidebar */
+                                .skin-red .main-sidebar {
+                                background-color: indianred;
+                                }
+                                /* body */
+                                .content-wrapper, .right-side {
+                                background-color: idianred;
+                                }
+
+                                '))),
                                     fluidRow(shinydashboard::box(width=1,
                                       selectInput(inputId = "pais",
                                                   label = NULL,
@@ -53,10 +64,9 @@ ui <- fluidPage(
                                         )
                                       )
                                     ),
-#                                    shinydashboard::box(tableOutput("debuga"))
+
                                   )
                                 )
-#                      )
              ),
              tabPanel("Indicador",icon = icon("chart-line"),
 #                      tags$body(class="skin-yellow sidebar-mini control-sidebar-closed",
@@ -85,10 +95,10 @@ ui <- fluidPage(
                                                 multiple = TRUE)
                                   ),
                                   dashboardBody(
-                                    ### changing theme
-                                    shinyDashboardThemes(
-                                      theme = "grey_light"
-                                    ),
+                                    # ### changing theme
+                                    # shinyDashboardThemes(
+                                    #   theme = "grey_light"
+                                    # ),
                                    
                                     shinydashboard::box(
                                       tableOutput("indicadores1")
@@ -96,7 +106,7 @@ ui <- fluidPage(
                                      shinydashboard::box(
                                         tableOutput("indicadores2")
                                     ),
-                                    shinydashboard::box(
+                                    shinydashboard::box(width=12,
                                       plotlyOutput("serie")
                                     )
                                   )
@@ -161,6 +171,7 @@ ui <- fluidPage(
                                     #   textOutput("proporcao_td_transferencias_saldo")
                                     # )
                                     # 
+#                                    shinydashboard::box(tableOutput("debuga"))
                                   )
                                 )
                       )
