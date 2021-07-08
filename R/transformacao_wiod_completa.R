@@ -18,7 +18,7 @@ my.cluster <- parallel::makeCluster(
 
 # Define a versão que será calculada. O nome da versão é o mesmo nome da pasta
 # onde estão gravadas as informações de inicialização.
-versao_resultado <- "Oficial_WIOD16"
+versao_resultado <- "oficial_WIOD16"
 
 # Lê os parâmetros presentes na pasta da versão.
 source("R/lib/parametros_versao.R")
