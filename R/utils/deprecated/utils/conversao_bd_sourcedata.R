@@ -8,8 +8,8 @@
 ###
 ### Variáveis de versão
 ###
- versao = versao_fonte  <- "July14"
-#versao = versao_fonte <- "Nov16"
+# versao = versao_fonte  <- "July14"
+versao = versao_fonte <- "Nov16"
 
 # Carrega variáveis de controle
 source('R/lib/variaveis_controle.R')
@@ -19,7 +19,6 @@ paises_setores$code <- setores$Code
 paises_demanda <- data.frame(country=rep(paises$Legenda,each=num_demanda))
 paises_demanda$description <- demanda$Demanda
 paises_demanda$code <- demanda$WIOD
-
 
 
 #### Conversão das contas socioeconômicas
@@ -38,14 +37,14 @@ num_paises <- length(lista_paises)
 num_setores <- length(lista_setores)
 
 sea_bd <- array(NA,
-                    dim = c(num_anos,
-                            num_variaveis_sea,
-                            num_paises,
-                            num_setores),
-                    dimnames = list(lista_anos,
-                                    lista_variaveis_sea,
-                                    lista_paises,
-                                    lista_setores))
+                dim = c(num_anos,
+                        num_variaveis_sea,
+                        num_paises,
+                        num_setores),
+                dimnames = list(lista_anos,
+                                lista_variaveis_sea,
+                                lista_setores,
+                                lista_paises))
 
 # Salva as informações no novo formato
 x <- 1:num_anos
@@ -86,7 +85,7 @@ m_io <- array(NA,
 for (ano in lista_anos) {
   #Carrega os dados brutos da versão especificada
   source("R/lib/dados_brutos.R")
-
+  
   ###
   ### Área para os cálculos desejados
   ###
@@ -95,3 +94,45 @@ for (ano in lista_anos) {
 
 # Salva novo formato no disco
 saveRDS(m_io,paste0(getwd(),"/sourcedata/",versao,"/m_io.rds"))
+
+# Converte dados do EUKLEMS
+lista_anos_ek <- as.character(1995:2015)
+ano <- "2000"
+
+ek_k_fonte <- readRDS(paste0("sourcedata/euklems/ekk_",ano,".rds"))
+ek_tx_dep_fonte <- readRDS(paste0("sourcedata/euklems/ektxdep_",ano,".rds"))
+
+lista_variavel_ek <- c("k_composicao", "tx_depreciacao")
+lista_paises_ek <- as.character(unique(ek_k_fonte[,1]))
+lista_setores_ek <- as.character(unique(ek_k_fonte[,2]))
+lista_tipos_k <- colnames(ek_k_fonte)[3:16]
+
+euklems <- array(NA, dim = c(length(lista_anos_ek),
+                             length(lista_variavel_ek),
+                             length(lista_tipos_k),
+                             length(lista_setores_ek),
+                             length(lista_paises_ek)),
+                 dimnames = list(lista_anos_ek,
+                                 lista_variavel_ek,
+                                 lista_tipos_k,
+                                 lista_setores_ek,
+                                 lista_paises_ek))
+
+max_x <- dim(ek_k_fonte)[1]
+max_y <- dim(ek_k_fonte)[2]
+
+
+## Problema: a qtd de países muda de acordo com os anos no EUKLEMS...
+for (ano in lista_anos_ek) {
+  ek_k_fonte <- readRDS(paste0("sourcedata/euklems/ekk_",ano,".rds"))
+  ek_tx_dep_fonte <- readRDS(paste0("sourcedata/euklems/ektxdep_",ano,".rds"))
+  for (x in 1:max_x) {
+    for (y in 3:max_y) {
+      euklems[ano,"k_composicao",(y-2),as.character(ek_k_fonte[x,2]),
+           as.character(ek_k_fonte[x,1])] <- ek_k_fonte[x,y]
+      euklems[ano,"tx_depreciacao",(y-2),as.character(ek_k_fonte[x,2]),
+           as.character(ek_k_fonte[x,1])] <- ek_tx_dep_fonte[x,y]
+      
+    }
+  }
+}

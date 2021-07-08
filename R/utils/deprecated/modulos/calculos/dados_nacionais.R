@@ -1,5 +1,12 @@
 ## Cálculos de dados nacionais
 
+
+TESTE <- "rowMeans"
+sea_paises[,"cambio",which(lista_paises!="ROW")] <- 
+  apply(sea_setores[,"cambio",,which(lista_paises!="ROW")], 3, TESTE,
+        na.rm = TRUE)
+
+
 print("Calculando dados nacionais...")
 pais <- paises[,c(1,3)]
 pais[,1] <- NULL
