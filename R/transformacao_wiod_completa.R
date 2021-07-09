@@ -43,10 +43,18 @@ source("R/modulos/preliminar/preliminar.R")
 #######################.
 
 # China
-source("R/modulos/pressupostos/china/suposicoes_china.R")
+if (is.null(parametros$china)) {
+  source("R/modulos/pressupostos/china/suposicoes_china.R")
+} else {
+  source(paste0("R/modulos/pressupostos/china/",parametros$china))
+}
 
 # RoW
-source("R/modulos/pressupostos/row/suposicoes_row.R")
+if (is.null(parametros$row)) {
+  source("R/modulos/pressupostos/row/suposicoes_row.R")
+} else {
+  source(paste0("R/modulos/pressupostos/row/",parametros$row))
+}
 
 # Demais pressupostos
 # (ex.: depreciação e problema da redução)
@@ -63,7 +71,11 @@ source("R/modulos/transformar.R")
 # Transferências
 ## Calcula as transferências de valor entre países.
 ## Reduz as matrizes IO em matrizes País x País.
-source("R/modulos/transferencias.R")
+if (is.null(parametros$transferencias)) {
+  source("R/modulos/transferencias.R")
+} else {
+  source(paste0("R/modulos/",parametros$transferencias))
+}
 
 # Cestas de consumo
 ## Calcula as cestas de consumo da população ocupada e assalariada
@@ -99,7 +111,7 @@ closeAllConnections()
 
 caminho <- paste0("resultados/", versao_resultado)
 
-print("Granvando...")
+print("Gravando...")
 saveRDS(m_io_filtros,paste0(caminho,"/m_io_filtros.RDS"))
 saveRDS(m_io,paste0(caminho,"/m_io.RDS"))
 saveRDS(m_paises,paste0(caminho,"/m_paises.RDS"))
