@@ -137,13 +137,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
 
 ### Sim certamente possível
   output$exportacoes_monetarias <- renderD3tree2({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
     
     ##Preparación del filtro del treemap interactivo
     agrupamento <- c("pais_origen","pais_d","sect_d")
@@ -179,13 +173,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     )
 
   output$exportacoes_valores <- renderPlot({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
     if (selecao < 4) {
       dados <- as.data.table(m_io_13[as.character(input$ano_transacoes),
                                      "exportações.pm",
@@ -206,13 +194,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     }})
 
   output$exportacoes_transferencias <- renderPlot({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
     if (selecao == 1) {
       temp <- m_paises_13[as.character(input$ano_transacoes),
                           "transferências.valores",
@@ -245,13 +227,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     rownames = TRUE)
 
   output$importacoes_monetarias <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
     if (selecao == 1) {
       m_paises_13[as.character(input$ano_transacoes),
                   "exportações.pm",
@@ -282,13 +258,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     rownames = TRUE)
 
   output$importacoes_valores <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
     if (selecao == 1) {
       m_paises_13[as.character(input$ano_transacoes),
                   "exportações.valores",
@@ -320,13 +290,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     rownames = TRUE)
 
   output$importacoes_transferencias <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
     if (selecao == 1) {
       m_paises_13[as.character(input$ano_transacoes),
                   "transferências.valores",
@@ -357,13 +321,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     rownames = TRUE)
 
   output$saldo_monetarias <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
     if (selecao == 1) {
       m_paises_13[as.character(input$ano_transacoes),
                   "exportações.pm",
@@ -420,13 +378,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     rownames = TRUE)
 
   output$saldo_valores <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
     if (selecao == 1) {
       m_paises_13[as.character(input$ano_transacoes),
                   "exportações.valores",
@@ -483,13 +435,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     rownames = TRUE)
 
   output$saldo_transferencias <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
     if (selecao == 1) {
       m_paises_13[as.character(input$ano_transacoes),
                   "transferências.valores",
@@ -550,13 +496,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
 
   ## Juntar tanto as exportações quanto as importações
   output$td_envios_recebimentos <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
     if (selecao == 1) {
       temp1 <- m_paises_13[as.character(input$ano_transacoes),
                            "transferências_produtivas.valores",
@@ -578,13 +518,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
   }, rownames = TRUE)
 
   output$td_envios_recebimentos_saldo <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
     if (selecao == 1){
       m_paises_13[as.character(input$ano_transacoes),
                            "transferências_produtivas.valores",
@@ -602,13 +536,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
 
 
   output$improdutivos_envios_recebimentos <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
     if (selecao == 1){
       temp1 <- m_paises_13[as.character(input$ano_transacoes),
                            "transferências.valores",
@@ -635,13 +563,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
 
 
   output$improdutivos_envios_recebimentos_saldo <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
     if (selecao == 1){
       temp1 <- m_paises_13[as.character(input$ano_transacoes),
                            "transferências.valores",
