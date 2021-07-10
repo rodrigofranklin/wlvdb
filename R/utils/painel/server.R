@@ -39,7 +39,7 @@ server <- function(input, output, session) {
   }
   d <- reactive({ 
     d <- as.data.table(m_io_13[as.character(input$ano_transacoes),
-                               "exportações.pm",
+                               "exportacoes_pm",
                                grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),],
                        keep.rownames = "paisect")
     d <- d%>%separate(paisect,c("pais_origen","sector_origen"),sep="\\.")%>%
@@ -71,8 +71,8 @@ server <- function(input, output, session) {
 
   output$setores_pais_13 <- renderDataTable(
     tabmil(sea_setores_13[as.character(input$ano_pais),
-                   input$indicador_pais,
-                   grep(input$pais, colnames(sea_setores_13[1,,]))])%>%
+                   input$indicador_pais,,
+                   input$pais])%>%
       separate(var,c("Legenda","Code"),sep="\\.")%>%left_join(setorest)%>%left_join(paises)%>%
       select(pais=`Países`,setor=pt,value = x),
 #    rownames = TRUE,
@@ -85,8 +85,8 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
 
   output$setores_pais_16 <- renderDataTable(
     tabmil(sea_setores_16[as.character(input$ano_pais),
-                   input$indicador_pais,
-                   grep(input$pais, colnames(sea_setores_16[1,,]))])%>%
+                   input$indicador_pais,,
+                   input$pais])%>%
       separate(var,c("Legenda","Code"),sep="\\.")%>%left_join(setorest)%>%left_join(paises)%>%
       select(pais=`Países`,setor=pt,value = x),
     #rownames = TRUE,
@@ -156,7 +156,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     if (selecao < 4) {
       #Prepara versão do BD
       dados <- as.data.table(m_io_13[as.character(input$ano_transacoes),
-                                     "exportações.pm",
+                                     "exportacoes_pm",
                                      grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),],
                              keep.rownames = "paisect")%>%
         separate(paisect,c("pais_origen","sector_origen"),sep="\\.")%>%
@@ -165,7 +165,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
       
     } else {
       dados <- as.data.table(m_io_16[as.character(input$ano_transacoes),
-                                     "exportações.pm",
+                                     "exportacoes_pm",
                                      grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),],
                              keep.rownames = "paisect")%>%
         separate(paisect,c("pais_origen","sector_origen"),sep="\\.")%>%
@@ -188,19 +188,19 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                       "WIOD16Por setor de destino" = 6)
     if (selecao < 4) {
       dados <- as.data.table(m_io_13[as.character(input$ano_transacoes),
-                                     "exportações.pm",
+                                     "exportacoes_pm",
                                      grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),])
     } else if (selecao > 3) {
       m_paises_16[as.character(input$ano_transacoes),
-                  "exportações.valores",
+                  "exportacoes.valores",
                   input$pais_transacoes,]
     } else if (selecao == 5) {
       rowSums(m_io_16[as.character(input$ano_transacoes),
-                      "exportações.valores",
+                      "exportacoes.valores",
                       grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),])
     } else if (selecao == 6) {
       colSums(m_io_16[as.character(input$ano_transacoes),
-                      "exportações.valores",
+                      "exportacoes.valores",
                       grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
                       -grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
     }})
@@ -215,30 +215,30 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                       "WIOD16Por setor de destino" = 6)
     if (selecao == 1) {
       temp <- m_paises_13[as.character(input$ano_transacoes),
-                          "transferências.valores",
+                          "transferencias_valores",
                           input$pais_transacoes,]
       dados <- data.frame(valor = temp, pais = names(temp))
       treemap(dados, index="pais", vSize = "valor", type = "value")
     } else if (selecao == 2) {
       rowSums(m_io_13[as.character(input$ano_transacoes),
-                      "transferências.valores",
+                      "transferencias_valores",
                       grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),])
     } else if (selecao == 3) {
       colSums(m_io_13[as.character(input$ano_transacoes),
-                      "transferências.valores",
+                      "transferencias_valores",
                       grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
                       -grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))])
     } else if (selecao == 4) {
       m_paises_16[as.character(input$ano_transacoes),
-                  "transferências.valores",
+                  "transferencias_valores",
                   input$pais_transacoes,]
     } else if (selecao == 5) {
       rowSums(m_io_16[as.character(input$ano_transacoes),
-                      "transferências.valores",
+                      "transferencias_valores",
                       grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),])
     } else if (selecao == 6) {
       colSums(m_io_16[as.character(input$ano_transacoes),
-                      "transferências.valores",
+                      "transferencias_valores",
                       grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
                       -grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
     }},
@@ -254,29 +254,29 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                       "WIOD16Por setor de destino" = 6)
     if (selecao == 1) {
       m_paises_13[as.character(input$ano_transacoes),
-                  "exportações.pm",
+                  "exportacoes_pm",
                   ,input$pais_transacoes]
     } else if (selecao == 2) {
       rowSums(m_io_13[as.character(input$ano_transacoes),
-                      "exportações.pm",
+                      "exportacoes_pm",
                       -grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
                       grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))])
     } else if (selecao == 3) {
       colSums(m_io_13[as.character(input$ano_transacoes),
-                      "exportações.pm",
+                      "exportacoes_pm",
                       ,grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))])
     } else if (selecao == 4) {
       m_paises_16[as.character(input$ano_transacoes),
-                  "exportações.pm",
+                  "exportacoes_pm",
                   ,input$pais_transacoes]
     } else if (selecao == 5) {
       rowSums(m_io_16[as.character(input$ano_transacoes),
-                      "exportações.pm",
+                      "exportacoes_pm",
                       -grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
                       grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
     } else if (selecao == 6) {
       colSums(m_io_16[as.character(input$ano_transacoes),
-                      "exportações.pm",
+                      "exportacoes_pm",
                       ,grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
     }},
     rownames = TRUE)
@@ -291,30 +291,30 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                       "WIOD16Por setor de destino" = 6)
     if (selecao == 1) {
       m_paises_13[as.character(input$ano_transacoes),
-                  "exportações.valores",
+                  "exportacoes.valores",
                   ,input$pais_transacoes]
     } else if (selecao == 2) {
       rowSums(m_io_13[as.character(input$ano_transacoes),
-                      "exportações.valores",
+                      "exportacoes.valores",
                       -grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
                       grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))],
               na.rm = TRUE)
     } else if (selecao == 3) {
       colSums(m_io_13[as.character(input$ano_transacoes),
-                      "exportações.valores",
+                      "exportacoes.valores",
                       ,grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))])
     } else if (selecao == 4) {
       m_paises_16[as.character(input$ano_transacoes),
-                  "exportações.valores",
+                  "exportacoes.valores",
                   ,input$pais_transacoes]
     } else if (selecao == 5) {
       rowSums(m_io_16[as.character(input$ano_transacoes),
-                      "exportações.valores",
+                      "exportacoes.valores",
                       -grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
                       grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
     } else if (selecao == 6) {
       colSums(m_io_16[as.character(input$ano_transacoes),
-                      "exportações.valores",
+                      "exportacoes.valores",
                       ,grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
     }},
     rownames = TRUE)
@@ -329,29 +329,29 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                       "WIOD16Por setor de destino" = 6)
     if (selecao == 1) {
       m_paises_13[as.character(input$ano_transacoes),
-                  "transferências.valores",
+                  "transferencias_valores",
                   ,input$pais_transacoes]
     } else if (selecao == 2) {
       rowSums(m_io_13[as.character(input$ano_transacoes),
-                      "transferências.valores",
+                      "transferencias_valores",
                       -grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
                       grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))])
     } else if (selecao == 3) {
       colSums(m_io_13[as.character(input$ano_transacoes),
-                      "transferências.valores",
+                      "transferencias_valores",
                       ,grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))])
     } else if (selecao == 4) {
       m_paises_16[as.character(input$ano_transacoes),
-                  "transferências.valores",
+                  "transferencias_valores",
                   ,input$pais_transacoes]
     } else if (selecao == 5) {
       rowSums(m_io_16[as.character(input$ano_transacoes),
-                      "transferências.valores",
+                      "transferencias_valores",
                       -grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
                       grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
     } else if (selecao == 6) {
       colSums(m_io_16[as.character(input$ano_transacoes),
-                      "transferências.valores",
+                      "transferencias_valores",
                       ,grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
     }},
     rownames = TRUE)
@@ -366,54 +366,54 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                       "WIOD16Por setor de destino" = 6)
     if (selecao == 1) {
       m_paises_13[as.character(input$ano_transacoes),
-                  "exportações.pm",
+                  "exportacoes_pm",
                   input$pais_transacoes,] -
       m_paises_13[as.character(input$ano_transacoes),
-                  "exportações.pm",
+                  "exportacoes_pm",
                   ,input$pais_transacoes]
     } else if (selecao == 2) {
       - colSums(m_io_13[as.character(input$ano_transacoes),
-                        "exportações.pm",
+                        "exportacoes_pm",
                         ,grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))],
                 na.rm = TRUE) +
       rowSums(m_io_13[as.character(input$ano_transacoes),
-                      "exportações.pm",
+                      "exportacoes_pm",
                       match(grep(input$pais_transacoes,colnames(m_io_13[1,1,,])),
                             grep(input$pais_transacoes,rownames(m_io_13[1,1,,]))),],
               na.rm = TRUE)
     } else if (selecao == 3) {
       colSums(m_io_13[as.character(input$ano_transacoes),
-                      "exportações.pm",
+                      "exportacoes_pm",
                       grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
                       -grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))]) -
       rowSums(m_io_13[as.character(input$ano_transacoes),
-                      "exportações.pm",
+                      "exportacoes_pm",
                       -grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
                       grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))])
     } else if (selecao == 4) {
       m_paises_16[as.character(input$ano_transacoes),
-                  "exportações.pm",
+                  "exportacoes_pm",
                   input$pais_transacoes,] -
       m_paises_16[as.character(input$ano_transacoes),
-                  "exportações.pm",
+                  "exportacoes_pm",
                   ,input$pais_transacoes]
     } else if (selecao == 5) {
       - colSums(m_io_16[as.character(input$ano_transacoes),
-                        "exportações.pm",
+                        "exportacoes_pm",
                         ,grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))],
                 na.rm = TRUE) +
         rowSums(m_io_16[as.character(input$ano_transacoes),
-                        "exportações.pm",
+                        "exportacoes_pm",
                         match(grep(input$pais_transacoes,colnames(m_io_16[1,1,,])),
                               grep(input$pais_transacoes,rownames(m_io_16[1,1,,]))),],
                 na.rm = TRUE)
     } else if (selecao == 6) {
       colSums(m_io_16[as.character(input$ano_transacoes),
-                      "exportações.pm",
+                      "exportacoes_pm",
                       grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
                       -grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))]) -
         rowSums(m_io_16[as.character(input$ano_transacoes),
-                        "exportações.pm",
+                        "exportacoes_pm",
                         -grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
                         grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
     }},
@@ -429,54 +429,54 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                       "WIOD16Por setor de destino" = 6)
     if (selecao == 1) {
       m_paises_13[as.character(input$ano_transacoes),
-                  "exportações.valores",
+                  "exportacoes.valores",
                   input$pais_transacoes,] -
         m_paises_13[as.character(input$ano_transacoes),
-                    "exportações.valores",
+                    "exportacoes.valores",
                     ,input$pais_transacoes]
     } else if (selecao == 2) {
       - colSums(m_io_13[as.character(input$ano_transacoes),
-                        "exportações.valores",
+                        "exportacoes.valores",
                         ,grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))],
                 na.rm = TRUE) +
         rowSums(m_io_13[as.character(input$ano_transacoes),
-                        "exportações.valores",
+                        "exportacoes.valores",
                         match(grep(input$pais_transacoes,colnames(m_io_13[1,1,,])),
                               grep(input$pais_transacoes,rownames(m_io_13[1,1,,]))),],
                 na.rm = TRUE)
     } else if (selecao == 3) {
       colSums(m_io_13[as.character(input$ano_transacoes),
-                      "exportações.valores",
+                      "exportacoes.valores",
                       grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
                       -grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))]) -
         rowSums(m_io_13[as.character(input$ano_transacoes),
-                        "exportações.valores",
+                        "exportacoes.valores",
                         -grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
                         grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))])
     } else if (selecao == 4) {
       m_paises_16[as.character(input$ano_transacoes),
-                  "exportações.valores",
+                  "exportacoes.valores",
                   input$pais_transacoes,] -
         m_paises_16[as.character(input$ano_transacoes),
-                    "exportações.valores",
+                    "exportacoes.valores",
                     ,input$pais_transacoes]
     } else if (selecao == 5) {
       - colSums(m_io_16[as.character(input$ano_transacoes),
-                        "exportações.valores",
+                        "exportacoes.valores",
                         ,grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))],
                 na.rm = TRUE) +
         rowSums(m_io_16[as.character(input$ano_transacoes),
-                        "exportações.valores",
+                        "exportacoes.valores",
                         match(grep(input$pais_transacoes,colnames(m_io_16[1,1,,])),
                               grep(input$pais_transacoes,rownames(m_io_16[1,1,,]))),],
                 na.rm = TRUE)
     } else if (selecao == 6) {
       colSums(m_io_16[as.character(input$ano_transacoes),
-                      "exportações.valores",
+                      "exportacoes.valores",
                       grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
                       -grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))]) -
         rowSums(m_io_16[as.character(input$ano_transacoes),
-                        "exportações.valores",
+                        "exportacoes.valores",
                         -grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
                         grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
     }},
@@ -492,54 +492,54 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                       "WIOD16Por setor de destino" = 6)
     if (selecao == 1) {
       m_paises_13[as.character(input$ano_transacoes),
-                  "transferências.valores",
+                  "transferencias_valores",
                   input$pais_transacoes,] -
         m_paises_13[as.character(input$ano_transacoes),
-                    "transferências.valores",
+                    "transferencias_valores",
                     ,input$pais_transacoes]
     } else if (selecao == 2) {
       - colSums(m_io_13[as.character(input$ano_transacoes),
-                        "transferências.valores",
+                        "transferencias_valores",
                         ,grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))],
                 na.rm = TRUE) +
         rowSums(m_io_13[as.character(input$ano_transacoes),
-                        "transferências.valores",
+                        "transferencias_valores",
                         match(grep(input$pais_transacoes,colnames(m_io_13[1,1,,])),
                               grep(input$pais_transacoes,rownames(m_io_13[1,1,,]))),],
                 na.rm = TRUE)
     } else if (selecao == 3) {
       colSums(m_io_13[as.character(input$ano_transacoes),
-                      "transferências.valores",
+                      "transferencias_valores",
                       grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
                       -grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))]) -
         rowSums(m_io_13[as.character(input$ano_transacoes),
-                        "transferências.valores",
+                        "transferencias_valores",
                         -grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
                         grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))])
     } else if (selecao == 4) {
       m_paises_16[as.character(input$ano_transacoes),
-                  "transferências.valores",
+                  "transferencias_valores",
                   input$pais_transacoes,] -
         m_paises_16[as.character(input$ano_transacoes),
-                    "transferências.valores",
+                    "transferencias_valores",
                     ,input$pais_transacoes]
     } else if (selecao == 5) {
       - colSums(m_io_16[as.character(input$ano_transacoes),
-                        "transferências.valores",
+                        "transferencias_valores",
                         ,grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))],
                 na.rm = TRUE) +
         rowSums(m_io_16[as.character(input$ano_transacoes),
-                        "transferências.valores",
+                        "transferencias_valores",
                         match(grep(input$pais_transacoes,colnames(m_io_16[1,1,,])),
                               grep(input$pais_transacoes,rownames(m_io_16[1,1,,]))),],
                 na.rm = TRUE)
     } else if (selecao == 6) {
       colSums(m_io_16[as.character(input$ano_transacoes),
-                      "transferências.valores",
+                      "transferencias_valores",
                       grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
                       -grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))]) -
         rowSums(m_io_16[as.character(input$ano_transacoes),
-                        "transferências.valores",
+                        "transferencias_valores",
                         -grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
                         grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
     }},
@@ -611,13 +611,13 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                       "WIOD16Por setor de destino" = 6)
     if (selecao == 1){
       temp1 <- m_paises_13[as.character(input$ano_transacoes),
-                           "transferências.valores",
+                           "transferencias_valores",
                            input$pais_transacoes,] -
         m_paises_13[as.character(input$ano_transacoes),
                            "transferências_produtivas.valores",
                            input$pais_transacoes,]
       temp2 <-  -(m_paises_13[as.character(input$ano_transacoes),
-                            "transferências.valores",
+                            "transferencias_valores",
                             ,input$pais_transacoes] -
         m_paises_13[as.character(input$ano_transacoes),
                     "transferências_produtivas.valores",
@@ -644,13 +644,13 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                       "WIOD16Por setor de destino" = 6)
     if (selecao == 1){
       temp1 <- m_paises_13[as.character(input$ano_transacoes),
-                           "transferências.valores",
+                           "transferencias_valores",
                            input$pais_transacoes,] -
         m_paises_13[as.character(input$ano_transacoes),
                     "transferências_produtivas.valores",
                     input$pais_transacoes,] -
         (m_paises_13[as.character(input$ano_transacoes),
-                              "transferências.valores",
+                              "transferencias_valores",
                               ,input$pais_transacoes] -
            m_paises_13[as.character(input$ano_transacoes),
                                 "transferências_produtivas.valores",
@@ -671,10 +671,10 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                                    "transferências_produtivas.valores",
                                    ,input$pais_transacoes])/
                    sum(m_paises_13[as.character(input$ano_transacoes),
-                                   "transferências.valores",
+                                   "transferencias_valores",
                                    input$pais_transacoes,] +
                          m_paises_13[as.character(input$ano_transacoes),
-                                     "transferências.valores",
+                                     "transferencias_valores",
                                      ,input$pais_transacoes]))
   })
   textOutput("proporcao_td_transferencias_saldo")
