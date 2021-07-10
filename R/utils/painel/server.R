@@ -133,15 +133,31 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
         separate(paisect_d,c("pais_d","sect_d"),sep="\\.")
     }
     #genera el resultado interactivo
-    d3tree2(treemap(dados, index=agrupamento, vSize = "valor", type = "value",
-                    palette = "Set1"))
+    d3tree2(treemap(dados, index = agrupamento, vSize = "valor", 
+                    type = "value", palette = "Set1"))
     }
     )
+  
+  linhas_13 <- reactive({
+    encontrar_pais(m_io_13, input$pais_transacoes, rownames)
+    })
+  
+  colunas_13 <- reactive({
+    encontrar_pais(m_io_13, input$pais_transacoes, colnames)
+  })
+  
+  linhas_16 <- reactive({
+    encontrar_pais(m_io_16, input$pais_transacoes, rownames)
+  })
+  
+  colunas_16 <- reactive({
+    encontrar_pais(m_io_16, input$pais_transacoes, colnames)
+  })
 
   output$exportacoes_valores <- renderPlot({
     selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
+    
     if (selecao < 4) {
-      paises <- encontrar_pais(m_io_13, input$pais_transacoes, rownames)
       dados <- m_io_13 %>% 
         agregado(input$ano_transacoes,"exportações.pm", paises2) %>% 
         as.data.table()
@@ -152,22 +168,20 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                  input$pais_transacoes)
       
     } else if (selecao == 5) {
-      paises <- encontrar_pais(m_io_16, input$pais_transacoes, rownames)
       m_io_16 %>% 
         agregado(input$ano_transacoes, "exportações.valores", 
-                 paises) %>% 
+                 linhas_16()) %>% 
         rowSums()
     } else if (selecao == 6) {
-      paises <- encontrar_pais(m_io_16, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_16, input$pais_transacoes, colnames)
       m_io_16 %>% 
-        agregado(input$ano_transacoes, "exportações.valores", paises) %>% 
-        limitar_colunas(-paises2) %>% 
+        agregado(input$ano_transacoes, "exportações.valores", linhas_16()) %>% 
+        limitar_colunas(-colunas_16()) %>% 
         colSums()
     }})
 
   output$exportacoes_transferencias <- renderPlot({
     selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
+    
     if (selecao == 1) {
       temp <- m_paises_13 %>% 
         agregado(input$ano_transacoes,
@@ -176,22 +190,17 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
       dados <- data.frame(valor = temp, pais = names(temp))
       treemap(dados, index="pais", vSize = "valor", type = "value")
     } else if (selecao == 2) {
-      paises <- encontrar_pais(m_io_13, input$pais_transacoes, rownames)
-      
       m_io_13 %>% 
         agregado(input$ano_transacoes,
                  "transferências.valores",
-                 paises) %>% 
+                 linhas_13()) %>% 
         rowSums()
     } else if (selecao == 3) {
-      paises <- encontrar_pais(m_io_13, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_13, input$pais_transacoes, colnames)
-      
       m_io_13 %>% 
         agregado(input$ano_transacoes,
                  "transferências.valores",
-                 paises) %>% 
-        limitar_colunas(-paises2) %>% 
+                 linhas_13()) %>% 
+        limitar_colunas(-colunas_16()) %>% 
         colSums()
     } else if (selecao == 4) {
       m_paises_16 %>% 
@@ -200,22 +209,17 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                  input$pais_transacoes)
       
     } else if (selecao == 5) {
-      paises <- encontrar_pais(m_io_16, input$pais_transacoes, rownames)
-      
       m_io_16 %>% 
         agregado(input$ano_transacoes,
                  "transferências.valores",
-                 paises) %>% 
+                 linhas_16()) %>% 
         rowSums()
     } else if (selecao == 6) {
-      paises <- encontrar_pais(m_io_16, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_16, input$pais_transacoes, colnames)
-      
       m_io_16 %>% 
         agregado(input$ano_transacoes,
                  "transferências.valores",
-                 paises) %>% 
-        limitar_colunas(-paises2) %>% 
+                 linhas_16()) %>% 
+        limitar_colunas(-colunas_16()) %>% 
         colSums()
     }},
     rownames = TRUE)
@@ -229,23 +233,18 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                  TRUE) %>% 
         limitar_colunas(input$pais_transacoes)
     } else if (selecao == 2) {
-      paises <- encontrar_pais(m_io_13, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_13, input$pais_transacoes, colnames)
-      
       m_io_13 %>% 
         agregado(input$ano_transacoes,
                  "exportações.pm",
-                 -paises) %>% 
-        limitar_colunas(paises2) %>% 
+                 -linhas_13()) %>% 
+        limitar_colunas(colunas_13()) %>% 
         rowSums()
     } else if (selecao == 3) {
-      paises <- encontrar_pais(m_io_13, input$pais_transacoes, colnames)
-      
       m_io_13 %>% 
         agregado(input$ano_transacoes,
                  "exportações.pm",
                  TRUE) %>% 
-        limitar_colunas(paises) %>% 
+        limitar_colunas(colunas_13()) %>% 
         colSums()
     } else if (selecao == 4) {
       m_paises_16 %>% 
@@ -254,116 +253,93 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                  TRUE) %>% 
         limitar_colunas(input$pais_transacoes)
     } else if (selecao == 5) {
-      paises <- encontrar_pais(m_io_16, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_16, input$pais_transacoes, colnames)
-      
       m_io_16 %>% 
         agregado(input$ano_transacoes,
                  "exportações.pm",
-                 -paises) %>% 
-        limitar_colunas(paises2) %>% 
+                 -linhas_16()) %>% 
+        limitar_colunas(colunas_16()) %>% 
         rowSums()
     } else if (selecao == 6) {
-      paises <- encontrar_pais(m_io_16, input$pais_transacoes, colnames)
-      
       m_io_16 %>% 
         agregado(input$ano_transacoes,
                  "exportações.pm",
                  TRUE) %>% 
-        limitar_colunas(paises) %>% 
+        limitar_colunas(colunas_16()) %>% 
         colSums()
     }},
     rownames = TRUE)
   
   output$importacoes_valores <- renderTable({
     selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
+    
     if (selecao == 1) {
       m_paises_13 %>% 
         agregado(input$ano_transacoes, "exportações.valores", TRUE) %>% 
           limitar_colunas(input$pais_transacoes)
     } else if (selecao == 2) {
-      paises <- encontrar_pais(m_io_13, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_13, input$pais_transacoes, colnames)
-      
       m_io_13 %>% 
-        agregado(input$ano_transacoes, "exportações.valores", -paises) %>% 
-        limitar_colunas(paises2) %>% 
+        agregado(input$ano_transacoes, "exportações.valores", -linhas_13()) %>% 
+        limitar_colunas(colunas_13()) %>% 
         rowSums(na.rm = TRUE)
     } else if (selecao == 3) {
-      paises <- encontrar_pais(m_io_13, input$pais_transacoes, colnames)
-      
       m_io_13 %>% 
         agregado(input$ano_transacoes, "exportações.valores", TRUE) %>% 
-        limitar_colunas(paises) %>% 
+        limitar_colunas(colunas_13()) %>% 
         colSums()
     } else if (selecao == 4) {
       m_paises_16 %>% 
         agregado(input$ano_transacoes, "exportações.valores", TRUE) %>% 
         limitar_colunas(input$pais_transacoes)
     } else if (selecao == 5) {
-      paises <- encontrar_pais(m_io_16, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_16, input$pais_transacoes, colnames)
-      
       m_io_16 %>% 
-        agregado(input$ano_transacoes, "exportações.valores", -paises) %>% 
-        limitar_colunas(paises2) %>% 
+        agregado(input$ano_transacoes, "exportações.valores", -linhas_16()) %>% 
+        limitar_colunas(colunas_16()) %>% 
         rowSums(na.rm = TRUE)
     } else if (selecao == 6) {
-      paises <- encontrar_pais(m_io_16, input$pais_transacoes, colnames)
-      
       m_io_16 %>% 
         agregado(input$ano_transacoes, "exportações.valores", TRUE) %>% 
-        limitar_colunas(paises) %>% 
+        limitar_colunas(colunas_16()) %>% 
         colSums()
     }},
     rownames = TRUE)
 
   output$importacoes_transferencias <- renderTable({
     selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
+    
     if (selecao == 1) {
       m_paises_13 %>% 
         agregado(input$ano_transacoes, "transferências.valores", TRUE) %>% 
         limitar_colunas(input$pais_transacoes)
     } else if (selecao == 2) {
-      paises <- encontrar_pais(m_io_13, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_13, input$pais_transacoes, colnames)
-      
       m_io_13 %>% 
-        agregado(input$ano_transacoes, "transferências.valores", -paises) %>% 
-        limitar_colunas(paises2) %>% 
+        agregado(input$ano_transacoes, "transferências.valores", -linhas_13()) %>% 
+        limitar_colunas(colunas_13()) %>% 
         rowSums(na.rm = TRUE)
     } else if (selecao == 3) {
-      paises <- encontrar_pais(m_io_13, input$pais_transacoes, colnames)
-      
       m_io_13 %>% 
         agregado(input$ano_transacoes, "transferências.valores", TRUE) %>% 
-        limitar_colunas(paises) %>% 
+        limitar_colunas(colunas_13()) %>% 
         colSums()
     } else if (selecao == 4) {
       m_paises_16 %>% 
         agregado(input$ano_transacoes, "transferências.valores", TRUE) %>% 
         limitar_colunas(input$pais_transacoes)
     } else if (selecao == 5) {
-      paises <- encontrar_pais(m_io_16, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_16, input$pais_transacoes, colnames)
-      
       m_io_16 %>% 
-        agregado(input$ano_transacoes, "transferências.valores", -paises) %>% 
-        limitar_colunas(paises2) %>% 
+        agregado(input$ano_transacoes, "transferências.valores", -linhas_16()) %>% 
+        limitar_colunas(colunas_16()) %>% 
         rowSums(na.rm = TRUE)
     } else if (selecao == 6) {
-      paises <- encontrar_pais(m_io_16, input$pais_transacoes, colnames)
-      
       m_io_16 %>% 
         agregado(input$ano_transacoes, "transferências.valores", TRUE) %>% 
-        limitar_colunas(paises) %>% 
+        limitar_colunas(colunas_16()) %>% 
         colSums()
     }},
     rownames = TRUE)
   
-  # 3
   output$saldo_monetarias <- renderTable({
     selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
+    
     if (selecao == 1) {
       m_paises_13 %>% 
         agregado(input$ano_transacoes, "exportações.pm", input$pais_transacoes) %>% 
@@ -373,13 +349,11 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
             limitar_colunas(input$pais_transacoes)
         )
     } else if (selecao == 2) {
-      paises <- encontrar_pais(m_io_13, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_13, input$pais_transacoes, colnames)
-      linhas <- match(paises2, paises)
+      linhas <- match(colunas_13(), linhas_13())
       
       m_io_13 %>% 
         agregado(input$ano_transacoes, "exportações.pm", TRUE) %>% 
-        limitar_colunas(paises2) %>% 
+        limitar_colunas(colunas_13()) %>% 
         colSums(na.rm = TRUE) %>%
         magrittr::multiply_by(-1) %>% 
         magrittr::add(
@@ -388,17 +362,14 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
             rowSums(na.rm = TRUE)
         )
     } else if (selecao == 3) {
-      paises <- encontrar_pais(m_io_13, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_13, input$pais_transacoes, colnames)
-      
       m_io_13 %>% 
-        agregado(input$ano_transacoes, "exportações.pm", paises) %>% 
-        limitar_colunas(-paises2) %>% 
+        agregado(input$ano_transacoes, "exportações.pm", linhas_13()) %>% 
+        limitar_colunas(-colunas_13()) %>% 
         colSums() %>% 
         magrittr::subtract(
           m_io_13 %>% 
-            agregado(input$ano_transacoes, "exportações.pm", -paises) %>% 
-            limitar_colunas(paises2) %>% 
+            agregado(input$ano_transacoes, "exportações.pm", -linhas_13()) %>% 
+            limitar_colunas(colunas_13()) %>% 
             rowSums()
         )
     } else if (selecao == 4) {
@@ -410,13 +381,11 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
             limitar_colunas(input$pais_transacoes)
         )
     } else if (selecao == 5) {
-      paises <- encontrar_pais(m_io_16, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_16, input$pais_transacoes, colnames)
-      linhas <- match(paises2, paises)
+      linhas <- match(colunas_16(), linhas_16())
       
       m_io_16 %>% 
         agregado(input$ano_transacoes, "exportações.pm", TRUE) %>% 
-        limitar_colunas(paises2) %>% 
+        limitar_colunas(colunas_16()) %>% 
         colSums(na.rm = TRUE) %>%
         magrittr::multiply_by(-1) %>% 
         magrittr::add(
@@ -425,23 +394,20 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
             rowSums(na.rm = TRUE)
         )
     } else if (selecao == 6) {
-      paises <- encontrar_pais(m_io_16, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_16, input$pais_transacoes, colnames)
-      
       m_io_16 %>% 
         agregado(input$ano_transacoes, "exportações.pm", paises) %>% 
-        limitar_colunas(-paises2) %>% 
+        limitar_colunas(-colunas_16()) %>% 
         colSums() %>% 
         magrittr::subtract(
           m_io_16 %>% 
-            agregado(input$ano_transacoes, "exportações.pm", -paises) %>% 
-            limitar_colunas(paises2) %>% 
+            agregado(input$ano_transacoes, "exportações.pm", -linhas_16()) %>% 
+            limitar_colunas(colunas_16()) %>% 
             rowSums()
         )
     }},
     rownames = TRUE)
   
-  # 4 Parei aqui
+  
   output$saldo_valores <- renderTable({
     selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
     if (selecao == 1) {
@@ -453,13 +419,11 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
             limitar_colunas(input$pais_transacoes)
         )
     } else if (selecao == 2) {
-      paises <- encontrar_pais(m_io_13, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_13, input$pais_transacoes, colnames)
-      linhas <- match(paises2, paises)
+      linhas <- match(colunas_13(), linhas_13())
       
       m_io_13 %>% 
         agregado(input$ano_transacoes, "exportações.valores", TRUE) %>% 
-        limitar_colunas(paises2) %>% 
+        limitar_colunas(colunas_13()) %>% 
         colSums(na.rm = TRUE) %>%
         magrittr::multiply_by(-1) %>% 
         magrittr::add(
@@ -468,39 +432,34 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
             rowSums(na.rm = TRUE)
         )
     } else if (selecao == 3) {
-      paises <- encontrar_pais(m_io_13, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_13, input$pais_transacoes, colnames)
-      
-        m_io_13 %>% 
-          agregado(input$ano_transacoes,
-                   "exportações.valores",
-                   paises) %>% 
-          limitar_colunas(-paises2) %>% 
-          colSums() %>% 
-          magrittr::subtract(
-            m_io_13 %>% 
-              agregado(input$ano_transacoes,
-                       "exportações.valores",
-                       -paises) %>% 
-              limitar_colunas(paises2) %>% 
-              rowSums()
-          )
+      m_io_13 %>% 
+        agregado(input$ano_transacoes,
+                 "exportações.valores",
+                 linhas_13()) %>% 
+        limitar_colunas(-colunas_13()) %>% 
+        colSums() %>% 
+        magrittr::subtract(
+          m_io_13 %>% 
+            agregado(input$ano_transacoes,
+                     "exportações.valores",
+                     -linhas_13()) %>% 
+            limitar_colunas(colunas_13()) %>% 
+            rowSums()
+        )
     } else if (selecao == 4) {
-        m_paises_16 %>% 
-          agregado(input$ano_transacoes, "exportações.valores", input$pais_transacoes) %>% 
-          magrittr::subtract(
+      m_paises_16 %>% 
+        agregado(input$ano_transacoes, "exportações.valores", input$pais_transacoes) %>% 
+        magrittr::subtract(
             m_paises_16 %>% 
               agregado(input$ano_transacoes, "exportações.valores", TRUE) %>% 
               limitar_colunas(input$pais_transacoes)
           )
     } else if (selecao == 5) {
-      paises <- encontrar_pais(m_io_16, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_16, input$pais_transacoes, colnames)
-      linhas <- match(paises2, paises)
+      linhas <- match(colunas_16(), linhas_16())
       
         m_io_16 %>% 
           agregado(input$ano_transacoes, "exportações.valores", TRUE) %>% 
-          limitar_colunas(paises2) %>% 
+          limitar_colunas(colunas_16()) %>% 
           colSums(na.rm = TRUE) %>%
           magrittr::multiply_by(-1) %>% 
           magrittr::add(
@@ -509,21 +468,18 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
               rowSums(na.rm = TRUE)
           )
     } else if (selecao == 6) {
-      paises <- encontrar_pais(m_io_16, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_16, input$pais_transacoes, colnames)
-      
       m_io_16 %>% 
         agregado(input$ano_transacoes,
                  "exportações.valores",
-                 paises) %>% 
-        limitar_colunas(-paises2) %>% 
+                 linhas_16()) %>% 
+        limitar_colunas(-colunas_16()) %>% 
         colSums() %>% 
         magrittr::subtract(
           m_io_16 %>% 
             agregado(input$ano_transacoes,
                      "exportações.valores",
-                     -paises) %>% 
-            limitar_colunas(paises2) %>% 
+                     -linhas_16()) %>% 
+            limitar_colunas(colunas_16()) %>% 
             rowSums()
         )
     }},
@@ -544,15 +500,13 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
             limitar_colunas(input$pais_transacoes)
         )
     } else if (selecao == 2) {
-      paises <- encontrar_pais(m_io_13, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_13, input$pais_transacoes, colnames)
-      linhas <- match(paises2, paises)
+      linhas <- match(colunas_13(), linhas_13())
       
       m_io_13 %>% 
         agregado(input$ano_transacoes,
                  "transferências.valores",
                  TRUE) %>% 
-        limitar_colunas(paises2) %>% 
+        limitar_colunas(colunas_13()) %>% 
         colSums(na.rm = TRUE) %>%
         magrittr::multiply_by(-1) %>% 
         magrittr::add(
@@ -563,21 +517,18 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
             rowSums(na.rm = TRUE)
         )
     } else if (selecao == 3) {
-      paises <- encontrar_pais(m_io_13, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_13, input$pais_transacoes, colnames)
-      
       m_io_13 %>% 
         agregado(input$ano_transacoes,
                  "transferências.valores",
-                 paises) %>% 
-        limitar_colunas(-paises2) %>% 
+                 linhas_13()) %>% 
+        limitar_colunas(-colunas_13()) %>% 
         colSums() %>% 
         magrittr::subtract(
           m_io_13 %>% 
             agregado(input$ano_transacoes,
                      "transferências.valores",
-                     -paises) %>% 
-            limitar_colunas(paises2) %>% 
+                     -linhas_13()) %>% 
+            limitar_colunas(colunas_13()) %>% 
             rowSums()
         )
       
@@ -593,15 +544,13 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                      TRUE) %>% 
             limitar_colunas(input$pais_transacoes))
     } else if (selecao == 5) {
-      paises <- encontrar_pais(m_io_16, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_16, input$pais_transacoes, colnames)
-      linhas <- match(paises2, paises)
+      linhas <- match(colunas_16(), linhas_16())
       
       m_io_16 %>% 
         agregado(input$ano_transacoes,
                  "transferências.valores",
                  TRUE) %>% 
-        limitar_colunas(paises2) %>% 
+        limitar_colunas(colunas_16()) %>% 
         colSums(na.rm = TRUE) %>%
         magrittr::multiply_by(-1) %>% 
         magrittr::add(
@@ -611,21 +560,18 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                      linhas) %>% 
             rowSums(na.rm = TRUE))
     } else if (selecao == 6) {
-      paises <- encontrar_pais(m_io_16, input$pais_transacoes, rownames)
-      paises2 <- encontrar_pais(m_io_16, input$pais_transacoes, colnames)
-      
       m_io_16 %>% 
         agregado(input$ano_transacoes,
                  "transferências.valores",
-                 paises) %>% 
-        limitar_colunas(-paises2) %>% 
+                 linhas_16()) %>% 
+        limitar_colunas(-colunas_16()) %>% 
         colSums() %>% 
         magrittr::subtract(
           m_io_16 %>% 
             agregado(input$ano_transacoes,
                      "transferências.valores",
-                     -paises) %>% 
-            limitar_colunas(paises2) %>% 
+                     -linhas_16) %>% 
+            limitar_colunas(colunas_16()) %>% 
             rowSums()
         )
     }},
