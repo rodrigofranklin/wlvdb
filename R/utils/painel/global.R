@@ -27,9 +27,9 @@ varst <- read_csv2("dados/vars.csv")
 setorest <- read_csv2("dados/setores_t.csv")
 ## Cria demais variáveis
 
-lista_versoes <- rownames(sea_paises[,,1,1])
-lista_anos <- rownames(sea_paises[1,,,1])
-lista_variaveis_sea <- rownames(sea_paises[1,1,,])
+lista_versoes <- names(sea_paises[,1,1,1])
+lista_anos <- names(sea_paises[1,,1,1])
+lista_variaveis_sea <- names(sea_paises[1,1,,1])
 lista_paises <- paises[,3]
 names(lista_paises) <- paises[match(paises[,3], lista_paises),1]
 
