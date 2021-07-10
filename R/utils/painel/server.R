@@ -1,11 +1,34 @@
 
 server <- function(input, output, session) {
+  linhas_13 <- reactive({
+    encontrar_pais(m_io_13, input$pais_transacoes, rownames)
+  })
+  
+  colunas_13 <- reactive({
+    encontrar_pais(m_io_13, input$pais_transacoes, colnames)
+  })
+  
+  linhas_16 <- reactive({
+    encontrar_pais(m_io_16, input$pais_transacoes, rownames)
+  })
+  
+  colunas_16 <- reactive({
+    encontrar_pais(m_io_16, input$pais_transacoes, colnames)
+  })
+  
+  fazer_selecao <- reactive({
+    switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
+             "WIOD13Agregado" = 1,
+             "WIOD13Por setor de origem" = 2,
+             "WIOD13Por setor de destino" = 3,
+             "WIOD16Agregado" = 4,
+             "WIOD16Por setor de origem" = 5,
+             "WIOD16Por setor de destino" = 6)
+  })
+  
   dados <- reactive({ 
-    paises <- m_io_13 %>% 
-      encontrar_pais(input$pais_transacoes, rownames)
-    
     m_io_13 %>% 
-      agregado(input$ano_transacoes, "exportações.pm",  paises) %>% 
+      agregado(input$ano_transacoes, "exportações.pm",  linhas_13()) %>% 
       as.data.table(keep.rownames = "paisect") %>%
       separate(paisect, c("pais_origen", "sector_origen"), sep="\\.") %>%
       pivot_longer(-c(pais_origen, sector_origen), names_to = "paisect_d", 
@@ -37,8 +60,10 @@ server <- function(input, output, session) {
   output$setores_pais_13 <- renderDataTable(
     tabmil(sea_setores_13[as.character(input$ano_pais),
                    input$indicador_pais,
-                   grep(input$pais, colnames(sea_setores_13[1,,]))])%>%
-      separate(var,c("Legenda","Code"),sep="\\.")%>%left_join(setorest)%>%left_join(paises)%>%
+                   grep(input$pais, colnames(sea_setores_13[1,,]))]) %>%
+      separate(var,c("Legenda","Code"),sep="\\.") %>%
+      left_join(setorest) %>% 
+      left_join(paises) %>%
       select(pais=`Países`,setor=pt,value = x),
 #    rownames = TRUE,
 #    spacing = "xs",
@@ -52,7 +77,9 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     tabmil(sea_setores_16[as.character(input$ano_pais),
                    input$indicador_pais,
                    grep(input$pais, colnames(sea_setores_16[1,,]))])%>%
-      separate(var,c("Legenda","Code"),sep="\\.")%>%left_join(setorest)%>%left_join(paises)%>%
+      separate(var,c("Legenda","Code"),sep="\\.") %>% 
+      left_join(setorest) %>% 
+      left_join(paises) %>%
       select(pais=`Países`,setor=pt,value = x),
     #rownames = TRUE,
 #    spacing = "xs",
@@ -73,8 +100,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     width = "100%"
     )
 
-  output$indicadores2 <-
-    renderTable({
+  output$indicadores2 <- renderTable({
       t(sea_paises[,as.character(input$ano_indicador),input$indicador,])[((num_paises/2)+1):num_paises,]
     },
     rownames = TRUE,
@@ -101,7 +127,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
 
 ### Sim certamente possível
   output$exportacoes_monetarias <- renderD3tree2({
-    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
+    selecao <- fazer_selecao()
     
     ##Preparación del filtro del treemap interactivo
     agrupamento <- c("pais_origen","pais_d","sect_d")
@@ -113,20 +139,15 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     
     if (selecao < 4) {
       #Prepara versão do BD
-      paises <- m_io_13 %>% 
-        encontrar_pais(input$pais_transacoes, rownames)
-      
       dados <- m_io_13 %>% 
-        agregado(input$ano_transacoes, "exportações.pm", paises) %>% 
+        agregado(input$ano_transacoes, "exportações.pm", linhas_13()) %>% 
         as.data.table(keep.rownames = "paisect")%>%
         separate(paisect,c("pais_origen","sector_origen"),sep="\\.")%>%
         pivot_longer(-c(pais_origen,sector_origen),names_to="paisect_d",values_to="valor")%>%
         separate(paisect_d,c("pais_d","sect_d"),sep="\\.")
     } else {
-      paises <- m_io_16 %>% 
-        encontrar_pais(input$pais_transacoes, rownames)
       dados <- m_io_16 %>% 
-        agregado(input$ano_transacoes, "exportações.pm", paises) %>% 
+        agregado(input$ano_transacoes, "exportações.pm", linhas_16()) %>% 
         as.data.table(keep.rownames = "paisect")%>%
         separate(paisect,c("pais_origen","sector_origen"),sep="\\.")%>%
         pivot_longer(-c(pais_origen,sector_origen),names_to="paisect_d",values_to="valor")%>%
@@ -137,40 +158,22 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                     type = "value", palette = "Set1"))
     }
     )
-  
-  linhas_13 <- reactive({
-    encontrar_pais(m_io_13, input$pais_transacoes, rownames)
-    })
-  
-  colunas_13 <- reactive({
-    encontrar_pais(m_io_13, input$pais_transacoes, colnames)
-  })
-  
-  linhas_16 <- reactive({
-    encontrar_pais(m_io_16, input$pais_transacoes, rownames)
-  })
-  
-  colunas_16 <- reactive({
-    encontrar_pais(m_io_16, input$pais_transacoes, colnames)
-  })
 
   output$exportacoes_valores <- renderPlot({
-    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
+    selecao <- fazer_selecao()
     
     if (selecao < 4) {
       dados <- m_io_13 %>% 
-        agregado(input$ano_transacoes,"exportações.pm", paises2) %>% 
+        agregado(input$ano_transacoes,"exportações.pm", linhas_13()) %>% 
         as.data.table()
       
     } else if (selecao > 3) {
       m_paises_16 %>% 
-        agregado(input$ano_transacoes, "exportações.valores", 
-                 input$pais_transacoes)
+        agregado(input$ano_transacoes, "exportações.valores", input$pais_transacoes)
       
     } else if (selecao == 5) {
       m_io_16 %>% 
-        agregado(input$ano_transacoes, "exportações.valores", 
-                 linhas_16()) %>% 
+        agregado(input$ano_transacoes, "exportações.valores", linhas_16()) %>% 
         rowSums()
     } else if (selecao == 6) {
       m_io_16 %>% 
@@ -180,7 +183,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     }})
 
   output$exportacoes_transferencias <- renderPlot({
-    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
+    selecao <- fazer_selecao()
     
     if (selecao == 1) {
       temp <- m_paises_13 %>% 
@@ -197,35 +200,27 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
         rowSums()
     } else if (selecao == 3) {
       m_io_13 %>% 
-        agregado(input$ano_transacoes,
-                 "transferências.valores",
-                 linhas_13()) %>% 
+        agregado(input$ano_transacoes, "transferências.valores", linhas_13()) %>% 
         limitar_colunas(-colunas_16()) %>% 
         colSums()
     } else if (selecao == 4) {
       m_paises_16 %>% 
-        agregado(input$ano_transacoes,
-                 "transferências.valores",
-                 input$pais_transacoes)
+        agregado(input$ano_transacoes, "transferências.valores", input$pais_transacoes)
       
     } else if (selecao == 5) {
       m_io_16 %>% 
-        agregado(input$ano_transacoes,
-                 "transferências.valores",
-                 linhas_16()) %>% 
+        agregado(input$ano_transacoes, "transferências.valores", linhas_16()) %>% 
         rowSums()
     } else if (selecao == 6) {
       m_io_16 %>% 
-        agregado(input$ano_transacoes,
-                 "transferências.valores",
-                 linhas_16()) %>% 
+        agregado(input$ano_transacoes, "transferências.valores", linhas_16()) %>% 
         limitar_colunas(-colunas_16()) %>% 
         colSums()
     }},
     rownames = TRUE)
   
   output$importacoes_monetarias <- renderTable({
-    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
+    selecao <- fazer_selecao()
     if (selecao == 1) {
       m_paises_13 %>% 
         agregado(input$ano_transacoes,
@@ -270,7 +265,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     rownames = TRUE)
   
   output$importacoes_valores <- renderTable({
-    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
+    selecao <- fazer_selecao()
     
     if (selecao == 1) {
       m_paises_13 %>% 
@@ -304,7 +299,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     rownames = TRUE)
 
   output$importacoes_transferencias <- renderTable({
-    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
+    selecao <- fazer_selecao()
     
     if (selecao == 1) {
       m_paises_13 %>% 
@@ -338,7 +333,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     rownames = TRUE)
   
   output$saldo_monetarias <- renderTable({
-    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
+    selecao <- fazer_selecao()
     
     if (selecao == 1) {
       m_paises_13 %>% 
@@ -409,7 +404,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
   
   
   output$saldo_valores <- renderTable({
-    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
+    selecao <- fazer_selecao()
     if (selecao == 1) {
       m_paises_13 %>% 
         agregado(input$ano_transacoes, "exportações.valores", input$pais_transacoes) %>% 
@@ -486,7 +481,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     rownames = TRUE)
   
   output$saldo_transferencias <- renderTable({
-    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
+    selecao <- fazer_selecao()
     if (selecao == 1) {
       m_paises_13 %>% 
         agregado(input$ano_transacoes,
@@ -582,7 +577,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
 
   ## Juntar tanto as exportações quanto as importações
   output$td_envios_recebimentos <- renderTable({
-    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
+    selecao <- fazer_selecao()
     if (selecao == 1) {
       temp1 <- m_paises_13[as.character(input$ano_transacoes),
                            "transferências_produtivas.valores",
@@ -604,7 +599,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
   }, rownames = TRUE)
 
   output$td_envios_recebimentos_saldo <- renderTable({
-    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
+    selecao <- fazer_selecao()
     if (selecao == 1){
       m_paises_13[as.character(input$ano_transacoes),
                            "transferências_produtivas.valores",
@@ -622,7 +617,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
 
 
   output$improdutivos_envios_recebimentos <- renderTable({
-    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
+    selecao <- fazer_selecao()
     if (selecao == 1){
       temp1 <- m_paises_13[as.character(input$ano_transacoes),
                            "transferências.valores",
@@ -649,7 +644,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
 
 
   output$improdutivos_envios_recebimentos_saldo <- renderTable({
-    selecao <- fazer_selecao(input$transacoes_versao,input$transacoes_agregacao)
+    selecao <- fazer_selecao()
     if (selecao == 1){
       temp1 <- m_paises_13[as.character(input$ano_transacoes),
                            "transferências.valores",

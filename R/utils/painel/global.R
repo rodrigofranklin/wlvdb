@@ -52,16 +52,6 @@ encontrar_pais <- function(matriz, pais, fun) {
     str_which(pais)
 }
 
-fazer_selecao <- function(versao, agregacao) {
-  switch(paste0(versao, agregacao),
-         "WIOD13Agregado" = 1,
-         "WIOD13Por setor de origem" = 2,
-         "WIOD13Por setor de destino" = 3,
-         "WIOD16Agregado" = 4,
-         "WIOD16Por setor de origem" = 5,
-         "WIOD16Por setor de destino" = 6)
-}
-
 ## Funções a reutilizar
 plotaserie <- function(dados,perc=F) {
   ##produz data.frame com cada versão para juntar
