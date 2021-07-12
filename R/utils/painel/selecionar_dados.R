@@ -22,8 +22,8 @@ paises <- read.csv2(file = "R/utils/painel/dados/paises.csv",
                     row.names = 1, check.names = F)
 num_paises <- dim(paises)[1]
 
-sea_paises_13 <- readRDS(file = paste0("resultados/",versao_resultado_13,"/sea_paises.RDS"))
-sea_paises_16 <- readRDS(file = paste0("resultados/",versao_resultado_16,"/sea_paises.RDS"))
+sea_paises_13 <- readRDS(file = paste0("resultados/",versao_resultado_13,"/sea_paises.rds"))
+sea_paises_16 <- readRDS(file = paste0("resultados/",versao_resultado_16,"/sea_paises.rds"))
 
 ## Cria as listas das dimensões (que serão utilizadas como inputs)
 #####
@@ -58,11 +58,11 @@ sea_paises["WIOD16",
 ### Seleciona os dados das matrizes insumo-produtos
 ## m_io_13
 m_io_resultados_13 <- 
-  readRDS(file = paste0("resultados/",versao_resultado_13,"/m_io.RDS"))
+  readRDS(file = paste0("resultados/",versao_resultado_13,"/m_io.rds"))
 m_io_fonte_13 <- 
-  readRDS(file = paste0("sourcedata/",versao_13,"/m_io.RDS"))
+  readRDS(file = paste0("sourcedata/",versao_13,"/m_io.rds"))
 m_io_filtros_13 <- 
-  readRDS(file = paste0("resultados/",versao_resultado_13,"/m_io_filtros.RDS"))
+  readRDS(file = paste0("resultados/",versao_resultado_13,"/m_io_filtros.rds"))
 
 lista_anos <- names(m_io_resultados_13[,1,1,1])
 lista_variaveis_io <- c("exportacoes_pm", "exportacoes_valores", 
@@ -96,11 +96,11 @@ m_io_13[,"transferencias_valores",,] <-
 
 ## m_io_16
 m_io_resultados_16 <- 
-  readRDS(file = paste0("resultados/",versao_resultado_16,"/m_io.RDS"))
+  readRDS(file = paste0("resultados/",versao_resultado_16,"/m_io.rds"))
 m_io_fonte_16 <- 
-  readRDS(file = paste0("sourcedata/",versao_16,"/m_io.RDS"))
+  readRDS(file = paste0("sourcedata/",versao_16,"/m_io.rds"))
 m_io_filtros_16 <- 
-  readRDS(file = paste0("resultados/",versao_resultado_16,"/m_io_filtros.RDS"))
+  readRDS(file = paste0("resultados/",versao_resultado_16,"/m_io_filtros.rds"))
 
 lista_anos <- names(m_io_resultados_16[,1,1,1])
 lista_input <- names(m_io_resultados_16[1,1,,1])
@@ -133,9 +133,9 @@ m_io_16[,"transferencias_valores",,] <-
 ## Salva informações na pasta do painel
 #####
 
-saveRDS(sea_paises, file = "R/utils/painel/dados/sea_paises.RDS")
-saveRDS(m_io_13, file = "R/utils/painel/dados/m_io_13.RDS")
-saveRDS(m_io_16, file = "R/utils/painel/dados/m_io_16.RDS")
+saveRDS(sea_paises, file = "R/utils/painel/dados/sea_paises.rds")
+saveRDS(m_io_13, file = "R/utils/painel/dados/m_io_13.rds")
+saveRDS(m_io_16, file = "R/utils/painel/dados/m_io_16.rds")
 
 ## Copiando demais arquivos
 
@@ -143,14 +143,14 @@ current.folder <- "C:/Where my files currently live"
 new.folder <- "H:/Where I want my files to be copied to"
 # find the files that you want
 lista_arquivos <- 
-  c(paste0("resultados/", versao_resultado_13,"/m_paises.RDS"),
-    paste0("resultados/", versao_resultado_13,"/sea_setores.RDS"),
-    paste0("resultados/", versao_resultado_16,"/m_paises.RDS"),
-    paste0("resultados/", versao_resultado_16,"/sea_setores.RDS"))
+  c(paste0("resultados/", versao_resultado_13,"/m_paises.rds"),
+    paste0("resultados/", versao_resultado_13,"/sea_setores.rds"),
+    paste0("resultados/", versao_resultado_16,"/m_paises.rds"),
+    paste0("resultados/", versao_resultado_16,"/sea_setores.rds"))
 lista_destino <- 
-  c("R/utils/painel/dados/m_paises_13.RDS",
-    "R/utils/painel/dados/sea_setores_13.RDS",
-    "R/utils/painel/dados/m_paises_16.RDS",
-    "R/utils/painel/dados/sea_setores_16.RDS")
+  c("R/utils/painel/dados/m_paises_13.rds",
+    "R/utils/painel/dados/sea_setores_13.rds",
+    "R/utils/painel/dados/m_paises_16.rds",
+    "R/utils/painel/dados/sea_setores_16.rds")
 # copy the files to the new folder
 file.copy(lista_arquivos, lista_destino, overwrite = TRUE)
