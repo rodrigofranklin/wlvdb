@@ -27,11 +27,11 @@ num_variaveis_sea <- length(lista_variaveis_sea)
 m_io <- array(NA,
               dim = c(num_anos,
                       num_variaveis_m_io,
-                      num_input,
+                      num_paises_setores,
                       num_output),
               dimnames = list(lista_anos,
                               lista_variaveis_m_io,
-                              lista_input,
+                              lista_paises_setores,
                               lista_output))
 # m_paises -> matrizes país x país
 m_paises <- array(NA,
