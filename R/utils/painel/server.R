@@ -1,61 +1,49 @@
 
 server <- function(input, output, session) {
-  ## Funções a reutilizar
-  plotaserie <- function(dados,perc=F) {
-    ##produz data.frame com cada versão para juntar
-    
-    if(length(dim(dados))>2){
-      dados <- as.data.table(dados)
-      ifelse(ncol(dados)==5,
-      names(dados) <- c("bd","ano","indicador","pais","valor"),
-      names(dados) <- c("bd","ano","pais","valor")
-      )
-      dados <- dados %>% mutate(ano = as.Date(paste0("01/01/",ano),
-                                              tryFormats="%d/%m/%Y"),
-                                across(c(-ano,-valor),as.factor))
-    }else{
-      bds <- names(dados[,1])
-      anos <- names(dados[1,])
-      dados <- as.data.table(t(dados))
-      dados$ano <- as.Date(paste0("01/01/",anos),
-                                 tryFormats="%d/%m/%Y")
-      dados <- dados%>%pivot_longer(-ano,names_to = "bd",values_to="valor")%>%
-        mutate(bd=as.factor(bd))
-    }
-    
-    ifelse(ncol(dados)==3,
-           p <- ggplot(dados,aes(x=ano,y=valor,col=bd)),
-           p <- ggplot(dados,aes(x=ano,y=valor,col=pais,linetype=bd)))
-      p+geom_line(size = 1) +
-      scale_y_continuous(labels = comma_format(big.mark = ".", decimal.mark = ","))+
-      theme_minimal()
-    
-    ggplotly()
-    
-  }
-  milhares <- function(x){prettyNum(x,big.mark = ".",decimal.mark = ",")}
-  tabmil <- function(x) {
-    x <- as.data.table(x,keep.rownames="var")%>%mutate(across(where(is.numeric),milhares))
-  }
-  d <- reactive({ 
-    d <- as.data.table(m_io_13[as.character(input$ano_transacoes),
-                               "exportacoes_pm",
-                               grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),],
-                       keep.rownames = "paisect")
-    d <- d%>%separate(paisect,c("pais_origen","sector_origen"),sep="\\.")%>%
-      pivot_longer(-c(pais_origen,sector_origen),names_to="paisect_d",values_to="valor")%>%
-      separate(paisect_d,c("pais_d","sect_d"),sep="\\.")
-    
-    print(d) # print from within
-    return(d)
+  linhas_13 <- reactive({
+    encontrar_pais(m_io_13, input$pais_transacoes, rownames)
   })
+  
+  colunas_13 <- reactive({
+    encontrar_pais(m_io_13, input$pais_transacoes, colnames)
+  })
+  
+  linhas_16 <- reactive({
+    encontrar_pais(m_io_16, input$pais_transacoes, rownames)
+  })
+  
+  colunas_16 <- reactive({
+    encontrar_pais(m_io_16, input$pais_transacoes, colnames)
+  })
+  
+  fazer_selecao <- reactive({
+    switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
+             "WIOD13Agregado" = 1,
+             "WIOD13Por setor de origem" = 2,
+             "WIOD13Por setor de destino" = 3,
+             "WIOD16Agregado" = 4,
+             "WIOD16Por setor de origem" = 5,
+             "WIOD16Por setor de destino" = 6)
+  })
+  
+  dados <- reactive({ 
+    m_io_13 %>% 
+      agregado(input$ano_transacoes, "exportações.pm",  linhas_13()) %>% 
+      as.data.table(keep.rownames = "paisect") %>%
+      separate(paisect, c("pais_origen", "sector_origen"), sep="\\.") %>%
+      pivot_longer(-c(pais_origen, sector_origen), names_to = "paisect_d", 
+                   values_to = "valor")%>%
+      separate(paisect_d, c("pais_d", "sect_d"), sep = "\\.")
+  })
+  
   output$debuga <- renderTable({
-    glimpse(d())
-    })
+    glimpse(dados())
+  })
+  
   output$pais <- renderDataTable(
     tabmil(t(sea_paises[,as.character(input$ano_pais),,input$pais]))%>%
       left_join(varst)%>%
-      select(var=pt,2:3),
+      select(var = pt, 2:3),
  #   rownames = TRUE,
 #    spacing = "xs",
 #    striped = TRUE,
@@ -71,9 +59,11 @@ server <- function(input, output, session) {
 
   output$setores_pais_13 <- renderDataTable(
     tabmil(sea_setores_13[as.character(input$ano_pais),
-                   input$indicador_pais,,
-                   input$pais])%>%
-      separate(var,c("Legenda","Code"),sep="\\.")%>%left_join(setorest)%>%left_join(paises)%>%
+                   input$indicador_pais,
+                   grep(input$pais, colnames(sea_setores_13[1,,]))]) %>%
+      separate(var,c("Legenda","Code"),sep="\\.") %>%
+      left_join(setorest) %>% 
+      left_join(paises) %>%
       select(pais=`Países`,setor=pt,value = x),
 #    rownames = TRUE,
 #    spacing = "xs",
@@ -85,9 +75,11 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
 
   output$setores_pais_16 <- renderDataTable(
     tabmil(sea_setores_16[as.character(input$ano_pais),
-                   input$indicador_pais,,
-                   input$pais])%>%
-      separate(var,c("Legenda","Code"),sep="\\.")%>%left_join(setorest)%>%left_join(paises)%>%
+                   input$indicador_pais,
+                   grep(input$pais, colnames(sea_setores_16[1,,]))])%>%
+      separate(var,c("Legenda","Code"),sep="\\.") %>% 
+      left_join(setorest) %>% 
+      left_join(paises) %>%
       select(pais=`Países`,setor=pt,value = x),
     #rownames = TRUE,
 #    spacing = "xs",
@@ -98,8 +90,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
 
   )
 
-  output$indicadores1 <-
-    renderTable({
+  output$indicadores1 <- renderTable({
       t(sea_paises[,as.character(input$ano_indicador),input$indicador,])[1:(num_paises/2),]
     },
     rownames = TRUE,
@@ -109,8 +100,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     width = "100%"
     )
 
-  output$indicadores2 <-
-    renderTable({
+  output$indicadores2 <- renderTable({
       t(sea_paises[,as.character(input$ano_indicador),input$indicador,])[((num_paises/2)+1):num_paises,]
     },
     rownames = TRUE,
@@ -137,13 +127,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
 
 ### Sim certamente possível
   output$exportacoes_monetarias <- renderD3tree2({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao()
     
     ##Preparación del filtro del treemap interactivo
     agrupamento <- c("pais_origen","pais_d","sect_d")
@@ -155,393 +139,436 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     
     if (selecao < 4) {
       #Prepara versão do BD
-      dados <- as.data.table(m_io_13[as.character(input$ano_transacoes),
-                                     "exportacoes_pm",
-                                     grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),],
-                             keep.rownames = "paisect")%>%
+      dados <- m_io_13 %>% 
+        agregado(input$ano_transacoes, "exportações.pm", linhas_13()) %>% 
+        as.data.table(keep.rownames = "paisect")%>%
         separate(paisect,c("pais_origen","sector_origen"),sep="\\.")%>%
         pivot_longer(-c(pais_origen,sector_origen),names_to="paisect_d",values_to="valor")%>%
         separate(paisect_d,c("pais_d","sect_d"),sep="\\.")
-      
     } else {
-      dados <- as.data.table(m_io_16[as.character(input$ano_transacoes),
-                                     "exportacoes_pm",
-                                     grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),],
-                             keep.rownames = "paisect")%>%
+      dados <- m_io_16 %>% 
+        agregado(input$ano_transacoes, "exportações.pm", linhas_16()) %>% 
+        as.data.table(keep.rownames = "paisect")%>%
         separate(paisect,c("pais_origen","sector_origen"),sep="\\.")%>%
         pivot_longer(-c(pais_origen,sector_origen),names_to="paisect_d",values_to="valor")%>%
         separate(paisect_d,c("pais_d","sect_d"),sep="\\.")
     }
     #genera el resultado interactivo
-    d3tree2(treemap(dados, index=agrupamento, vSize = "valor", type = "value",
-                    palette = "Set1"))
+    d3tree2(treemap(dados, index = agrupamento, vSize = "valor", 
+                    type = "value", palette = "Set1"))
     }
     )
 
   output$exportacoes_valores <- renderPlot({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao()
+    
     if (selecao < 4) {
-      dados <- as.data.table(m_io_13[as.character(input$ano_transacoes),
-                                     "exportacoes_pm",
-                                     grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),])
+      dados <- m_io_13 %>% 
+        agregado(input$ano_transacoes,"exportações.pm", linhas_13()) %>% 
+        as.data.table()
+      
     } else if (selecao > 3) {
-      m_paises_16[as.character(input$ano_transacoes),
-                  "exportacoes.valores",
-                  input$pais_transacoes,]
+      m_paises_16 %>% 
+        agregado(input$ano_transacoes, "exportações.valores", input$pais_transacoes)
+      
     } else if (selecao == 5) {
-      rowSums(m_io_16[as.character(input$ano_transacoes),
-                      "exportacoes.valores",
-                      grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),])
+      m_io_16 %>% 
+        agregado(input$ano_transacoes, "exportações.valores", linhas_16()) %>% 
+        rowSums()
     } else if (selecao == 6) {
-      colSums(m_io_16[as.character(input$ano_transacoes),
-                      "exportacoes.valores",
-                      grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
-                      -grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
+      m_io_16 %>% 
+        agregado(input$ano_transacoes, "exportações.valores", linhas_16()) %>% 
+        limitar_colunas(-colunas_16()) %>% 
+        colSums()
     }})
 
   output$exportacoes_transferencias <- renderPlot({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao()
+    
     if (selecao == 1) {
-      temp <- m_paises_13[as.character(input$ano_transacoes),
-                          "transferencias_valores",
-                          input$pais_transacoes,]
+      temp <- m_paises_13 %>% 
+        agregado(input$ano_transacoes,
+                 "transferências.valores",
+                  input$pais_transacoes)
       dados <- data.frame(valor = temp, pais = names(temp))
       treemap(dados, index="pais", vSize = "valor", type = "value")
     } else if (selecao == 2) {
-      rowSums(m_io_13[as.character(input$ano_transacoes),
-                      "transferencias_valores",
-                      grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),])
+      m_io_13 %>% 
+        agregado(input$ano_transacoes,
+                 "transferências.valores",
+                 linhas_13()) %>% 
+        rowSums()
     } else if (selecao == 3) {
-      colSums(m_io_13[as.character(input$ano_transacoes),
-                      "transferencias_valores",
-                      grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
-                      -grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))])
+      m_io_13 %>% 
+        agregado(input$ano_transacoes, "transferências.valores", linhas_13()) %>% 
+        limitar_colunas(-colunas_16()) %>% 
+        colSums()
     } else if (selecao == 4) {
-      m_paises_16[as.character(input$ano_transacoes),
-                  "transferencias_valores",
-                  input$pais_transacoes,]
+      m_paises_16 %>% 
+        agregado(input$ano_transacoes, "transferências.valores", input$pais_transacoes)
+      
     } else if (selecao == 5) {
-      rowSums(m_io_16[as.character(input$ano_transacoes),
-                      "transferencias_valores",
-                      grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),])
+      m_io_16 %>% 
+        agregado(input$ano_transacoes, "transferências.valores", linhas_16()) %>% 
+        rowSums()
     } else if (selecao == 6) {
-      colSums(m_io_16[as.character(input$ano_transacoes),
-                      "transferencias_valores",
-                      grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
-                      -grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
+      m_io_16 %>% 
+        agregado(input$ano_transacoes, "transferências.valores", linhas_16()) %>% 
+        limitar_colunas(-colunas_16()) %>% 
+        colSums()
     }},
     rownames = TRUE)
-
+  
   output$importacoes_monetarias <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao()
     if (selecao == 1) {
-      m_paises_13[as.character(input$ano_transacoes),
-                  "exportacoes_pm",
-                  ,input$pais_transacoes]
+      m_paises_13 %>% 
+        agregado(input$ano_transacoes,
+                 "exportações.pm",
+                 TRUE) %>% 
+        limitar_colunas(input$pais_transacoes)
     } else if (selecao == 2) {
-      rowSums(m_io_13[as.character(input$ano_transacoes),
-                      "exportacoes_pm",
-                      -grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
-                      grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))])
+      m_io_13 %>% 
+        agregado(input$ano_transacoes,
+                 "exportações.pm",
+                 -linhas_13()) %>% 
+        limitar_colunas(colunas_13()) %>% 
+        rowSums()
     } else if (selecao == 3) {
-      colSums(m_io_13[as.character(input$ano_transacoes),
-                      "exportacoes_pm",
-                      ,grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))])
+      m_io_13 %>% 
+        agregado(input$ano_transacoes,
+                 "exportações.pm",
+                 TRUE) %>% 
+        limitar_colunas(colunas_13()) %>% 
+        colSums()
     } else if (selecao == 4) {
-      m_paises_16[as.character(input$ano_transacoes),
-                  "exportacoes_pm",
-                  ,input$pais_transacoes]
+      m_paises_16 %>% 
+        agregado(input$ano_transacoes,
+                 "exportações.pm",
+                 TRUE) %>% 
+        limitar_colunas(input$pais_transacoes)
     } else if (selecao == 5) {
-      rowSums(m_io_16[as.character(input$ano_transacoes),
-                      "exportacoes_pm",
-                      -grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
-                      grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
+      m_io_16 %>% 
+        agregado(input$ano_transacoes,
+                 "exportações.pm",
+                 -linhas_16()) %>% 
+        limitar_colunas(colunas_16()) %>% 
+        rowSums()
     } else if (selecao == 6) {
-      colSums(m_io_16[as.character(input$ano_transacoes),
-                      "exportacoes_pm",
-                      ,grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
+      m_io_16 %>% 
+        agregado(input$ano_transacoes,
+                 "exportações.pm",
+                 TRUE) %>% 
+        limitar_colunas(colunas_16()) %>% 
+        colSums()
     }},
     rownames = TRUE)
-
+  
   output$importacoes_valores <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao()
+    
     if (selecao == 1) {
-      m_paises_13[as.character(input$ano_transacoes),
-                  "exportacoes.valores",
-                  ,input$pais_transacoes]
+      m_paises_13 %>% 
+        agregado(input$ano_transacoes, "exportações.valores", TRUE) %>% 
+          limitar_colunas(input$pais_transacoes)
     } else if (selecao == 2) {
-      rowSums(m_io_13[as.character(input$ano_transacoes),
-                      "exportacoes.valores",
-                      -grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
-                      grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))],
-              na.rm = TRUE)
+      m_io_13 %>% 
+        agregado(input$ano_transacoes, "exportações.valores", -linhas_13()) %>% 
+        limitar_colunas(colunas_13()) %>% 
+        rowSums(na.rm = TRUE)
     } else if (selecao == 3) {
-      colSums(m_io_13[as.character(input$ano_transacoes),
-                      "exportacoes.valores",
-                      ,grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))])
+      m_io_13 %>% 
+        agregado(input$ano_transacoes, "exportações.valores", TRUE) %>% 
+        limitar_colunas(colunas_13()) %>% 
+        colSums()
     } else if (selecao == 4) {
-      m_paises_16[as.character(input$ano_transacoes),
-                  "exportacoes.valores",
-                  ,input$pais_transacoes]
+      m_paises_16 %>% 
+        agregado(input$ano_transacoes, "exportações.valores", TRUE) %>% 
+        limitar_colunas(input$pais_transacoes)
     } else if (selecao == 5) {
-      rowSums(m_io_16[as.character(input$ano_transacoes),
-                      "exportacoes.valores",
-                      -grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
-                      grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
+      m_io_16 %>% 
+        agregado(input$ano_transacoes, "exportações.valores", -linhas_16()) %>% 
+        limitar_colunas(colunas_16()) %>% 
+        rowSums(na.rm = TRUE)
     } else if (selecao == 6) {
-      colSums(m_io_16[as.character(input$ano_transacoes),
-                      "exportacoes.valores",
-                      ,grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
+      m_io_16 %>% 
+        agregado(input$ano_transacoes, "exportações.valores", TRUE) %>% 
+        limitar_colunas(colunas_16()) %>% 
+        colSums()
     }},
     rownames = TRUE)
 
   output$importacoes_transferencias <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao()
+    
     if (selecao == 1) {
-      m_paises_13[as.character(input$ano_transacoes),
-                  "transferencias_valores",
-                  ,input$pais_transacoes]
+      m_paises_13 %>% 
+        agregado(input$ano_transacoes, "transferências.valores", TRUE) %>% 
+        limitar_colunas(input$pais_transacoes)
     } else if (selecao == 2) {
-      rowSums(m_io_13[as.character(input$ano_transacoes),
-                      "transferencias_valores",
-                      -grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
-                      grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))])
+      m_io_13 %>% 
+        agregado(input$ano_transacoes, "transferências.valores", -linhas_13()) %>% 
+        limitar_colunas(colunas_13()) %>% 
+        rowSums(na.rm = TRUE)
     } else if (selecao == 3) {
-      colSums(m_io_13[as.character(input$ano_transacoes),
-                      "transferencias_valores",
-                      ,grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))])
+      m_io_13 %>% 
+        agregado(input$ano_transacoes, "transferências.valores", TRUE) %>% 
+        limitar_colunas(colunas_13()) %>% 
+        colSums()
     } else if (selecao == 4) {
-      m_paises_16[as.character(input$ano_transacoes),
-                  "transferencias_valores",
-                  ,input$pais_transacoes]
+      m_paises_16 %>% 
+        agregado(input$ano_transacoes, "transferências.valores", TRUE) %>% 
+        limitar_colunas(input$pais_transacoes)
     } else if (selecao == 5) {
-      rowSums(m_io_16[as.character(input$ano_transacoes),
-                      "transferencias_valores",
-                      -grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
-                      grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
+      m_io_16 %>% 
+        agregado(input$ano_transacoes, "transferências.valores", -linhas_16()) %>% 
+        limitar_colunas(colunas_16()) %>% 
+        rowSums(na.rm = TRUE)
     } else if (selecao == 6) {
-      colSums(m_io_16[as.character(input$ano_transacoes),
-                      "transferencias_valores",
-                      ,grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
+      m_io_16 %>% 
+        agregado(input$ano_transacoes, "transferências.valores", TRUE) %>% 
+        limitar_colunas(colunas_16()) %>% 
+        colSums()
     }},
     rownames = TRUE)
-
+  
   output$saldo_monetarias <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao()
+    
     if (selecao == 1) {
-      m_paises_13[as.character(input$ano_transacoes),
-                  "exportacoes_pm",
-                  input$pais_transacoes,] -
-      m_paises_13[as.character(input$ano_transacoes),
-                  "exportacoes_pm",
-                  ,input$pais_transacoes]
+      m_paises_13 %>% 
+        agregado(input$ano_transacoes, "exportações.pm", input$pais_transacoes) %>% 
+        magrittr::subtract(
+          m_paises_13 %>% 
+            agregado(input$ano_transacoes, "exportações.pm", TRUE) %>% 
+            limitar_colunas(input$pais_transacoes)
+        )
     } else if (selecao == 2) {
-      - colSums(m_io_13[as.character(input$ano_transacoes),
-                        "exportacoes_pm",
-                        ,grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))],
-                na.rm = TRUE) +
-      rowSums(m_io_13[as.character(input$ano_transacoes),
-                      "exportacoes_pm",
-                      match(grep(input$pais_transacoes,colnames(m_io_13[1,1,,])),
-                            grep(input$pais_transacoes,rownames(m_io_13[1,1,,]))),],
-              na.rm = TRUE)
+      linhas <- match(colunas_13(), linhas_13())
+      
+      m_io_13 %>% 
+        agregado(input$ano_transacoes, "exportações.pm", TRUE) %>% 
+        limitar_colunas(colunas_13()) %>% 
+        colSums(na.rm = TRUE) %>%
+        magrittr::multiply_by(-1) %>% 
+        magrittr::add(
+          m_io_13 %>% 
+            agregado(input$ano_transacoes, "exportações.pm", linhas) %>% 
+            rowSums(na.rm = TRUE)
+        )
     } else if (selecao == 3) {
-      colSums(m_io_13[as.character(input$ano_transacoes),
-                      "exportacoes_pm",
-                      grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
-                      -grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))]) -
-      rowSums(m_io_13[as.character(input$ano_transacoes),
-                      "exportacoes_pm",
-                      -grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
-                      grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))])
+      m_io_13 %>% 
+        agregado(input$ano_transacoes, "exportações.pm", linhas_13()) %>% 
+        limitar_colunas(-colunas_13()) %>% 
+        colSums() %>% 
+        magrittr::subtract(
+          m_io_13 %>% 
+            agregado(input$ano_transacoes, "exportações.pm", -linhas_13()) %>% 
+            limitar_colunas(colunas_13()) %>% 
+            rowSums()
+        )
     } else if (selecao == 4) {
-      m_paises_16[as.character(input$ano_transacoes),
-                  "exportacoes_pm",
-                  input$pais_transacoes,] -
-      m_paises_16[as.character(input$ano_transacoes),
-                  "exportacoes_pm",
-                  ,input$pais_transacoes]
+      m_paises_16 %>% 
+        agregado(input$ano_transacoes, "exportações.pm", input$pais_transacoes) %>% 
+        magrittr::subtract(
+          m_paises_16 %>% 
+            agregado(input$ano_transacoes, "exportações.pm", TRUE) %>% 
+            limitar_colunas(input$pais_transacoes)
+        )
     } else if (selecao == 5) {
-      - colSums(m_io_16[as.character(input$ano_transacoes),
-                        "exportacoes_pm",
-                        ,grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))],
-                na.rm = TRUE) +
-        rowSums(m_io_16[as.character(input$ano_transacoes),
-                        "exportacoes_pm",
-                        match(grep(input$pais_transacoes,colnames(m_io_16[1,1,,])),
-                              grep(input$pais_transacoes,rownames(m_io_16[1,1,,]))),],
-                na.rm = TRUE)
+      linhas <- match(colunas_16(), linhas_16())
+      
+      m_io_16 %>% 
+        agregado(input$ano_transacoes, "exportações.pm", TRUE) %>% 
+        limitar_colunas(colunas_16()) %>% 
+        colSums(na.rm = TRUE) %>%
+        magrittr::multiply_by(-1) %>% 
+        magrittr::add(
+          m_io_16 %>% 
+            agregado(input$ano_transacoes, "exportações.pm", linhas) %>% 
+            rowSums(na.rm = TRUE)
+        )
     } else if (selecao == 6) {
-      colSums(m_io_16[as.character(input$ano_transacoes),
-                      "exportacoes_pm",
-                      grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
-                      -grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))]) -
-        rowSums(m_io_16[as.character(input$ano_transacoes),
-                        "exportacoes_pm",
-                        -grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
-                        grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
+      m_io_16 %>% 
+        agregado(input$ano_transacoes, "exportações.pm", paises) %>% 
+        limitar_colunas(-colunas_16()) %>% 
+        colSums() %>% 
+        magrittr::subtract(
+          m_io_16 %>% 
+            agregado(input$ano_transacoes, "exportações.pm", -linhas_16()) %>% 
+            limitar_colunas(colunas_16()) %>% 
+            rowSums()
+        )
     }},
     rownames = TRUE)
-
+  
+  
   output$saldo_valores <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao()
     if (selecao == 1) {
-      m_paises_13[as.character(input$ano_transacoes),
-                  "exportacoes.valores",
-                  input$pais_transacoes,] -
-        m_paises_13[as.character(input$ano_transacoes),
-                    "exportacoes.valores",
-                    ,input$pais_transacoes]
+      m_paises_13 %>% 
+        agregado(input$ano_transacoes, "exportações.valores", input$pais_transacoes) %>% 
+        magrittr::subtract(
+          m_paises_13 %>% 
+            agregado(input$ano_transacoes, "exportações.valores", TRUE) %>% 
+            limitar_colunas(input$pais_transacoes)
+        )
     } else if (selecao == 2) {
-      - colSums(m_io_13[as.character(input$ano_transacoes),
-                        "exportacoes.valores",
-                        ,grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))],
-                na.rm = TRUE) +
-        rowSums(m_io_13[as.character(input$ano_transacoes),
-                        "exportacoes.valores",
-                        match(grep(input$pais_transacoes,colnames(m_io_13[1,1,,])),
-                              grep(input$pais_transacoes,rownames(m_io_13[1,1,,]))),],
-                na.rm = TRUE)
+      linhas <- match(colunas_13(), linhas_13())
+      
+      m_io_13 %>% 
+        agregado(input$ano_transacoes, "exportações.valores", TRUE) %>% 
+        limitar_colunas(colunas_13()) %>% 
+        colSums(na.rm = TRUE) %>%
+        magrittr::multiply_by(-1) %>% 
+        magrittr::add(
+          m_io_13 %>% 
+            agregado(input$ano_transacoes, "exportações.valores", linhas) %>% 
+            rowSums(na.rm = TRUE)
+        )
     } else if (selecao == 3) {
-      colSums(m_io_13[as.character(input$ano_transacoes),
-                      "exportacoes.valores",
-                      grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
-                      -grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))]) -
-        rowSums(m_io_13[as.character(input$ano_transacoes),
-                        "exportacoes.valores",
-                        -grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
-                        grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))])
+      m_io_13 %>% 
+        agregado(input$ano_transacoes,
+                 "exportações.valores",
+                 linhas_13()) %>% 
+        limitar_colunas(-colunas_13()) %>% 
+        colSums() %>% 
+        magrittr::subtract(
+          m_io_13 %>% 
+            agregado(input$ano_transacoes,
+                     "exportações.valores",
+                     -linhas_13()) %>% 
+            limitar_colunas(colunas_13()) %>% 
+            rowSums()
+        )
     } else if (selecao == 4) {
-      m_paises_16[as.character(input$ano_transacoes),
-                  "exportacoes.valores",
-                  input$pais_transacoes,] -
-        m_paises_16[as.character(input$ano_transacoes),
-                    "exportacoes.valores",
-                    ,input$pais_transacoes]
+      m_paises_16 %>% 
+        agregado(input$ano_transacoes, "exportações.valores", input$pais_transacoes) %>% 
+        magrittr::subtract(
+            m_paises_16 %>% 
+              agregado(input$ano_transacoes, "exportações.valores", TRUE) %>% 
+              limitar_colunas(input$pais_transacoes)
+          )
     } else if (selecao == 5) {
-      - colSums(m_io_16[as.character(input$ano_transacoes),
-                        "exportacoes.valores",
-                        ,grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))],
-                na.rm = TRUE) +
-        rowSums(m_io_16[as.character(input$ano_transacoes),
-                        "exportacoes.valores",
-                        match(grep(input$pais_transacoes,colnames(m_io_16[1,1,,])),
-                              grep(input$pais_transacoes,rownames(m_io_16[1,1,,]))),],
-                na.rm = TRUE)
+      linhas <- match(colunas_16(), linhas_16())
+      
+        m_io_16 %>% 
+          agregado(input$ano_transacoes, "exportações.valores", TRUE) %>% 
+          limitar_colunas(colunas_16()) %>% 
+          colSums(na.rm = TRUE) %>%
+          magrittr::multiply_by(-1) %>% 
+          magrittr::add(
+            m_io_16 %>% 
+              agregado(input$ano_transacoes, "exportações.valores", linhas) %>% 
+              rowSums(na.rm = TRUE)
+          )
     } else if (selecao == 6) {
-      colSums(m_io_16[as.character(input$ano_transacoes),
-                      "exportacoes.valores",
-                      grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
-                      -grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))]) -
-        rowSums(m_io_16[as.character(input$ano_transacoes),
-                        "exportacoes.valores",
-                        -grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
-                        grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
+      m_io_16 %>% 
+        agregado(input$ano_transacoes,
+                 "exportações.valores",
+                 linhas_16()) %>% 
+        limitar_colunas(-colunas_16()) %>% 
+        colSums() %>% 
+        magrittr::subtract(
+          m_io_16 %>% 
+            agregado(input$ano_transacoes,
+                     "exportações.valores",
+                     -linhas_16()) %>% 
+            limitar_colunas(colunas_16()) %>% 
+            rowSums()
+        )
     }},
     rownames = TRUE)
-
+  
   output$saldo_transferencias <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao()
     if (selecao == 1) {
-      m_paises_13[as.character(input$ano_transacoes),
-                  "transferencias_valores",
-                  input$pais_transacoes,] -
-        m_paises_13[as.character(input$ano_transacoes),
-                    "transferencias_valores",
-                    ,input$pais_transacoes]
+      m_paises_13 %>% 
+        agregado(input$ano_transacoes,
+                 "transferências.valores",
+                 input$pais_transacoes) %>% 
+        magrittr::subtract(
+          m_paises_13 %>% 
+            agregado(input$ano_transacoes,
+                     "transferências.valores",
+                     TRUE) %>% 
+            limitar_colunas(input$pais_transacoes)
+        )
     } else if (selecao == 2) {
-      - colSums(m_io_13[as.character(input$ano_transacoes),
-                        "transferencias_valores",
-                        ,grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))],
-                na.rm = TRUE) +
-        rowSums(m_io_13[as.character(input$ano_transacoes),
-                        "transferencias_valores",
-                        match(grep(input$pais_transacoes,colnames(m_io_13[1,1,,])),
-                              grep(input$pais_transacoes,rownames(m_io_13[1,1,,]))),],
-                na.rm = TRUE)
+      linhas <- match(colunas_13(), linhas_13())
+      
+      m_io_13 %>% 
+        agregado(input$ano_transacoes,
+                 "transferências.valores",
+                 TRUE) %>% 
+        limitar_colunas(colunas_13()) %>% 
+        colSums(na.rm = TRUE) %>%
+        magrittr::multiply_by(-1) %>% 
+        magrittr::add(
+          m_io_13 %>% 
+            agregado(input$ano_transacoes,
+                     "transferências.valores",
+                     linhas) %>% 
+            rowSums(na.rm = TRUE)
+        )
     } else if (selecao == 3) {
-      colSums(m_io_13[as.character(input$ano_transacoes),
-                      "transferencias_valores",
-                      grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
-                      -grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))]) -
-        rowSums(m_io_13[as.character(input$ano_transacoes),
-                        "transferencias_valores",
-                        -grep(input$pais_transacoes,rownames(m_io_13[1,1,,])),
-                        grep(input$pais_transacoes,colnames(m_io_13[1,1,,]))])
+      m_io_13 %>% 
+        agregado(input$ano_transacoes,
+                 "transferências.valores",
+                 linhas_13()) %>% 
+        limitar_colunas(-colunas_13()) %>% 
+        colSums() %>% 
+        magrittr::subtract(
+          m_io_13 %>% 
+            agregado(input$ano_transacoes,
+                     "transferências.valores",
+                     -linhas_13()) %>% 
+            limitar_colunas(colunas_13()) %>% 
+            rowSums()
+        )
+      
     } else if (selecao == 4) {
-      m_paises_16[as.character(input$ano_transacoes),
-                  "transferencias_valores",
-                  input$pais_transacoes,] -
-        m_paises_16[as.character(input$ano_transacoes),
-                    "transferencias_valores",
-                    ,input$pais_transacoes]
+      m_paises_16 %>% 
+        agregado(input$ano_transacoes,
+                 "transferências.valores",
+                 input$pais_transacoes) %>% 
+        magrittr::subtract(
+          m_paises_16 %>% 
+            agregado(input$ano_transacoes,
+                     "transferências.valores",
+                     TRUE) %>% 
+            limitar_colunas(input$pais_transacoes))
     } else if (selecao == 5) {
-      - colSums(m_io_16[as.character(input$ano_transacoes),
-                        "transferencias_valores",
-                        ,grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))],
-                na.rm = TRUE) +
-        rowSums(m_io_16[as.character(input$ano_transacoes),
-                        "transferencias_valores",
-                        match(grep(input$pais_transacoes,colnames(m_io_16[1,1,,])),
-                              grep(input$pais_transacoes,rownames(m_io_16[1,1,,]))),],
-                na.rm = TRUE)
+      linhas <- match(colunas_16(), linhas_16())
+      
+      m_io_16 %>% 
+        agregado(input$ano_transacoes,
+                 "transferências.valores",
+                 TRUE) %>% 
+        limitar_colunas(colunas_16()) %>% 
+        colSums(na.rm = TRUE) %>%
+        magrittr::multiply_by(-1) %>% 
+        magrittr::add(
+          m_io_16 %>% 
+            agregado(input$ano_transacoes,
+                     "transferências.valores",
+                     linhas) %>% 
+            rowSums(na.rm = TRUE))
     } else if (selecao == 6) {
-      colSums(m_io_16[as.character(input$ano_transacoes),
-                      "transferencias_valores",
-                      grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
-                      -grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))]) -
-        rowSums(m_io_16[as.character(input$ano_transacoes),
-                        "transferencias_valores",
-                        -grep(input$pais_transacoes,rownames(m_io_16[1,1,,])),
-                        grep(input$pais_transacoes,colnames(m_io_16[1,1,,]))])
+      m_io_16 %>% 
+        agregado(input$ano_transacoes,
+                 "transferências.valores",
+                 linhas_16()) %>% 
+        limitar_colunas(-colunas_16()) %>% 
+        colSums() %>% 
+        magrittr::subtract(
+          m_io_16 %>% 
+            agregado(input$ano_transacoes,
+                     "transferências.valores",
+                     -linhas_16) %>% 
+            limitar_colunas(colunas_16()) %>% 
+            rowSums()
+        )
     }},
     rownames = TRUE)
 
@@ -550,13 +577,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
 
   ## Juntar tanto as exportações quanto as importações
   output$td_envios_recebimentos <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao()
     if (selecao == 1) {
       temp1 <- m_paises_13[as.character(input$ano_transacoes),
                            "transferências_produtivas.valores",
@@ -578,13 +599,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
   }, rownames = TRUE)
 
   output$td_envios_recebimentos_saldo <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao()
     if (selecao == 1){
       m_paises_13[as.character(input$ano_transacoes),
                            "transferências_produtivas.valores",
@@ -602,13 +617,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
 
 
   output$improdutivos_envios_recebimentos <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao()
     if (selecao == 1){
       temp1 <- m_paises_13[as.character(input$ano_transacoes),
                            "transferencias_valores",
@@ -635,13 +644,7 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
 
 
   output$improdutivos_envios_recebimentos_saldo <- renderTable({
-    selecao <- switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
-                      "WIOD13Agregado" = 1,
-                      "WIOD13Por setor de origem" = 2,
-                      "WIOD13Por setor de destino" = 3,
-                      "WIOD16Agregado" = 4,
-                      "WIOD16Por setor de origem" = 5,
-                      "WIOD16Por setor de destino" = 6)
+    selecao <- fazer_selecao()
     if (selecao == 1){
       temp1 <- m_paises_13[as.character(input$ano_transacoes),
                            "transferencias_valores",
