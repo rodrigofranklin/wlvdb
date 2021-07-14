@@ -52,52 +52,67 @@ server <- function(input, output, session) {
     options = list(
       ordering = FALSE,
       searching = FALSE,
-      # scrollY = "600",
-      pageLength = 10,
+      paging = FALSE,
+      # pageLength = 10,
       info = FALSE, 
       lengthChange = FALSE
     )
   )
 
-  names(sea_paises[1,1,,1])
-  
   output$serie_pais <- renderPlotly({
     dados <- sea_paises[,,input$indicador_pais,input$pais]
     plotaserie(dados)
   })
 
+  
   output$setores_pais_13 <- renderDataTable(
     tabmil(sea_setores_13[as.character(input$ano_pais),
-                   input$indicador_pais,
-                   grep(input$pais, colnames(sea_setores_13[1,,]))]) %>%
-      separate(var,c("Legenda","Code"),sep="\\.") %>%
-      left_join(setorest) %>% 
-      left_join(paises) %>%
-      select(pais=`Países`,setor=pt,value = x),
-#    rownames = TRUE,
-#    spacing = "xs",
-#    striped = TRUE,
-    #hover = TRUE,
-    #width = "100%",
-options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30", "All")) )
+                   input$indicador_pais,,
+                   input$pais]),
+    options = list(
+      ordering = FALSE,
+      searching = FALSE,
+      paging = FALSE,
+      # pageLength = 10,
+      info = FALSE, 
+      lengthChange = FALSE
+    )
   )
+  
+  
+#   output$setores_pais_13 <- renderDataTable(
+#     sea_setores_13[as.character(input$ano_pais),
+#                    input$indicador_pais,
+#                    ,input$pais])
+#         # tabmil(sea_setores_13[as.character(input$ano_pais),
+#     #                input$indicador_pais,
+#     #                ,input$pais]) %>%
+#     #   left_join(setorest) %>% 
+#     #   select(pais=`Países`,setor=pt,value = x),
+# #    rownames = TRUE,
+# #    spacing = "xs",
+# #    striped = TRUE,
+#     #hover = TRUE,
+#     #width = "100%",
+# options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30", "All")) )
+  
 
-  output$setores_pais_16 <- renderDataTable(
-    tabmil(sea_setores_16[as.character(input$ano_pais),
-                   input$indicador_pais,
-                   grep(input$pais, colnames(sea_setores_16[1,,]))])%>%
-      separate(var,c("Legenda","Code"),sep="\\.") %>% 
-      left_join(setorest) %>% 
-      left_join(paises) %>%
-      select(pais=`Países`,setor=pt,value = x),
-    #rownames = TRUE,
-#    spacing = "xs",
-#    striped = TRUE,
-    #hover = TRUE,
-    #width = "100%",
-options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30", "All")) )
-
-  )
+#   output$setores_pais_16 <- renderDataTable(
+#     tabmil(sea_setores_16[as.character(input$ano_pais),
+#                    input$indicador_pais,
+#                    grep(input$pais, colnames(sea_setores_16[1,,]))])%>%
+#       separate(var,c("Legenda","Code"),sep="\\.") %>% 
+#       left_join(setorest) %>% 
+#       left_join(paises) %>%
+#       select(pais=`Países`,setor=pt,value = x),
+#     #rownames = TRUE,
+# #    spacing = "xs",
+# #    striped = TRUE,
+#     #hover = TRUE,
+#     #width = "100%",
+# options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30", "All")) )
+# 
+#   )
 
   output$indicadores1 <- renderTable({
       t(sea_paises[,as.character(input$ano_indicador),input$indicador,])[1:(num_paises/2),]

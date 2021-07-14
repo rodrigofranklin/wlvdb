@@ -1,6 +1,5 @@
 
-ui <- fluidPage(
-  navbarPage(
+ui <- navbarPage(
     theme="painel.css",
     lang="es",
     footer=tags$div(tags$i(class="fa fa-copyright fa-flip-horizontal"),
@@ -19,71 +18,78 @@ ui <- fluidPage(
                           icon("bars",class = )),
                    "World Labour Values Database"),
     windowTitle ="World Labour Values App",
-    selected = "Pais/Country",
+    selected = "País",
+
+    
+        
+### Painel "País" -------------------    
+    
     tabPanel(
-      "Pais/Country",
+      "País",
       icon = icon("globe-americas"),
-      dashboardPage(
-        skin="red",
-        dashboardHeader(disable = T),
-        dashboardSidebar(disable = T),
-        dashboardBody(
-          ### changing theme
-          shinyDashboardThemes(theme = "grey_light"),
-          tags$head(tags$style(HTML('
-
-                                /* main sidebar */
-                                .skin-red .main-sidebar {
-                                background-color: indianred;
-                                }
-                                /* body */
-                                .content-wrapper, .right-side {
-                                background-color: idianred;
-                                }
-
-                                '))),
+      column(
+        width = 4,
+        wellPanel(
           fluidRow(
             column(
-              width = 2,
+              width = 5,
               selectInput(inputId = "pais", 
-                          label = NULL, 
+                          label = "País:", 
                           width = "100%",
-                          choices = lista_paises)),
+                          choices = lista_paises)          
+            ),
             column(
-              width = 4,
+              width = 7,
               selectInput(inputId = "indicador_pais",
-                          label = NULL,
+                          label = "Indicador:",
                           width = "100%",
-                          choices = lista_variaveis_sea)),
-            column(
-              width = 6,
-              sliderInput(inputId = "ano_pais",
-                          label = NULL,
-                          min = ano_min,
-                          max = ano_max,
-                          value = 2009,
-                          ticks = FALSE,
-                          width = "100%",
-                          sep = ""))
-          ),
-          column(
-            width = 6,
-            fluidRow(
-              dataTableOutput("pais"),
-              plotlyOutput("serie_pais")
+                          choices = lista_variaveis_sea)          
             )
           ),
-          column(
-            width = 6,
-            tabsetPanel(
-              tabPanel(
-                "WIOD.13",
-                dataTableOutput("setores_pais_13")),
-              tabPanel(
-                "WIOD.16",
-                dataTableOutput("setores_pais_16")))),
-    ))),
-    tabPanel("Indicador",icon = icon("chart-line"),
+          fluidRow(
+            align = "center",
+            sliderInput(inputId = "ano_pais",
+                        label = NULL,
+                        min = ano_min,
+                        max = ano_max,
+                        value = 2009,
+                        ticks = FALSE,
+                        width = "95%",
+                        sep = "")
+          )
+        ),
+        wellPanel(
+          tabsetPanel(
+            tabPanel(
+              "WIOD.13",
+              dataTableOutput("setores_pais_13")
+            ),
+            tabPanel(
+              "WIOD.16",
+              dataTableOutput("setores_pais_16")
+            )
+          )
+        )
+      ),
+      column(
+        width = 8,
+        wellPanel(
+          
+          plotlyOutput("serie_pais")
+        ),
+        wellPanel(
+          dataTableOutput("pais"),          
+        )
+      )
+    ),
+    
+    
+    
+  
+    
+### Painel "Indicador --------------    
+    
+  tabPanel("Indicador",icon = icon("chart-line"),
 #                      tags$body(class="skin-yellow sidebar-mini control-sidebar-closed",
                                 dashboardPage(
                                   dashboardHeader(disable = T),
@@ -193,7 +199,6 @@ ui <- fluidPage(
                       )
 #             )             
              
-  )
   )
 
 
