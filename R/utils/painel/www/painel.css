@@ -12,6 +12,18 @@
 	background-color: #ffffff !important;
 }
 
+.skin-blue .left-side, .skin-blue .main-sidebar, .skin-blue .wrapper {
+  	background-color: indianred !important;
+}
+
+.skin-blue .sidebar-menu>li.active>a, .skin-blue .sidebar-menu>li:hover>a {
+background-color: #AA3A3A !important;
+}
+
+.skin-blue .sidebar-menu>li>.treeview-menu {
+  background-color: #BB4B4B !important;
+}
+
 .container-fluid {
 	padding-right: 1px;
 	padding-left: 1px;
@@ -23,8 +35,8 @@
 }
 .table > tbody > tr > td, .table > tbody > tr > th, .table > tfoot > tr > td, .table > tfoot > tr > th, .table > thead > tr > td, .table > thead > tr > th {
 	padding: 2px;
-	line-height: 1 !important;
-	vertical-align: middle;
+	line-height: 1.5 !important;
+	vertical-align: middle !important;
 	border-top: 1px solid #ddd;
 }
 

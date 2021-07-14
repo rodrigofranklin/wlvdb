@@ -193,7 +193,7 @@ ui <- navbarPage(
                                     #   textOutput("proporcao_td_transferencias_saldo")
                                     # )
                                     # 
-                                    shinydashboard::box(tableOutput("debuga"))
+ #                                   shinydashboard::box(tableOutput("debuga"))
                                   )
                                 )
                       )
