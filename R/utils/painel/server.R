@@ -100,13 +100,27 @@ server <- function(input, output, session) {
 
   output$titulo_serie_pais <- 
     renderText(
-      paste("Série histórica:",
-            input$indicador_pais,
-            paises[paises$Legenda==input$pais,1],
+      paste(varst[varst$var==input$indicador_pais,"pt"])
+    )
+
+  output$subtitulo_serie_pais <- 
+    renderText(
+      paste0(paises[paises$Legenda==input$pais,1],
+             ", ",
             as.character(ano_min),
-            "-",
+            " - ",
             as.character(ano_max)))
 
+  output$titulo_painel <- 
+    renderText(
+      paste("Painel geral:",
+            paises[paises$Legenda==input$pais,1],
+            "-",
+            input$ano_pais
+            )
+    )
+  
+  
   output$indicadores1 <- renderTable({
       t(sea_paises[,as.character(input$ano_indicador),input$indicador,])[1:(num_paises/2),]
     },

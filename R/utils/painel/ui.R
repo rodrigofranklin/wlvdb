@@ -17,7 +17,7 @@ ui <- navbarPage(
                           style='color: #ffffff;',
                           icon("bars",class = )),
                    "World Labour Values Database"),
-    windowTitle ="World Labour Values App",
+    windowTitle ="World Labour Values Database",
     selected = "País",
 
     
@@ -36,14 +36,16 @@ ui <- navbarPage(
               selectInput(inputId = "pais", 
                           label = "País:", 
                           width = "100%",
-                          choices = lista_paises)          
+                          choices = lista_paises,
+                          selected = "BRA")          
             ),
             column(
               width = 7,
               selectInput(inputId = "indicador_pais",
                           label = "Indicador:",
                           width = "100%",
-                          choices = lista_variaveis_sea)          
+                          choices = lista_variaveis_sea,
+                          selected = "taxa_exploracao")          
             )
           ),
           fluidRow(
@@ -59,7 +61,7 @@ ui <- navbarPage(
           )
         ),
         wellPanel(
-          h3("Detalhamento setorial"),
+          h3("Detalhamento setorial", align = "center"),
           tabsetPanel(
             tabPanel(
               "WIOD.13",
@@ -75,11 +77,12 @@ ui <- navbarPage(
       column(
         width = 8,
         wellPanel(
-          h3(textOutput("titulo_serie_pais")),
+          h3(textOutput("titulo_serie_pais"), align = "center"),
+          h4(textOutput("subtitulo_serie_pais"), align = "center"),
           plotlyOutput("serie_pais")
         ),
         wellPanel(
-          h3("Resumo do país"),
+          h3(textOutput("titulo_painel"), align = "center"),
           dataTableOutput("pais"),          
         )
       )
