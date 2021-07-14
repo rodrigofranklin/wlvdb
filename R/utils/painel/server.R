@@ -68,7 +68,9 @@ server <- function(input, output, session) {
   output$setores_pais_13 <- renderDataTable(
     tabmil(sea_setores_13[as.character(input$ano_pais),
                    input$indicador_pais,,
-                   input$pais]),
+                   input$pais])%>%
+      left_join(setorest,by=c("var" = "Code"))%>%
+      select(sector=pt,value=x),
     options = list(
       ordering = FALSE,
       searching = FALSE,
