@@ -59,6 +59,7 @@ ui <- navbarPage(
           )
         ),
         wellPanel(
+          h3("Detalhamento setorial"),
           tabsetPanel(
             tabPanel(
               "WIOD.13",
@@ -74,10 +75,11 @@ ui <- navbarPage(
       column(
         width = 8,
         wellPanel(
-          
+          h3(textOutput("titulo_serie_pais")),
           plotlyOutput("serie_pais")
         ),
         wellPanel(
+          h3("Resumo do país"),
           dataTableOutput("pais"),          
         )
       )
@@ -89,116 +91,116 @@ ui <- navbarPage(
     
 ### Painel "Indicador --------------    
     
-  tabPanel("Indicador",icon = icon("chart-line"),
-#                      tags$body(class="skin-yellow sidebar-mini control-sidebar-closed",
-                                dashboardPage(
-                                  dashboardHeader(disable = T),
-                                  dashboardSidebar(
-                                    sliderInput(inputId = "ano_indicador",
-                                                label = NULL,
-                                                min = ano_min,
-                                                max = ano_max,
-                                                value = 2009,
-                                                ticks = FALSE,
-                                                width = "95%",
-                                                sep = ""),
-                                    selectInput(inputId = "indicador", 
-                                                label = NULL, 
-                                                choices = lista_variaveis_sea),
-                                    checkboxGroupInput(inputId = "versao_indicadores",
-                                                       choices = lista_versoes,
-                                                       selected =  lista_versoes,
-                                                       label = "Versão:"),
-                                    selectInput(inputId = "paises_indicadores",
-                                                label = "Países:",
-                                                choices = lista_paises,
-                                                selected = lista_paises,
-                                                multiple = TRUE)
-                                  ),
-                                  dashboardBody(
-                                    # ### changing theme
-                                    # shinyDashboardThemes(
-                                    #   theme = "grey_light"
-                                    # ),
-                                   
-                                    shinydashboard::box(
-                                      tableOutput("indicadores1")
-                                      ),
-                                     shinydashboard::box(
-                                        tableOutput("indicadores2")
-                                    ),
-                                    shinydashboard::box(width=12,
-                                      plotlyOutput("serie")
-                                    )
-                                  )
-                                )
- #                     )
-             ),
-             tabPanel("Unequal Exchange",icon = icon("globe"),
-  #                    tags$body(class="skin-blue sidebar-mini control-sidebar-closed",
-                                dashboardPage(
-                                  dashboardHeader(disable = T),
-                                  dashboardSidebar(
-                                    sliderInput(inputId = "ano_transacoes", label = NULL, min = ano_min, max = ano_max, value = 2009, ticks = FALSE, width = "95%", sep = ""),
-                                    selectInput(inputId = "pais_transacoes", label = "País:", choices = lista_paises),
-                                    radioButtons(inputId = "transacoes_agregacao", choices = c("Agregado", "Por setor de origem", "Por setor de destino"), selected = "Agregado", label = ""), 
-                                    radioButtons(inputId = "transacoes_versao", choices = c("WIOD13", "WIOD16"), selected = "WIOD13", label = ""),
-                                    sidebarMenu("",
-                                    menuItem("Export",
-                                             menuSubItem(selectInput(inputId = "par_transacoes", label = "Parceiro/Partner:", choices = lista_paises)),
-                                             tabName = "transf"
-                                    ),
-                                    menuItem("Import",
-                                             menuSubItem(selectInput(inputId = "par_transacoes", label = "Parceiro/Partner:", choices = lista_paises)),
-                                             tabName = "transf"
+  tabPanel(
+    "Indicador",
+    #                      tags$body(class="skin-yellow sidebar-mini control-sidebar-closed",
+    icon = icon("chart-line"),
+    dashboardPage(
+      dashboardHeader(disable = T),
+      dashboardSidebar(
+        sliderInput(inputId = "ano_indicador",
+                    label = NULL,
+                    min = ano_min,
+                    max = ano_max,
+                    value = 2009,
+                    ticks = FALSE,
+                    width = "95%",
+                    sep = ""),
+        selectInput(inputId = "indicador",
+                    label = NULL,
+                    choices = lista_variaveis_sea),
+        checkboxGroupInput(inputId = "versao_indicadores",
+                           choices = lista_versoes,
+                           selected =  lista_versoes,
+                           label = "Versão:"),
+        selectInput(inputId = "paises_indicadores",
+                    label = "Países:",
+                    choices = lista_paises,
+                    selected = lista_paises,
+                    multiple = TRUE)
+      ),
+      dashboardBody(
+        shinyDashboardThemes(
+          theme = "grey_light"
+        ),
+        
+        shinydashboard::box(
+          tableOutput("indicadores1")
+        ),
+        shinydashboard::box(
+          tableOutput("indicadores2")
+        ),
+        shinydashboard::box(width=12,
+                            plotlyOutput("serie")
+        )
+      )
+    )
+  ),
+            tabPanel("Unequal Exchange",icon = icon("globe"),
+ #                    tags$body(class="skin-blue sidebar-mini control-sidebar-closed",
+                               dashboardPage(
+                                 dashboardHeader(disable = T),
+                                 dashboardSidebar(
+                                   sliderInput(inputId = "ano_transacoes", label = NULL, min = ano_min, max = ano_max, value = 2009, ticks = FALSE, width = "95%", sep = ""),
+                                   selectInput(inputId = "pais_transacoes", label = "País:", choices = lista_paises),
+                                   radioButtons(inputId = "transacoes_agregacao", choices = c("Agregado", "Por setor de origem", "Por setor de destino"), selected = "Agregado", label = ""),
+                                   radioButtons(inputId = "transacoes_versao", choices = c("WIOD13", "WIOD16"), selected = "WIOD13", label = ""),
+                                   sidebarMenu("",
+                                   menuItem("Export",
+                                            menuSubItem(selectInput(inputId = "par_transacoes", label = "Parceiro/Partner:", choices = lista_paises)),
+                                            tabName = "transf"
+                                   ),
+                                   menuItem("Import",
+                                            menuSubItem(selectInput(inputId = "par_transacoes", label = "Parceiro/Partner:", choices = lista_paises)),
+                                            tabName = "transf"
 
-                                    ),
-                                    menuItem("Saldo/Position",
-                                             tabName = "transf"
-                                  ),
-                                    menuItem("Unequal Transfers",
-                                             tabName = "transf"
-                                   )
-                                    )
-                                  ),
-                                  dashboardBody(
-                                    shinydashboard::box(
-                                      #plotOutput("exportacoes_monetarias")
-                                      d3tree2Output("exportacoes_monetarias")
-                                      
-                                    ),
-                                    # 
-                                    # shinydashboard::box(
-                                    #   plotOutput("exportacoes_valores")
-                                    # ),
-                                    # shinydashboard::box(
-                                    #   plotOutput("exportacoes_transferencias")
-                                    # ),
-                                    # shinydashboard::box(
-                                    #   tableOutput("importacoes_monetarias"),
-                                    #   tableOutput("importacoes_valores"),
-                                    #   tableOutput("importacoes_transferencias"),
-                                    # ),
-                                    # shinydashboard::box(
-                                    #   tableOutput("saldo_monetarias"),
-                                    #   tableOutput("saldo_valores"),
-                                    #   tableOutput("saldo_transferencias"),
-                                    # ),
-                                    # shinydashboard::box(
-                                    #   tableOutput("td_envios_recebimentos"),
-                                    #   tableOutput("td_envios_recebimentos_saldo"),
-                                    #   tableOutput("improdutivos_envios_recebimentos"),
-                                    #   tableOutput("improdutivos_envios_recebimentos_saldo"),
-                                    #   textOutput("proporcao_td_transferencias"),
-                                    #   textOutput("proporcao_td_transferencias_saldo")
-                                    # )
-                                    # 
- #                                   shinydashboard::box(tableOutput("debuga"))
+                                   ),
+                                   menuItem("Saldo/Position",
+                                            tabName = "transf"
+                                 ),
+                                   menuItem("Unequal Transfers",
+                                            tabName = "transf"
                                   )
-                                )
+                                   )
+                                 ),
+                                 dashboardBody(
+                                   shinydashboard::box(
+                                     #plotOutput("exportacoes_monetarias")
+                                     d3tree2Output("exportacoes_monetarias")
+
+                                   )
+                                   #
+                                   # shinydashboard::box(
+                                   #   plotOutput("exportacoes_valores")
+                                   # ),
+                                   # shinydashboard::box(
+                                   #   plotOutput("exportacoes_transferencias")
+                                   # ),
+                                   # shinydashboard::box(
+                                   #   tableOutput("importacoes_monetarias"),
+                                   #   tableOutput("importacoes_valores"),
+                                   #   tableOutput("importacoes_transferencias"),
+                                   # ),
+                                   # shinydashboard::box(
+                                   #   tableOutput("saldo_monetarias"),
+                                   #   tableOutput("saldo_valores"),
+                                   #   tableOutput("saldo_transferencias"),
+                                   # ),
+                                   # shinydashboard::box(
+                                   #   tableOutput("td_envios_recebimentos"),
+                                   #   tableOutput("td_envios_recebimentos_saldo"),
+                                   #   tableOutput("improdutivos_envios_recebimentos"),
+                                   #   tableOutput("improdutivos_envios_recebimentos_saldo"),
+                                   #   textOutput("proporcao_td_transferencias"),
+                                   #   textOutput("proporcao_td_transferencias_saldo")
+                                   # )
+                                   #
+#                                   shinydashboard::box(tableOutput("debuga"))
+                                 )
+                               )
                       )
-#             )             
-             
+#             )
+
   )
 
 

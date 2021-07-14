@@ -98,7 +98,14 @@ server <- function(input, output, session) {
   )
   
 
-
+  output$titulo_serie_pais <- 
+    renderText(
+      paste("Série histórica:",
+            input$indicador_pais,
+            paises[paises$Legenda==input$pais,1],
+            as.character(ano_min),
+            "-",
+            as.character(ano_max)))
 
   output$indicadores1 <- renderTable({
       t(sea_paises[,as.character(input$ano_indicador),input$indicador,])[1:(num_paises/2),]
