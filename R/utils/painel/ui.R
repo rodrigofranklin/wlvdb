@@ -1,26 +1,36 @@
 
 ui <- fluidPage(
-  navbarPage(theme="painel.css", lang="es",footer=tags$div(tags$i(class="fa fa-copyright fa-flip-horizontal"),
-                                                         tags$a(href="https://gitlab.com/rodrigoesborges/worldlabourvalues",icon("creative-commons")),"Por: World Labour Values Task Force - ",
-                                                                  tags$a(href="https://worldlabourvalues.org","Grupo de Estudos Concretos sobre Teoria do Valor")),
-             header="",id="mainpanel",
-             title=tags$div(style="margin-bottom: 0px !important;",tags$a(href="#", class="sidebar-toggle",
-                                   `data-toggle`="offcanvas",role="button",
-                                   tags$span(class="sr-only","Toggle navigation") , 
-                                   style='color: #ffffff;',
-                                  icon("bars",class = )
-             ),"World Labour Values Database"), windowTitle ="World Labour Values App", selected = "Pais/Country",
-             tabPanel("Pais/Country",icon = icon("globe-americas"),
-                                dashboardPage(skin="red",
-                                  dashboardHeader(disable = T),
-                                  dashboardSidebar(disable = T
-                                  ),
-                                  dashboardBody(
-                                     ### changing theme
-                                     shinyDashboardThemes(
-                                       theme = "grey_light"
-                                     ),
-                                     tags$head(tags$style(HTML('
+  navbarPage(
+    theme="painel.css",
+    lang="es",
+    footer=tags$div(tags$i(class="fa fa-copyright fa-flip-horizontal"),
+                    tags$a(href="https://gitlab.com/rodrigoesborges/worldlabourvalues",
+                           icon("creative-commons")),
+                    "Por: World Labour Values Task Force - ",
+                    tags$a(href="https://worldlabourvalues.org",
+                           "Grupo de Estudos Concretos sobre Teoria do Valor")),
+    header="",
+    id="mainpanel",
+    title=tags$div(style="margin-bottom: 0px !important;",
+                   tags$a(href="#", class="sidebar-toggle",
+                          `data-toggle`="offcanvas",role="button",
+                          tags$span(class="sr-only","Toggle navigation") ,
+                          style='color: #ffffff;',
+                          icon("bars",class = )),
+                   "World Labour Values Database"),
+    windowTitle ="World Labour Values App",
+    selected = "Pais/Country",
+    tabPanel(
+      "Pais/Country",
+      icon = icon("globe-americas"),
+      dashboardPage(
+        skin="red",
+        dashboardHeader(disable = T),
+        dashboardSidebar(disable = T),
+        dashboardBody(
+          ### changing theme
+          shinyDashboardThemes(theme = "grey_light"),
+          tags$head(tags$style(HTML('
 
                                 /* main sidebar */
                                 .skin-red .main-sidebar {
@@ -32,43 +42,48 @@ ui <- fluidPage(
                                 }
 
                                 '))),
-                                    fluidRow(shinydashboard::box(width=1,
-                                      selectInput(inputId = "pais",
-                                                  label = NULL,
-                                                  choices = lista_paises
-                                      )),
-                                      shinydashboard::box(width=5,selectInput(inputId = "indicador_pais",
-                                                  label = NULL,
-                                                  choices = lista_variaveis_sea
-                                      )),
-                                      shinydashboard::box(width=6,sliderInput(inputId = "ano_pais",
-                                                  label = NULL,
-                                                  min = ano_min,
-                                                  max = ano_max,
-                                                  value = 2009,
-                                                  ticks = FALSE,
-                                                  width = "95%",
-                                                  sep = ""
-                                      )
-                                    )
-                                    ),
-                                    shinydashboard::box(dataTableOutput("pais"),
-                                                        plotlyOutput("serie_pais")),
-                                    shinydashboard::box(
-                                      tabsetPanel(
-                                        tabPanel("WIOD.13",
-                                                 dataTableOutput("setores_pais_13")
-                                        ),
-                                        tabPanel("WIOD.16",
-                                                 dataTableOutput("setores_pais_16")
-                                        )
-                                      )
-                                    ),
-
-                                  )
-                                )
-             ),
-             tabPanel("Indicador",icon = icon("chart-line"),
+          fluidRow(
+            column(
+              width = 2,
+              selectInput(inputId = "pais", 
+                          label = NULL, 
+                          width = "100%",
+                          choices = lista_paises)),
+            column(
+              width = 4,
+              selectInput(inputId = "indicador_pais",
+                          label = NULL,
+                          width = "100%",
+                          choices = lista_variaveis_sea)),
+            column(
+              width = 6,
+              sliderInput(inputId = "ano_pais",
+                          label = NULL,
+                          min = ano_min,
+                          max = ano_max,
+                          value = 2009,
+                          ticks = FALSE,
+                          width = "100%",
+                          sep = ""))
+          ),
+          column(
+            width = 6,
+            fluidRow(
+              dataTableOutput("pais"),
+              plotlyOutput("serie_pais")
+            )
+          ),
+          column(
+            width = 6,
+            tabsetPanel(
+              tabPanel(
+                "WIOD.13",
+                dataTableOutput("setores_pais_13")),
+              tabPanel(
+                "WIOD.16",
+                dataTableOutput("setores_pais_16")))),
+    ))),
+    tabPanel("Indicador",icon = icon("chart-line"),
 #                      tags$body(class="skin-yellow sidebar-mini control-sidebar-closed",
                                 dashboardPage(
                                   dashboardHeader(disable = T),

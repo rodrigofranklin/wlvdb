@@ -44,14 +44,23 @@ server <- function(input, output, session) {
     tabmil(t(sea_paises[,as.character(input$ano_pais),,input$pais]))%>%
       left_join(varst)%>%
       select(var = pt, 2:3),
- #   rownames = TRUE,
+   # rownames = TRUE,
 #    spacing = "xs",
 #    striped = TRUE,
- #   hover = TRUE,
+#    hover = TRUE,
 #    width = "100%",
-    options = list(pageLength = 10, info = FALSE, lengthMenu = list(c(10, -1), c("10", "All")) )
+    options = list(
+      ordering = FALSE,
+      searching = FALSE,
+      # scrollY = "600",
+      pageLength = 10,
+      info = FALSE, 
+      lengthChange = FALSE
+    )
   )
 
+  names(sea_paises[1,1,,1])
+  
   output$serie_pais <- renderPlotly({
     dados <- sea_paises[,,input$indicador_pais,input$pais]
     plotaserie(dados)
