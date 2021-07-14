@@ -142,7 +142,8 @@ ui <- fluidPage(
                                   ),
                                   dashboardBody(
                                     shinydashboard::box(
-                                      plotOutput("exportacoes_monetarias")
+                                      #plotOutput("exportacoes_monetarias")
+                                      d3tree2Output("exportacoes_monetarias")
                                       
                                     ),
                                     # 
@@ -171,7 +172,7 @@ ui <- fluidPage(
                                     #   textOutput("proporcao_td_transferencias_saldo")
                                     # )
                                     # 
-#                                    shinydashboard::box(tableOutput("debuga"))
+                                    shinydashboard::box(tableOutput("debuga"))
                                   )
                                 )
                       )
