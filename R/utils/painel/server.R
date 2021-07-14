@@ -620,13 +620,13 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     selecao <- fazer_selecao()
     if (selecao == 1){
       temp1 <- m_paises_13[as.character(input$ano_transacoes),
-                           "transferências.valores",
+                           "transferencias_valores",
                            input$pais_transacoes,] -
         m_paises_13[as.character(input$ano_transacoes),
                            "transferências_produtivas.valores",
                            input$pais_transacoes,]
       temp2 <-  -(m_paises_13[as.character(input$ano_transacoes),
-                            "transferências.valores",
+                            "transferencias_valores",
                             ,input$pais_transacoes] -
         m_paises_13[as.character(input$ano_transacoes),
                     "transferências_produtivas.valores",
@@ -647,13 +647,13 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
     selecao <- fazer_selecao()
     if (selecao == 1){
       temp1 <- m_paises_13[as.character(input$ano_transacoes),
-                           "transferências.valores",
+                           "transferencias_valores",
                            input$pais_transacoes,] -
         m_paises_13[as.character(input$ano_transacoes),
                     "transferências_produtivas.valores",
                     input$pais_transacoes,] -
         (m_paises_13[as.character(input$ano_transacoes),
-                              "transferências.valores",
+                              "transferencias_valores",
                               ,input$pais_transacoes] -
            m_paises_13[as.character(input$ano_transacoes),
                                 "transferências_produtivas.valores",
@@ -674,10 +674,10 @@ options = list(pageLength = 30, info = FALSE, lengthMenu = list(c(30, -1), c("30
                                    "transferências_produtivas.valores",
                                    ,input$pais_transacoes])/
                    sum(m_paises_13[as.character(input$ano_transacoes),
-                                   "transferências.valores",
+                                   "transferencias_valores",
                                    input$pais_transacoes,] +
                          m_paises_13[as.character(input$ano_transacoes),
-                                     "transferências.valores",
+                                     "transferencias_valores",
                                      ,input$pais_transacoes]))
   })
   textOutput("proporcao_td_transferencias_saldo")

@@ -1,5 +1,5 @@
   pacotes <-  c("ggplot2","zoo","readxl","tidyverse","dplyr","tidyr","plotly","lubridate","readODS",
-                "shiny","shinydashboard","dashboardthemes","treemap","rnaturalearth","plotly")
+                "shiny","shinydashboard","dashboardthemes","treemap","rnaturalearth","plotly","data.table","doParallel")
 pacotesnovos <- pacotes[ !( pacotes %in% utils::installed.packages()[ , "Package" ] ) ]
 if( length( pacotesnovos ) ) utils::install.packages( pacotesnovos )
  
