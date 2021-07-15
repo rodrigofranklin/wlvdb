@@ -73,11 +73,10 @@ server <- function(input, output, session) {
       left_join(setorest,by=c("var" = "Code"))%>%
       select(sector=pt,value=x),
     options = list(
-      ordering = FALSE,
+      ordering = TRUE,
       searching = FALSE,
       paging = FALSE,
       scrollY= "100%",
-      # pageLength = 10,
       info = FALSE, 
       lengthChange = FALSE
     )
@@ -90,10 +89,10 @@ server <- function(input, output, session) {
       left_join(setorest,by=c("var" = "Code"))%>%
       select(sector=pt,value=x),
     options = list(
-      ordering = FALSE,
+      ordering = TRUE,
       searching = FALSE,
       paging = FALSE,
-      # pageLength = 10,
+      scrollY= "100%",
       info = FALSE, 
       lengthChange = FALSE
     )
@@ -156,9 +155,9 @@ server <- function(input, output, session) {
     )
 
   output$serie <- renderPlotly({
-    dados <- sea_paises[input$versao_indicadores,,
+    dados <- sea_paises[input$versao,,
                         input$indicador,
-                        input$paises_indicadores]
+                        input$paises]
   plotaserie(dados)
   })
 

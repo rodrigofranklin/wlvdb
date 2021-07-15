@@ -10,10 +10,13 @@ ui <- dashboardPage(
   skin = "red",
   title = "Banco de Dados Valor Trabalho Mundial",
   header = dashboardHeader (
-    title = "valor-trabalho"
+    title = "Valor Trabalho Mundial",
+    titleWidth = 250
   ),
   sidebar = dashboardSidebar(
+    width = 250,
     sidebarMenu(
+      id = "menu",
       menuItem(
         "País",
         tabName = "País",
@@ -32,28 +35,39 @@ ui <- dashboardPage(
         "Comércio Internacional",
         icon = icon("sync-alt"),
         menuSubItem(
-          "Exportações"
+          "Exportações",
+          tabName = "Exportações"
         ),
         menuSubItem(
-          "Importações"
+          "Importações",
+          tabName = "Importações"
         ),
         menuSubItem(
-          "Saldos"
+          "Saldos",
+          tabName = "Saldos"
         ),
         menuSubItem(
-          "Transferências"
+          "Transferências",
+          tabName = "Transferências"
         )
         
         
         
       )
     ),
-    br(), hr(width = "80%"), br(),
+    hr(width = "80%"),
     
-    selectInput(inputId = "pais",
-                label = "País:",
-                choices = lista_paises,
-                selected = "BRA"),
+    conditionalPanel(
+      'input.menu == "País" |
+      input.menu == "Exportações" |
+      input.menu == "Importações" |
+      input.menu == "Saldos" |
+      input.menu == "Transferências"',
+      selectInput(inputId = "pais",
+                  label = "País:",
+                  choices = lista_paises,
+                  selected = "BRA")
+    ),
     
     selectInput(inputId = "indicador",
                 label = "Indicador:",
@@ -68,7 +82,34 @@ ui <- dashboardPage(
                 value = 2009,
                 ticks = FALSE,
                 width = "100%",
-                sep = "")
+                sep = ""),
+
+    conditionalPanel(
+      'input.menu == "Indicador"',
+      
+      checkboxGroupInput(inputId = "versao",
+                         choices = lista_versoes,
+                         selected =  lista_versoes,
+                         label = "Base de dados:"),
+      
+      selectInput(inputId = "paises",
+                  label = "Países:",
+                  choices = lista_paises,
+                  selected = lista_paises,
+                  multiple = TRUE)      
+    ),
+    
+    conditionalPanel(
+      'input.menu == "Exportações" |
+      input.menu == "Importações" |
+      input.menu == "Saldos" |
+      input.menu == "Transferências"',
+      radioButtons(inputId = "transacoes_agregacao", choices = c("Agregado", "Por setor de origem", "Por setor de destino"), selected = "Agregado", label = ""),
+      radioButtons(inputId = "transacoes_versao", choices = c("WIOD13", "WIOD16"), selected = "WIOD13", label = "Base de dados:"),
+    )
+
+    
+        
   ),
   body = dashboardBody(
     tabItems(
@@ -125,6 +166,13 @@ ui <- dashboardPage(
         tabName = "Indicador",
         shinydashboard::box(
           width = "100%",
+          title = "Série Temporal",
+          status = "danger",
+          solidHeader = TRUE,
+          plotlyOutput("serie")
+        ),
+        shinydashboard::box(
+          width = "100%",
           # title = "",
           # solidHeader = TRUE,
           status = "danger",
@@ -136,9 +184,6 @@ ui <- dashboardPage(
             width = 6,
             tableOutput("indicadores2")
           )
-        ),
-        shinydashboard::box(width=12,
-                            plotlyOutput("serie")
         )
         
       ),
@@ -192,10 +237,6 @@ ui <- dashboardPage(
 #         selectInput(inputId = "indicador",
 #                     label = NULL,
 #                     choices = lista_variaveis_sea),
-#         checkboxGroupInput(inputId = "versao_indicadores",
-#                            choices = lista_versoes,
-#                            selected =  lista_versoes,
-#                            label = "Versão:"),
 #         selectInput(inputId = "paises_indicadores",
 #                     label = "Países:",
 #                     choices = lista_paises,
