@@ -95,7 +95,7 @@ ui <- dashboardPage(
       selectInput(inputId = "paises",
                   label = "Países:",
                   choices = lista_paises,
-                  selected = lista_paises,
+                  selected = c("BRA","CHN","USA"),
                   multiple = TRUE)      
     ),
     
