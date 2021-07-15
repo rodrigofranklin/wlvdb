@@ -41,7 +41,7 @@ server <- function(input, output, session) {
    })
   
   output$pais <- renderDataTable(
-    tabmil(t(sea_paises[,as.character(input$ano_pais),,input$pais]))%>%
+    tabmil(t(sea_paises[,as.character(input$ano),,input$pais]))%>%
       left_join(varst)%>%
       select(var = pt, 2:3),
    # rownames = TRUE,
@@ -53,6 +53,7 @@ server <- function(input, output, session) {
       ordering = FALSE,
       searching = FALSE,
       paging = FALSE,
+      scrollY = "300",
       # pageLength = 10,
       info = FALSE, 
       lengthChange = FALSE
@@ -60,14 +61,14 @@ server <- function(input, output, session) {
   )
 
   output$serie_pais <- renderPlotly({
-    dados <- sea_paises[,,input$indicador_pais,input$pais]
+    dados <- sea_paises[,,input$indicador,input$pais]
     plotaserie(dados)
   })
 
   
   output$setores_pais_13 <- renderDataTable(
-    tabmil(sea_setores_13[as.character(input$ano_pais),
-                   input$indicador_pais,,
+    tabmil(sea_setores_13[as.character(input$ano),
+                   input$indicador,,
                    input$pais])%>%
       left_join(setorest,by=c("var" = "Code"))%>%
       select(sector=pt,value=x),
@@ -75,6 +76,7 @@ server <- function(input, output, session) {
       ordering = FALSE,
       searching = FALSE,
       paging = FALSE,
+      scrollY= "100%",
       # pageLength = 10,
       info = FALSE, 
       lengthChange = FALSE
@@ -82,8 +84,8 @@ server <- function(input, output, session) {
   )
   
   output$setores_pais_16 <- renderDataTable(
-    tabmil(sea_setores_16[as.character(input$ano_pais),
-                          input$indicador_pais,,
+    tabmil(sea_setores_16[as.character(input$ano),
+                          input$indicador,,
                           input$pais])%>%
       left_join(setorest,by=c("var" = "Code"))%>%
       select(sector=pt,value=x),
@@ -96,11 +98,24 @@ server <- function(input, output, session) {
       lengthChange = FALSE
     )
   )
-  
 
+  
+  output$titulo_detalhamento_pais <- 
+    renderText(
+      paste(varst[varst$var==input$indicador,"pt"])
+      )
+
+  
+  output$subtitulo_detalhamento_pais <- 
+    renderText(
+      paste(paises[paises$Legenda==input$pais,1],
+            "-",
+            input$ano)
+      )
+  
   output$titulo_serie_pais <- 
     renderText(
-      paste(varst[varst$var==input$indicador_pais,"pt"])
+      paste(varst[varst$var==input$indicador,"pt"])
     )
 
   output$subtitulo_serie_pais <- 
@@ -113,16 +128,15 @@ server <- function(input, output, session) {
 
   output$titulo_painel <- 
     renderText(
-      paste("Painel geral:",
-            paises[paises$Legenda==input$pais,1],
+      paste("Painel Geral:",paises[paises$Legenda==input$pais,1],
             "-",
-            input$ano_pais
+            input$ano
             )
     )
   
   
   output$indicadores1 <- renderTable({
-      t(sea_paises[,as.character(input$ano_indicador),input$indicador,])[1:(num_paises/2),]
+      t(sea_paises[,as.character(input$ano),input$indicador,])[1:(num_paises/2),]
     },
     rownames = TRUE,
     spacing = "xs",
@@ -132,7 +146,7 @@ server <- function(input, output, session) {
     )
 
   output$indicadores2 <- renderTable({
-      t(sea_paises[,as.character(input$ano_indicador),input$indicador,])[((num_paises/2)+1):num_paises,]
+      t(sea_paises[,as.character(input$ano),input$indicador,])[((num_paises/2)+1):num_paises,]
     },
     rownames = TRUE,
     spacing = "xs",
