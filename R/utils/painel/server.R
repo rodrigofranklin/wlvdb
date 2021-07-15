@@ -134,38 +134,46 @@ server <- function(input, output, session) {
     )
   
   
-  output$indicadores1 <- renderDataTable(
+  output$indicadores1 <- renderDT(
     {
       dados <- t(rbind(
         paises[match(names(sea_paises[1,1,1,]),paises[,3]),1],
         sea_paises[,as.character(input$ano),input$indicador,]))[1:(num_paises/2),]
-      as.data.frame(dados)
+      dados <- datatable(dados,
+                rownames = 1,
+                options = list(
+                  ordering = FALSE,
+                  searching = FALSE,
+                  paging = FALSE,
+                  scrollY= "100%",
+                  info = FALSE, 
+                  lengthChange = FALSE
+                )
+      ) %>% 
+        formatPercentage("WIOD13", 2)
+      formatStyle(dados, names(dados$x$data),`line-height` = '10px')
     },
-    options = list(
-      ordering = TRUE,
-      searching = FALSE,
-      paging = FALSE,
-      scrollY= "100%",
-      info = FALSE, 
-      lengthChange = FALSE
-    )
   )
 
-  output$indicadores2 <- renderDataTable(
+  output$indicadores2 <- DT::renderDataTable(
     {
       dados <- t(rbind(
         paises[match(names(sea_paises[1,1,1,]),paises[,3]),1],
         sea_paises[,as.character(input$ano),input$indicador,]))[((num_paises/2)+1):num_paises,]
-      as.data.frame(dados)
+      dados <- datatable(dados,
+                         rownames = 1,
+                         options = list(
+                           ordering = FALSE,
+                           searching = FALSE,
+                           paging = FALSE,
+                           scrollY= "100%",
+                           info = FALSE, 
+                           lengthChange = FALSE
+                         )
+      ) %>% 
+        formatPercentage("WIOD13", 2)
+      formatStyle(dados, names(dados$x$data),`line-height` = '10px')
     },
-    options = list(
-      ordering = TRUE,
-      searching = FALSE,
-      paging = FALSE,
-      scrollY= "100%",
-      info = FALSE, 
-      lengthChange = FALSE
-    )
   )
 
   output$serie <- renderPlotly({
