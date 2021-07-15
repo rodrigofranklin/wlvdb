@@ -166,26 +166,25 @@ ui <- dashboardPage(
         tabName = "Indicador",
         shinydashboard::box(
           width = "100%",
-          title = "Série Temporal",
-          status = "danger",
-          solidHeader = TRUE,
-          plotlyOutput("serie")
-        ),
-        shinydashboard::box(
-          width = "100%",
           # title = "",
           # solidHeader = TRUE,
           status = "danger",
           column(
             width = 6,
-            tableOutput("indicadores1")
+            dataTableOutput("indicadores1")
           ),
           column(
             width = 6,
-            tableOutput("indicadores2")
+            dataTableOutput("indicadores2")
           )
+        ),
+        shinydashboard::box(
+          width = "100%",
+          title = "Série Temporal",
+          status = "danger",
+          solidHeader = TRUE,
+          plotlyOutput("serie")
         )
-        
       ),
 
 ### Exportações -------------------------------

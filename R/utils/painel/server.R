@@ -134,25 +134,39 @@ server <- function(input, output, session) {
     )
   
   
-  output$indicadores1 <- renderTable({
-      t(sea_paises[,as.character(input$ano),input$indicador,])[1:(num_paises/2),]
+  output$indicadores1 <- renderDataTable(
+    {
+      dados <- t(rbind(
+        paises[match(names(sea_paises[1,1,1,]),paises[,3]),1],
+        sea_paises[,as.character(input$ano),input$indicador,]))[1:(num_paises/2),]
+      as.data.frame(dados)
     },
-    rownames = TRUE,
-    spacing = "xs",
-    striped = TRUE,
-    hover = TRUE,
-    width = "100%"
+    options = list(
+      ordering = TRUE,
+      searching = FALSE,
+      paging = FALSE,
+      scrollY= "100%",
+      info = FALSE, 
+      lengthChange = FALSE
     )
+  )
 
-  output$indicadores2 <- renderTable({
-      t(sea_paises[,as.character(input$ano),input$indicador,])[((num_paises/2)+1):num_paises,]
+  output$indicadores2 <- renderDataTable(
+    {
+      dados <- t(rbind(
+        paises[match(names(sea_paises[1,1,1,]),paises[,3]),1],
+        sea_paises[,as.character(input$ano),input$indicador,]))[((num_paises/2)+1):num_paises,]
+      as.data.frame(dados)
     },
-    rownames = TRUE,
-    spacing = "xs",
-    striped = TRUE,
-    hover = TRUE,
-    width = "100%"
+    options = list(
+      ordering = TRUE,
+      searching = FALSE,
+      paging = FALSE,
+      scrollY= "100%",
+      info = FALSE, 
+      lengthChange = FALSE
     )
+  )
 
   output$serie <- renderPlotly({
     dados <- sea_paises[input$versao,,
