@@ -9,7 +9,7 @@
 source("requ.R")
 
 ## Carrega os dados
-#####
+######
 paises <- read.csv2(file = "dados/paises.csv", row.names = 1, check.names = F)
 num_paises <- dim(paises)[1]
 

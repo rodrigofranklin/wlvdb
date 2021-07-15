@@ -1,7 +1,7 @@
 
 server <- function(input, output, session) {
   linhas_13 <- reactive({
-    encontrar_pais(m_io_13, input$pais_transacoes, rownames)
+    encontrar_pais(m_io_13, input$pais, rownames)
   })
   
   colunas_13 <- reactive({
@@ -16,6 +16,13 @@ server <- function(input, output, session) {
     encontrar_pais(m_io_16, input$pais_transacoes, colnames)
   })
   
+  comerciantes_p <-  function(bd=13,pais = input$pais,ano = input$ano, elemento = "exportacoes_pm",qtde = 15) {
+      mat <- get(paste0("m_paises_",bd))
+      mat <- mat[as.character(ano),elemento,pais,]
+      paises <- names(sort(mat,T)[2:(qtde+1)])
+    }
+ 
+  
   fazer_selecao <- reactive({
     switch(paste0(input$transacoes_versao,input$transacoes_agregacao),
              "WIOD13Agregado" = 1,
@@ -28,12 +35,16 @@ server <- function(input, output, session) {
   
    dados <- reactive({ 
      m_io_13 %>% 
-       agregado(input$ano_transacoes, "exportacoes_pm",  linhas_13()) %>% 
-       as.data.table(keep.rownames = "paisect") %>%
-       separate(paisect, c("pais_origen", "sector_origen"), sep="\\.") %>%
-       pivot_longer(-c(pais_origen, sector_origen), names_to = "paisect_d", 
-                    values_to = "valor")%>%
-       separate(paisect_d, c("pais_d", "sect_d"), sep = "\\.")
+       agregado(input$ano_transacoes, "exportacoes_pm", linhas_13()) %>% 
+       as.data.table(keep.rownames = "paisect")%>%
+       separate(paisect,c("pais_origen","sector_origen"),sep="\\.")%>%
+       select(-pais_origen)%>%
+       pivot_longer(-c(sector_origen),names_to="paisect_d",values_to="valor")%>%
+       separate(paisect_d,c("pais_d","sect_d"),sep="\\.")%>%
+       dplyr::group_by(across(all_of(c("pais_d","sect_d"))))%>%
+       summarize(valor=sum(valor))%>%
+       left_join(setorest,by = c("sect_d" = "Code"))%>%
+       mutate(sect_d = pt)%>%select(-sector,-es,-fr)
    })
    
    output$debuga <- renderTable({
@@ -192,36 +203,51 @@ server <- function(input, output, session) {
   # No entanto, os gráficos conforme tipo de variábel são concomitantes.
 
 ### Sim certamente possível
-  output$exportacoes_monetarias <- renderD3tree2({
-    selecao <- fazer_selecao()
+  output$exportacoes_monetarias <- renderD3tree3({
+#    selecao <- fazer_selecao()
     
     ##Preparación del filtro del treemap interactivo
-    agrupamento <- c("pais_origen","pais_d","sect_d")
-    if (selecao %in% c(2,5) ){
-      agrupamento <- c("pais_origen","sect_origen","pais_d")
-    } else  if (selecao %in% c(3,6)){
-      agrupamento <- c("pais_origen","sect_d","pais_d")
-    }
+    agrupamento <- c("pais_d","sect_d")
+#    if (selecao %in% c(2,5) ){
+#      agrupamento <- c("sector_origen","pais_d")
+#    } else  if (selecao %in% c(3,6)){
+#      agrupamento <- c("sect_d","pais_d")
+#    }
     
-    if (selecao < 4) {
+#    if (selecao < 4) {
       #Prepara versão do BD
-      dados <- m_io_13 %>% 
-        agregado(input$ano_transacoes, "exportacoes_pm", linhas_13()) %>% 
-        as.data.table(keep.rownames = "paisect")%>%
-        separate(paisect,c("pais_origen","sector_origen"),sep="\\.")%>%
-        pivot_longer(-c(pais_origen,sector_origen),names_to="paisect_d",values_to="valor")%>%
-        separate(paisect_d,c("pais_d","sect_d"),sep="\\.")
-    } else {
-      dados <- m_io_16 %>% 
-        agregado(input$ano_transacoes, "exportacoes_pm", linhas_16()) %>% 
-        as.data.table(keep.rownames = "paisect")%>%
-        separate(paisect,c("pais_origen","sector_origen"),sep="\\.")%>%
-        pivot_longer(-c(pais_origen,sector_origen),names_to="paisect_d",values_to="valor")%>%
-        separate(paisect_d,c("pais_d","sect_d"),sep="\\.")
-    }
+        p <- comerciantes_p(13,input$pais,input$ano,"exportacoes_pm",10)
+        dados <- m_io_13 %>% 
+          agregado(input$ano, "exportacoes_pm", linhas_13()) %>% 
+          as.data.table(keep.rownames = "paisect")%>%
+          separate(paisect,c("pais_origen","sector_origen"),sep="\\.")%>%
+          select(-pais_origen)%>%
+          pivot_longer(-c(sector_origen),names_to="paisect_d",values_to="valor")%>%
+          separate(paisect_d,c("pais_d","sect_d"),sep="\\.")%>%
+          mutate(pais_d = ifelse(pais_d %in% p,pais_d,"ROW"))%>%
+          dplyr::group_by(across(all_of(agrupamento)))%>%
+          summarize(valor=sum(valor))%>%
+          left_join(paises, by = c("pais_d" = "Legenda"))%>%
+          left_join(setorest,by = c("sect_d" = "Code"))%>%
+          transmute(pais_d = `Países`,sect_d = pt, valor)%>%ungroup()
+        #%>%
+         # mutate(across(-valor,as.factor))
+        
+        
+#    } else {
+    #   dados <- m_io_16 %>% 
+    #     agregado(input$ano_transacoes, "exportacoes_pm", linhas_16()) %>% 
+    #     as.data.table(keep.rownames = "paisect")%>%
+    #     separate(paisect,c("pais_origen","sector_origen"),sep="\\.")%>%
+    #     pivot_longer(-c(pais_origen,sector_origen),names_to="paisect_d",values_to="valor")%>%
+    #     separate(paisect_d,c("pais_d","sect_d"),sep="\\.")%>%
+    #     dplyr::group_by(across(all_of(agrupamento)))%>%
+    #     summarize(valor=sum(valor))
+    # }
     #genera el resultado interactivo
-    d3tree2(treemap(dados, index = agrupamento, vSize = "valor", 
-                    type = "value", palette = "Set1"))
+    d3tree3(treemap(dados, index = agrupamento, vSize = "valor"))
+    #, 
+     #               type = "value", palette = "Set1"))
     }
     )
 
