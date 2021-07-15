@@ -158,8 +158,8 @@ ui <- dashboardPage(
               )
             )
           )
-        )
-      ),
+          )
+        ),
 
 ### Indicador -------------------------------
       tabItem(
@@ -189,7 +189,14 @@ ui <- dashboardPage(
 
 ### Exportações -------------------------------
       tabItem(
-        tabName = "Exportações"
+        tabName = "Exportações",
+        column(width= 6,
+               shinydashboard::box(
+                 width="100%",
+                 d3tree3Output("exportacoes_monetarias")
+               )
+        )
+        
         
       ),      
 
