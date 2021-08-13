@@ -1,0 +1,6 @@
+names;computation;order
+k_composition;k_composition;1
+k_depreciation;k_depreciation;2
+values;transformation.R;3
+transfers_values;transfers.R;4
+consumption_basket;national_basket.R;5

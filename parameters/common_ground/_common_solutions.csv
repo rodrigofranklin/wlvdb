@@ -1,0 +1,12 @@
+names;sector_solution;country_solution;order
+z;common/z.R;mean;2
+z_employees;common/z_employees.R;mean;2
+abstract_labour;common/abstract_labour.R;sum;2
+abstract_labour_employees;common/abstract_labour_employees.R;sum;2
+gross_output_values;common/gross_output_values.R;sum;4
+gross_output_dp;common/gross_output_dp.R;sum;5
+value_added_values;common/value_added_values.R;sum;2
+value_added_dp;common/value_added_dp.R;sum;5
+labour_force_value_total;common/labour_force_value_total.R;sum;4
+exploitation_rate;common/exploitation_rate.R;common/exploitation_rate_country.R;5
+value;common/value.R;sum;4

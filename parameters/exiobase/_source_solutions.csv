@@ -1,0 +1,11 @@
+names;sector_solution;country_solution;order
+depreciation;exiobase/depreciation.R;sum;4
+z;reduction/alternative_1/z.R;mean;2
+z_employees;reduction/alternative_1/z_employees.R;mean;2
+employed_persons;exiobase/employed_persons.R;sum;1
+employees;exiobase/employees.R;sum;1
+hours_employed;exiobase/hours_employed.R;sum;1
+hours_employees;exiobase/hours_employees.R;sum;1
+wages;exiobase/wages.R;sum;1
+gross_output_mp;gross_output_mp;sum;0
+value_added_mp;exiobase/value_added_mp.R;sum;1
