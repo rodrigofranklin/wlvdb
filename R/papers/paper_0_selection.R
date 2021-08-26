@@ -1,7 +1,7 @@
 # select data to the paper on the reduction problem
 country_selection <- c("BRA","USA","JPN","MEX")
 year <- "2009"
-nums$methods <- length(method_list)
+nums$methods <- length(methods)
 
 m_countries <- array(NA,
                      dim = c(nums$methods,
@@ -9,7 +9,7 @@ m_countries <- array(NA,
                              nums$m_countries_variables,
                              nums$countries,
                              nums$countries),
-                     dimnames = list(method_list,
+                     dimnames = list(methods,
                                      lists$years,
                                      lists$m_countries_variables,
                                      lists$countries,
@@ -21,7 +21,7 @@ sea_sectors <- array(NA,
                              nums$sea_variables,
                              nums$sectors,
                              nums$countries),
-                     dimnames = list(method_list,
+                     dimnames = list(methods,
                                      lists$years,
                                      lists$sea_variables,
                                      lists$sectors,
@@ -32,22 +32,25 @@ sea_countries <- array(NA,
                                nums$years,
                                nums$sea_variables,
                                nums$countries+1),
-                       dimnames = list(method_list,
+                       dimnames = list(methods,
                                        lists$years,
                                        lists$sea_variables,
                                        c(lists$countries,"WWW")))
 
+## lets predefine percentandresults for this paper
+pc_cols <- (nums$methods+2):(nums$methods*2+1)
+pc_res <- c(1,rbind(1:nums$methods+1,(nums$methods+2):(nums$methods*2+1)))
 # load all results
-for (method_version in method_list) {
-  method_path <- paste0("results/", method_version)
+for (mth_v in methods) {
+  method_path <- paste0("models/", mth_v,"/results")
 
-  m_countries[method_version,,,,] <-
+  m_countries[mth_v,,,,] <-
     readRDS(paste0(method_path,"/m_countries.rds"))
   
-  sea_sectors[method_version,,,,] <-
+  sea_sectors[mth_v,,,,] <-
     readRDS(paste0(method_path,"/sea_sectors.rds"))
   
-  sea_countries[method_version,,,] <-
+  sea_countries[mth_v,,,] <-
     readRDS(paste0(method_path,"/sea_countries.rds"))
 }
 
@@ -59,7 +62,8 @@ dim(temp1) <- nums$countries_sectors
 temp2 <- sea_sectors[,year,"gross_output_dp",,]
 dim(temp2) <- c(nums$methods,nums$countries_sectors)
 table_0 <- cbind(temp1, t(temp2))
-colnames(table_0) <- c("market_prices",method_list)
+
+colnames(table_0) <- c("market_prices",methods)
   
 # Table 1: gross output in mp and dp
 mp <- sea_countries[1,year,"gross_output_mp",country_selection]/1000000
@@ -69,32 +73,41 @@ table_1 <-
   cbind(table_1,
         t(sea_countries[,year,"gross_output_dp",country_selection] /
             sea_countries[,year,"gross_output_mp",country_selection]))
-colnames(table_1)[7:11] <- "%"
-table_1 <- table_1[,c(1,2,7,3,8,4,9,5,11)]
+
+colnames(table_1)[pc_cols] <- "%"
+table_1 <- table_1[,pc_res]
 
 # Table 2: value added in mp and dp
+
 mp <- sea_countries[1,year,"value_added_mp",country_selection]/1000000
+
 table_2 <- 
   cbind(mp,t(sea_countries[,year,"value_added_dp",country_selection])/1000000)
+
 table_2 <- 
   cbind(table_2,
         t(sea_countries[,year,"value_added_dp",country_selection] /
             sea_countries[,year,"value_added_mp",country_selection]))
-colnames(table_2)[7:11] <- "%"
-table_2 <- table_2[,c(1,2,7,3,8,4,9,5,11)]
+
+colnames(table_2)[pc_cols] <- "%"
+table_2 <- table_2[,pc_res]
 
 # Table 3: exploitation rate
 table_3 <- t(sea_countries[,year,"exploitation_rate",
                            c(country_selection,"WWW")])
 
 # Table 4: exploitation rate per skill level
-table_4 <- sea_countries[3:5,
+if(sum(!grepl("ochoa",dimnames(sea_countries)[[1]])) > 0) {
+  pseq <- (1:dim(sea_countries)[1])[!grepl("ochoa",dimnames(sea_countries)[[1]])]
+table_4 <- sea_countries[pseq,
                          year,
                          grep("exploitation_rate_",lists$sea_variables),
                          c(country_selection,"WWW")]
-table_4 <- aperm(table_4, c(3,2,1))
-dim(table_4) <- c(5,9)
 
+table_4 <- aperm(table_4, c(3,2,1))
+
+dim(table_4) <- c(5,9)
+} else {table_4 <- "only if methods other than ochoa's selected"}
 # Figure 1: exploitation rate - series
 f1_bra_exploitation_rate <- 
   sea_countries[,,"exploitation_rate","BRA"]
@@ -137,5 +150,5 @@ mydata <- list(
   data.frame(f2_bra_usa_unequal),
   data.frame(f2_mex_usa_unequal))
 
-myfile <- paste0("results/reduction_problem.xlsx")
+myfile <- paste0(method_path,"/reduction_problem.xlsx")
 write_xlsx(mydata, path = myfile)

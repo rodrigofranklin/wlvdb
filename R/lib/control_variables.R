@@ -11,7 +11,6 @@ countries <-
 
 lists$countries <-  countries$country.source
 nums$countries <- length(lists$countries)
-
 # append sectors
 lists$sectors <- sectors$sector.source
 nums$sectors <- length(lists$sectors)
@@ -19,9 +18,10 @@ nums$sectors <- length(lists$sectors)
 # identify rows
 rows <- data.frame(country = rep(lists$countries, each = nums$sectors))
 rows$sector <- lists$sectors
+
 rows$productive <- sectors$productive
 rows$num_country <- match(rows$country, countries$country.source)
-rows$num_sector <- match(rows$sector, sectors$code)
+rows$num_sector <- match(rows$sector, sectors$sector.source)
 rows$country_sector <- paste0(rows$country,".",rows$sector)
 
 nums$countries_sectors <- nums$countries*nums$sectors
@@ -46,4 +46,4 @@ nums$years <- length(lists$years)
 nums$input <- length(lists$input)
 nums$output <- length(lists$output)
 
-method_path <- paste0("results/", method_version)
+method_path <- paste0("models/", method_version)

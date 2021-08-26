@@ -1,7 +1,7 @@
 ## load all parameters of the choosed method
 
 parameters <- 
-  read.csv2(paste0("results/",method_version,"/_parameters.csv"))
+  read.csv2(paste0("models/",method_version,"/parameters/_parameters.csv"))
 
 source_version <- parameters$version
 
@@ -86,7 +86,7 @@ if (file.exists(source_solutions)) {
 
 # method specifics solutions
 method_solutions <-
-  paste0("results/",method_version,"/_method_solutions.csv")
+  paste0("models/",method_version,"/parameters/_method_solutions.csv")
 if (file.exists(method_solutions)) {
   method_solutions <-
     read.csv2(method_solutions)
@@ -116,7 +116,7 @@ sea_variables[match(method_solutions$names, sea_variables$names),2:4] <-
 # sectors definitions ----
 # according to the method
 sectors <-
-  read.csv2(paste0("results/",method_version,"/_sectors.csv"))
+  read.csv2(paste0("models/",method_version,"/parameters/_sectors.csv"))
 
 # clear environment
 rm(source_reduced, source_matrices, method_reduced, method_matrices, 

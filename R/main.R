@@ -4,35 +4,6 @@
 #                                                                              #
 ###############################################################################.
 
-# installing and loading required packages
-packages <- c("dplyr",
-              "magrittr",
-              "R.matlab",
-              "writexl",
-              "readxl",
-              "doParallel",
-              "abind")
-
-.libPaths(c(.libPaths(),"./library"))
-
-install.packages(setdiff(packages, rownames(installed.packages())),
-                 repos = "https://cloud.r-project.org/",
-                 lib = "./library")  
-
-library(dplyr)
-library(magrittr)
-library(R.matlab)
-library(writexl)
-library(readxl)
-library(doParallel)
-library(abind)
-source("R/lib/functions.R")
-# Prepare WIOD ----
-
-# source("R/utils/prepare_wiod_data.R")
-
-# Prepare EUKLEMS ----
-source("R/utils/prepare_euklems_data.R")
 
 # Versions computations ----
 
@@ -44,23 +15,48 @@ method_list <- c(
   "alternative_2"
   )
 
-my.cluster <- parallel::makeCluster(
-  parallel::detectCores() - 1, 
-  type = "PSOCK"
-)
+gomarx <- function(methods = method_list, repeat_pp = F,
+                   papern = 0, prepaper = F) {
+  #Load functions
+  source("R/lib/functions.R")
+  
+  if (repeat_pp == T ) {
+    
+    # Prepare WIOD ----
+    
+    source("R/utils/prepare_wiod_data.R")
+    
+    # Prepare EUKLEMS ----
+    source("R/utils/prepare_euklems_data.R")
+    
+  }
+  #Control for avoiding repeated intro message on cluster
+  #creation
+  cf <- "started"
+  write(c("started","clusters"),cf,sep=",")
 
-for (method_version in method_list) {
-  print(paste0("Calculating ", method_version,"..."))
-  source("R/lib/computations.R")
+  assign("my.cluster",parallel::makeCluster(
+    parallel::detectCores() - 1, 
+    type = "PSOCK"), envir=globalenv())
+  
+  file.remove(cf)
+  
+  for (method_version in methods) {
+    print(paste0("Calculating ", method_version,"..."))
+    assign("method_version", method_version, envir=globalenv())
+    assign("methods", methods, envir=globalenv())
+    source("R/lib/computations.R")
+  }
+  
+  stopCluster(cl = my.cluster)
+  closeAllConnections()
+  
+  if(prepaper == T) {
+    # Select and save ----
+    
+    source(paste0("R/papers/paper_",papern,"_selection.R"))
+  }
+
+  gc()
+  
 }
-
-stopCluster(cl = my.cluster)
-closeAllConnections()
-
-# Select and save ----
-
-source("R/utils/paper_selection.R")
-
-rm(consumption_basket)
-
-gc()

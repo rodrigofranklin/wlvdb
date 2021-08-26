@@ -1,5 +1,9 @@
+
 ## Este script salva as distribuições do capital e as taxas de
 ## depreciação para todos os anos
+
+## This script saves sectoral capital distributions and
+## depreciation rates for all needed years
 
 # download euklems ----
 
@@ -9,7 +13,7 @@ download.file(
   "source_data/euklems/euklems.rds")
 
 # national accounts (only to use value added information, needed for
-# desaggregation purposes)
+# disaggregation purposes)
 download.file(
   "http://euklems.eu/bulk/Statistical_National-Accounts.rds",
   "source_data/euklems/euklems-na.rds")
@@ -22,7 +26,9 @@ euklems.na <- readRDS("source_data/euklems/euklems-na.rds")
 dep.rates <- 
   as.data.frame(read.csv2("source_data/euklems/dep_rates.csv", header = TRUE))
 
-# aggregation data
+# load aggregation/harmonization data 
+# needed to harmonize euklems and WIOD 
+# capital goods and sectors 
 agg <-
   read.csv2("source_data/euklems/aggregation.csv")
 
@@ -82,7 +88,7 @@ for (year in as.character(1995:2009)) {
   }
   ek.k$control <- ek.k$K_GFCF
   
-  ### excluding countries without fulll information
+  ### excluding countries without full information
   ek.k$sum <- rowSums(ek.k[,lists$ek_variables], na.rm = FALSE)
   countries_to_exclude <- (ek.k[ek.k$sector=="TOT_IND" & is.na(ek.k$sum),1])
   
@@ -143,6 +149,9 @@ for (year in as.character(1995:2009)) {
   }
   
   # (sum available data to indicates which sectors had change)
+  # Altered sectors now have a sum different from NA
+  # Non changed sectors will display a zero sum in this new column
+  
   ek.k$sum <- rowSums(ek.k[,lists$ek_variables], na.rm = TRUE) 
   
   # second, from "prop"
@@ -158,11 +167,14 @@ for (year in as.character(1995:2009)) {
       ek.k[filter2,lists$ek_variables] * ek.va.prop[filter1,]
   }
 
-  # aggregate ----
+  # reaggregating ----
 
   ek.k[is.na(ek.k)] <- 0
 
   # agreggate data when "needed"
+  # Some capital goods are products of the same unique
+  # sector in WIOD - so this aggregation serves
+  # harmonization purposes for combining relevant data
   for (x in which(agg[,3]=="needed")) {
     filter1 <-
       ek.k$sector == agg$aggregated[x] & 
@@ -203,7 +215,7 @@ for (year in as.character(1995:2009)) {
       ek.k[filter2, lists$ek_variables]
   }
   
-  # depreciation rate (weighted by capital stock)
+  # depreciation rate (weighted by capital stock goods' sectoral proportions)
   
   ek.dep.rate[is.na(ek.dep.rate)] <- 0
   
@@ -225,7 +237,7 @@ for (year in as.character(1995:2009)) {
   ek.dep.rate[is.na(ek.dep.rate)] <- 0
   
   # combine ----
-  # combine some capital categories
+  # combine capital categories for harmonization with WIOD
   
   # create new columns
   for (x in unique(agg[agg[,3]=="category",2])) {
@@ -264,6 +276,9 @@ for (year in as.character(1995:2009)) {
   }
   
   ## include "mean country" ("MD")
+  ## Started by copying any arbitrary country,
+  ## Afterwards, it is recalculated by averaging all available
+  ## countries  
   ek.k.md <- ek.k[ek.k$country=="AT",]
   ek.k.md$country <- "MD"
   ek.dep.rate.md <- ek.k.md
