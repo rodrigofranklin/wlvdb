@@ -48,7 +48,7 @@ gomarx <- function(methods = method_list, repeat_pp = F,
     
     print(paste0("Calculating ", method_version,"..."))
     assign("method_version", method_version, envir=globalenv())
-    assign("methods/", methods, envir=globalenv())
+    assign("methods", methods, envir=globalenv())
     source("R/lib/computations.R")
   }
   
