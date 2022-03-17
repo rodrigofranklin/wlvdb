@@ -21,14 +21,14 @@ m_io_filters <- array(0,
 # Create a matrix where each cell is a number in X.Y format, where
 # the integer part (X) is the number of the country of the column, and 
 # the decimal part (Y) is the number of the country of the row.
-contry_cols_matrix <- t(rep(columns$num_country, each = nums$input))
-dim(contry_cols_matrix) <- c(nums$input, nums$output)
+country_cols_matrix <- t(rep(columns$num_country, each = nums$input))
+dim(country_cols_matrix) <- c(nums$input, nums$output)
 
-country_row_matrix <- rep(rows$num_country, times = nums$output)
-dim(country_row_matrix) <- c(nums$input, nums$output)
+country_rows_matrix <- rep(rows$num_country, times = nums$output)
+dim(country_rows_matrix) <- c(nums$input, nums$output)
 
 m_io_filters["countries",1:nums$input,1:nums$output] <- 
-  contry_cols_matrix+(country_row_matrix/100)
+  country_cols_matrix+(country_rows_matrix/100)
 
 ## productive sectors filters ----
 # Multiplication filter: when multiplying this filter by an matrix
@@ -41,6 +41,6 @@ m_io_filters["productive_sectors",rows$productive==1,] <- 1
 m_io_filters["trade",
              1:nums$input,
              1:nums$output
-             ][(contry_cols_matrix - country_row_matrix)!=0] <- 1
+             ][(country_cols_matrix - country_rows_matrix)!=0] <- 1
 
-rm(contry_cols_matrix, country_row_matrix)
+rm(country_cols_matrix, country_rows_matrix)
