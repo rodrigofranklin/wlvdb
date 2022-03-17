@@ -11,3 +11,8 @@ clean <- function(x) {
   x[is.infinite(x)] <- 0
   return(x)
 }
+
+cnames <- function(a,b) {
+  #match column named "names"  from a and b
+  match(a$names,b$names)
+}
