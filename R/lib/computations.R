@@ -48,7 +48,7 @@ source("R/modules/variables/sea_sectors.R")
 # obtain list of m_io files
 lists$m_io_files <- 
   dir(path = paste0("source_data/",source_version),
-      pattern = "m_io")
+      pattern = "m_io", full.names = T )
 
 # compute each file
 for (current_m_io in lists$m_io_files) {
