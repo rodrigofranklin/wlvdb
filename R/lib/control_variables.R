@@ -3,10 +3,13 @@
 lists <- NULL
 nums <- NULL
 
+#data basepaths
+srcdata_path <- paste0(getwd(),"/source_data/",source_version,"/")
+
 # load country list
 countries <- 
   read.csv2(file = 
-              paste0(getwd(),"/source_data/",source_version,"/countries.csv"),
+              paste0(srcdata_path,"countries.csv"),
             row.names = NULL, check.names = F)
 
 lists$countries <-  countries$country.source
@@ -28,7 +31,7 @@ nums$countries_sectors <- nums$countries*nums$sectors
 
 # load demands list
 demands <-
-  read.csv2(paste0(getwd(),"/source_data/",source_version,"/demand.csv"))
+  read.csv2(paste0(srcdata_path,"demand.csv"))
 nums$demands <- dim(demands)[1]
 
 # identify columns
@@ -46,4 +49,3 @@ nums$years <- length(lists$years)
 nums$input <- length(lists$input)
 nums$output <- length(lists$output)
 
-method_path <- paste0("models/", method_version)
