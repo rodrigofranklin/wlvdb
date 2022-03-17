@@ -15,7 +15,7 @@ filter <-
 # I => identity matrix;
 # A => matrix of technical coefficients: (intermediate consumption)/total product
 # D => matrix of depreciation coefficients: (depreciation)/total product
-# Code designed to save memory, applied to all year at once.
+# Code designed to save memory, applied to all years at once.
 
 # Step 1: Create an array of annual matrices whose columns are the total 
 # product of each sector.
