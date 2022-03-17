@@ -1,6 +1,6 @@
 # load raw m_io data
 m_io_source <- 
-  readRDS(file = paste0("source_data/",source_version,"/",current_m_io))
+  readRDS(file = current_m_io)
 
 # Adjusts lists$years and nums$years to the years in m_io_source
 lists$years <- unlist(dimnames(m_io_source)[1])
