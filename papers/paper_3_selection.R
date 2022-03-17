@@ -1,7 +1,12 @@
 # select data to the paper on the reduction problem
-country_selection <- c("BRA","USA","JPN","MEX")
+method_list <- c("alternative_1","zerodep_1")
+
+#Uncomment if needed the call for gomarx
+gomarx(method_list)
+
+#country_selection <- c("BRA","USA","JPN","MEX")
 year <- "2009"
-nums$methods <- length(methods)
+nums$methods <- length(method_list)
 
 m_countries <- array(NA,
                      dim = c(nums$methods,
@@ -42,7 +47,7 @@ pc_cols <- (nums$methods+2):(nums$methods*2+1)
 pc_res <- c(1,rbind(1:nums$methods+1,(nums$methods+2):(nums$methods*2+1)))
 # load all results
 for (mth_v in methods) {
-  method_path <- paste0("models/", mth_v,"/results")
+  method_path <- paste0("methods/", mth_v,"/results")
 
   m_countries[mth_v,,,,] <-
     readRDS(paste0(method_path,"/m_countries.rds"))
@@ -61,10 +66,44 @@ temp1 <- sea_sectors[1,year,"gross_output_mp",,]
 dim(temp1) <- nums$countries_sectors
 temp2 <- sea_sectors[,year,"gross_output_dp",,]
 dim(temp2) <- c(nums$methods,nums$countries_sectors)
-table_0 <- cbind(temp1, t(temp2))
 
-colnames(table_0) <- c("market_prices",methods)
+table_0b <- cbind(temp1, t(temp2))
+colnames(table_0b) <- c("market_prices",method_list)
+
+#Function to compute relevant deviation meauser
+get_deviations <- function(method = "ochoa_1",basetable = table_0b,
+                           productive=rows$productive) {
+  b <-  basetable[which(productive == 1 & basetable[,1] !=0 ),1]
+  b <- log(b)
+  c <- basetable[ which(productive == 1 & basetable[,1]!=0) ,method]
+  c <- log(c)
+  x <- abs(c-b)
+  x_perc <- x/b
+  r <- cor(c,b)
+  rsquared <- r^2
+  MAWD <- weighted.mean(x_perc,b)
+  MAD <- mean(x_perc)
+  NVD <- norm(as.matrix(x),"F")/norm(as.matrix(b),"F")
+  rmspe <- MLmetrics::RMSPE(c,b) #rmse
+  cv <- sd(c/b)/mean(c/b)
+  θ <- rad2deg(atan(cv))
+  d <-  2*sin(atan(cv)/2)
   
+  print(paste("market-direct price deviations calculated for method",method))
+  a <- data.frame(cbind(r,rsquared,MAD,MAWD,NVD,rmspe,θ,cv,d))
+  a$method <- method
+  a
+}
+
+table_0 <- lapply(method_list,get_deviations)
+table_0 <- do.call(rbind,table_0)
+
+table_0 <- table_0%>%pivot_longer(-method,names_to="metric",values_to="value")%>%
+  pivot_wider(names_from=method,values_from="value")
+
+##Removing leftover table_0b
+rm(table_0b)  
+
 # Table 1: gross output in mp and dp
 mp <- sea_countries[1,year,"gross_output_mp",country_selection]/1000000
 table_1 <- 
