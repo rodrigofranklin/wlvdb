@@ -137,6 +137,8 @@ table_3[table_3<0] <- NA
 table_3 <- table_3%>%as_tibble(rownames = "year")%>%pivot_longer(-1,names_to="method",values_to = "exploitation rate")%>%
   mutate(year=as.numeric(year), method = as.factor(method))
 
+table_4 <- t(sea_countries[,,"gross_output_dp",
+                           "WWW"])
 
 ggplot(table_3,aes(year,`exploitation rate`, colour = method))+
   geom_line()+
