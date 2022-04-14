@@ -2,7 +2,7 @@
 method_list <- c("alternative_1","zerodep_1")
 
 #Uncomment if needed the call for gomarx
-gomarx(method_list)
+#gomarx(method_list)
 
 #country_selection <- c("BRA","USA","JPN","MEX")
 year <- "2009"
