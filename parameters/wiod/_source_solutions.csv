@@ -1,0 +1,14 @@
+"names";"sector_solution";"country_solution";"order"
+"depreciation";"depreciation/euklems.R";"sum";3
+"z";"reduction/alternative_1/z.R";"mean";2
+"z_employees";"reduction/alternative_1/z_employees.R";"mean";2
+"employed_persons";"EMP*1000";"sum";0
+"employees";"EMPE*1000";"sum";0
+"hours_employed";"H_EMPE*1000000";"sum";0
+"hours_employees";"H_EMPE*1000000";"sum";0
+"exchange_rate";"wiodr13/exchange.R";"mean";1
+"wages";"wiodr13/wages.R";"sum";1
+"labour_compensation";"wiodr13/labour_compensation.R";"sum";1
+"capital_stock";"wiodr13/capital_stock.R";"sum";1
+"gross_output_mp";"GO_USD";"sum";0
+"value_added_mp";"VA_USD";"sum";0
