@@ -5,7 +5,8 @@
 download.file(
 #  "http://www.wiod.org/protected3/data13/update_sep12/wiot/wiot_matlab_sep12.zip",
   "https://dataverse.nl/api/access/datafile/199125",
-  "source_data/wiodr13/wiot_matlab_sep12.zip")
+  "source_data/wiodr13/wiot_matlab_sep12.zip",
+  mode = "wb")
 
 # download sea
 download.file(
