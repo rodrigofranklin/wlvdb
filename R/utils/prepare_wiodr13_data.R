@@ -3,12 +3,14 @@
 # download wiod data ----
 # download wiots
 download.file(
-  "http://www.wiod.org/protected3/data13/update_sep12/wiot/wiot_matlab_sep12.zip",
+#  "http://www.wiod.org/protected3/data13/update_sep12/wiot/wiot_matlab_sep12.zip",
+  "https://dataverse.nl/api/access/datafile/199125",
   "source_data/wiodr13/wiot_matlab_sep12.zip")
 
 # download sea
 download.file(
-  "http://www.wiod.org/protected3/data13/SEA/WIOD_SEA_July14.xlsx",
+#  "http://www.wiod.org/protected3/data13/SEA/WIOD_SEA_July14.xlsx",
+  "https://dataverse.nl/api/access/datafile/199111",
   "source_data/wiodr13/WIOD_SEA_July14.xlsx",
   mode="wb")
 
@@ -28,7 +30,7 @@ lists$countries <- unique(sea[,1])
 lists$sea_variables <- unique(sea[,2])
 lists$sectors <- unique(sea[,4])
 
-# includind sea variables obtained from WIOTs
+# including sea variables obtained from WIOTs
 lists$sea_variables <- c(lists$sea_variables,"VA_USD", "GO_USD")
 
 # including RoW
