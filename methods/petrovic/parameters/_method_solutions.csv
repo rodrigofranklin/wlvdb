@@ -1,0 +1,3 @@
+names;sector_solution;country_solution;order
+z;reduction/petrovic/z.R;mean;2
+z_employees;reduction/petrovic/z_employees.R;mean;2
