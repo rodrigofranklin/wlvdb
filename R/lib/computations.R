@@ -82,9 +82,9 @@ for (current_m_io in lists$m_io_files) {
 
   # just in case of blackout
   print("Temporary writing...")
-  saveRDS(m_countries,paste0(method_path,"/results/m_countries.rds"))
-  saveRDS(sea_sectors,paste0(method_path,"/results/sea_sectors.rds"))
-  saveRDS(sea_countries,paste0(method_path,"/results/sea_countries.rds"))
+  saveRDS(m_countries,paste0("resultados/",method_version,"/m_countries.rds"))
+  saveRDS(sea_sectors,paste0("resultados/",method_version,"sea_sectors.rds"))
+  saveRDS(sea_countries,paste0("resultados/",method_version,"sea_countries.rds"))
 
   # clear environment
   rm(lambda, m_io_source, m_io, balance_factor, filter, matrix_script)
