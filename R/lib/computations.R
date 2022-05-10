@@ -78,7 +78,7 @@ for (current_m_io in lists$m_io_files) {
   
   # write
   print("Writing...")
-  saveRDS(m_io,paste0(method_path,"/results/m_io",lists$years[1],".rds"))
+  saveRDS(m_io,paste0("resultados/",method_version,"/m_io",lists$years[1],".rds"))
 
   # just in case of blackout
   print("Temporary writing...")
