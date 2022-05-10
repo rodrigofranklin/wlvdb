@@ -34,9 +34,9 @@ if(length(br) == 0) {
 "
       )
   cat(
-"Función gomarx (de R/main.R) cargada. Prueba gomarx(\"alternative_1\")
-Função gomarx (de R / main.R) carregada. Teste gomarx(\"alternative_1\")
-gomarx function(from R / main.R) loaded. Test gomarx(\"alternative_1\")
+"Función get_wlv (de R/main.R) cargada. Prueba get_wlv(\"alternative_1\")
+Função get_wlv (de R / main.R) carregada. Teste get_wlv(\"alternative_1\")
+get_wlv function(from R / main.R) loaded. Test get_wlv(\"alternative_1\")
   ")
   rm(packages)
   rm(dipa)
