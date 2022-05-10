@@ -30,9 +30,13 @@ dep.rates <-
 # needed to harmonize euklems and WIOD 
 # capital goods and sectors 
 agg <-
-  read.csv2("source_data/euklems/aggregationr16.csv")
+  read.csv2("source_data/euklems/aggregation.csv")
 
-for (year in as.character(2000:2014)) {
+present_dataek <- list.files(path="source_data/euklems",pattern="ekk")
+present_dataek <- as.numeric(sapply(present_dataek,function(x) substr(x,5,8)))
+missing_ek <- unique(euklems[,7])[!(unique(euklems[,7]) %in% present_dataek)]
+
+for (year in as.character(missing_ek)){
   print(paste0("Obtaining capital composition data to the year ",year,"..."))
   
   # assign variables
@@ -294,8 +298,8 @@ for (year in as.character(2000:2014)) {
   ek.k <- rbind(ek.k, ek.k.md)
   ek.dep.rate <- rbind(ek.dep.rate, ek.dep.rate.md)
   
-  saveRDS(ek.k, paste0("source_data/euklems/ekk_wiod16_",year,".rds"))
-  saveRDS(ek.dep.rate, paste0("source_data/euklems/ekdeprate_wiod16_",year,".rds"))
+  saveRDS(ek.k, paste0("source_data/euklems/ekk_",year,".rds"))
+  saveRDS(ek.dep.rate, paste0("source_data/euklems/ekdeprate_",year,".rds"))
 }
 
 # clear variables and data ----
