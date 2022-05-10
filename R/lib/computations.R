@@ -78,13 +78,13 @@ for (current_m_io in lists$m_io_files) {
   
   # write
   print("Writing...")
-  saveRDS(m_io,paste0("resultados/",method_version,"/m_io",lists$years[1],".rds"))
+  saveRDS(m_io,paste0("results/",method_version,"/m_io",lists$years[1],".rds"))
 
   # just in case of blackout
   print("Temporary writing...")
-  saveRDS(m_countries,paste0("resultados/",method_version,"/m_countries.rds"))
-  saveRDS(sea_sectors,paste0("resultados/",method_version,"sea_sectors.rds"))
-  saveRDS(sea_countries,paste0("resultados/",method_version,"sea_countries.rds"))
+  saveRDS(m_countries,paste0("results/",method_version,"/m_countries.rds"))
+  saveRDS(sea_sectors,paste0("results/",method_version,"sea_sectors.rds"))
+  saveRDS(sea_countries,paste0("results/",method_version,"sea_countries.rds"))
 
   # clear environment
   rm(lambda, m_io_source, m_io, balance_factor, filter, matrix_script)
@@ -114,7 +114,7 @@ source("R/modules/variables/sea_countries.R")
 #######################.
 
 print("Writing...")
-saveRDS(m_io_filters,paste0("resultados/",method_version,"/m_io_filters.rds"))
-saveRDS(m_countries,paste0("resultados/",method_version,"/m_countries.rds"))
-saveRDS(sea_sectors,paste0("resultados/",method_version,"/sea_sectors.rds"))
-saveRDS(sea_countries,paste0("resultados/",method_version,"/sea_countries.rds"))
+saveRDS(m_io_filters,paste0("results/",method_version,"/m_io_filters.rds"))
+saveRDS(m_countries,paste0("results/",method_version,"/m_countries.rds"))
+saveRDS(sea_sectors,paste0("results/",method_version,"/sea_sectors.rds"))
+saveRDS(sea_countries,paste0("results/",method_version,"/sea_countries.rds"))
