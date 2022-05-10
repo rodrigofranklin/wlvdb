@@ -114,7 +114,7 @@ source("R/modules/variables/sea_countries.R")
 #######################.
 
 print("Writing...")
-saveRDS(m_io_filters,paste0(method_path,"/results/m_io_filters.rds"))
-saveRDS(m_countries,paste0(method_path,"/results/m_countries.rds"))
-saveRDS(sea_sectors,paste0(method_path,"/results/sea_sectors.rds"))
-saveRDS(sea_countries,paste0(method_path,"/results/sea_countries.rds"))
+saveRDS(m_io_filters,paste0("resultados/",method_version,"/m_io_filters.rds"))
+saveRDS(m_countries,paste0("resultados/",method_version,"/m_countries.rds"))
+saveRDS(sea_sectors,paste0("resultados/",method_version,"/sea_sectors.rds"))
+saveRDS(sea_countries,paste0("resultados/",method_version,"/sea_countries.rds"))
