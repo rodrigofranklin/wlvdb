@@ -23,8 +23,8 @@ for (year in lists$years) {
   rows$pwiod_sek <- paste0(rows$country, rows$s_ek)
 
   # Load data ----
-  # ek_k -> distribution rate of each type of capital across all sectors
-  # ek_dep_rate -> depreciation rate of each type of capital in each sector
+  # ek_k -> distribution ratio of each type of capital across all sectors
+  # ek_dep_rate -> depreciation ratio of each type of capital in each sector
   ek_k <- readRDS(paste0("source_data/euklems/ekk_",year,".rds"))
   ek_dep_rate <- readRDS(paste0("source_data/euklems/ekdeprate_",
                               as.character(as.numeric(year)),".rds"))
@@ -44,7 +44,7 @@ for (year in lists$years) {
           aggregates[rows$pwiod_sek], 
         each = nums$input)
   
-  # disaggregate the rate of distribution of types of k by sectors according 
+  # disaggregate the ratio of types of k by sectors according 
   # to value added
   for (x in 1:nums$input) {
     k_composition[x,] <- 
@@ -65,11 +65,11 @@ for (year in lists$years) {
   gfcf <- as.matrix(gfcf[rep(names(gfcf), each = nums$sectors)])
   gfcf[gfcf<0] <- 0
   
-  # First, it distributes the gfcf of each country according to 
+  # First, we distribute the gfcf of each country according to 
   # the composition of capital in the euklems 
   k_composition <- k_composition * gfcf 
   
-  # then distributes the capital stock by the proportions of 
+  # then we distribute the capital stock by the proportions of 
   # the distributed gfcf
   k_composition <- prop.table(k_composition, margin = 2) * 
     matrix(sea_sectors[year,"capital_stock",,], 
@@ -80,12 +80,12 @@ for (year in lists$years) {
        1:nums$input,1:nums$input] <- 
     k_composition
   
-  #Aplica as taxas de depreciacao ao capital total
+  #Applying depreciation rates to total capital
   m_io[year,"k_depreciation",
        1:nums$input,1:nums$input] <- 
     k_composition * dep_ratio
   
-  # Calcula as informações setoriais, por país e para o mundo
+  # Next and final step, calculate sectoral information, by country and for the world
   sea_sectors[year,"depreciation",,] <-
     colSums(m_io[year,"k_depreciation",,1:nums$input], na.rm = TRUE)
 }
