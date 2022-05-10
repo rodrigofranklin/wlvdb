@@ -81,13 +81,12 @@ loren <- function(ano) {
   patwiot <- "_October16_ROW.RData"
   load(paste0("source_data/wiodr16/WIOT",ano,patwiot))
   withpoint <- paste(wiot$Country,wiot$IndustryCode,sep = ".")
-  wiot <- wiot %>% select(-IndustryDescription,-Country,-RNr,-Year)
-  wiot <- data.matrix(wiot[,c(-1,-ncol(wiot))])
+  wiot <- wiot %>% select(-IndustryDescription,-IndustryCode,-Country,-RNr,-Year)
+  wiot <- data.matrix(wiot[,-ncol(wiot)])
   findemcntry <- paste(rep(lists$countries,each=5),paste0("c",c(57,58,59,60,61)),sep = ".")
   puntocols <- c(paste(rep(lists$countries, each = 56),lists$sectors,sep="."),findemcntry)
   dimnames(wiot)[[1]] <- withpoint
   dimnames(wiot)[[2]] <- puntocols
-  wiot <- array(c(ano,wiot),dim = c(1,dim(wiot)),dimnames = c(ano,dimnames(wiot)[1],dimnames(wiot)[2]))
   assign(paste0("wiot_",ano),wiot,envir = .GlobalEnv)
   rm(wiot)
 }
@@ -95,7 +94,10 @@ loren <- function(ano) {
 lapply(2000:2014,loren)
 wiots <- ls(pattern="wiot_")
 
-m_io <- abind(lapply(wiots,get),along = 1)
+m_io <- abind(lapply(wiots,get),along = 3)
+dimnames(m_io)[[3]] <- 2000:2014
+
+m_io <- aperm(m_io,c(3,1,2))
 rm(list=wiots)
 gc()
 
@@ -103,11 +105,11 @@ gc()
 lists$demand <- paste0("c",c(57:61))
 nums$demand <- length(lists$demand)
 
-lists$input <-dimnames(wiots)[[2]][1:(nums$countries*nums$sectors)]
+lists$input <-dimnames(m_io)[[2]][1:(nums$countries*nums$sectors)]
   
 nums$input <- length(lists$input)
 
-lists$output <- dimnames(wiots)[[3]]
+lists$output <- dimnames(m_io)[[3]]
   
 nums$output <- length(lists$output)
 
