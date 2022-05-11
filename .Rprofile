@@ -21,13 +21,14 @@ if(length(br) == 0) {
       == length(packages)) {
     print("Packages loaded successfully")
   }
+  
   source("R/main.R")
   cat("\n
 ##################################################################
 #                                                                #
 #                                                                #
-#   Bienvenidx a la Base de Datos Mundial de Valores-Trabajo     #
-#   Bem-vindx ao Banco de Dados Mundial de Valores-Trabalho      #
+#   Bienvenidx a la Base de Datos de Valores-Trabajo Mundiales   #
+#   Bem-vindx ao Banco de Dados de Valores-Trabalho Mundiais     #
 #         Welcome to the World Labour Values Database            #
 #                                                                #
 ##################################################################
