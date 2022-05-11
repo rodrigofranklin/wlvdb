@@ -22,8 +22,11 @@ if(length(br) == 0) {
     print("Packages loaded successfully")
   }
   
+  print("Triggering code update from main linked source")
+  system2("git",args = "pull")
+  
   source("R/main.R")
-  cat("\n
+  cat("\n\n\n\n\n\n
 ##################################################################
 #                                                                #
 #                                                                #
@@ -32,7 +35,7 @@ if(length(br) == 0) {
 #         Welcome to the World Labour Values Database            #
 #                                                                #
 ##################################################################
-"
+\n"
       )
   cat(
 "Función get_wlv (de R/main.R) cargada. Prueba get_wlv(\"alternative_1\")
@@ -41,8 +44,8 @@ get_wlv function(from R / main.R) loaded. Test get_wlv(\"alternative_1\")
   ")
   rm(packages)
   rm(dipa)
-
+  rm(br)
 }
 
 
-rm(br)
+
