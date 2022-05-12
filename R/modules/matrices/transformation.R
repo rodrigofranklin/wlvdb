@@ -23,7 +23,7 @@ filter <-
 # Step 1: Create an array of annual matrices whose columns are the total 
 # product of each sector.
 leontief <- 
-  sea_sectors[lists$years,"gross_output_mp",,] %>% 
+  sea_sectors[lists$years,"gross_output.s.us",,] %>% 
   rep(times = d) %>% 
   newDim(c(a, d, d)) %>%
   aperm(c(1,3,2))
@@ -59,8 +59,8 @@ print("End of invertion...")
 # labour_requirements represent the amount of direct labour 
 # required per unit of output 
 labour_requirements <- 
-  ((sea_sectors[lists$years,"abstract_labour",,] / 
-     sea_sectors[lists$years,"gross_output_mp",,]) * 
+  ((sea_sectors[lists$years,"abstract_labour.emp.s.mv",,] / 
+     sea_sectors[lists$years,"gross_output.s.us",,]) * 
   rep(rows$productive, each = a)) %>%
   newDim(c(a, d)) %>%
   clean

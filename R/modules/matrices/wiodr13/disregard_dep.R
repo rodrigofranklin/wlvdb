@@ -5,4 +5,4 @@ m_io[,"k_depreciation",
 
 
 # Calcula as informações setoriais, por país e para o mundo
-sea_sectors[,"depreciation",,] <- 0
+sea_sectors[,"capital_depreciation.s.us",,] <- 0

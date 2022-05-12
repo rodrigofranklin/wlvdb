@@ -1,5 +1,6 @@
 .Rproj.user
 .Rhistory
+.RDataTmp
 .RData
 .Ruserdata
 .rds
@@ -18,3 +19,4 @@ temp
 results
 source_data
 models
+results_nuvem

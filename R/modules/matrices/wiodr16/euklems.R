@@ -37,10 +37,10 @@ for (year in lists$years) {
   # disaggregation factor: disaggregates EUKLEMS capitals data by value
   # added from WIOD.
   # aggregates -> sum of WIOD VA representing a single sector in EUKLEMS
-  aggregates <- tapply(as.numeric(sea_sectors[year,"value_added_mp", ,]), 
+  aggregates <- tapply(as.numeric(sea_sectors[year,"gdp.s.us", ,]), 
                       rows$pwiod_sek, sum, na.rm = FALSE)
   k_composition[,1:nums$input] <- 
-    rep(as.numeric(sea_sectors[year,"value_added_mp", ,]) / 
+    rep(as.numeric(sea_sectors[year,"gdp.s.us", ,]) / 
           aggregates[rows$pwiod_sek], 
         each = nums$input)
   
@@ -72,7 +72,7 @@ for (year in lists$years) {
   # then we distribute the capital stock by the proportions of 
   # the distributed gfcf
   k_composition <- prop.table(k_composition, margin = 2) * 
-    matrix(sea_sectors[year,"capital_stock",,], 
+    matrix(sea_sectors[year,"capital_stock.s.us",,], 
            nrow=nums$input, ncol=nums$input,
            byrow= TRUE)
   
@@ -86,7 +86,7 @@ for (year in lists$years) {
     k_composition * dep_ratio
   
   # Next and final step, calculate sectoral information, by country and for the world
-  sea_sectors[year,"depreciation",,] <-
+  sea_sectors[year,"capital_depreciation.s.us",,] <-
     colSums(m_io[year,"k_depreciation",,1:nums$input], na.rm = TRUE)
 }
 

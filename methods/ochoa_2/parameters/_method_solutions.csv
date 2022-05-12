@@ -1,3 +1,3 @@
 names;sector_solution;country_solution;order
-z;reduction/ochoa_2/z.R;mean;2
-z_employees;reduction/ochoa_2/z_employees.R;mean;2
+complex_labour_multiplier.emp.r.un;reduction/ochoa_2-complex_labour_multiplier.emp.r.un.R;mean;2
+ochoa_2-complex_labour_multiplier.empe.r.un.R;reduction/ochoa_2-complex_labour_multiplier.empe.r.un.R;mean;2

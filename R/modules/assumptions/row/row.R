@@ -2,7 +2,7 @@
 # calculates missing data for the rest of the world (RoW):
 # - employment
 # - labour hours
-# - wages
+# - compensation.empe.s.us
 # - capital
 ####
 
@@ -22,93 +22,93 @@ row_position <- grep("ROW",rows$country_sector)
 
 # Calculation of employment and labour hours
 sum_emp_sector <- 
-  sea_sectors[,"employed_persons",,which(lists$countries!="ROW")] %>%
+  sea_sectors[,"emp.s.un",,which(lists$countries!="ROW")] %>%
   apply(2, rowSums)
 sum_h_emp_sector <- 
-  sea_sectors[,"hours_employed",, which(lists$countries!="ROW")] %>%
+  sea_sectors[,"hours_worked.emp.s.hr",, which(lists$countries!="ROW")] %>%
   apply(2, rowSums)
 sum_va_sector <- 
-  sea_sectors[,"value_added_mp",, which(lists$countries!="ROW")] %>%
+  sea_sectors[,"gdp.s.us",, which(lists$countries!="ROW")] %>%
   apply(2, rowSums)
 
-sea_sectors[,"employed_persons",,"ROW"] <- 
+sea_sectors[,"emp.s.un",,"ROW"] <- 
   as.numeric(emp_row_total) * 
-  prop.table(sea_sectors[,"value_added_mp",, "ROW"]*
+  prop.table(sea_sectors[,"gdp.s.us",, "ROW"]*
                sum_emp_sector/sum_va_sector, margin = 1)
 
-sea_sectors[,"hours_employed",,"ROW"] <- 
-  sea_sectors[,"employed_persons",,"ROW"] * 
+sea_sectors[,"hours_worked.emp.s.hr",,"ROW"] <- 
+  sea_sectors[,"emp.s.un",,"ROW"] * 
   sum_h_emp_sector/sum_emp_sector
 
 # Calculation of employee data, assuming same working day as employed
-sea_sectors[,"employees",,"ROW"] <- 
-  sea_sectors[,"employed_persons",,"ROW"] * was_w_row
+sea_sectors[,"empe.s.un",,"ROW"] <- 
+  sea_sectors[,"emp.s.un",,"ROW"] * was_w_row
 
-sea_sectors[,"hours_employees",,"ROW"] <- 
-  sea_sectors[,"hours_employed",,"ROW"] * was_w_row
+sea_sectors[,"hours_worked.empe.s.hr",,"ROW"] <- 
+  sea_sectors[,"hours_worked.emp.s.hr",,"ROW"] * was_w_row
 
 
 ## Skill strata
 ## Calculated as average of other countries
-sea_sectors[,"hours_ratio_hs",,"ROW"] <- 
-  sea_sectors[,"hours_ratio_hs",,which(lists$countries!="ROW")] %>%
+sea_sectors[,"hours_worked.empe_hs.r.pc",,"ROW"] <- 
+  sea_sectors[,"hours_worked.empe_hs.r.pc",,which(lists$countries!="ROW")] %>%
   apply(2, rowMeans)
 
-sea_sectors[,"hours_ratio_ms",,"ROW"] <- 
-  sea_sectors[,"hours_ratio_ms",,which(lists$countries!="ROW")] %>%
+sea_sectors[,"hours_worked.empe_ms.r.pc",,"ROW"] <- 
+  sea_sectors[,"hours_worked.empe_ms.r.pc",,which(lists$countries!="ROW")] %>%
   apply(2, rowMeans)
 
-sea_sectors[,"hours_ratio_ls",,"ROW"] <- 
-  1 - sea_sectors[,"hours_ratio_hs",,"ROW"] - 
-  sea_sectors[,"hours_ratio_ms",,"ROW"]
+sea_sectors[,"hours_worked.empe_ls.r.pc",,"ROW"] <- 
+  1 - sea_sectors[,"hours_worked.empe_hs.r.pc",,"ROW"] - 
+  sea_sectors[,"hours_worked.empe_ms.r.pc",,"ROW"]
 
-sea_sectors[,"compensation_ratio_hs",,"ROW"] <- 
-  sea_sectors[,"compensation_ratio_hs",,which(lists$countries!="ROW")] %>%
+sea_sectors[,"compensation.empe_hs.r.pc",,"ROW"] <- 
+  sea_sectors[,"compensation.empe_hs.r.pc",,which(lists$countries!="ROW")] %>%
   apply(2, rowMeans)
 
-sea_sectors[,"compensation_ratio_ms",,"ROW"] <- 
-  sea_sectors[,"compensation_ratio_ms",,which(lists$countries!="ROW")] %>%
+sea_sectors[,"compensation.empe_ms.r.pc",,"ROW"] <- 
+  sea_sectors[,"compensation.empe_ms.r.pc",,which(lists$countries!="ROW")] %>%
   apply(2, rowMeans)
 
-sea_sectors[,"compensation_ratio_ls",,"ROW"] <- 
-  1 - sea_sectors[,"compensation_ratio_hs",,"ROW"] - 
-  sea_sectors[,"compensation_ratio_ms",,"ROW"]
+sea_sectors[,"compensation.empe_ls.r.pc",,"ROW"] <- 
+  1 - sea_sectors[,"compensation.empe_hs.r.pc",,"ROW"] - 
+  sea_sectors[,"compensation.empe_ms.r.pc",,"ROW"]
 
-# wages and labour compensation
+# compensation.empe.s.us and labour compensation
 # Considering the same value added distribution ratio
 sum_va_countries <- 
-  apply(sea_sectors[,"value_added_mp",, which(lists$countries!="ROW")], 1, sum)
+  apply(sea_sectors[,"gdp.s.us",, which(lists$countries!="ROW")], 1, sum)
 sum_va_row <- 
-  apply(sea_sectors[,"value_added_mp",, "ROW"], 1, sum)
+  apply(sea_sectors[,"gdp.s.us",, "ROW"], 1, sum)
 sum_empe_sector <- 
-  sea_sectors[,"employees",,which(lists$countries!="ROW")] %>% 
+  sea_sectors[,"empe.s.un",,which(lists$countries!="ROW")] %>% 
   apply(2, rowSums)
 
 lab_row_total <- 
-  sea_sectors[,"labour_compensation",,which(lists$countries!="ROW")] %>% 
+  sea_sectors[,"compensation.emp.s.us",,which(lists$countries!="ROW")] %>% 
   apply(1, sum) /
   sum_va_countries * sum_va_row
 
 sum_lab_sector <- 
-  sea_sectors[,"labour_compensation",,which(lists$countries!="ROW")] %>%
+  sea_sectors[,"compensation.emp.s.us",,which(lists$countries!="ROW")] %>%
   apply(2, rowSums)
 
-sea_sectors[,"labour_compensation",,"ROW"] <- 
+sea_sectors[,"compensation.emp.s.us",,"ROW"] <- 
   as.numeric(lab_row_total) * 
-  prop.table(sea_sectors[,"value_added_mp",, "ROW"] *
+  prop.table(sea_sectors[,"gdp.s.us",, "ROW"] *
                sum_lab_sector/sum_emp_sector, margin = 1)
 
 comp_row_total <- 
-  apply(sea_sectors[,"wages",,which(lists$countries!="ROW")], 1, sum)/
+  apply(sea_sectors[,"compensation.empe.s.us",,which(lists$countries!="ROW")], 1, sum)/
   sum_va_countries * sum_va_row
 
 sum_comp_sector <- 
-  sea_sectors[,"wages",,which(lists$countries!="ROW")] %>%
+  sea_sectors[,"compensation.empe.s.us",,which(lists$countries!="ROW")] %>%
   apply(2, rowSums)
 
-sea_sectors[,"wages",,"ROW"] <- 
+sea_sectors[,"compensation.empe.s.us",,"ROW"] <- 
   as.numeric(comp_row_total) * 
-  prop.table(sea_sectors[,"value_added_mp",, "ROW"] *
+  prop.table(sea_sectors[,"gdp.s.us",, "ROW"] *
                sum_comp_sector/sum_emp_sector, margin = 1)
 
 
@@ -119,14 +119,14 @@ sea_sectors[,"wages",,"ROW"] <-
 least_developed <- c("GRC","HUN","BGR","BRA","SWE","LVA","CHN","PRT","POL",
                    "MLT","GBR","JPN","KOR","ROU","DNK","CZE")
 
-sum_k_usd_sector <- apply(sea_sectors[,"capital_stock",,least_developed],
+sum_k_usd_sector <- apply(sea_sectors[,"capital_stock.s.us",,least_developed],
                                  2, rowSums)
 sum_va_sector_least <- 
-  sea_sectors[,"value_added_mp",, least_developed] %>%
+  sea_sectors[,"gdp.s.us",, least_developed] %>%
   apply(2, rowSums)
 
-sea_sectors[,"capital_stock",,"ROW"] <- 
-  sea_sectors[,"value_added_mp",, "ROW"] * 
+sea_sectors[,"capital_stock.s.us",,"ROW"] <- 
+  sea_sectors[,"gdp.s.us",, "ROW"] * 
   sum_k_usd_sector / sum_va_sector_least
 
 # Clear all variables that will no longer be used

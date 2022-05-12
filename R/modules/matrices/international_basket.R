@@ -21,7 +21,7 @@ consumption_basket <- aperm(consumption_basket, c(2,1,3))
 # distributes the income of each sector according to the structure of the consumption basket
 # (both for employed and employee)
 
-income <- rep(sea_sectors[,"wages",,],
+income <- rep(sea_sectors[,"compensation.empe.s.us",,],
                    times = nums$countries_sectors)
 dim(income) <- c(nums$years, nums$countries_sectors, nums$countries_sectors)
 income <- aperm(income, c(1,3,2))

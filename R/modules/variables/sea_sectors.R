@@ -5,7 +5,7 @@
 # 0 - variables directly obtained from raw data
 # 1 - variables obtained by computation over raw data
 # 2 - assumption variables
-# 3 - assumption matrices
+# 3 - assumption matrices # there are no assumption matrices
 # 4 - variables obtained from transformed m_io
 # 5 - variables obtained by computation over SEA results
 
