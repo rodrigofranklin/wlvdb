@@ -14,8 +14,9 @@ if(length(br) == 0) {
                  "dineq",
                  "MLmetrics",
                  "foreach",
-                 "itertools",
-                 "tidyverse")
+                 "lubridate",
+                 "tidyverse",
+                 "fst")
   br <- "https://cloud.r-project.org"
   dipa <- setdiff(packages, rownames(utils::installed.packages())) 
   if (length(dipa)) utils::install.packages(dipa,repos = br)  
