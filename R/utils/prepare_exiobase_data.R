@@ -75,49 +75,6 @@ sea_append <- array(NA, dim = c(nums$years,
                                     lists$sectors,
                                     lists$countries))
 
-# preenche as m_io de z em z.
-# z <- 1
-# for (y in 1:9) {
-#   temp_year <- as.character(1994 + (1:z) + (z*(y-1)))
-#   m_io_source <- array(NA, dim = c(z,
-#                                    nums$input,
-#                                    nums$output),
-#                        dimnames = list(temp_year,
-#                                        lists$input,
-#                                        lists$output))
-# 
-#   for (x in 1:3) {
-#     # lê o arquivo de intermediate input do ano específico
-#     print(paste0("loading  intermediate inputs of year ",temp_year[x],"..."))
-#     intermediate_inputs <- 
-#       read.delim(file = paste0("temp/",temp_year[x],"/Z.txt"),
-#                  header = FALSE)
-#     
-#     # load demand file
-#     print(paste0("loading  demands of year ",temp_year[x],"..."))
-#     demand <- 
-#       read.delim(file = paste0("temp/",temp_year[x],"/Y.txt"),
-#                  header = FALSE)
-#     
-#     # copy intermediate and demand data to m_io
-#     print(paste0("copying ",temp_year[x],"..."))
-#     temp <- 
-#       as.numeric(
-#         cbind(
-#           intermediate_inputs[4:nums$rows,3:nums$cols_intermediate_inputs],
-#           demand[4:nums$rows, 3:nums$col_demand]))
-#     # m_io_source[x,,1:nums$input] <- 
-#     #   
-#     # m_io_source[x,,(nums$input+1):nums$output] <- 
-#       
-#     
-#     # copy gross_output to sea_append
-#     sea_append[temp_year[x],1,,] <- rowSums(m_io_source[x,,])
-#   }
-#   print(paste0("writing ",temp_year[x],"..."))
-#   saveRDS(m_io_source, 
-#           file = paste0("source_data/exiobase/m_io_",y,".RDS"))
-# }
 
 rm(factors, intermediate_inputs, demand)
 
@@ -164,8 +121,8 @@ for (y in 1:nums$years) {
   sea_append[temp_year,1,,] <- rowSums(m_io_source[1,,])
 
   print(paste0("writing ",temp_year,"..."))
-  saveRDS(m_io_source, 
-          file = paste0("source_data/exiobase/m_io_",temp_year,".rds"))
+  write_fst_array(m_io_source, 
+          file = paste0("source_data/exiobase/m_io_",temp_year,".fst"))
 }
 
 # append
@@ -173,8 +130,8 @@ sea_source <- abind(sea_source, sea_append, along = 2)
 
 
 # Salda dados e parâmetros
-saveRDS(sea_source, 
-        file = paste0("source_data/exiobase/sea.rds"))
+write_fst_array(sea_source, 
+        file = paste0("source_data/exiobase/sea.fst"))
 
 write.table(lists$demand, "source_data/exiobase/demand.csv", 
            row.names = FALSE, col.names = "demand", sep = ";")

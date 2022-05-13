@@ -3,7 +3,7 @@ print("loading m_io file...")
 print(current_m_io)
 print(ls(1,pattern="rows"))
 m_io_source <- 
-  readRDS(file = current_m_io)
+  read_fst_array(current_m_io)
 print("loaded source m_io")
 # Adjusts lists$years and nums$years to the years in m_io_source
 lists$years <- unlist(dimnames(m_io_source)[1])

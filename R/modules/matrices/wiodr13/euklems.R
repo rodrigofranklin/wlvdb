@@ -25,9 +25,9 @@ for (year in lists$years) {
   # Load data ----
   # ek_k -> distribution rate of each type of capital across all sectors
   # ek_dep_rate -> depreciation rate of each type of capital in each sector
-  ek_k <- readRDS(paste0("source_data/euklems/ekk_",year,".rds"))
-  ek_dep_rate <- readRDS(paste0("source_data/euklems/ekdeprate_",
-                              as.character(as.numeric(year)),".rds"))
+  ek_k <- read_fst_array(paste0("source_data/euklems/ekk_",year,".fst"))
+  ek_dep_rate <- read_fst_array(paste0("source_data/euklems/ekdeprate_",
+                              as.character(as.numeric(year)),".fst"))
 
   # Countries that do not have data in the EUKLEMS database will be averaged
   rows[!(rows$p_ek %in% unique(ek_k$country)),"p_ek"] <- "MD" 

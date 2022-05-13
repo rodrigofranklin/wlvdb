@@ -123,8 +123,8 @@ dimnames(m_io) <- list(lists$years,
                        lists$output)
 
 # save all data
-saveRDS(m_io,"source_data/wiodr13/m_io.rds")
-saveRDS(sea_source,"source_data/wiodr13/sea.rds")
+write_fst_array(m_io,"source_data/wiodr13/m_io.fst")
+write_fst_array(sea_source,"source_data/wiodr13/sea.fst")
 
 # write.table(lists$demand, "source_data/wiodr13/demand.csv", 
 #             row.names = FALSE, col.names = "demand", sep = ";")

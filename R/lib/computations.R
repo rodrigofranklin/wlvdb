@@ -50,7 +50,7 @@ source("R/modules/variables/sea_sectors.R")
 # obtain list of m_io files
 lists$m_io_files <- 
   dir(path = paste0("source_data/",source_version),
-      pattern = "m_io", full.names = T )
+      pattern = "m_io*fst", full.names = T )
 
 
 for(current_m_io in lists$m_io_files) {
@@ -85,17 +85,17 @@ for(current_m_io in lists$m_io_files) {
   # write
   print("Writing...")
   if (nums$years == 1) {
-    saveRDS(m_io,paste0("results/",method_version,"/m_io",lists$years[1],".rds"))
+    write_fst_array(m_io,paste0("results/",method_version,"/m_io",lists$years[1],".fst"))
   } else {
-    saveRDS(m_io,paste0("results/",method_version,"/m_io",lists$years[1],"-",
-                        lists$years[nums$years],".rds"))
+    write_fst_array(m_io,paste0("results/",method_version,"/m_io",lists$years[1],"-",
+                        lists$years[nums$years],".fst"))
   }
 
   # just in case of blackout
   print("Temporary writing...")
-  saveRDS(m_countries,paste0("results/",method_version,"/m_countries.rds"))
-  saveRDS(sea_sectors,paste0("results/",method_version,"/sea_sectors.rds"))
-  saveRDS(sea_countries,paste0("results/",method_version,"/sea_countries.rds"))
+  write_fst_array(m_countries,paste0("results/",method_version,"/m_countries.fst"))
+  write_fst_array(sea_sectors,paste0("results/",method_version,"/sea_sectors.fst"))
+  write_fst_array(sea_countries,paste0("results/",method_version,"/sea_countries.fst"))
 
   # clear environment
   rm(lambda, m_io_source, m_io, balance_factor, filter, matrix_script)
@@ -129,7 +129,7 @@ source("R/modules/variables/sea_countries.R")
 #######################.
 
 print("Writing...")
-saveRDS(m_io_filters,paste0("results/",method_version,"/m_io_filters.rds"))
-saveRDS(m_countries,paste0("results/",method_version,"/m_countries.rds"))
-saveRDS(sea_sectors,paste0("results/",method_version,"/sea_sectors.rds"))
-saveRDS(sea_countries,paste0("results/",method_version,"/sea_countries.rds"))
+write_fst_array(m_io_filters,paste0("results/",method_version,"/m_io_filters.fst"))
+write_fst_array(m_countries,paste0("results/",method_version,"/m_countries.fst"))
+write_fst_array(sea_sectors,paste0("results/",method_version,"/sea_sectors.fst"))
+write_fst_array(sea_countries,paste0("results/",method_version,"/sea_countries.fst"))

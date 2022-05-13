@@ -19,8 +19,8 @@ download.file(
   "source_data/euklems/euklems-na.rds")
 
 # prepare data ----
-euklems <- readRDS("source_data/euklems/euklems.rds")
-euklems.na <- readRDS("source_data/euklems/euklems-na.rds")
+euklems <- read_fst_array("source_data/euklems/euklems.fst")
+euklems.na <- read_fst_array("source_data/euklems/euklems-na.fst")
 
 # depreciation rate: obtained in EUKLEMS documentation
 dep.rates <- 
@@ -298,8 +298,8 @@ for (year in as.character(missing_ek)){
   ek.k <- rbind(ek.k, ek.k.md)
   ek.dep.rate <- rbind(ek.dep.rate, ek.dep.rate.md)
   
-  saveRDS(ek.k, paste0("source_data/euklems/ekk_",year,".rds"))
-  saveRDS(ek.dep.rate, paste0("source_data/euklems/ekdeprate_",year,".rds"))
+  write_fst_array(ek.k, paste0("source_data/euklems/ekk_",year,".fst"))
+  write_fst_array(ek.dep.rate, paste0("source_data/euklems/ekdeprate_",year,".fst"))
 }
 
 # clear variables and data ----
