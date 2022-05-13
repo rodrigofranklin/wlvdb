@@ -1,6 +1,6 @@
 ###############################################################################.
 #                                                                              #
-#       World Labour Values Database                                           #
+#                       World Labour Values Database                           #
 #                                                                              #
 ###############################################################################.
 
@@ -27,9 +27,16 @@ get_wlv <- function(methods = "alternative_1", repeat_pp = F,
   cf <- "started"
   write(c("started","clusters"),cf,sep=",")
 
-  assign("my.cluster",parallel::makeCluster(
-    parallel::detectCores() - 1, 
-    type = "PSOCK"), envir=globalenv())
+  if(.Platform$OS.type == "unix") {
+    assign("my.cluster", makeCluster(detectCores() - 1, 'FORK',outfile="results/logs/parallelworkers.log"),
+           envir=globalenv())
+  } else {
+    assign("my.cluster",parallel::makeCluster(
+      parallel::detectCores() - 1, 
+      type = "PSOCK"), envir=globalenv())
+    
+  }
+  
   
   file.remove(cf)
   
