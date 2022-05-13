@@ -51,3 +51,10 @@ write_fst_array <- function(m, file_name) {
   fst::write_fst(data.frame(Data = m), file_name)
   saveRDS(meta_data, paste0(file_name, ".meta"))
 }
+
+convert_array_RDS <- function(nomebase) {
+  t <- readRDS(paste0(nomebase,".rds"))
+  write_fst_array(t,paste0(nomebase,".fst"))
+  rm(t)
+  gc()
+}
