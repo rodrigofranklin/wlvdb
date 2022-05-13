@@ -103,7 +103,7 @@ for(current_m_io in lists$m_io_files) {
   unregister_dopar()
 }
 #}
-closeAllConnections()
+
 
 # clear environment
 gc()
