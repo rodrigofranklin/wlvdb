@@ -50,17 +50,17 @@ source("R/modules/variables/sea_sectors.R")
 # obtain list of m_io files
 lists$m_io_files <- 
   dir(path = paste0("source_data/",source_version),
-      pattern = "m_io*fst", full.names = T )
+      pattern = "m_io.*.fst", full.names = T )
 
-
+print(head(lists$m_io_files))
 for(current_m_io in lists$m_io_files) {
   print("lets prepare the computation")
-  source("R/lib/prepare_computation.R", local = T)
+  source("R/lib/prepare_computation.R")
   stage <- 3
   print("Starting stage 3")
   # matricial computations
   for (matrix_script in matrices$computation) {
-    source(paste0("R/modules/matrices/",matrix_script),local = T)
+    source(paste0("R/modules/matrices/",matrix_script))
   }
 
   # reduces input-output matrices to country matrices.
@@ -80,7 +80,7 @@ for(current_m_io in lists$m_io_files) {
   
   # compute variables from matrices
   stage <- 4
-  source("R/modules/variables/sea_sectors.R",local = T)
+  source("R/modules/variables/sea_sectors.R")
   
   # write
   print("Writing...")
@@ -100,9 +100,8 @@ for(current_m_io in lists$m_io_files) {
   # clear environment
   rm(lambda, m_io_source, m_io, balance_factor, filter, matrix_script)
   gc()
-  unregister_dopar()
 }
-#}
+
 
 
 # clear environment
