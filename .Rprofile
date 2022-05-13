@@ -12,7 +12,10 @@ if(length(br) == 0) {
                  "abind",
                  "REdaS",
                  "dineq",
-                 "MLmetrics")
+                 "MLmetrics",
+                 "foreach",
+                 "itertools",
+                 "tidyverse")
   br <- "https://cloud.r-project.org"
   dipa <- setdiff(packages, rownames(utils::installed.packages())) 
   if (length(dipa)) utils::install.packages(dipa,repos = br)  

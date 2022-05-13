@@ -4,6 +4,8 @@
 #                                                         #
 ##########################################################.
 
+registerDoParallel(my.cluster)
+
 source("R/lib/parameters.R")
 
 # load raw sea data
@@ -50,31 +52,35 @@ lists$m_io_files <-
   dir(path = paste0("source_data/",source_version),
       pattern = "m_io", full.names = T )
 
-# compute each file
-for (current_m_io in lists$m_io_files) {
-  
-  # prepare m_io computation
-  source("R/lib/prepare_computation.R")
-  
 
+for(current_m_io in lists$m_io_files) {
+  print("lets prepare the computation")
+  source("R/lib/prepare_computation.R", local = T)
+  stage <- 3
+  print("Starting stage 3")
   # matricial computations
   for (matrix_script in matrices$computation) {
-    source(paste0("R/modules/matrices/",matrix_script))
+    source(paste0("R/modules/matrices/",matrix_script),local = T)
   }
 
   # reduces input-output matrices to country matrices.
   # filter to eliminate internal trade
   filter <- rep(1-diag(nums$countries), each = nums$years)
-  
+
+
+
   print("Start of reduction of IxO matrices:")
+  
   for (matrix_script in reduced_matrices$computation) {
+    
     source(paste0("R/modules/reduced_matrices/",matrix_script))
   }
+  
   print("End of matrix reduction.")
   
   # compute variables from matrices
   stage <- 4
-  source("R/modules/variables/sea_sectors.R")
+  source("R/modules/variables/sea_sectors.R",local = T)
   
   # write
   print("Writing...")
@@ -94,7 +100,11 @@ for (current_m_io in lists$m_io_files) {
   # clear environment
   rm(lambda, m_io_source, m_io, balance_factor, filter, matrix_script)
   gc()
+  unregister_dopar()
 }
+#}
+stopCluster(cl)
+closeAllConnections()
 
 # clear environment
 gc()

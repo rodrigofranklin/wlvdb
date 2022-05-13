@@ -31,9 +31,11 @@ if (stage == 1) {
 
 # preliminary computation of order 1
 for (loop in sea_variables$sector_solution[which(sea_variables$order==stage)]) {
-  print(paste0("Sourcing from stage ",stage," script ",gsub(".*/","",loop)))
+  print(paste("Sourcing from stage ",stage," script ",gsub(".*/","",loop)))
   source(paste0("R/modules/variables/",loop))
   sea_sectors <- clean(sea_sectors)
+  print(paste("Finished sourcing script ",gsub(".*/","",loop)," from stage ",stage))
 }
 
+print(paste("Finished stage",stage))
 rm(loop)

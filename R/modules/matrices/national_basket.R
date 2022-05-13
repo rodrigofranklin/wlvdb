@@ -8,6 +8,7 @@
 # assumption, all sectors of the same country have the same consumption 
 # basket structure (= demand from families).
 # Obs: "c37" = household final demand column
+
 m_io[, "consumption_basket", 1:nums$input, 1:nums$input] <- 
   m_io_source[, 1:nums$input, grep("by households", columns$sector)] %>%
   newDim(c(nums$years, nums$input, nums$countries)) %>%

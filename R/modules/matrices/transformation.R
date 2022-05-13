@@ -9,7 +9,7 @@ n <- 1:d
 # input-output matrix, rows of productive sectors remain.
 filter <- 
   matrix(rows$productive, nrow = d, ncol = d, byrow = TRUE ) * rows$productive
-
+print("Finished creating productive sectors filter")
 #####.
 # Calculates the inverse matrix of leontief = (I-A-D)^(-1), where:
 # I => identity matrix;
@@ -27,7 +27,7 @@ leontief <-
   rep(times = d) %>% 
   newDim(c(a, d, d)) %>%
   aperm(c(1,3,2))
-
+print("Finished loading leontief intermediates")
 # Step 2: calculates -(A+D)
 # -(A+D) = (T+C) * <X>^(-1)
 leontief <- (-1) *

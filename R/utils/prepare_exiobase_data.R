@@ -1,5 +1,5 @@
 library(abind)
-
+library(lubridate)
 # Primeira carga de leitura somente para buscar os parâmetros dessa base.
 demand <- read.delim(file = "temp/1995/Y.txt", header = FALSE)
 factors <- read.delim(file = "temp/1995/F.txt", header = FALSE, nrows = 26)
