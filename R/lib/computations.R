@@ -78,7 +78,12 @@ for (current_m_io in lists$m_io_files) {
   
   # write
   print("Writing...")
-  saveRDS(m_io,paste0("results/",method_version,"/m_io",lists$years[1],".rds"))
+  if (nums$years == 1) {
+    saveRDS(m_io,paste0("results/",method_version,"/m_io",lists$years[1],".rds"))
+  } else {
+    saveRDS(m_io,paste0("results/",method_version,"/m_io",lists$years[1],"-",
+                        lists$years[nums$years],".rds"))
+  }
 
   # just in case of blackout
   print("Temporary writing...")

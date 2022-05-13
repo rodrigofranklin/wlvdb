@@ -1,16 +1,14 @@
 ###############################################################################.
 #                                                                              #
-#       World Labour Values Database  - studies on the reduction problem       #
+#       World Labour Values Database                                           #
 #                                                                              #
 ###############################################################################.
 
 
 # Versions computations ----
 
+method_list <- gsub("methods/","",list.dirs("methods",recursive = F))
 
-method_list <- c(
-  list.dirs("methods",recursive = F)
-  )
 #Current methods
 # [1] "methods/alternative_1"         "methods/alternative_1_wiodr16"
 # [3] "methods/alternative_2"         "methods/exiobase"             
@@ -18,6 +16,7 @@ method_list <- c(
 # [7] "methods/ochoa_2"                       
 # [9] "methods/petrovic"              "methods/zerodep_1"            
 # [11] "methods/zerodep_2"            
+
 get_wlv <- function(methods = "alternative_1", repeat_pp = F,
                    papern = 0, prepaper = F) {
   #Load functions

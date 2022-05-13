@@ -1,4 +1,0 @@
-names;sector_solution;country_solution;order
-z;reduction/alternative_1/z.R;mean;2
-z_employees;reduction/alternative_1/z_employees.R;mean;2
-depreciation;../matrices/wiod/disregard_dep.R;sum;2

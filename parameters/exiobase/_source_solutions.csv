@@ -1,9 +1,9 @@
 names;sector_solution;country_solution;order
-capital_depreciation.s.us;exibase/capital_depreciation.s.us.R;sum;4
-emp.s.un;exibase/emp.s.un.R;sum;1
-empe.s.un;exibase/empe.s.un.R;sum;1
-hours_worked.emp.s.hr;exibase/hours_worked.emp.s.hr.R;sum;1
-hours_worked.empe.s.hr;exibase/hours_worked.empe.s.hr.R;sum;1
-compensation.empe.s.us;exibase/compensation.empe.s.us.R;sum;1
+capital_depreciation.s.us;exiobase/capital_depreciation.s.us.R;sum;4
+emp.s.un;exiobase/emp.s.un.R;sum;1
+empe.s.un;exiobase/empe.s.un.R;sum;1
+hours_worked.emp.s.hr;exiobase/hours_worked.emp.s.hr.R;sum;1
+hours_worked.empe.s.hr;exiobase/hours_worked.empe.s.hr.R;sum;1
+compensation.empe.s.us;exiobase/compensation.empe.s.us.R;sum;1
 gross_output.s.us;gross_output_mp;sum;0
-gdp.s.us;exibase/gdp.s.us.R;sum;1
+gdp.s.us;exiobase/gdp.s.us.R;sum;1

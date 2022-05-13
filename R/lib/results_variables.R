@@ -40,3 +40,6 @@ sea_countries <- array(NA,
                     dimnames = list(lists$years,
                                     lists$sea_variables,
                                     c(lists$countries,"WWW")))
+
+# Creates folder in "results"
+dir.create(paste0("results/",method_version), showWarnings = FALSE)
