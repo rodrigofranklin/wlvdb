@@ -103,7 +103,6 @@ for(current_m_io in lists$m_io_files) {
   unregister_dopar()
 }
 #}
-stopCluster(cl)
 closeAllConnections()
 
 # clear environment
