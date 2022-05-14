@@ -1,8 +1,8 @@
 #create-cpis_gdps_exchange_rates array
-library(tidyverse)
+
 ##Add CPIS
 indexcpis <- read_csv2("source_data/worldbank/cpis_countries.csv")
-indexcpis$year <- year(indexcpis$year)
+indexcpis$year <- as.numeric(indexcpis$year)
 indexcpis <- indexcpis[indexcpis$year>1994,]
 
 ##Adding regional codes/ areas included in exiobase sea

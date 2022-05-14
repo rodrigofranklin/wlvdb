@@ -6,7 +6,7 @@ base_year <- (dimnames(sea_source)[[1]])[1]
 
 fchnames <- dimnames(m_io)[[4]]
 basebasket <- 
-  m_io[base_year,"consumption_basket",,1]
+  m_io[base_year,"consumption_basket",,1:nums$input]
 
 shc <- substr(dimnames(basebasket)[[2]],1,2)
 basebasket <- array(basebasket,
@@ -14,5 +14,5 @@ basebasket <- array(basebasket,
                              dimnames = list(dimnames(basebasket)[[1]],
                                              shc,
                                              base_year))
-write_fst_array(consumption_baskets,paste0("results/",method_version,"/base_basket.fst"))
+write_fst_array(basebasket,paste0("results/",method_version,"/base_basket.fst"))
 

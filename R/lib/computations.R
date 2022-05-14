@@ -52,7 +52,6 @@ lists$m_io_files <-
   dir(path = paste0("source_data/",source_version),
       pattern = "m_io.*.fst", full.names = T )
 
-print(head(lists$m_io_files))
 for(current_m_io in lists$m_io_files) {
   print("lets prepare the computation")
   source("R/lib/prepare_computation.R")
