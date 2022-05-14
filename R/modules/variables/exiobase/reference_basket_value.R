@@ -111,8 +111,8 @@ if(length(a)>0) {
   source("R/utils/base_basket_exiobase.R")
 }
 cpis_gdps_er <- read_fst_array("results/exiobase/cpis_gdps_er.fst")
+lambdas <- as.numeric(lambda)
 if(base_year == lists$years[1]) {
-  lambdas <- as.numeric(sea_sectors[base_year,"value.m.mv",,])
   basi <- array(c(basebasket*replicate(nums$countries+1,lambdas),
                                  lambdas),c(nums$input,nums$countries+1),
                                  dimnames = list(
@@ -120,14 +120,17 @@ if(base_year == lists$years[1]) {
                                    dimnames(basebasket)[[2]]
                                  )
                   )
+  
+  allyears <- dimnames(sea_countries)[[1]]
   basi <- colSums(basi,na.rm=T)
-  basi <- array(replicate(nrow(cpi_gdp_er),basi),c(nrow(cpi_gdp_er),1,length(basi)),
-                dimnames = list(list(dimnames(sea_countries)[[1]],"reference basket value",dimnames(sea_countries)[[3]]))
-  )
-
+  
+  basi <- array(replicate(length(allyears),basi),dim = c(length(basi),length(allyears),1),
+                dimnames = list(dimnames(sea_countries)[[3]],allyears,"reference basket value"))%>%
+    aperm(c(2,3,1))
+  
+  
   sea_countries <- abind(sea_countries,basi,along = 2)  
 } else {
-  lambdas <- as.numeric(sea_sectors[,"value",,])
   er <- cpi_gdp_er[lists$years,,"exchange_rate"]
   erbase <- cpi_gdp_er[base_year,,"exchange_rate"]
   consprice <- cpi_gdp_er[lists$years,,"CPI"]
