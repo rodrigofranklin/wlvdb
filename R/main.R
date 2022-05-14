@@ -28,12 +28,12 @@ get_wlv <- function(methods = "alternative_1", repeat_pp = F,
   write(c("started","clusters"),cf,sep=",")
 
   if(.Platform$OS.type == "unix") {
-    assign("my.cluster", makeCluster(detectCores() - 1, 'FORK',outfile="results/logs/parallelworkers.log"),
+    my.cluster <-  makeForkCluster(detectCores() - 1,outfile="results/logs/parallelworkers.log",
            envir=globalenv())
   } else {
-    assign("my.cluster",parallel::makeCluster(
+    my.cluster <- parallel::makeCluster(
       parallel::detectCores() - 1, 
-      type = "PSOCK"), envir=globalenv())
+      type = "PSOCK", envir=globalenv())
     
   }
   
