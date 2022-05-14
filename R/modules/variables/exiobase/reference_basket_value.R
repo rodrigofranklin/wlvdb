@@ -1,5 +1,7 @@
 #create-cpis_gdps_exchange_rates array
-
+if(!exists(base_year)){
+  base_year <- dimnames(sea_source)[[1]]
+}
 ##Add CPIS
 indexcpis <- read_csv2("source_data/worldbank/cpis_countries.csv")
 lastyear <- dimnames(sea_source)[[1]][length(dimnames(sea_source)[[1]])]
