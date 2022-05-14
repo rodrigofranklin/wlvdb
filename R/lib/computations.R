@@ -50,7 +50,7 @@ source("R/modules/variables/sea_sectors.R")
 # obtain list of m_io files
 lists$m_io_files <- 
   dir(path = paste0("source_data/",source_version),
-      pattern = "m_io.*.fst", full.names = T )
+      pattern = "m_io.*.fst$", full.names = T )
 
 for(current_m_io in lists$m_io_files) {
   print("lets prepare the computation")
