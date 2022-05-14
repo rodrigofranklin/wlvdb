@@ -121,7 +121,7 @@ if(base_year == lists$years[1]) {
                                  )
                   )
   basi <- colSums(basi,na.rm=T)
-  basi <- array(replicate(nrow(cpi_gdp_er),basi),c(nrow(cpi_gdp_er),1,dim(basi)[2]),
+  basi <- array(replicate(nrow(cpi_gdp_er),basi),c(nrow(cpi_gdp_er),1,length(basi)),
                 dimnames = list(list(dimnames(sea_countries)[[1]],"reference basket value",dimnames(sea_countries)[[3]]))
   )
 
