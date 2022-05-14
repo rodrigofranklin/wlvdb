@@ -44,7 +44,7 @@ leontief <- leontief + rep(diag(d), each = a)
 # Step 4: inverts the matrix.
 print("Inverting leontief matrix...")
 
-leontief <- parApply(cl = my.cluster, leontief, 1, solve) %>%
+leontief <- apply(leontief, 1, solve) %>%
   newDim(c(d, d, a)) %>%
   aperm(c(3,1,2))
 
