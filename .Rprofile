@@ -1,5 +1,5 @@
 br <- list.files(path=getwd(),pattern = "started")
-
+Sys.umask("002")
 if(length(br) == 0) {
   cat("installing and loading required packages...")
   packages <-  c("ggplot2",
@@ -16,7 +16,8 @@ if(length(br) == 0) {
                  "foreach",
                  "lubridate",
                  "tidyverse",
-                 "fst")
+                 "fst",
+                 "countrycode")
   br <- "https://cloud.r-project.org"
   dipa <- setdiff(packages, rownames(utils::installed.packages())) 
   if (length(dipa)) utils::install.packages(dipa,repos = br)  

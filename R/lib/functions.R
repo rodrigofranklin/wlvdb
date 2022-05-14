@@ -20,7 +20,9 @@ cnames <- function(a,b) {
 read_fst_array <- function(file_name) {
   
   ft <- fst::read_fst(file_name)  # single column data.frame
-  meta_data <- readRDS(paste0(file_name, ".meta"))  # retrieve dim
+  metaf <- paste0(file_name, ".meta")
+  if(file.exists(metaf)) {
+  meta_data <- readRDS(metaf)  # retrieve dim
   
   m <- ft[[1]]  
   attr(m, "dim") <- meta_data$dim
@@ -31,7 +33,9 @@ read_fst_array <- function(file_name) {
   # })
   dimnames(m) <- meta_data
   
-  m
+  m} else {
+    ft
+  }
 }
 
 write_fst_array <- function(m, file_name) {
@@ -53,8 +57,15 @@ write_fst_array <- function(m, file_name) {
 }
 
 convert_array_RDS <- function(nomebase) {
-  t <- readRDS(paste0(nomebase,".rds"))
+  nrds <- paste0(nomebase,".rds")
+  print(paste("Converting",nrds))
+  t <- readRDS(nrds)
+  if(class(t) == "array"){
+    print("This is an array object")
   write_fst_array(t,paste0(nomebase,".fst"))
+  } else {
+    write_fst(t,paste0(nomebase,".fst"))
+  }
   rm(t)
   gc()
 }

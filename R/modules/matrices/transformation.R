@@ -43,10 +43,16 @@ leontief <- leontief + rep(diag(d), each = a)
 
 # Step 4: inverts the matrix.
 print("Inverting leontief matrix...")
-
+if(!(method_version %in% c("wiodr13","wiodr16"))) {
 leontief <- apply(leontief, 1, solve) %>%
   newDim(c(d, d, a)) %>%
   aperm(c(3,1,2))
+} else {
+  leontief <- parApply(my.cluster,leontief, 1, solve) %>%
+    newDim(c(d, d, a)) %>%
+    aperm(c(3,1,2))
+  
+}
 
 gc()
 
