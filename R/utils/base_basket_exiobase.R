@@ -6,7 +6,7 @@ base_year <- (dimnames(sea_source)[[1]])[1]
 
 fchnames <- dimnames(m_io)[[4]]
 basebasket <- 
-  m_io[base_year,"consumption_basket",,1:nums$input]
+  m_io[base_year,"consumption_basket",,(0:nums$countries)*nums$sectors+1]
 
 shc <- substr(dimnames(basebasket)[[2]],1,2)
 basebasket <- array(basebasket,

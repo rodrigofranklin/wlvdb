@@ -101,10 +101,10 @@ write_fst_array(cpi_gdp_er,paste0("results/",method_version,"/cpis_gdps_er.fst")
 
 #Check if there is a base basket file already in results, otherwise sets first year as base year
 
-a <- list.files(paste0("results/",method_version),pattern = "base_basket.fst",full.names = T)
+a <- list.files(paste0("results/",method_version),pattern = "base_basket.fst$",full.names = T)
 
 if(length(a)>0) {
-  basebasket <- readfst(a)
+  basebasket <- read_fst_array(a)
   base_year <- dimnames(basebasket)[[3]]
   basebasket <- basebasket[,,1]
 } else {
@@ -112,16 +112,16 @@ if(length(a)>0) {
 }
 cpis_gdps_er <- read_fst_array("results/exiobase/cpis_gdps_er.fst")
 if(base_year == lists$years[1]) {
-  lambdas <- as.numeric(sea_sectors[base_year,"value",,])
-  basi <- array(c(basebasket*replicate(nums$countries,lambdas),
+  lambdas <- as.numeric(sea_sectors[base_year,"value.m.mv",,])
+  basi <- array(c(basebasket*replicate(nums$countries+1,lambdas),
                                  lambdas),c(nums$input,nums$countries+1),
                                  dimnames = list(
                                    dimnames(basebasket)[[1]],
-                                   c(dimnames(basebasket)[[2]],"WWW")
+                                   dimnames(basebasket)[[2]]
                                  )
                   )
   basi <- colSums(basi,na.rm=T)
-  basi <- array(replicate(27,basi),c(27,1,nums$countries+1),
+  basi <- array(replicate(nrow(cpi_gdp_er),basi),c(nrow(cpi_gdp_er),1,dim(basi)[2]),
                 dimnames = list(list(dimnames(sea_countries)[[1]],"reference basket value",dimnames(sea_countries)[[3]]))
   )
 

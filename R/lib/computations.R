@@ -91,10 +91,10 @@ for(current_m_io in lists$m_io_files) {
   }
 
   # just in case of blackout
-  print("Temporary writing...")
-  write_fst_array(m_countries,paste0("results/",method_version,"/m_countries.fst"))
-  write_fst_array(sea_sectors,paste0("results/",method_version,"/sea_sectors.fst"))
-  write_fst_array(sea_countries,paste0("results/",method_version,"/sea_countries.fst"))
+#  print("Temporary writing...")
+#  write_fst_array(m_countries,paste0("results/",method_version,"/m_countries.fst"))
+#  write_fst_array(sea_sectors,paste0("results/",method_version,"/sea_sectors.fst"))
+#  write_fst_array(sea_countries,paste0("results/",method_version,"/sea_countries.fst"))
 
   # clear environment
   rm(lambda, m_io_source, m_io, balance_factor, filter, matrix_script)

@@ -9,8 +9,9 @@ y <- 1:d2
 # Unequal exchange
 print("Productive transfers in values...")
 m_countries[lists$years,"transfers_productive_values",,] <- 
-  parApply(
-    cl = my.cluster,
+  # parApply(
+  #   cl = my.cluster,
+  apply(
     (m_io[,"transfers_values", x, y] * 
        (m_io_filters["productive_sectors", x, y] %>% rep(each = nums$years))) %>%
       newDim(c(a, d1, d2)), 1,

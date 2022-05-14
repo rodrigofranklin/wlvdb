@@ -8,8 +8,9 @@ y <- 1:d2
 # Exports in values ----
 print("Exports in values...")
 m_countries[lists$years,"exports_values",,] <- 
-  parApply( 
-    cl = my.cluster,
+  # parApply( 
+  #   cl = my.cluster,
+  apply(
     m_io[,"values", x, y] %>% newDim(c(a, d1, d2)), 1,
     tapply, m_io_filters["countries", x, y], sum, na.rm = TRUE
   ) %>% aperm(c(2,1)) * filter
