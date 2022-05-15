@@ -1,5 +1,5 @@
 #create-cpis_gdps_exchange_rates array
-if(!exists(base_year)){
+if(!exists("base_year")){
   base_year <- dimnames(sea_source)[[1]]
 }
 ##Add CPIS
@@ -7,20 +7,11 @@ indexcpis <- read_csv2("source_data/worldbank/cpis_countries.csv")
 lastyear <- dimnames(sea_source)[[1]][length(dimnames(sea_source)[[1]])]
 
 indexcpis$year <- as.numeric(indexcpis$year)
-indexcpis <- indexcpis[indexcpis$year> as.numeric(base_year) & indexcpis$year<(as.numeric(lastyear)+1),]
+indexcpis <- indexcpis[indexcpis$year> as.numeric(base_year)-1 & indexcpis$year<(as.numeric(lastyear)+1),]
 
 ##Adding regional codes/ areas included in exiobase sea
 al <- indexcpis$year
-if (source_version %in% c("wiodr13","wiodr16")) {
-  ciso2c <- countrycode(lists$countries,"iso3c","iso2c", nomatch = "ROW")
-for (i in names(indexcpis)[!(countrycode::countrycode(lists$countries,"iso3c","iso2c",nomatch = "ROW") %in% names(indexcpis))][-1]) {
-  indexcpis[i] <- 100
-  indexcpis <- indexcpis[,-1]
-  indexcpis <- indexcpis[,ciso2c[ciso2c != "ROW"]]
-  row.names(indexcpis) <- al
-  indexcpis[,ciso2c[ciso2c != "ROW"]]
-}
-  } else {
+
     ciso2c <- lists$countries
   for (i in dimnames(sea_source)[[4]][!(dimnames(sea_source)[[4]] %in% names(indexcpis)[-1])]) {
     indexcpis[i] <- 100
@@ -28,7 +19,6 @@ for (i in names(indexcpis)[!(countrycode::countrycode(lists$countries,"iso3c","i
     indexcpis <- indexcpis[,-1]
     indexcpis <- indexcpis[dimnames(m_io)[[1]],dimnames(sea_source)[[4]]]
     
-  }
 }
 
 
@@ -41,9 +31,7 @@ arraycpis <- arraycpis[,ciso2c[ciso2c != "ROW"]]
 pibx <- function(pais,ano) {
   a <- data.frame(year = ano,
                   iso2c = pais,
-                  gdp = ifelse(source_version %in% c("wiodr13","wiodr16"),
-                               sum(sea_source[as.character(ano),"VA_USD",,pais]),
-                               sum(sea_source[as.character(ano),dimnames(sea_source)[[2]][1:9],,pais])))
+                  gdp = sum(sea_source[as.character(ano),dimnames(sea_source)[[2]][1:9],,pais]))
   a
 }
 
@@ -51,16 +39,13 @@ combs <- expand.grid(dimnames(sea_source)[[1]],lists$countries)
 
 pibsexiobase <- data.table::rbindlist(mapply(pibx,combs$Var2,combs$Var1, SIMPLIFY = F))
 
-if(source_version %in% c("wiodr13","wiodr16")){
-  levels(pibsexiobase$iso2c) <- ciso2c
-}
 
 pibsexiobase <- pibsexiobase%>%pivot_wider(names_from=iso2c,values_from=gdp)
 
 anospi <- pibsexiobase$year
 
 pibsexiobase <- pibsexiobase[-1]
-pibsexiobase <- pibsexiobase[ciso2c[ciso2c!="ROW"]]
+pibsexiobase <- pibsexiobase[lists$countries !="ROW"]
 row.names(pibsexiobase) <- anospi
 
 pibsexiobase <- array(as.matrix(pibsexiobase),dim(pibsexiobase),dimnames = list(anospi,names(pibsexiobase)))
@@ -91,16 +76,11 @@ gdps <- read_csv2("source_data/worldbank/gdps_lcu.csv")
 
 gdps <- gdps[-2]%>%pivot_wider(names_from = iso2c, values_from = NY.GDP.MKTP.CN)
 
-if(source_version %in% c("wiodr13","wiodr16")){
-  gdps <- gdps[gdps$year<as.numeric(lastyear)+1,]
-for (i in names(gdps)[!(ciso2c[ciso2c != "ROW"] %in% names(gdps))]) {
-  gdps[i] <- NA
-}} else {
-  for (i in lists$countries[!(ciso2c[c2iso2c != "ROW"] %in% names(gdps))][-1]) {
+  for (i in lists$countries[!(lists$countries %in% names(gdps))][-1]) {
     gdps[i] <- 100
   }
   
-}
+
 
 gdps <- gdps%>%arrange(year)
 
@@ -146,24 +126,26 @@ if(length(a)>0) {
 } else {
   source("R/utils/base_basket_exiobase.R")
 }
+basebasket <- basebasket[,ciso2c[ciso2c!= "ROW"],]
 cpis_gdps_er <- read_fst_array("results/exiobase/cpis_gdps_er.fst")
 lambdas <- as.numeric(lambda)
+
 if(base_year == lists$years[1]) {
-  basi <- array(c(basebasket*replicate(nums$countries+1,lambdas),
-                                 lambdas),c(nums$input,nums$countries+1),
-                                 dimnames = list(
-                                   dimnames(basebasket)[[1]],
-                                   dimnames(basebasket)[[2]]
-                                 )
+    basi <- array(c(basebasket*replicate(nums$countries+1,lambdas),
+                    lambdas),c(nums$input,nums$countries+1),
+                  dimnames = list(
+                    dimnames(basebasket)[[1]],
+                    dimnames(basebasket)[[2]]
                   )
+    )
   
   allyears <- dimnames(sea_countries)[[1]]
   basi <- colSums(basi,na.rm=T)
   
-  basi <- array(replicate(length(allyears),basi),dim = c(length(basi),length(allyears),1),
-                dimnames = list(dimnames(sea_countries)[[3]],allyears,"reference basket value"))%>%
-    aperm(c(2,3,1))
   
+    basi <- array(replicate(length(allyears),basi),dim = c(length(basi),length(allyears),1),
+                  dimnames = list(dimnames(sea_countries)[[3]],allyears,"reference basket value"))%>%
+      aperm(c(2,3,1))
   
   sea_countries <- abind(sea_countries,basi,along = 2)  
 } else {
@@ -175,12 +157,13 @@ if(base_year == lists$years[1]) {
                          replicate(nums$inputs,consprice)/replicate(nums$inputs,er),
                        lambdas),c(nums$input,nums$countries+1),
                      dimnames = list(
-                       dimnames(basebasket)[[1]],
+                       dimnames(basebasket)[[1]][dimnames(basebasket)[[1]]!= "ROW" &dimnames(basebasket)[[1]]!= "WWW"],
                        c(dimnames(basebasket)[[2]],"WWW")
                      )
   )
   curba <- colSums(curba,na.rm=T)
   sea_countries[lists$years,"reference basket value",] <- curba
 }
+
   
 write_fst_array(sea_countries,paste0("results/",method_version,"/sea_countries.fst"))
