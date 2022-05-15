@@ -11,20 +11,21 @@ indexcpis <- indexcpis[indexcpis$year> as.numeric(base_year)-1 & indexcpis$year<
 
 ##Adding regional codes/ areas included in exiobase sea
 al <- indexcpis$year
-
+allyears <- dimnames(sea_countries)[[1]]
     ciso2c <- lists$countries
-  for (i in dimnames(sea_source)[[4]][!(dimnames(sea_source)[[4]] %in% names(indexcpis)[-1])]) {
+  for (i in ciso2c[(!ciso2c %in% names(indexcpis))]) {
     indexcpis[i] <- 100
-    row.names(indexcpis) <- indexcpis$year
+  }
+    row.names(indexcpis) <- al
     indexcpis <- indexcpis[,-1]
-    indexcpis <- indexcpis[dimnames(m_io)[[1]],dimnames(sea_source)[[4]]]
     
-}
+    
+
 
 
 
 arraycpis <- array(as.matrix(indexcpis),dim(indexcpis),dimnames = list(row.names(indexcpis), names(indexcpis)))
-arraycpis <- arraycpis[,ciso2c[ciso2c != "ROW"]]
+
 
 
 ##calculate GDPS from sea_source data
@@ -76,7 +77,7 @@ gdps <- read_csv2("source_data/worldbank/gdps_lcu.csv")
 
 gdps <- gdps[-2]%>%pivot_wider(names_from = iso2c, values_from = NY.GDP.MKTP.CN)
 
-  for (i in lists$countries[!(lists$countries %in% names(gdps))][-1]) {
+  for (i in ciso2c[!(lists$countries %in% names(gdps))]) {
     gdps[i] <- 100
   }
   
@@ -93,13 +94,12 @@ gdps[,-1] <- gdps[,-1]/1000000
     gdps[gdps$year>srctable$startyear-1,unique(srctable$iso2c)] <- 
       cpi_gdp_er[as.character(srctable$startyear:as.numeric(lastyear)),i,"VA"]
    }
-      
+rm(srctable)
 anos <- as.character(gdps$year)
-gdps <- gdps[,ciso2c[ciso2c!= "ROW"]]
+gdps <- gdps[,ciso2c]
 
 
-gdps <- gdps[ciso2c[ciso2c != "ROW"]]
-row.names(gdps) <- as.character(anos)
+row.names(gdps) <- al
 
 arraygdps <- array(as.matrix(gdps),c(dim(gdps),1),dimnames = list(row.names(gdps),names(gdps),"VATOTAL"))
 
@@ -126,44 +126,56 @@ if(length(a)>0) {
 } else {
   source("R/utils/base_basket_exiobase.R")
 }
-basebasket <- basebasket[,ciso2c[ciso2c!= "ROW"],]
+basebasket <- basebasket[,ciso2c[ciso2c!= "ROW"]]
 cpis_gdps_er <- read_fst_array("results/exiobase/cpis_gdps_er.fst")
 lambdas <- as.numeric(lambda)
 
 if(base_year == lists$years[1]) {
-    basi <- array(c(basebasket*replicate(nums$countries+1,lambdas),
-                    lambdas),c(nums$input,nums$countries+1),
+    basi <- array(abind(basebasket,
+                        rowMeans(basebasket),along = 2),
+                        c(nums$input,nums$countries+1),
                   dimnames = list(
                     dimnames(basebasket)[[1]],
-                    dimnames(basebasket)[[2]]
+                    c(dimnames(basebasket)[[2]],"WWW")
                   )
     )
   
   allyears <- dimnames(sea_countries)[[1]]
-  basi <- colSums(basi,na.rm=T)
+#  basi <- colSums(basi,na.rm=T)
   
   
-    basi <- array(replicate(length(allyears),basi),dim = c(length(basi),length(allyears),1),
-                  dimnames = list(dimnames(sea_countries)[[3]],allyears,"reference basket value"))%>%
-      aperm(c(2,3,1))
+    basi <- array(replicate(length(allyears),basi),dim = c(dim(basi),length(allyears),1),
+                  dimnames = list(lists$input,dimnames(sea_countries)[[3]],allyears,"reference basket value"))%>%
+      aperm(c(3,4,1,2))
+    
+    basi[1,1,,] <- basi[1,1,,]*replicate(nums$countries+1,lambdas)
   
-  sea_countries <- abind(sea_countries,basi,along = 2)  
-} else {
+  write_fst_array(basi,paste0("results/",method_version,"base_monetary_structure_of_cbasket.fst"))
+} 
   er <- cpi_gdp_er[lists$years,,"exchange_rate"]
+  fkwww <- 1
+  names(fkwww) <- "WWW"
+  er <- c(er,fkwww)
   erbase <- cpi_gdp_er[base_year,,"exchange_rate"]
+  erbase <- c(erbase,fkwww)
+  
   consprice <- cpi_gdp_er[lists$years,,"CPI"]
+  fkwww <- 105
+  consprice <- c(consprice,fkwww)
+  
   baseconsprice <- cpi_gdp_er[base_year,,"CPI"]
-  curba <-     array(c(replicate(nums$countries,lambdas)*basebasket*replicate(nums$inputs,erbase)*
-                         replicate(nums$inputs,consprice)/replicate(nums$inputs,er),
-                       lambdas),c(nums$input,nums$countries+1),
-                     dimnames = list(
-                       dimnames(basebasket)[[1]][dimnames(basebasket)[[1]]!= "ROW" &dimnames(basebasket)[[1]]!= "WWW"],
-                       c(dimnames(basebasket)[[2]],"WWW")
-                     )
-  )
-  curba <- colSums(curba,na.rm=T)
+  baseconsprice <- c(baseconsprice,fkwww)
+  
+  curba <-     basi[base_year,1,,]*replicate(nums$countries+1,lambdas)*
+    t(replicate(nums$input,erbase))*100*
+    t(replicate(nums$input,consprice))/
+    t(replicate(nums$input,er))
+                     
+  names(curba) <- names(er)
+  
+curba <- colSums(curba,na.rm=T)
   sea_countries[lists$years,"reference basket value",] <- curba
-}
+
 
   
 write_fst_array(sea_countries,paste0("results/",method_version,"/sea_countries.fst"))
