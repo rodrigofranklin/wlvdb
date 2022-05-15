@@ -7,4 +7,3 @@ hours_worked.empe.s.hr;exiobase/hours_worked.empe.s.hr.R;sum;1
 compensation.empe.s.us;exiobase/compensation.empe.s.us.R;sum;1
 gross_output.s.us;gross_output_mp;sum;0
 gdp.s.us;exiobase/gdp.s.us.R;sum;1
-reference_basket_value;exiobase/reference_basket_value.R;mean;4

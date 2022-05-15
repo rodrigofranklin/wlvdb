@@ -8,23 +8,21 @@ y <- 1:d2
 # Total transfers in values ----
 print("Total transfers in values...")
 
-if (!(source_version %in% c("wiodr13","wiodr16"))) {
-m_countries[lists$years,"transfers_values",,] <- 
-  # parApply( 
-  #   cl = my.cluster,
-apply(
-      m_io[,"transfers_values", x, y] %>% newDim(c(a, d1, d2)), 1,
-    tapply, m_io_filters["countries", x, y], sum, na.rm = TRUE
-  ) %>% aperm(c(2,1)) * filter
-} else {
+if (a==1) {
   m_countries[lists$years,"transfers_values",,] <- 
-     parApply( 
-       cl = my.cluster,
+    apply(
       m_io[,"transfers_values", x, y] %>% newDim(c(a, d1, d2)), 1,
       tapply, m_io_filters["countries", x, y], sum, na.rm = TRUE
     ) %>% aperm(c(2,1)) * filter
-  
+} else {
+  m_countries[lists$years,"transfers_values",,] <- 
+    parApply( 
+      cl = my.cluster,
+      m_io[,"transfers_values", x, y] %>% newDim(c(a, d1, d2)), 1,
+      tapply, m_io_filters["countries", x, y], sum, na.rm = TRUE
+    ) %>% aperm(c(2,1)) * filter
 }
+
 # clear environment
 rm(a, d1, d2, x, y)
 gc()

@@ -1,13 +1,11 @@
 ## prea - define some basepaths
 com_path <- "parameters/common_ground/" 
-method_path <- paste0("methods/", method_version)
-#method parameters basepath
-met_p_pth <- paste0(method_path,"/parameters/")
+method_path <- paste0("methods/", method_version,"/")
 
 ## load all parameters of the choosed method
 #Read method parameters
 parameters <- 
-  read.csv2(paste0(met_p_pth,"_parameters.csv"))
+  read.csv2(paste0(method_path,"_parameters.csv"))
 
 #Def source basepath
 source_version <- parameters$version
@@ -15,7 +13,7 @@ src_path <- paste0("parameters/",source_version,"/")
 
 ##Helper function for loading most specific parameters for matrices,
 ##reduced matrices and solutions
-load_parameters <- function(pg,paths = c(met_p_pth,src_path,com_path)) {
+load_parameters <- function(pg,paths = c(method_path,src_path,com_path)) {
   files <- unlist(lapply(paths,dir,pattern = pg, full.names = T))
   param <- bind_rows(lapply(files,read.csv2))
   param <- param[!duplicated(param$names),]
@@ -36,4 +34,4 @@ for(i in 1:nrow(param_groups)){
 # sectors definitions ----
 # according to the method
 sectors <- 
-  read.csv2(paste0(met_p_pth,"_sectors.csv"))
+  read.csv2(paste0(method_path,"_sectors.csv"))

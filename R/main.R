@@ -16,27 +16,25 @@ method_list <- gsub("methods/","",list.dirs("methods",recursive = F))
 # [7] "methods/ochoa_2"                       
 # [9] "methods/petrovic"              "methods/zerodep_1"            
 # [11] "methods/zerodep_2"            
-if(.Platform$OS.type == "unix") {
-  my.cluster <-  makeForkCluster(detectCores() - 1,outfile="results/logs/parallelworkers.log",
-                                 envir=.GlobalEnv)
-} else {
-  assign("my.cluster",parallel::makeCluster(
-    parallel::detectCores() - 1, 
-    type = "PSOCK"), envir=globalenv())
-  
-}
-
 
 get_wlv <- function(methods = "alternative_1", repeat_pp = F,
                    papern = 0, prepaper = F) {
   #Load functions
   source("R/lib/functions.R")
   
-    #Control for avoiding repeated intro message on cluster
+  #Control for avoiding repeated intro message on cluster
   #creation
   cf <- "started"
   write(c("started","clusters"),cf,sep=",")
 
+  if(.Platform$OS.type == "unix") {
+    my.cluster <-  makeForkCluster(detectCores() - 1,outfile="results/logs/parallelworkers.log",
+           envir=globalenv())
+  } else {
+    assign("my.cluster",parallel::makeCluster(
+      parallel::detectCores() - 1, 
+      type = "PSOCK"), envir=globalenv())
+  }
   
   file.remove(cf)
   

@@ -8,22 +8,21 @@ y <- 1:d2
 # Exports in market prices ----
 print("Exports in market prices...")
 
-if (source_version %in% c("wiodr13","wiodr16")) {
-m_countries[lists$years,"exports_mp",,] <- 
-  parApply(
-    cl = my.cluster,
-    m_io_source[, x, y] %>% newDim(c(a, d1, d2)), 1,
-    tapply, m_io_filters["countries", x, y], sum, na.rm = TRUE
-  ) %>% aperm(c(2,1)) * filter
-} else {
+if (a==1) {
   m_countries[lists$years,"exports_mp",,] <- 
-    #  parApply(
-    #    cl = my.cluster,
     apply(
       m_io_source[, x, y] %>% newDim(c(a, d1, d2)), 1,
       tapply, m_io_filters["countries", x, y], sum, na.rm = TRUE
     ) %>% aperm(c(2,1)) * filter
+} else {
+  m_countries[lists$years,"exports_mp",,] <- 
+    parApply(
+      cl = my.cluster,
+      m_io_source[, x, y] %>% newDim(c(a, d1, d2)), 1,
+      tapply, m_io_filters["countries", x, y], sum, na.rm = TRUE
+    ) %>% aperm(c(2,1)) * filter
 }
+
 # clear environment
 rm(a, d1, d2, x, y)
 gc()
