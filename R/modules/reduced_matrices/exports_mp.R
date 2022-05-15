@@ -10,9 +10,8 @@ print("Exports in market prices...")
 
 if (!(source_version %in% c("wiodr13","wiodr16"))) {
 m_countries[lists$years,"exports_mp",,] <- 
-#  parApply(
-#    cl = my.cluster,
-  apply(
+  parApply(
+    cl = my.cluster,
     m_io_source[, x, y] %>% newDim(c(a, d1, d2)), 1,
     tapply, m_io_filters["countries", x, y], sum, na.rm = TRUE
   ) %>% aperm(c(2,1)) * filter
