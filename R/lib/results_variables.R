@@ -45,4 +45,5 @@ sea_countries <- array(NA,
 dir.create(paste0("results/",method_version), showWarnings = FALSE)
 
 # Save infos
-write.csv2(parameters,paste0("results/",method_version,"/_parameters.csv"))
+write.csv2(parameters,paste0("results/",method_version,"/_parameters.csv"),
+           row.names = FALSE)
