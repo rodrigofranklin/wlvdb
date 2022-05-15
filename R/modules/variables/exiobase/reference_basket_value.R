@@ -174,7 +174,7 @@ if(base_year == lists$years[1]) {
   names(curba) <- names(er)
   
 curba <- colSums(curba,na.rm=T)
-  sea_countries[lists$years,"reference basket value",] <- curba
+  sea_countries[lists$years,"reference_basket_value",] <- curba
 
 
   
