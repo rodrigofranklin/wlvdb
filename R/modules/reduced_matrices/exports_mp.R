@@ -8,7 +8,7 @@ y <- 1:d2
 # Exports in market prices ----
 print("Exports in market prices...")
 
-if (!(source_version %in% c("wiodr13","wiodr16"))) {
+if (source_version %in% c("wiodr13","wiodr16")) {
 m_countries[lists$years,"exports_mp",,] <- 
   parApply(
     cl = my.cluster,
