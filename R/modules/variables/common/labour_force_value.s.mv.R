@@ -3,8 +3,9 @@
 sea_sectors[lists$years,"labour_force_value.s.mv",,] <- 
   # distribute wages according to consumption basket
   (((sea_sectors[lists$years,"compensation.empe.s.us",,] %>%
-       rep(each = nums$input) %>%
-       newDim(c(nums$years, nums$input, nums$input))) * 
+       rep(times = nums$input) %>%
+       newDim(c(nums$years, nums$input, nums$input)) %>%
+       aperm(c(1,3,2))) * 
       (m_io[, "consumption_basket", 1:nums$input, 1:nums$input] %>%
          newDim(c(nums$years, nums$input, nums$input)))) *
      

@@ -48,32 +48,6 @@ sea_sectors[,"hours_worked.empe.s.hr",,"ROW"] <-
   sea_sectors[,"hours_worked.emp.s.hr",,"ROW"] * was_w_row
 
 
-## Skill strata
-## Calculated as average of other countries
-sea_sectors[,"hours_worked.empe_hs.r.pc",,"ROW"] <- 
-  sea_sectors[,"hours_worked.empe_hs.r.pc",,which(lists$countries!="ROW")] %>%
-  apply(2, rowMeans)
-
-sea_sectors[,"hours_worked.empe_ms.r.pc",,"ROW"] <- 
-  sea_sectors[,"hours_worked.empe_ms.r.pc",,which(lists$countries!="ROW")] %>%
-  apply(2, rowMeans)
-
-sea_sectors[,"hours_worked.empe_ls.r.pc",,"ROW"] <- 
-  1 - sea_sectors[,"hours_worked.empe_hs.r.pc",,"ROW"] - 
-  sea_sectors[,"hours_worked.empe_ms.r.pc",,"ROW"]
-
-sea_sectors[,"compensation.empe_hs.r.pc",,"ROW"] <- 
-  sea_sectors[,"compensation.empe_hs.r.pc",,which(lists$countries!="ROW")] %>%
-  apply(2, rowMeans)
-
-sea_sectors[,"compensation.empe_ms.r.pc",,"ROW"] <- 
-  sea_sectors[,"compensation.empe_ms.r.pc",,which(lists$countries!="ROW")] %>%
-  apply(2, rowMeans)
-
-sea_sectors[,"compensation.empe_ls.r.pc",,"ROW"] <- 
-  1 - sea_sectors[,"compensation.empe_hs.r.pc",,"ROW"] - 
-  sea_sectors[,"compensation.empe_ms.r.pc",,"ROW"]
-
 # compensation.empe.s.us and labour compensation
 # Considering the same value added distribution ratio
 sum_va_countries <- 
