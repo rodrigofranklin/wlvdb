@@ -10,3 +10,5 @@ compensation.emp.s.us;wiodr13/compensation.emp.s.us.R;sum;1
 capital_stock.s.us;wiodr16/capital_stock.s.us.R;sum;1
 gross_output.s.us;GO;sum;0
 gdp.s.us;VA;sum;0
+reference_basket_value.c.hr;wiodr13/reference_basket_value.R;mean;4
+appropriated_monetary_rate_of_profit.r.pc;wiodr13/appropriated_monetary_rate_of_profit.r.pc.R;appropriated_monetary_rate_of_profit.r.pc-country.R;5
