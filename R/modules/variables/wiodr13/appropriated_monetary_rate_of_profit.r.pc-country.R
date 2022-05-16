@@ -10,7 +10,6 @@ mfunc <- function(x,y){
   p[is.na(p)] <- 0
   a <- weighted.mean(p,
                      k)
-  print(a)
   a
 }
 pr_pondered_k <- mapply(mfunc,yearxcountry[[1]],yearxcountry[[2]])
