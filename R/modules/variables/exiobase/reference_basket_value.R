@@ -56,14 +56,15 @@ cpi_gdp_er <- abind(list(CPI = arraycpis, VA = pibsexiobase),along =3)
 
 #get list of eurozone members and entry dates
 eu_m <- "https://en.wikipedia.org/wiki/Eurozone"
-eu <- tempfile()
-download.file(eu_m,eu)
-eutmembers <- rvest::html_element(xml2::read_html(eu),xpath = "/html/body/div[3]/div[3]/div[5]/div[1]/table[3]")
-eutmembers <- rvest::html_table(eutmembers)
-eutmembers <- eutmembers%>%transmute(iso2c = ISOcode, startyear = year(as.Date(substr(Adopted,1,10))))
-eutmembers <- eutmembers[-nrow(eutmembers),]
-eutmembers <- eutmembers[eutmembers$startyear< as.numeric(lastyear)+1,]
-
+# eu <- tempfile()
+# download.file(eu_m,eu)
+# eutmembers <- rvest::html_element(xml2::read_html(eu),xpath = "/html/body/div[3]/div[3]/div[5]/div[1]/table[3]")
+# eutmembers <- rvest::html_table(eutmembers)
+# eutmembers <- eutmembers%>%transmute(iso2c = ISOcode, startyear = year(as.Date(substr(Adopted,1,10))))
+# eutmembers <- eutmembers[-nrow(eutmembers),]
+# eutmembers <- eutmembers[eutmembers$startyear< as.numeric(lastyear)+1,]
+# 
+eutmembers <- read_fst("source_data/exiobase/eutmembers.fst")
 eutmembers <- eutmembers[eutmembers$startyear < (as.numeric(lastyear)+1),]
 ##ADD GDPS in local currency and calculate exchange rate
 ##except for euro area where gdp lcu is copied from "VATOTAL"
@@ -125,7 +126,7 @@ if(length(a)>0) {
 }
 basebasket <- basebasket[,ciso2c[ciso2c!= "ROW"]]
 cpis_gdps_er <- read_fst_array("results/exiobase/cpis_gdps_er.fst")
-lambdas <- sea_sectors[lists$years,"value.m.mv",,]
+
 
     basi <- array(basebasket,
                         c(nums$input,nums$countries),
@@ -153,6 +154,8 @@ lambdas <- sea_sectors[lists$years,"value.m.mv",,]
     
   
   write_fst_array(basi,paste0("results/",method_version,"/base_monetary_structure_of_cbasket.fst"))
+  lambdas <- sea_sectors[lists$years,"value.m.mv",,]
+  
   er <- cpi_gdp_er[lists$year,,"exchange_rate"]
   fkwww <- data.frame(WWW = rep(105,27))
   er <- cbind(er,fkwww)
@@ -167,16 +170,17 @@ lambdas <- sea_sectors[lists$years,"value.m.mv",,]
   baseconsprice <- cpi_gdp_er[base_year,,"CPI"]
   fkwww<- 1
   baseconsprice <- c(baseconsprice,fkwww)
-
+  baseconsprice <- array(replicate(nums$years*nums$countries_sectors,baseconsprice),
+                         dim(basi[,1,,]))
   
   ##
-  lambdas  <- array(replicate(nums$countries+1,as.numeric(lambdas[lists$years,,])),c(nums$years,nums$input,nums$countries+1))
+  lambdas  <- array(replicate(nums$countries+1,as.matrix(lambdas[lists$years,,])),c(nums$years,nums$input,nums$countries+1))
   
   erbase <- (array(replicate(nums$years,replicate(nums$input,erbase)),dim = c(nums$years,nums$input,nums$countries+1)))
   
-  er <- replicate(nums$input,as.matrix(er))
+  er <- replicate(nums$input,as.matrix(er))%>%aperm(c(1,3,2))
   
-  consprice <- replicate(nums$input,as.matrix(consprice)) 
+  consprice <- replicate(nums$input,as.matrix(consprice)) %>%aperm(c(1,3,2))
   
   ##
   
@@ -190,7 +194,7 @@ lambdas <- sea_sectors[lists$years,"value.m.mv",,]
     
 
 
-dimnames(curba) <- dimnames(er)
+dimnames(curba) <- dimnames(er)[c(1,3)]
 
   sea_countries[lists$years,"reference_basket_value.c.hr",] <- curba
 
