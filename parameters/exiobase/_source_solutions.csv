@@ -1,9 +1,10 @@
-names;sector_solution;country_solution;order
-capital_depreciation.s.us;exiobase/capital_depreciation.s.us.R;sum;4
-emp.s.un;exiobase/emp.s.un.R;sum;1
-empe.s.un;exiobase/empe.s.un.R;sum;1
-hours_worked.emp.s.hr;exiobase/hours_worked.emp.s.hr.R;sum;1
-hours_worked.empe.s.hr;exiobase/hours_worked.empe.s.hr.R;sum;1
-compensation.empe.s.us;exiobase/compensation.empe.s.us.R;sum;1
 gross_output.s.us;gross_output_mp;sum;0
+names;sector_solution;country_solution;order
+compensation.empe.s.us;exiobase/compensation.empe.s.us.R;sum;1
+empe.s.un;exiobase/empe.s.un.R;sum;1
+emp.s.un;exiobase/emp.s.un.R;sum;1
 gdp.s.us;exiobase/gdp.s.us.R;sum;1
+hours_worked.empe.s.hr;exiobase/hours_worked.empe.s.hr.R;sum;1
+hours_worked.emp.s.hr;exiobase/hours_worked.emp.s.hr.R;sum;1
+capital_depreciation.s.us;exiobase/capital_depreciation.s.us.R;sum;4
+reference_basket_value.c.hr;exiobase/reference_basket_value.R;exiobase/reference_basket_value.R;5
