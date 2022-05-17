@@ -185,11 +185,11 @@ lambdas <- sea_sectors[lists$years,"value.m.mv",,]
     ((replicate(nums$input,as.matrix(consprice)) %>%aperm(c(1,3,2)))*er)
                     
   
-  vlavla <- sapply(1:nums$years,function(i){colSums(curba[i,,],na.rm= T)} )%>%aperm(c(2,1))
+  curba <- sapply(1:nums$years,function(i){colSums(curba[i,,],na.rm= T)} )%>%aperm(c(2,1))
     
 
-curba <- sapply(1:nums$years,function(x){curba[x,,] <- colSums(curba[x,,],na.rm = T)})
-dimnames(curba)[] <- dimnames(er)
+
+dimnames(curba) <- dimnames(er)
 
   sea_countries[lists$years,"reference_basket_value.c.hr",] <- curba
 
