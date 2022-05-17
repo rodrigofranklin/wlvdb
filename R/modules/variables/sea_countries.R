@@ -1,5 +1,6 @@
 # calculates national values for SEA variables with sum and mean
 for (loop in grep(".R", sea_variables$country_solution, invert = TRUE)) {
+  cat("Agregating by ",sea_variables$country_solution[loop]," variable",sea_variables$names[loop],"... \n")
   sea_countries[, loop, lists$countries] <- 
     aperm(
       apply(sea_sectors[,loop,,], 1,

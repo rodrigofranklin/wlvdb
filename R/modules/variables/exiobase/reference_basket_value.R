@@ -138,12 +138,11 @@ lambdas <- sea_sectors[lists$years,"value.m.mv",,]
 
 #  basi <- colSums(basi,na.rm=T)
   expbasi <- as.matrix(data.frame("WWW" = apply(basi,1,mean,na.rm = T)))
-  cseac <- length(dimnames(sea_countries)[[3]])
   
-    basi <- array(replicate(length(allyears),abind(basi,expbasi,along = 2)),
+    basi <- array(replicate(nums$years,abind(basi,expbasi,along = 2)),
                   dim = c(dim(basi)[[1]],
-                          cseac,
-                          length(allyears),
+                          nums$countries+1,
+                          nums$years,
                           1),
                   dimnames = list(lists$input,
                                   dimnames(sea_countries)[[3]],
@@ -157,7 +156,7 @@ lambdas <- sea_sectors[lists$years,"value.m.mv",,]
   er <- cpi_gdp_er[lists$year,,"exchange_rate"]
   fkwww <- data.frame(WWW = rep(105,27))
   er <- cbind(er,fkwww)
-  erm <- (replicate(nums$input,as.matrix(er)) %>%aperm(c(1,3,2)))
+  
   erbase <- cpi_gdp_er[base_year,,"exchange_rate"]
   erbase <- c(erbase,1)
   
@@ -168,21 +167,23 @@ lambdas <- sea_sectors[lists$years,"value.m.mv",,]
   baseconsprice <- cpi_gdp_er[base_year,,"CPI"]
   fkwww<- 1
   baseconsprice <- c(baseconsprice,fkwww)
-#  curba <-     basi[base_year,1,,]*replicate(nums$countries+1,as.numeric(lambdas[base_year,,]))
-  
 
   
-#  curba <- colSums(curba,na.rm=T)
+  ##
+  lambdas  <- array(replicate(nums$countries+1,as.numeric(lambdas[lists$years,,])),c(nums$years,nums$input,nums$countries+1))
   
-  #names(curba) <- names(er)
+  erbase <- (array(replicate(nums$years,replicate(nums$input,erbase)),dim = c(nums$years,nums$input,nums$countries+1)))
   
-  #sea_countries[base_year,"reference_basket_value.c.hr",] <- curba
+  er <- replicate(nums$input,as.matrix(er))
   
-  curba <-     basi[lists$years,1,,]*array(replicate(nums$countries+1,as.numeric(lambdas[lists$years,,])),c(nums$years,nums$input,nums$countries+1))*
-  (array(replicate(nums$years,replicate(nums$input,erbase)),dim = c(nums$years,nums$input,nums$countries+1)))*
-    array(rep(100,nums$years*nums$input*(nums$countries+1)),c(nums$years,nums$input,nums$countries+1))*
-    array(rep(100,nums$years,nums$input*(nums$countries+1)),c(nums$years,nums$input,nums$countries+1))/
-    ((replicate(nums$input,as.matrix(consprice)) %>%aperm(c(1,3,2)))*er)
+  consprice <- replicate(nums$input,as.matrix(consprice)) 
+  
+  ##
+  
+  curba <-     basi[lists$years,1,,]*lambdas*
+    erbase*
+    baseconsprice/
+    (consprice*er)
                     
   
   curba <- sapply(1:nums$years,function(i){colSums(curba[i,,],na.rm= T)} )%>%aperm(c(2,1))

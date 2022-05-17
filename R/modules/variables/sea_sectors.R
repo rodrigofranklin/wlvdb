@@ -29,8 +29,8 @@ if (stage == 1) {
   rm(temp)
 }
 
-# preliminary computation of order 1
-for (loop in sea_variables$sector_solution[which(sea_variables$order==stage)]) {
+# preliminary computation of order 2-5
+for (loop in (sea_variables%>%filter(stage == stage)%>%arrange(sector_solution)%>%select(sector_solution))) {
   print(paste("Sourcing from stage ",stage," script ",gsub(".*/","",loop)))
   source(paste0("R/modules/variables/",loop))
   sea_sectors <- clean(sea_sectors)
