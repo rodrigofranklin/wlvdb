@@ -8,15 +8,14 @@
 # assumption, all sectors of the world have the same consumption 
 # basket structure (= demand from families).
 # Obs: "c37" = household final demand column
-consumption_basket <- 
-  apply(m_io_source[,1:nums$countries_sectors,columns$sector=="c37"],
-        MARGIN = 1, rowSums, na.rm = TRUE) %>%
-  prop.table(margin = 2)
-consumption_basket <- rep(consumption_basket, times = nums$countries_sectors)
 
-dim(consumption_basket) <- c(nums$countries_sectors, nums$years,
-                             nums$countries_sectors)
-consumption_basket <- aperm(consumption_basket, c(2,1,3))
+m_io[, "consumption_basket", 1:nums$input, 1:nums$input] <- 
+  m_io_source[, 1:nums$input, grep("by households", columns$sector)] %>%
+  newDim(c(nums$years, nums$input, nums$countries)) %>%
+  apply (MARGIN = 1, rowSums, na.rm = TRUE) %>% 
+  prop.table(margin = 2) %>% 
+  rep(each = nums$countries_sectors) %>%
+  newDim(c(nums$input, nums$input, nums$years)) %>%
+  aperm(c(3,2,1))
 
-rm(income)
 gc()

@@ -21,8 +21,8 @@ load_parameters <- function(pg,paths = c(method_path,src_path,com_path)) {
 
 #Def param groups and unambiguous patterns 
 param_groups <- 
-  data.frame(group_pattern = c("[^e]._matrices","reduced","solutions"),
-             object = c("matrices","reduced_matrices","sea_variables"))
+  data.frame(group_pattern = c("[^e]._matrices","reduced","solutions","assumptions"),
+             object = c("matrices","reduced_matrices","sea_variables","assumptions"))
 
 for(i in 1:nrow(param_groups)){
   a <- load_parameters(param_groups$group_pattern[i])

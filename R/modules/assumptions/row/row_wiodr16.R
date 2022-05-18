@@ -13,7 +13,7 @@ row_emp_data <-
   read.csv2("source_data/worldbank/employment_row.csv", row.names = 1)
 colnames(row_emp_data) <- sub("X","",colnames(row_emp_data))
 
-emp_row_total <- row_emp_data[method_version,lists$years]
+emp_row_total <- row_emp_data[source_version,lists$years]
 was_w_row <- as.numeric(row_emp_data["was_w",lists$years])/100
 
 # RoW position in rows (initial and list of positions)

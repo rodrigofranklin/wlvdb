@@ -27,14 +27,9 @@ source("R/modules/variables/sea_sectors.R")
 # assumptions ----
 #######################.
 
-# China
-if (!is.null(parameters$china)) {
-  source(paste0("R/modules/assumptions/",parameters$china))
-}
-
-# RoW
-if (!is.null(parameters$row)) {
-  source(paste0("R/modules/assumptions/",parameters$row))
+for (assumption in assumptions$computation) {
+  print(paste0("sourcing: ",assumption))
+  source(paste0("R/modules/assumptions/",assumption))
 }
 
 # Other assumptions

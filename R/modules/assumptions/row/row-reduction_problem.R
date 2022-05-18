@@ -40,19 +40,12 @@ sea_sectors[,"hours_worked.emp.s.hr",,"ROW"] <-
   sea_sectors[,"emp.s.un",,"ROW"] * 
   sum_h_emp_sector/sum_emp_sector
 
-# Calculation of employee data, assuming the same relation between employed's
-# and employee's working day as the mean.
+# Calculation of employee data, assuming same working day as employed
 sea_sectors[,"empe.s.un",,"ROW"] <- 
   sea_sectors[,"emp.s.un",,"ROW"] * was_w_row
 
-sum_h_empe_sector <- 
-  sea_sectors[,"hours_worked.empe.s.hr",, which(lists$countries!="ROW")] %>%
-  apply(2, rowSums)
-
-h_empe.h_emp.ratio <- sum_h_empe_sector/sum_h_emp_sector
-
 sea_sectors[,"hours_worked.empe.s.hr",,"ROW"] <- 
-  sea_sectors[,"hours_worked.emp.s.hr",,"ROW"] * h_empe.h_emp.ratio
+  sea_sectors[,"hours_worked.emp.s.hr",,"ROW"] * was_w_row
 
 
 ## Skill strata
@@ -117,6 +110,7 @@ sea_sectors[,"compensation.empe.s.us",,"ROW"] <-
   as.numeric(comp_row_total) * 
   prop.table(sea_sectors[,"gdp.s.us",, "ROW"] *
                sum_comp_sector/sum_emp_sector, margin = 1)
+
 
 # Capital stock
 # Considers the same capital requirement by value added ratio
