@@ -25,3 +25,4 @@ trade_balance.s.us;common/trade_balance.s.us.R;sum;5;1
 trade_balance.s.mv;common/trade_balance.s.mv.R;sum;5;1
 gdp.p.s.us;common/gdp.p.s.us.R;sum;2;1
 appropriated_profit.r.pc;common/appropriated_profit.r.pc.R;common/appropriated_profit.r.pc-country.R;5;1
+trade_transfers.p.m.pc;common/trade_transfers.p.m.pc.R;common/trade_transfers.p.m.pc-country.R;5;1
