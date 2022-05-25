@@ -10,7 +10,7 @@
 # 5 - variables obtained by computation over SEA results
 
 if (stage == 1) {
-  # Copy  order 0 variables , adjusting scale as specified in parameters
+  # Copy  stage 0 variables , adjusting scale as specified in parameters
   # Copy variables from sea_source to sea_sectors (indicated in parameters)
   for (loop in grep(".R", sea_variables$sector_solution, invert = TRUE)) {
     temp <- unlist(strsplit(sea_variables$sector_solution[loop], "[*]"))
@@ -29,8 +29,8 @@ if (stage == 1) {
   rm(temp)
 }
 
-# preliminary computation of order 2-5
-for (loop in (sea_variables%>%filter(stage == stage)%>%arrange(sector_solution)%>%select(sector_solution))) {
+# preliminary computation of stage 2-5
+for (loop in sea_variables$sector_solution[which(sea_variables$stage==stage)]) {
   print(paste("Sourcing from stage ",stage," script ",gsub(".*/","",loop)))
   source(paste0("R/modules/variables/",loop))
   sea_sectors <- clean(sea_sectors)

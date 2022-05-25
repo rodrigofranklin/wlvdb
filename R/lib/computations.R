@@ -58,17 +58,11 @@ for(current_m_io in lists$m_io_files) {
 
   # reduces input-output matrices to country matrices.
   # filter to eliminate internal trade
-  filter <- rep(1-diag(nums$countries), each = nums$years)
-
-
-
   print("Start of reduction of IxO matrices:")
-  
+  filter <- rep(1-diag(nums$countries), each = nums$years)
   for (matrix_script in reduced_matrices$computation) {
-    
     source(paste0("R/modules/reduced_matrices/",matrix_script))
   }
-  
   print("End of matrix reduction.")
   
   # compute variables from matrices

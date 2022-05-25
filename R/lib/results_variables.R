@@ -45,5 +45,18 @@ sea_countries <- array(NA,
 dir.create(paste0("results/",method_version), showWarnings = FALSE)
 
 # Save infos
-write.csv2(parameters,paste0("results/",method_version,"/_parameters.csv"),
-           row.names = FALSE)
+write.csv2(parameters,
+           paste0("results/",method_version,"/_parameters.csv"),
+           row.names = FALSE, na = "")
+write.csv2(assumptions,
+           paste0("results/",method_version,"/_method_assumptions.csv"),
+           row.names = FALSE, na = "")
+write.csv2(matrices,
+           paste0("results/",method_version,"/_method_matrices.csv"),
+           row.names = FALSE, na = "")
+write.csv2(sea_variables,
+           paste0("results/",method_version,"/_method_solutions.csv"),
+           row.names = FALSE, na = "")
+write.csv2(sectors,
+           paste0("results/",method_version,"/_sectors.csv"),
+           row.names = FALSE, na = "")

@@ -31,4 +31,4 @@ sea_sectors[,"hours_worked.empe.s.hr",,"CHN"] <-
 
 
 # clear variable
-rm(was_w_china)
+rm(was_w_china, working_day_china)

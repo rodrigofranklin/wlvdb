@@ -27,7 +27,7 @@ for (year in lists$years) {
   # ek_dep_rate -> depreciation rate of each type of capital in each sector
   ek_k <- read_fst_array(paste0("source_data/euklems/ekk_",year,".fst"))
   ek_dep_rate <- read_fst_array(paste0("source_data/euklems/ekdeprate_",
-                              as.character(as.numeric(year)),".fst"))
+                              as.character(as.numeric(year)+1),".fst"))
 
   # Countries that do not have data in the EUKLEMS database will be averaged
   rows[!(rows$p_ek %in% unique(ek_k$country)),"p_ek"] <- "MD" 
@@ -84,10 +84,6 @@ for (year in lists$years) {
   m_io[year,"k_depreciation",
        1:nums$input,1:nums$input] <- 
     k_composition * dep_ratio
-  
-  # Calcula as informações setoriais, por país e para o mundo
-  sea_sectors[year,"capital_depreciation.s.us",,] <-
-    colSums(m_io[year,"k_depreciation",,1:nums$input], na.rm = TRUE)
 }
 
 # clear temporary variables

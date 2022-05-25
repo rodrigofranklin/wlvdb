@@ -1,8 +1,6 @@
 #Disregards depreciation - initially for course/paper n. 3
 
 #For sector and country matrices 
-m_io[year,"k_depreciation",
-     1:nums$input,1:nums$input] <- 0
 
-# Sectorial info for country and world
-sea_sectors[year,"capital_depreciation.s.us",,] <- 0
+m_io[,"k_depreciation",
+     1:nums$input,1:nums$input] <- 0

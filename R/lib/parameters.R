@@ -8,7 +8,7 @@ parameters <-
   read.csv2(paste0(method_path,"_parameters.csv"))
 
 #Def source basepath
-source_version <- parameters$version
+source_version <- parameters$source
 src_path <- paste0("parameters/",source_version,"/")
 
 ##Helper function for loading most specific parameters for matrices,
@@ -30,6 +30,10 @@ for(i in 1:nrow(param_groups)){
   print(paste0("Loaded ",param_groups$object[i]," parameters"))
 }
 
+#Ordena as variáveis que precisam ser calculadas primeiro
+matrices <- matrices[order(matrices$order),]
+assumptions <- assumptions[order(assumptions$order),]
+sea_variables <- sea_variables[order(sea_variables$order),]
 
 # sectors definitions ----
 # according to the method

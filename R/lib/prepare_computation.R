@@ -9,6 +9,17 @@ print("loaded source m_io")
 lists$years <- unlist(dimnames(m_io_source)[1])
 nums$years <- length(lists$years)
 
+# Define função paralelizada se houver + de 1 ano.
+if (nums$years == 1) {
+  myApply <- function (...) {
+    apply(...)
+  }
+} else {
+  myApply <- function (...) {
+    parApply(cl = my.cluster,...)
+  }
+}
+
 # assign m_io result variable
 # m_io -> input-output matrix of results
 
