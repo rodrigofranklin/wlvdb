@@ -34,8 +34,12 @@ for(i in 1:nrow(param_groups)){
 matrices <- matrices[order(matrices$order),]
 assumptions <- assumptions[order(assumptions$order),]
 sea_variables <- sea_variables[order(sea_variables$order),]
+sea_variables <- sea_variables[order(sea_variables$stage),]
 
 # sectors definitions ----
 # according to the method
 sectors <- 
   read.csv2(paste0(method_path,"_sectors.csv"))
+
+#clear environment
+rm(a, param_groups)

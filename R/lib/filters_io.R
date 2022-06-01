@@ -29,7 +29,7 @@ country_rows_matrix <- rep(rows$num_country, times = nums$output)
 dim(country_rows_matrix) <- c(nums$input, nums$output)
 
 m_io_filters["countries",1:nums$input,1:nums$output] <- 
-  country_cols_matrix+(country_rows_matrix/100)
+  country_cols_matrix+(country_rows_matrix/1000)
 
 ## productive sectors filters ----
 # Multiplication filter: when multiplying this filter by an matrix

@@ -1,9 +1,63 @@
 library(abind)
 library(lubridate)
+source("R/lib/functions.R")
+
+# Download dos arquivos do exiobase, conforme versão disponível no zenodo
+
+anos <- 1995:2022
+
+versao_source <- "exiobase382"
+
+dir.create(paste0("source_data/",versao_source), showWarnings = FALSE)
+
+# Download dos arquivos IOT
+pos_file <- "https://zenodo.org/record/5589597/files/IOT_"
+pre_file <- "_ixi.zip?download=1"
+for (ano in as.character(anos)) {
+  download.file(paste0(pos_file,ano,pre_file),
+                paste0("temp/",ano,".zip"),
+                mode="wb")
+}
+
+# Download das SUTs. Como a versão 3.7 das IOTs não vem com a matriz de consumo
+# intermediário, mas apenas com a matriz de coeficientes técnicos, é preciso
+# calcular o gross output (somando os usos com o valor agregado) 
+# para obter a primeira a partir da segunda.
+# pos_file <- "https://zenodo.org/record/3583071/files/MRSUT_"
+# pre_file <- ".zip?download=1"
+# for (ano in as.character(1995:2011)) {
+#   download.file(paste0(pos_file,ano,pre_file),
+#                 paste0("temp/MRSUT_",ano,".zip"),
+#                 mode="wb")
+# }
+
+# Extrai os arquivos Y, Z e F
+for (ano in as.character(anos)) {
+  myzipfile <- paste0("temp/",ano,".zip")
+  myfiles <- c(paste0("IOT_",ano,"_ixi/Y.txt"),
+               # paste0("IOT_",ano,"_ixi/A.txt"), # Versão 3.7 não possui Z.txt
+               paste0("IOT_",ano,"_ixi/Z.txt"), # Versão 3.7 não possui Z.txt
+               paste0("IOT_",ano,"_ixi/satellite/F.txt"))
+  myexdir <- paste0("temp/",ano)
+  
+  dir.create(myexdir, showWarnings = FALSE)
+  
+  unzip(myzipfile, files = myfiles, junkpaths = TRUE, exdir = myexdir)
+  
+  # MRSUT para a versão 3.7
+  # myzipfile <- paste0("temp/MRSUT_",ano,".zip")
+  # myfiles <- c(paste0("MRSUT_",ano,"/use.csv"),
+  #              paste0("MRSUT_",ano,"/value_added.csv"))
+  # unzip(myzipfile, files = myfiles, junkpaths = TRUE, exdir = myexdir)
+}
+
 # Primeira carga de leitura somente para buscar os parâmetros dessa base.
 demand <- read.delim(file = "temp/1995/Y.txt", header = FALSE)
 factors <- read.delim(file = "temp/1995/F.txt", header = FALSE, nrows = 26)
 intermediate_inputs <- read.delim(file = "temp/1995/Z.txt", header = FALSE)
+# intermediate_inputs <- read.delim(file = "temp/1995/A.txt", header = FALSE)
+
+
 
 # leitura de parâmetros a partir dos dados carregados
 nums <- NULL
@@ -28,7 +82,7 @@ lists$output <- c(paste0(intermediate_inputs[4:nums$rows,1],
                          ".",
                          demand[2,3:nums$col_demand]))
 
-lists$years <- as.character(1995:2021)
+lists$years <- as.character(anos)
 lists$sea_variables <- 
   c(unique(factors[4:nums$rows_factors,1]))
 
@@ -93,7 +147,7 @@ for (y in 1:nums$years) {
   
   # lê o arquivo de intermediate input do ano específico
   print(paste0("loading  intermediate inputs of year ",temp_year,"..."))
-  m_io_source[1,,1:nums$input] <- 
+  m_io_source[1,,1:nums$input] <-
     as.numeric(
       unlist(
         read.delim(
@@ -101,6 +155,33 @@ for (y in 1:nums$years) {
           header = FALSE)[4:nums$rows,3:nums$cols_intermediate_inputs]
       )
     )
+  
+  # # Converter os arquivos A em Z (Coeficientes técnicos para matriz monetária)
+  ## Versão 3.7!
+  # value_added <- 
+  #   read.csv(paste0("temp/",temp_year,"/value_added.csv"), sep = "|")[3:14,3:7989] %>% 
+  #   unlist() %>%
+  #   as.numeric() %>%
+  #   newDim(c(12,7987)) %>%
+  #   colSums()
+  # 
+  # uses <- 
+  #   read.csv(paste0("temp/",temp_year,"/use.csv"), sep = "|")[3:9802,4:7990] %>% 
+  #   unlist() %>%
+  #   as.numeric() %>%
+  #   newDim(c(9800,7987)) %>%
+  #   colSums()
+  # 
+  # produto <- value_added + uses
+  # 
+  # m_io_source[1,,1:nums$input] <-
+  #   (read.delim(file = paste0("temp/",temp_year,"/A.txt"),
+  #               header = FALSE)[4:nums$rows,3:nums$cols_intermediate_inputs]  %>%
+  #      unlist() %>%
+  #      as.numeric()) *
+  #   (produto %>% 
+  #      rep(each = 7987) %>% 
+  #      newDim(c(7987,7987)))
   
   gc(reset = TRUE)
 
@@ -122,24 +203,24 @@ for (y in 1:nums$years) {
 
   print(paste0("writing ",temp_year,"..."))
   write_fst_array(m_io_source, 
-          file = paste0("source_data/exiobase/m_io_",temp_year,".fst"))
+          file = paste0("source_data/",versao_source,"/m_io_",temp_year,".fst"))
 }
 
 # append
 sea_source <- abind(sea_source, sea_append, along = 2)
 
 
-# Salda dados e parâmetros
+# Salva dados e parâmetros
 write_fst_array(sea_source, 
-        file = paste0("source_data/exiobase/sea.fst"))
+        file = paste0("source_data/",versao_source,"/sea.fst"))
 
-write.table(lists$demand, "source_data/exiobase/demand.csv", 
+write.table(lists$demand, paste0("source_data/",versao_source,"/demand.csv"), 
            row.names = FALSE, col.names = "demand", sep = ";")
 
-write.table(lists$countries, file = "source_data/exiobase/countries.csv", 
+write.table(lists$countries, file = paste0("source_data/",versao_source,"/countries.csv"), 
            row.names = FALSE, col.names = "country.source", sep = ";")
 
-write.table(lists$sectors, "source_data/exiobase/sectors.csv", 
+write.table(lists$sectors, paste0("source_data/",versao_source,"/sectors.csv"), 
            row.names = FALSE, col.names = "sector.source", sep = ";")
 
 # limpar variáveis e arquivos

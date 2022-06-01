@@ -20,7 +20,11 @@ gdp.s.us;VA_USD;sum;0;
 surplus_value.empe_hs.r.pc;wiodr13/surplus_value.empe_hs.r.pc.R;wiodr13/surplus_value.empe_hs.r.pc-country.R;5;1
 surplus_value.empe_ms.r.pc;wiodr13/surplus_value.empe_ms.r.pc.R;wiodr13/surplus_value.empe_ms.r.pc-country.R;5;1
 surplus_value.empe_ls.r.pc;wiodr13/surplus_value.empe_ls.r.pc.R;wiodr13/surplus_value.empe_ls.r.pc-country.R;5;1
-compensation.emp.s.cu;wiodr13/compensation.emp.s.cu.R;sum;1;10
-compensation.empe.s.cu;wiodr13/compensation.empe.s.cu.R;sum;1;10
+compensation.emp.s.cu;wiodr13/compensation.emp.s.cu.R;sum;5;1
+compensation.empe.s.cu;wiodr13/compensation.empe.s.cu.R;sum;5;1
 profit.s.us;wiodr13/profit.s.us.R;sum;1;10
 capital_stock.s.cu;K_GFCF;sum;0;
+basket_price.r.pc;wiodr13/basket_price.r.pc.R;mean;4;1
+exchange.r.id;wiodr13/exchange.r.id.R;mean;1;10
+basket_value.r.pc;wiodr13/basket_value.r.pc.R;mean;4;1
+go_price.r.id;GO_P;mean;0;

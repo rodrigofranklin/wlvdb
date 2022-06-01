@@ -14,15 +14,15 @@ if (stage == 1) {
   # Copy variables from sea_source to sea_sectors (indicated in parameters)
   for (loop in grep(".R", sea_variables$sector_solution, invert = TRUE)) {
     temp <- unlist(strsplit(sea_variables$sector_solution[loop], "[*]"))
-    sea_sectors[, loop, lists$sectors, lists$countries] <- 
+    sea_sectors[, sea_variables$names[loop], lists$sectors, lists$countries] <- 
       sea_source[, temp[1], lists$sectors, lists$countries]
   }
   
   # Changes scale of variables when indicated in parameters
   for (loop in grep("[*]", sea_variables$sector_solution)) {
     temp <- unlist(strsplit(sea_variables$sector_solution[loop], "[*]"))
-    sea_sectors[,loop,lists$sectors,lists$countries] <- 
-      sea_sectors[,loop,lists$sectors,lists$countries] *
+    sea_sectors[,sea_variables$names[loop],lists$sectors,lists$countries] <- 
+      sea_sectors[,sea_variables$names[loop],lists$sectors,lists$countries] *
       as.numeric(temp[2])
   }
   

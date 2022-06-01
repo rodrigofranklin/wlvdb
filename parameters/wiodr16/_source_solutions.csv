@@ -9,7 +9,11 @@ compensation.emp.s.us;wiodr13/compensation.emp.s.us.R;sum;1;10
 capital_stock.s.us;wiodr16/capital_stock.s.us.R;sum;1;10
 gross_output.s.us;GO_USD;sum;0;
 gdp.s.us;VA_USD;sum;0;
-compensation.emp.s.cu;wiodr16/compensation.emp.s.cu.R;sum;1;10
-compensation.empe.s.cu;wiodr16/compensation.empe.s.cu.R;sum;1;10
+compensation.emp.s.cu;wiodr13/compensation.emp.s.cu.R;sum;5;1
+compensation.empe.s.cu;wiodr13/compensation.empe.s.cu.R;sum;5;1
 profit.s.us;wiodr13/profit.s.us.R;sum;1;10
 capital_stock.s.cu;wiodr16/capital_stock.s.cu.R;sum;1;10
+basket_price.r.pc;wiodr13/basket_price.r.pc.R;mean;4;1
+exchange.r.id;wiodr13/exchange.r.id.R;mean;1;10
+basket_value.r.pc;wiodr13/basket_value.r.pc.R;mean;4;1
+go_price.r.id;wiodr16/go_price.r.id.R;mean;1;1

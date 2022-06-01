@@ -82,7 +82,6 @@ for(current_m_io in lists$m_io_files) {
   print("Temporary writing...")
   write_fst_array(m_countries,paste0("results/",method_version,"/m_countries.fst"))
   write_fst_array(sea_sectors,paste0("results/",method_version,"/sea_sectors.fst"))
-  write_fst_array(sea_countries,paste0("results/",method_version,"/sea_countries.fst"))
 
   # clear environment
   rm(lambda, m_io_source, m_io, balance_factor, filter, matrix_script)
@@ -114,7 +113,8 @@ source("R/modules/variables/sea_countries.R")
 #######################.
 
 print("Writing...")
-write_fst_array(m_io_filters,paste0("results/",method_version,"/m_io_filters.fst"))
 write_fst_array(m_countries,paste0("results/",method_version,"/m_countries.fst"))
 write_fst_array(sea_sectors,paste0("results/",method_version,"/sea_sectors.fst"))
 write_fst_array(sea_countries,paste0("results/",method_version,"/sea_countries.fst"))
+
+rm(basket_zero, basket_value_zero)

@@ -9,15 +9,7 @@
 
 method_list <- gsub("methods/","",list.dirs("methods",recursive = F))
 
-#Current methods
-# [1] "methods/alternative_1"         "methods/alternative_1_wiodr16"
-# [3] "methods/alternative_2"         "methods/exiobase"             
-# [5] "methods/limpa"                 "methods/ochoa_1"              
-# [7] "methods/ochoa_2"                       
-# [9] "methods/petrovic"              "methods/zerodep_1"            
-# [11] "methods/zerodep_2"            
-
-get_wlv <- function(methods = "alternative_1", repeat_pp = F,
+get_wlv <- function (methods = "wiodr13", repeat_pp = F,
                    papern = 0, prepaper = F) {
   #Load functions
   source("R/lib/functions.R")
@@ -68,6 +60,50 @@ get_wlv <- function(methods = "alternative_1", repeat_pp = F,
     source(paste0("papers/paper_",papern,"_selection.R"))
   }
 
+  gc()
+  
+}
+recalc_wlv <- function (methods = "wiodr13", at_stage = 1,
+                    sea_vars = NULL, papern = 0, prepaper = F) {
+  #Load functions
+  source("R/lib/functions.R")
+  
+  #Control for avoiding repeated intro message on cluster
+  #creation
+  cf <- "started"
+  write(c("started","clusters"),cf,sep=",")
+  
+  if(.Platform$OS.type == "unix") {
+    my.cluster <-  makeForkCluster(detectCores() - 1,outfile="results/logs/parallelworkers.log",
+                                   envir=globalenv())
+  } else {
+    assign("my.cluster",parallel::makeCluster(
+      parallel::detectCores() - 1, 
+      type = "PSOCK"), envir=globalenv())
+  }
+  
+  file.remove(cf)
+  
+  assign("methods", methods, envir=globalenv())
+  assign("at_stage", at_stage, envir=globalenv())
+  assign("sea_vars", sea_vars, envir=globalenv())
+  
+  for (method_version in methods) {
+
+    print(paste0("Calculating ", method_version,"..."))
+    assign("method_version", method_version, envir=globalenv())
+    source("R/lib/re_computations.R")
+  }
+  
+  stopCluster(cl = my.cluster)
+  closeAllConnections()
+  
+  if(prepaper == T) {
+    # Select and save ----
+    
+    source(paste0("papers/paper_",papern,"_selection.R"))
+  }
+  
   gc()
   
 }

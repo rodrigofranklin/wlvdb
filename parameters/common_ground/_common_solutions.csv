@@ -26,3 +26,7 @@ trade_balance.s.mv;common/trade_balance.s.mv.R;sum;5;1
 gdp.p.s.us;common/gdp.p.s.us.R;sum;2;1
 appropriated_profit.r.pc;common/appropriated_profit.r.pc.R;common/appropriated_profit.r.pc-country.R;5;1
 trade_transfers.p.m.pc;common/trade_transfers.p.m.pc.R;common/trade_transfers.p.m.pc-country.R;5;1
+labour_force_value.emp.s.mv;common/labour_force_value.emp.s.mv.R;sum;4;1
+labour_force_value.emp.m.mv;common/labour_force_value.emp.m.mv.R;common/labour_force_value.emp.m.mv-country.R;5;1
+surplus_value.emp.r.pc;common/surplus_value.emp.r.pc.R;common/surplus_value.emp.r.pc-country.R;5;1
+surplus_value.emp_p.r.pc;common/surplus_value.emp_p.r.pc.R;common/surplus_value.emp_p.r.pc-country.R;5;10

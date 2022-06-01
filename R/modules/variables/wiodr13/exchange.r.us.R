@@ -14,4 +14,7 @@ sea_sectors[,"exchange.r.us",,][
   is.nan(sea_sectors[,"exchange.r.us",,])] <- 
   temp_exchange_mean[is.nan(sea_sectors[,"exchange.r.us",,])]
 
+# Desconsidera os pequenos desvios na taxa dos EUA
+sea_sectors[,"exchange.r.us",,"USA"] <- 1
+
 rm(temp_exchange_mean)
