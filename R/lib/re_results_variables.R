@@ -34,18 +34,18 @@ sea_countries <- array(NA,
 ## load variables  ----
 
 m_countries <- 
-  read_fst_array(paste0(paste0("results/",method_version,"/m_countries.fst")))
+  read_fst_array(paste0("results/",method_version,"/m_countries.fst"))
 
 # sea_sectors -> vectors of results per sector
 sea_sectors_temp <- 
-  read_fst_array(paste0(paste0("results/",method_version,"/sea_sectors.fst")))
-
-# sea_countries -> vectors of results per country
-sea_countries_temp <- 
-  read_fst_array(paste0(paste0("results/",method_version,"/sea_countries.fst")))
-
+  read_fst_array(paste0("results/",method_version,"/sea_sectors.fst"))
 sea_sectors[,names(sea_sectors_temp[1,,1,1]),,] <- sea_sectors_temp
 
-sea_countries[,names(sea_countries_temp[1,,1]),] <- sea_countries_temp
+# sea_countries -> vectors of results per country
+if (file.exists(paste0("results/",method_version,"/sea_countries.fst"))) {
+  sea_countries_temp <- 
+    read_fst_array(paste0("results/",method_version,"/sea_countries.fst"))
+  sea_countries[,names(sea_countries_temp[1,,1]),] <- sea_countries_temp
+}
 
 rm(sea_sectors_temp, sea_countries_temp)

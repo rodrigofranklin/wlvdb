@@ -91,7 +91,6 @@ sea_append <- array(NA, dim = c(nums$years,
 
 # cria m_io para cada ano (ainda precisa automatizar para número variável
 # de anos)
-y <- 1
 for (y in 1:nums$years) {
   temp_year <- as.character(1989 + y)
   m_io_source <- array(NA, dim = c(1,
@@ -122,9 +121,6 @@ for (y in 1:nums$years) {
     as.numeric() / 1000
   
   gc(reset = TRUE)
-  
-  
-  
 
   # copy gross_output to sea_append
   sea_append[temp_year,1,,] <- rowSums(m_io_source[1,,])
