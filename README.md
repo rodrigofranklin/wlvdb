@@ -1,4 +1,4 @@
-Sumarry
+Summary
 
 Open Science project to develop, implement and improve methodologies to obtain values (marxian, sraffian ...) and categorical concepts estimates based on world - level public available information such as World Input Output matrices, KLEMS, cepal io data. Further extensions to include EXIOBASE, better estimates available for more countries.
 
