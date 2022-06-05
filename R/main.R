@@ -57,12 +57,15 @@ get_wlv <- function (methods = "wiodr13", repeat_pp = F,
   if(prepaper == T) {
     # Select and save ----
     
-    source(paste0("papers/paper_",papern,"_selection.R"))
+    source(paste0("R/utils/papers/paper_",papern,"_selection.R"))
   }
 
   gc()
   
 }
+
+# Function to recalculate just data from sea_variables and sea_countries
+# Can also be used to include new variables
 recalc_wlv <- function (methods = "wiodr13", at_stage = 1,
                     sea_vars = NULL, papern = 0, prepaper = F) {
   #Load functions
