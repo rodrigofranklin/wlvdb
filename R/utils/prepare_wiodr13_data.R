@@ -1,28 +1,31 @@
 # download and prepare wiod data
 
 dir.create("source_data", showWarnings = FALSE)
+dir.create("source_data/wiodr13", showWarnings = FALSE)
 
 # download wiod data ----
 # download wiots
-download.file(
-#  "http://www.wiod.org/protected3/data13/update_sep12/wiot/wiot_matlab_sep12.zip",
+if (!file.exists("source_data/wiodr13/WIOTS_in_MATLAB.zip")) {
+  download.file(
   "https://dataverse.nl/api/access/datafile/199125",
-  "source_data/wiodr13/wiot_matlab_sep12.zip",
+  "source_data/wiodr13/WIOTS_in_MATLAB.zip",
   mode = "wb")
+}
 
 # download sea
-download.file(
-#  "http://www.wiod.org/protected3/data13/SEA/WIOD_SEA_July14.xlsx",
+if (!file.exists("source_data/wiodr13/Socio_Economic_Accounts_July14.xlsx")) {
+  download.file(
   "https://dataverse.nl/api/access/datafile/199111",
-  "source_data/wiodr13/WIOD_SEA_July14.xlsx",
+  "source_data/wiodr13/Socio_Economic_Accounts_July14.xlsx",
   mode="wb")
+}
 
 print("converting WIOD files...")
 
 # converting sea ----
 sea <- as.data.frame(
-  read_excel("source_data/wiodr13/WIOD_SEA_July14.xlsx",
-            sheet = "DATA", col_names = T, na = 'NA'))
+  read_excel("source_data/wiodr13/Socio_Economic_Accounts_July14.xlsx",
+             sheet = "DATA", col_names = T, na = 'NA'))
 sea[is.na(sea)] <- 0
 colnames(sea) <- tolower(gsub("_","",colnames(sea)))
 
@@ -71,7 +74,7 @@ sea_source <- sea_source[,,lists$sectors,]
 
 # converting wiots ----
 unzip(
-  "source_data/wiodr13/wiot_matlab_sep12.zip",
+  "source_data/wiodr13/WIOTS_in_MATLAB.zip",
   files = c("WIOT95_00.mat",
             "WIOT01_05.mat",
             "WIOT06_09.mat",
@@ -128,26 +131,27 @@ dimnames(m_io) <- list(lists$years,
 write_fst_array(m_io,"source_data/wiodr13/m_io.fst")
 write_fst_array(sea_source,"source_data/wiodr13/sea.fst")
 
-# write.table(lists$demand, "source_data/wiodr13/demand.csv", 
-#             row.names = FALSE, col.names = "demand", sep = ";")
-# 
-# write.table(lists$countries, file = "source_data/wiodr13/countries.csv", 
-#             row.names = FALSE, col.names = "country.source", sep = ";")
-# 
-# write.table(lists$sectors, "source_data/wiodr13/sectors.csv", 
-#             row.names = FALSE, col.names = "sector.source", sep = ";")
+write.table(lists$demand, "source_data/wiodr13/demand.csv",
+            row.names = FALSE, col.names = "demand", sep = ";")
+
+write.table(lists$countries, file = "source_data/wiodr13/countries.csv",
+            row.names = FALSE, col.names = "country.source", sep = ";")
+
+write.table(lists$sectors, "source_data/wiodr13/sectors.csv",
+            row.names = FALSE, col.names = "sector.source", sep = ";")
 
 
 
 
 # clear variables and data ----
 
-file.remove("source_data/wiodr13/WIOD_SEA_July14.xlsx",
-            "source_data/wiodr13/wiot_matlab_sep12.zip",
-            "source_data/wiodr13/WIOT95_00.mat",
-            "source_data/wiodr13/WIOT01_05.mat",
-            "source_data/wiodr13/WIOT06_09.mat",
-            "source_data/wiodr13/WIOT08_11.mat")
+# file.remove("source_data/wiodr13/Socio_Economic_Accounts_July14.xlsx",
+#             "source_data/wiodr13/WIOTS_in_MATLAB.zip",
+file.remove(
+  "source_data/wiodr13/WIOT95_00.mat",
+  "source_data/wiodr13/WIOT01_05.mat",
+  "source_data/wiodr13/WIOT06_09.mat",
+  "source_data/wiodr13/WIOT08_11.mat")
 
 rm(lists, nums, sea, sea_source, wiot_1, wiot_2, wiot_3, wiot_4, m_io, x, y)
 gc()

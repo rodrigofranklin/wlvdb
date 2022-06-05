@@ -53,6 +53,7 @@ for(current_m_io in lists$m_io_files) {
   # print("Starting stage 3")
   # matricial computations
   for (matrix_script in matrices$computation) {
+    print(paste("Sourcing from ",paste0("R/modules/matrices/",matrix_script)))
     source(paste0("R/modules/matrices/",matrix_script))
   }
 

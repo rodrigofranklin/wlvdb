@@ -10,13 +10,13 @@ if(length(br) == 0) {
                  "readxl",
                  "doParallel",
                  "abind",
-                 "REdaS",
                  "dineq",
                  "MLmetrics",
                  "foreach",
                  "lubridate",
                  "tidyverse",
                  "fst",
+                 "ISOcodes",
                  "countrycode")
   br <- "https://cloud.r-project.org"
   dipa <- setdiff(packages, rownames(utils::installed.packages())) 

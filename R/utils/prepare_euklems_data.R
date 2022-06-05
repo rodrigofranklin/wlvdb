@@ -8,19 +8,23 @@
 # download euklems ----
 
 # capital stocks data
-download.file(
-  "http://euklems.eu/bulk/Statistical_Capital.rds",
-  "source_data/euklems/euklems.rds")
+if (!file.exists("source_data/euklems/Statistical_Capital.rds")) {
+  download.file(
+    "http://euklems.eu/bulk/Statistical_Capital.rds",
+    "source_data/euklems/Statistical_Capital.rds")
+}
 
 # national accounts (only to use value added information, needed for
 # disaggregation purposes)
-download.file(
-  "http://euklems.eu/bulk/Statistical_National-Accounts.rds",
-  "source_data/euklems/euklems-na.rds")
+if (!file.exists("source_data/euklems/Statistical_National-Accounts.rds")) {
+  download.file(
+    "http://euklems.eu/bulk/Statistical_National-Accounts.rds",
+    "source_data/euklems/Statistical_National-Accounts.rds")
+}
 
 # prepare data ----
-euklems <- readRDS("source_data/euklems/euklems.rds")
-euklems.na <- readRDS("source_data/euklems/euklems-na.rds")
+euklems <- readRDS("source_data/euklems/Statistical_Capital.rds")
+euklems.na <- readRDS("source_data/euklems/Statistical_National-Accounts.rds")
 
 # depreciation rate: obtained in EUKLEMS documentation
 dep.rates <- 
@@ -32,13 +36,13 @@ dep.rates <-
 agg <-
   read.csv2("source_data/euklems/aggregation.csv")
 
-for (year in as.character(1995:2009)) {
+for (year in as.character(1995:2010)) {
   print(paste0("Obtaining capital composition data to the year ",year,"..."))
-
+  
   # assign variables
   lists <- NULL
-  lists$countries <- unique(euklems[,1])
-  lists$sectors <- unique(euklems[,6])
+  lists$countries <- unique(euklems$country) %>% unlist() %>% as.character()
+  lists$sectors <- unique(euklems$code) %>% unlist() %>% as.character()
   lists$ek_variables <- c("K_GFCF",
                           "K_IT",
                           "K_CT",
@@ -55,7 +59,7 @@ for (year in as.character(1995:2009)) {
   nums$countries <- length(lists$countries)
   nums$sectors <- length(lists$sectors)
   nums$ek_variables <-length(lists$ek_variables)
-
+  
   ek.k <- data.frame(country = 
                        (lists$countries %>%
                           rep(each = nums$sectors)))
@@ -64,12 +68,12 @@ for (year in as.character(1995:2009)) {
   
   # select data ----
   # extract Value Added and depreciation rate information
-  ek.va$va <- 
-    left_join(
-      ek.va,
-      euklems.na[which(euklems.na[,3]=="VA" & euklems.na[,7]==year),c(1,6,8)],
-      by = c("country", "sector" = "code")
-    )[,3]
+  filter.na <- (euklems.na$var=="VA") & (euklems.na$year==as.numeric(year))
+  ek.va$va <- left_join(
+    ek.va,
+    euklems.na[filter.na,],
+    by = c("country", "sector" = "code")
+  )$value
   
   ek.dep.rate <- 
     left_join(ek.dep.rate,
@@ -78,12 +82,13 @@ for (year in as.character(1995:2009)) {
   
   # select capital information from source
   for (x in lists$ek_variables) {
+    filter.ek <- euklems$var==x & euklems$year==year
     ek.k$temp <- 
       left_join(
         ek.k,
-        euklems[which(euklems$var==x & euklems$year==year),c(1,6,8)],
+        euklems[filter.ek,],
         by = c("country", "sector" = "code")
-      )[,"value"]
+      )$value
     names(ek.k)[names(ek.k) == "temp"] <- x
   }
   ek.k$control <- ek.k$K_GFCF
@@ -113,7 +118,7 @@ for (year in as.character(1995:2009)) {
   # There are two levels of aggregation. "prop" is the broader one.
   ek.va$prop <- 0
   ek.va$prop2 <- 0
-
+  
   for (x in unique(agg[agg$level=="prop",2])) {
     sectors <- unique(agg$disaggregated[agg$aggregated==x])
     ek.va$prop[ek.va$sector %in% sectors] <-
@@ -166,11 +171,11 @@ for (year in as.character(1995:2009)) {
     ek.k[filter1,lists$ek_variables] <- 
       ek.k[filter2,lists$ek_variables] * ek.va.prop[filter1,]
   }
-
+  
   # reaggregating ----
-
+  
   ek.k[is.na(ek.k)] <- 0
-
+  
   # agreggate data when "needed"
   # Some capital goods are products of the same unique
   # sector in WIOD - so this aggregation serves
@@ -197,7 +202,7 @@ for (year in as.character(1995:2009)) {
     ek.temp$sector <- x
     ek.temp[, lists$ek_variables] <- 0
     ek.k <- rbind(ek.k, ek.temp)
-
+    
     ek.dep.temp <- ek.dep.rate[ek.dep.rate$sector == "TOT",]
     ek.dep.temp$sector <- x
     ek.dep.temp[, lists$ek_variables] <- 0
@@ -233,7 +238,7 @@ for (year in as.character(1995:2009)) {
          ek.k[filter2, lists$ek_variables] /
          ek.k[filter1, lists$ek_variables])
   }
-
+  
   ek.dep.rate[is.na(ek.dep.rate)] <- 0
   
   # combine ----
@@ -243,7 +248,7 @@ for (year in as.character(1995:2009)) {
   for (x in unique(agg[agg[,3]=="category",2])) {
     ek.k$temp <- 0
     names(ek.k)[names(ek.k) == "temp"] <- x
-
+    
     ek.dep.rate$temp <- 0
     names(ek.dep.rate)[names(ek.dep.rate) == "temp"] <- x
   }
@@ -257,7 +262,7 @@ for (year in as.character(1995:2009)) {
       ek.k[,agg$aggregated[x]] +
       ek.k[,agg$disaggregated[x]]
   }
-
+  
   # combine depreciation rate data (weighted by capital stock)
   for (x in which(agg$level == "category")) {
     ek.dep.rate[,agg$aggregated[x]] <- 
@@ -294,18 +299,19 @@ for (year in as.character(1995:2009)) {
   ek.k <- rbind(ek.k, ek.k.md)
   ek.dep.rate <- rbind(ek.dep.rate, ek.dep.rate.md)
   
-  write_fst_array(ek.k, paste0("source_data/euklems/ekk_",year,".fst"))
-  write_fst_array(ek.dep.rate, paste0("source_data/euklems/ekdeprate_",year,".fst"))
+  write_fst(ek.k, paste0("source_data/euklems/ekk_",year,".fst"))
+  write_fst(ek.dep.rate, paste0("source_data/euklems/ekdeprate_",year,".fst"))
 }
 
 # clear variables and data ----
 
-file.remove(
-  "source_data/euklems/euklems.rds",
-  "source_data/euklems/euklems-na.rds")
+# file.remove(
+#   "source_data/euklems/Statistical_Capital.rds",
+#   "source_data/euklems/Statistical_National-Accounts.rds")
 
 rm(agg, dep.rates, ek.dep.rate, ek.dep.rate.md, ek.dep.temp, ek.k, ek.k.md,
    ek.va, ek.va.prop, ek.va.prop2, ek.temp, euklems, euklems.na, lists, nums,
-   countries_to_exclude, filter1, filter2, sectors, totals, x)
+   countries_to_exclude, filter1, filter2, sectors, totals, x, filter.na, 
+   filter.ek)
 
 gc()

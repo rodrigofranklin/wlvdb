@@ -10,7 +10,7 @@
 # Obs: "c37" = household final demand column
 
 m_io[, "consumption_basket", 1:nums$input, 1:nums$input] <- 
-  m_io_source[, 1:nums$input, grep("by households", columns$sector)] %>%
+  m_io_source[, 1:nums$input, grep("c37", columns$sector)] %>%
   newDim(c(nums$years, nums$input, nums$countries)) %>%
   apply (MARGIN = 1, rowSums, na.rm = TRUE) %>% 
   prop.table(margin = 2) %>% 
