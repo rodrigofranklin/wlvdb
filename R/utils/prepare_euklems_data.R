@@ -8,6 +8,7 @@
 # download euklems ----
 
 # capital stocks data
+options(timeout = max(300, getOption("timeout")))
 if (!file.exists("source_data/euklems/Statistical_Capital.rds")) {
   download.file(
     "http://euklems.eu/bulk/Statistical_Capital.rds",

@@ -5,6 +5,7 @@ dir.create("source_data/wiodr13", showWarnings = FALSE)
 
 # download wiod data ----
 # download wiots
+options(timeout = max(300, getOption("timeout")))
 if (!file.exists("source_data/wiodr13/WIOTS_in_MATLAB.zip")) {
   download.file(
   "https://dataverse.nl/api/access/datafile/199125",
