@@ -19,8 +19,8 @@ download.file(
   "source_data/euklems/euklems-na.rds")
 
 # prepare data ----
-euklems <- read_fst_array("source_data/euklems/euklems.fst")
-euklems.na <- read_fst_array("source_data/euklems/euklems-na.fst")
+euklems <- readRDS("source_data/euklems/euklems.rds")
+euklems.na <- readRDS("source_data/euklems/euklems-na.rds")
 
 # depreciation rate: obtained in EUKLEMS documentation
 dep.rates <- 

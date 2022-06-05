@@ -1,5 +1,7 @@
 # download and prepare wiod data
 
+dir.create("source_data", showWarnings = FALSE)
+
 # download wiod data ----
 # download wiots
 download.file(
@@ -149,3 +151,5 @@ file.remove("source_data/wiodr13/WIOD_SEA_July14.xlsx",
 
 rm(lists, nums, sea, sea_source, wiot_1, wiot_2, wiot_3, wiot_4, m_io, x, y)
 gc()
+
+source("R/utils/prepare_euklems_data.R")

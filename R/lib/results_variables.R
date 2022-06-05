@@ -42,6 +42,7 @@ sea_countries <- array(NA,
                                     c(lists$countries,"WWW")))
 
 # Creates folder in "results"
+dir.create("results", showWarnings = FALSE)
 dir.create(paste0("results/",method_version), showWarnings = FALSE)
 
 # Save infos
