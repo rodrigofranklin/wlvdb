@@ -85,7 +85,7 @@ for(current_m_io in lists$m_io_files) {
   write_fst_array(sea_sectors,paste0("results/",method_version,"/sea_sectors.fst"))
 
   # clear environment
-  rm(lambda, m_io_source, m_io, balance_factor, filter, matrix_script)
+  #rm(lambda, m_io_source, m_io, balance_factor, filter, matrix_script)
   gc()
 }
 
