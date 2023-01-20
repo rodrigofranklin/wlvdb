@@ -1,6 +1,12 @@
 # Load working day data from previous version of WIOD (r13)
 # The working day of the last year (2009) was extended to the
 # last ones (2010-2014)
+parameters$description <- 
+  paste0("China: the working day of persons engaged was projected based on ",
+         "data from wiodr13, with data from the last year available (2009) ",
+         "being replicated for the following years (2010 to 2014); all persons ",
+         "engaged was considered employee. ", parameters$description)
+
 working_day_china <- 
   read.csv2(file = paste0(getwd(),"/source_data/wiodr16/China H_EMPE-EMPE.csv"),
             row.names = 1)

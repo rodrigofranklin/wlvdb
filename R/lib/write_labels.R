@@ -1,0 +1,77 @@
+# Writing meta_data for panel
+
+# create indicators_en file with labels for indicators, descriptions, 
+# observations and groups
+indicators_names <- meta_indicators[,c("code","name")]
+
+descriptions <- meta_indicators[,c("code","description")]
+descriptions$code <- paste0("desc.", descriptions$code)
+
+observations <- meta_indicators[,c("code","observation")]
+observations$code <- paste0("obs.",parameters$code,".", observations$code)
+observations <- observations[observations$observation |> is.na() |> not(),]
+
+groups <- NULL
+groups$label <- meta_indicators$group |> unique()
+groups$code <- paste0("group.",groups$label)
+groups <- groups |> as.data.frame()
+groups <- groups[groups$label |> is.na() |> not(),c(2,1)]
+
+names(indicators_names) = names(descriptions) = names(observations) = 
+  names(groups) <- c("cod_label","label")
+
+indicators_en <- rbind(indicators_names, descriptions, observations, groups)
+
+if (file.exists("results/indicators_en.csv")) {
+  temp_indicators <- read.csv2("results/indicators_en.csv")
+  
+  # preserve old labels for which we currently do not have information 
+  indicators_en[indicators_en$label |> is.na(), "label"] <- 
+    temp_indicators$label[
+      match(indicators_en$cod_label[indicators_en$label |> is.na()],
+            temp_indicators$cod_label)]
+  
+  # merge labels
+  temp_indicators <- 
+    temp_indicators[
+      temp_indicators$cod_label %in% indicators_en$cod_label |> not(),]
+  
+  indicators_en <- rbind(temp_indicators, indicators_en)
+}
+
+# Create meta_indicators file with group, type and reverted attribute
+meta_indicators_panel <- meta_indicators[,c("code", "group", "type", "reverted")]
+names(meta_indicators_panel) <- c("value",	"groups",	"type",	"reverted")
+
+if (file.exists("results/meta_indicators.csv")) {
+  temp_meta <- read.csv2("results/meta_indicators.csv")
+  
+  # preserve old metadata for which we currently do not have information 
+  meta_indicators_panel[meta_indicators_panel$groups |> is.na(), "groups"] <- 
+    temp_meta$groups[
+      match(meta_indicators_panel$value[meta_indicators_panel$groups |> is.na()],
+            temp_meta$value)]
+
+  meta_indicators_panel[meta_indicators_panel$type |> is.na(), "type"] <- 
+    temp_meta$type[
+      match(meta_indicators_panel$value[meta_indicators_panel$type |> is.na()],
+            temp_meta$value)]
+
+  meta_indicators_panel[meta_indicators_panel$reverted |> is.na(), "reverted"] <- 
+    temp_meta$reverted[
+      match(meta_indicators_panel$value[meta_indicators_panel$reverted |> is.na()],
+            temp_meta$value)]
+  
+  # merge labels
+  temp_meta <- 
+    temp_meta[
+      temp_meta$value %in% meta_indicators_panel$value |> not(),]
+  
+  meta_indicators_panel <- rbind(temp_meta, meta_indicators_panel)
+}
+
+indicators_en |> write.csv2("results/indicators_en.csv", row.names = FALSE)
+meta_indicators_panel |> write.csv2("results/meta_indicators.csv", row.names = FALSE)
+meta_indicators |> saveRDS(paste0("results/",method_version,"/meta_indicators.RDS"))
+parameters |> write.csv2(paste0("results/",method_version,"/_parameters.csv"),
+                         row.names = FALSE, na = "")

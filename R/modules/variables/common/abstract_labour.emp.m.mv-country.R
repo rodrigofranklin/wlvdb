@@ -1,4 +1,4 @@
-# Sum of labour force value of each sector
+# Mean of abstract labour per person engaged
 
 sea_countries[lists$years,"abstract_labour.emp.m.mv",] <- 
   sea_countries[lists$years,"abstract_labour.emp.s.mv",] /

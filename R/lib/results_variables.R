@@ -11,6 +11,18 @@ nums$sea_variables <- length(lists$sea_variables)
 
 ## assign variables  ----
 
+# meta_indicator (to be used in our web panel)
+meta_indicators <- NULL
+meta_indicators$code <- sea_variables$names
+meta_indicators$name <- NA
+meta_indicators$description <- NA
+meta_indicators$observation <- NA
+meta_indicators$group <- NA
+meta_indicators$type <- NA
+meta_indicators$reverted <- NA
+meta_indicators <- meta_indicators |> as.data.frame()
+row.names(meta_indicators) <- meta_indicators$code
+
 # m_countries -> country x country matrix
 m_countries <- array(NA,
                   dim = c(nums$years,

@@ -9,13 +9,15 @@
 # 4 - variables obtained from transformed m_io
 # 5 - variables obtained by computation over SEA results
 
-if (stage == 1) {
-  # Copy  stage 0 variables , adjusting scale as specified in parameters
+if (stage == 1) { # Stage 0 is computed only before computing stage 1 variables
+  # Stage 0 variables, adjusting scale as specified in parameters
+  
   # Copy variables from sea_source to sea_sectors (indicated in parameters)
   for (loop in grep(".R", sea_variables$sector_solution, invert = TRUE)) {
     temp <- unlist(strsplit(sea_variables$sector_solution[loop], "[*]"))
     sea_sectors[, sea_variables$names[loop], lists$sectors, lists$countries] <- 
       sea_source[, temp[1], lists$sectors, lists$countries]
+    meta_indicators[sea_variables$names[loop],"observation"] <- paste("Source:", source_version)
   }
   
   # Changes scale of variables when indicated in parameters
@@ -29,12 +31,12 @@ if (stage == 1) {
   rm(temp)
 }
 
-# preliminary computation of stage 2-5
+# Computing stages 1 to 5, as define by "stage" variable
 for (loop in sea_variables$sector_solution[which(sea_variables$stage==stage)]) {
-  print(paste("Sourcing from stage ",stage," script ",gsub(".*/","",loop)))
+  print(paste("Sourcing from stage",stage,"script",gsub(".*/","",loop)))
   source(paste0("R/modules/variables/",loop))
   sea_sectors <- clean(sea_sectors)
-  print(paste("Finished sourcing script ",gsub(".*/","",loop)," from stage ",stage))
+  print(paste("Finished sourcing script",gsub(".*/","",loop),"from stage",stage))
 }
 
 print(paste("Finished stage",stage))

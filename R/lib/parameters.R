@@ -41,5 +41,15 @@ sea_variables <- sea_variables[order(sea_variables$stage),]
 sectors <- 
   read.csv2(paste0(method_path,"_sectors.csv"))
 
+productive_sectors <- 
+  paste(sectors$sector[sectors$productive==1], collapse = "; ")
+
+unproductive_sectors <- 
+  paste(sectors$sector[sectors$productive!=1], collapse = "; ")
+
+parameters$description <- paste0(parameters$description," The following sectors ",
+  "are deemed as productives: ", productive_sectors,". The following sectors ",
+  "are deemed as unproductives: ", unproductive_sectors,".")
+
 #clear environment
-rm(a, param_groups)
+rm(a, param_groups, productive_sectors, unproductive_sectors)

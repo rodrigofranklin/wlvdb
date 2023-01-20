@@ -30,3 +30,4 @@ labour_force_value.emp.s.mv;common/labour_force_value.emp.s.mv.R;sum;4;1
 labour_force_value.emp.m.mv;common/labour_force_value.emp.m.mv.R;common/labour_force_value.emp.m.mv-country.R;5;1
 surplus_value.emp.r.pc;common/surplus_value.emp.r.pc.R;common/surplus_value.emp.r.pc-country.R;5;1
 surplus_value.emp_p.r.pc;common/surplus_value.emp_p.r.pc.R;common/surplus_value.emp_p.r.pc-country.R;5;10
+surplus_value.empe_p.r.pc;common/surplus_value.empe_p.r.pc.R;common/surplus_value.empe_p.r.pc-country.R;5;10

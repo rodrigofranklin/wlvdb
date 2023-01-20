@@ -1,5 +1,17 @@
 ## Solution to the reduction problem.
 ## Ochoa 1: average wage index
+code <- "complex_labour_multiplier.emp.r.un"
+
+meta_indicators[code,"name"] <- "Complex labour multiplier"
+meta_indicators[code,"description"] <- 
+  paste0("Multiplier of labour accordingly it's complexty and intensity.")
+meta_indicators[code,"observation"] <- 
+  paste0("Reduction Problem: Ochoa 1: uses market wages as an index of skill ",
+         "and intensity of labour in a world wide process of equalization of ",
+         "rate of surplus value.")
+meta_indicators[code,"type"] <- "index"
+meta_indicators[code,"group"] <- "Others"
+meta_indicators[code,"reverted"] <- FALSE
 
 w_average <- 
   sea_sectors[,"compensation.emp.s.us",,] /

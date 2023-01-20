@@ -1,6 +1,9 @@
 ####
 # Cálculo sem pressupostos sobre RoW
 ####
+parameters$description <- 
+  paste0("Rest of World: all data for RoW was considered zero. ",
+         parameters$description)
 
 sea_sectors[,"emp.s.un",,"ROW"] <- 0
 

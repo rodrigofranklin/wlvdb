@@ -5,6 +5,13 @@
 # - compensation.empe.s.us
 # - capital
 ####
+parameters$description <- 
+  paste0("Rest of World: total persons engaged obtained from World Bank and ",
+         "distributed by sectors according to the  average number of employees ",
+         "weightned by value-added; hours worked determined by the average ",
+         "working day of each sector; Capital stock determined according to ",
+         "an arbitrary group of countries considered less developed. ",
+         parameters$description)
 
 # Load employment data from an external source (worldbank)
 # emp_row_total => total employed persons
@@ -110,7 +117,6 @@ sea_sectors[,"compensation.empe.s.us",,"ROW"] <-
   as.numeric(comp_row_total) * 
   prop.table(sea_sectors[,"gdp.s.us",, "ROW"] *
                sum_comp_sector/sum_emp_sector, margin = 1)
-
 
 # Capital stock
 # Considers the same capital requirement by value added ratio

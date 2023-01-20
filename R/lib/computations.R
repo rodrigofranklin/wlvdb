@@ -118,4 +118,6 @@ write_fst_array(m_countries,paste0("results/",method_version,"/m_countries.fst")
 write_fst_array(sea_sectors,paste0("results/",method_version,"/sea_sectors.fst"))
 write_fst_array(sea_countries,paste0("results/",method_version,"/sea_countries.fst"))
 
+source("R/lib/write_labels.R")
+
 rm(basket_zero, basket_value_zero)

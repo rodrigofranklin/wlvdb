@@ -1,4 +1,14 @@
-## Solution to the reduction problem.
-## Alternative 1: all labour is considered simple
+## Complex labour multiplier of employed persons
+code <- "complex_labour_multiplier.empe.r.un"
 
-sea_sectors[,"complex_labour_multiplier.empe.r.un",,] <- 1
+meta_indicators[code,"name"] <- "Complex labour multiplier (employees only)"
+meta_indicators[code,"description"] <- 
+  paste0("Multiplier of labour of emplyees accordingly it's complexty and ",
+  "intensity.")
+meta_indicators[code,"observation"] <- 
+  paste0("The standard treatment is to consider all labour as equal.")
+meta_indicators[code,"type"] <- "index"
+meta_indicators[code,"group"] <- "Others"
+meta_indicators[code,"reverted"] <- FALSE
+
+sea_sectors[,code,,] <- 1

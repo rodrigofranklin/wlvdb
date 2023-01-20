@@ -61,7 +61,7 @@ for (year in lists$years) {
   gfcf <- 
     as.data.frame(
       m_io_source[year,1:nums$input,
-                  grep("capital", columns$sector)])
+                  grep("c41", columns$sector)])
   gfcf <- as.matrix(gfcf[rep(names(gfcf), each = nums$sectors)])
   gfcf[gfcf<0] <- 0
   

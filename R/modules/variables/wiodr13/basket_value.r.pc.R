@@ -1,4 +1,16 @@
 # Índice de valores da cesta de consumo
+code <- "basket_value.r.pc"
+
+meta_indicators[code,"name"] <- "Consumption basket value index (2000 = 100)"
+meta_indicators[code,"description"] <- 
+  paste0("Consumption basket value index reflects changes in the socially ",
+         "necessary labour-time to produce a fixed consumption basket ",
+         "necessary for reproduction of an avarage worker. The Laspeyres ",
+         "formula is used.")
+meta_indicators[code,"observation"] <- NA
+meta_indicators[code,"type"] <- "index"
+meta_indicators[code,"group"] <- "Others"
+meta_indicators[code,"reverted"] <- FALSE
 
 if (!exists("basket_value_zero")) {
   # Define a distribuição monetária (USD) da cesta do período Zero
@@ -15,7 +27,7 @@ if (!exists("basket_value_zero")) {
     colSums(na.rm = TRUE)
 }
 
-sea_sectors[lists$years,"basket_value.r.pc",,] <- 
+sea_sectors[lists$years,code,,] <- 
   # Replica a distribuição da cesta do período Zero para todos os anos
   ((basket_zero %>%
       rep(times = nums$years) %>%
@@ -37,17 +49,17 @@ sea_sectors[lists$years,"basket_value.r.pc",,] <-
   aperm(c(2,1))
 
 # Divide todos os anos pelo valor da cesta do ano zero (para criar um índice)
-sea_sectors[lists$years,"basket_value.r.pc",,] <- 
-  sea_sectors[lists$years,"basket_value.r.pc",,] /
+sea_sectors[lists$years,code,,] <- 
+  sea_sectors[lists$years,code,,] /
   (basket_value_zero %>%
      rep(times = nums$years) %>%
      newDim(c(nums$sectors, nums$countries, nums$years)) %>%
      aperm(c(3,1,2)))
 
 # Ano base = 2000
-sea_sectors[,"basket_value.r.pc",,] <- 
-  sea_sectors[,"basket_value.r.pc",,] /
-  (sea_sectors["2000","basket_value.r.pc",,] %>%
+sea_sectors[,code,,] <-
+  sea_sectors[,code,,] /
+  (sea_sectors["2000",code,,] %>%
      rep(times = nums$years) %>%
      newDim(c(nums$sectors, nums$countries, nums$years)) %>%
      aperm(c(3,1,2)))

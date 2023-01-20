@@ -57,21 +57,8 @@ recalc_wlv <- function (methods = "wiodr13", at_stage = 1,
   #Load functions
   source("R/lib/functions.R")
   
-  #Control for avoiding repeated intro message on cluster
-  #creation
-  cf <- "started"
-  write(c("started","clusters"),cf,sep=",")
-  
-  if(.Platform$OS.type == "unix") {
-    my.cluster <-  makeForkCluster(detectCores() - 1,outfile="results/logs/parallelworkers.log",
-                                   envir=globalenv())
-  } else {
-    assign("my.cluster",parallel::makeCluster(
-      parallel::detectCores() - 1, 
-      type = "PSOCK"), envir=globalenv())
-  }
-  
-  file.remove(cf)
+  #Starts parallel computation
+  source("R/lib/parallelization_start.R")
   
   assign("methods", methods, envir=globalenv())
   assign("at_stage", at_stage, envir=globalenv())
@@ -84,15 +71,15 @@ recalc_wlv <- function (methods = "wiodr13", at_stage = 1,
     source("R/lib/re_computations.R")
   }
   
-  stopCluster(cl = my.cluster)
-  closeAllConnections()
-  
   if(prepaper == T) {
     # Select and save ----
     
     source(paste0("papers/paper_",papern,"_selection.R"))
   }
   
+  #Stops parallel computation
+  source("R/lib/parallelization_stop.R")
+
   gc()
   
 }

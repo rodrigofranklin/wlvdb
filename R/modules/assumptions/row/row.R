@@ -4,6 +4,13 @@
 # - labour hours
 # - capital
 ####
+parameters$description <- 
+  paste0("Rest of World: total persons engaged obtained from World Bank and ",
+         "distributed by sectors according to the  average number of employees ",
+         "weightned by value-added; hours worked determined by the average ",
+         "working day of each sector; Capital stock determined according to ",
+         "the country with the lowest capital stock per worker in each year. ",
+         parameters$description)
 
 # Load employment data from an external source (worldbank)
 # emp_row_total => total employed persons

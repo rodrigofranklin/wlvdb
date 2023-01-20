@@ -1,4 +1,14 @@
 #create-cpis_gdps_exchange_rates array
+# code <- ""
+# 
+# meta_indicators[code,"name"] <- ""
+# meta_indicators[code,"description"] <- 
+#   paste0("")
+# meta_indicators[code,"observation"] <- NA
+# meta_indicators[code,"type"] <- ""
+# meta_indicators[code,"group"] <- ""
+# meta_indicators[code,"reverted"] <- FALSE
+
 if(!exists("base_year")){
   base_year <- lists$years
 }

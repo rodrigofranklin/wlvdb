@@ -1,5 +1,17 @@
 # Exchange rate from Value Added in local currency and USD
-sea_sectors[,"exchange.r.us",,] <-
+code <- "exchange.r.us"
+
+meta_indicators[code,"name"] <- "Exchange rate (local currency per USD)"
+meta_indicators[code,"description"] <- 
+  paste0("Exchange rate is the correspondence between local currency and USD.")
+meta_indicators[code,"observation"] <- 
+  paste0("Calculated as the implicit exchange rate of Value Added (VA in local ",
+         "currency / VA in USD).")
+meta_indicators[code,"type"] <- "usd"
+meta_indicators[code,"group"] <- "Others"
+meta_indicators[code,"reverted"] <- FALSE
+
+sea_sectors[,code,,] <-
   as.numeric(sea_source[,"VA",lists$sectors,]) / 
   as.numeric(sea_source[,"VA_USD",lists$sectors,])
 

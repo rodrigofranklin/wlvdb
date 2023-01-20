@@ -1,5 +1,10 @@
 # Load employment data from an external source (worldbank)
 # was_w => Wage and salaried workers as a percentage of employed population
+parameters$description <- 
+  paste0("China: data about employee as a percentage of employment obtained ",
+         "from World Bank (SL.EMP.WORK.ZS); hours worked by employee ",
+         "was projected considering the same working hours of the persons ",
+         "engaged. ", parameters$description)
 
 was_w_china <- as.data.frame(
   read.csv2(paste0(getwd(),"/source_data/worldbank/employment_china.csv")))
