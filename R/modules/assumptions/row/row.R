@@ -13,7 +13,7 @@ parameters$description <-
 # Load employment data from an external source (worldbank)
 # emp_row_total => total employed persons
 row_emp_data <-
-  read.csv2("source_data/worldbank/employment_row.new.csv", row.names = 1)
+  read.csv2("complementar/worldbank/employment_row.new.csv", row.names = 1)
 colnames(row_emp_data) <- sub("X","",colnames(row_emp_data))
 
 emp_row_total <- row_emp_data[source_version,lists$years]

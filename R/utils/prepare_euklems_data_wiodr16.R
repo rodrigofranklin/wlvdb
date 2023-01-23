@@ -24,13 +24,13 @@ euklems.na <- readRDS("source_data/euklems/euklems-na.rds")
 
 # depreciation rate: obtained in EUKLEMS documentation
 dep.rates <- 
-  as.data.frame(read.csv2("source_data/euklems/dep_rates.csv", header = TRUE))
+  as.data.frame(read.csv2("complementar/euklems/dep_rates.csv", header = TRUE))
 
 # load aggregation/harmonization data 
 # needed to harmonize euklems and WIOD 
 # capital goods and sectors 
 agg <-
-  read.csv2("source_data/euklems/aggregation.csv")
+  read.csv2("complementar/euklems/aggregation.csv")
 
 present_dataek <- list.files(path="source_data/euklems",pattern="ekk")
 present_dataek <- as.numeric(sapply(present_dataek,function(x) substr(x,5,8)))

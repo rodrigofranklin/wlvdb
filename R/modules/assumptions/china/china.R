@@ -7,7 +7,7 @@ parameters$description <-
          "engaged. ", parameters$description)
 
 was_w_china <- as.data.frame(
-  read.csv2(paste0(getwd(),"/source_data/worldbank/employment_china.csv")))
+  read.csv2(paste0(getwd(),"/complementar/worldbank/employment_china.csv")))
 colnames(was_w_china) <- sub("X","",colnames(was_w_china))
 
 was_w_china <- as.numeric(was_w_china[1,lists$years])/100
