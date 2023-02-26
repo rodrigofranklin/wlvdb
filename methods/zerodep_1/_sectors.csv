@@ -20,7 +20,7 @@
 "50";"Sale, Maintenance and Repair of Motor Vehicles and Motorcycles; Retail Sale of Fuel";"c19";0;"K_OIPP";"G45"
 "51";"Wholesale Trade and Commission Trade, Except of Motor Vehicles and Motorcycles";"c20";0;"K_OIPP";"G46"
 "52";"Retail Trade, Except of Motor Vehicles and Motorcycles; Repair of Household Goods";"c21";0;"K_OIPP";"G47"
-"H";"Hotels and Restaurants";"c22";0;"K_OCon";"I"
+"H";"Hotels and Restaurants";"c22";1;"K_OCon";"I"
 "60";"Inland Transport";"c23";1;"K_TraEq";"H49"
 "61";"Water Transport";"c24";1;"K_TraEq";"H50"
 "62";"Air Transport";"c25";1;"K_TraEq";"H51"

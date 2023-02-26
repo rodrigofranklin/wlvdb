@@ -34,7 +34,7 @@ H50;Water transport;32;1;K_TraEq;H50
 H51;Air transport;33;1;K_TraEq;H51
 H52;Warehousing and support activities for transportation;34;0;K_TraEq;H52
 H53;Postal and courier activities;35;0;K_SoftIPP;H53
-I;Accommodation and food service activities;36;0;K_OCon;I
+I;Accommodation and food service activities;36;1;K_OCon;I
 J58;Publishing activities;37;0;K_Soft_DB;J58-J60
 J59_J60;"Motion picture, video and television programme production, sound recording and music publishing activities; programming and broadcasting activities";38;0;K_OIPP;J58-J60
 J61;Telecommunications;39;0;K_OIPP;J61
