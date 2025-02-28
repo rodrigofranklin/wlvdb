@@ -4,4 +4,5 @@
 #
 ####
 
-sea_sectors[,"capital_depreciation.s.us",,] <- 0
+sea_sectors[,"capital_depreciation.s.us",,] <- 
+  sea_source[,"Operating surplus: Consumption of fixed capital",,]

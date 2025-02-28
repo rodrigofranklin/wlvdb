@@ -2,7 +2,8 @@
 
 
 euro_data <- 
-  read.csv("source_data/eurostat/ert_bil_eur_a__custom_2789526_page_linear.csv")
+  read.csv("source_data/eurostat/estat_ert_bil_eur_a_en.csv") |>
+  dplyr::filter(currency == "US dollar" & statinfo == "Value at the end of the period")
 
 euro <- euro_data$OBS_VALUE
 names(euro) <- euro_data$TIME_PERIOD

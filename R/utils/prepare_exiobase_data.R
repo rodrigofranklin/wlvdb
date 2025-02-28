@@ -2,16 +2,19 @@ library(abind)
 library(lubridate)
 source("R/lib/functions.R")
 
+# Alterado para a versão 3.9.5
 # Download dos arquivos do exiobase, conforme versão disponível no zenodo
 
 anos <- 1995:2022
 
-versao_source <- "exiobase382"
+versao_source <- "exiobase395"
+options(timeout=1200)
 
-dir.create(paste0("source_data/",versao_source), showWarnings = FALSE)
+dir.create(paste0("source_data/",versao_source), showWarnings = FALSE, recursive = TRUE)
+dir.create("temp", showWarnings = FALSE, recursive = TRUE)
 
 # Download dos arquivos IOT
-pos_file <- "https://zenodo.org/record/5589597/files/IOT_"
+pos_file <- "https://zenodo.org/record/14869924/files/IOT_"
 pre_file <- "_ixi.zip?download=1"
 for (ano in as.character(anos)) {
   download.file(paste0(pos_file,ano,pre_file),
@@ -19,43 +22,25 @@ for (ano in as.character(anos)) {
                 mode="wb")
 }
 
-# Download das SUTs. Como a versão 3.7 das IOTs não vem com a matriz de consumo
-# intermediário, mas apenas com a matriz de coeficientes técnicos, é preciso
-# calcular o gross output (somando os usos com o valor agregado) 
-# para obter a primeira a partir da segunda.
-# pos_file <- "https://zenodo.org/record/3583071/files/MRSUT_"
-# pre_file <- ".zip?download=1"
-# for (ano in as.character(1995:2011)) {
-#   download.file(paste0(pos_file,ano,pre_file),
-#                 paste0("temp/MRSUT_",ano,".zip"),
-#                 mode="wb")
-# }
-
-# Extrai os arquivos Y, Z e F
+# Extrai os arquivos Y, Z e F (employment e factor inputs)
 for (ano in as.character(anos)) {
   myzipfile <- paste0("temp/",ano,".zip")
-  myfiles <- c(paste0("IOT_",ano,"_ixi/Y.txt"),
-               # paste0("IOT_",ano,"_ixi/A.txt"), # Versão 3.7 não possui Z.txt
-               paste0("IOT_",ano,"_ixi/Z.txt"), # Versão 3.7 não possui Z.txt
-               paste0("IOT_",ano,"_ixi/satellite/F.txt"))
+  myfiles <- c("Y.txt",
+               "Z.txt", # Versão 3.7 não possui Z.txt
+               "employment/F.txt",
+               "factor_inputs/F.txt")
   myexdir <- paste0("temp/",ano)
   
   dir.create(myexdir, showWarnings = FALSE)
   
-  unzip(myzipfile, files = myfiles, junkpaths = TRUE, exdir = myexdir)
-  
-  # MRSUT para a versão 3.7
-  # myzipfile <- paste0("temp/MRSUT_",ano,".zip")
-  # myfiles <- c(paste0("MRSUT_",ano,"/use.csv"),
-  #              paste0("MRSUT_",ano,"/value_added.csv"))
-  # unzip(myzipfile, files = myfiles, junkpaths = TRUE, exdir = myexdir)
+  unzip(myzipfile, files = myfiles, junkpaths = FALSE, exdir = myexdir)
 }
 
 # Primeira carga de leitura somente para buscar os parâmetros dessa base.
 demand <- read.delim(file = "temp/1995/Y.txt", header = FALSE)
-factors <- read.delim(file = "temp/1995/F.txt", header = FALSE, nrows = 26)
+factors <- read.delim(file = "temp/1995/factor_inputs/F.txt", header = FALSE)
+employment <- read.delim(file = "temp/1995/employment/F.txt", header = FALSE)
 intermediate_inputs <- read.delim(file = "temp/1995/Z.txt", header = FALSE)
-# intermediate_inputs <- read.delim(file = "temp/1995/A.txt", header = FALSE)
 
 
 
@@ -65,6 +50,7 @@ nums$rows <- nrow(demand)
 nums$col_demand <-  ncol(demand)
 nums$cols_intermediate_inputs = ncol(intermediate_inputs)
 nums$rows_factors <- nrow(factors)
+nums$rows_employment <- nrow(employment)
 
 lists <- NULL
 lists$countries <- unique(demand[4:nums$rows,1])
@@ -84,7 +70,8 @@ lists$output <- c(paste0(intermediate_inputs[4:nums$rows,1],
 
 lists$years <- as.character(anos)
 lists$sea_variables <- 
-  c(unique(factors[4:nums$rows_factors,1]))
+  c(unique(factors[4:nums$rows_factors,1]),
+    unique(employment[4:nums$rows_employment,1]))
 
 nums$countries <- length(lists$countries)
 nums$sectors <- length(lists$sectors)
@@ -107,15 +94,25 @@ sea_source <- array(NA, dim = c(nums$years,
 for (y in lists$years) {
   # lê o arquivo do ano específico
   print(paste0("loading  factors of year ",y,"..."))
-  factors <- read.delim(file = paste0("temp/",y,"/F.txt"),
-                        header = FALSE,
-                        nrows = 26)
+  factors <- read.delim(file = paste0("temp/",y,"/factor_inputs/F.txt"),
+                        header = FALSE)
   
   # adiciona seus dados à sea_source
   print(paste0("copying ",y,"..."))
   for (x in lists$sea_variables) {
     sea_source[y,x,,] <- 
       as.numeric(factors[factors[,1]==x,2:ncol(factors)])
+  }
+  
+  print(paste0("loading  employment of year ",y,"..."))
+  employment <- read.delim(file = paste0("temp/",y,"/employment/F.txt"),
+                        header = FALSE)
+  
+  # adiciona seus dados à sea_source
+  print(paste0("copying ",y,"..."))
+  for (x in lists$sea_variables) {
+    sea_source[y,x,,] <- 
+      as.numeric(employment[employment[,1]==x,2:ncol(employment)])
   }
 }
 
@@ -130,7 +127,7 @@ sea_append <- array(NA, dim = c(nums$years,
                                     lists$countries))
 
 
-rm(factors, intermediate_inputs, demand)
+rm(factors, employment, intermediate_inputs, demand)
 
 # cria m_io para cada ano (ainda precisa automatizar para número variável
 # de anos)
@@ -155,33 +152,6 @@ for (y in 1:nums$years) {
           header = FALSE)[4:nums$rows,3:nums$cols_intermediate_inputs]
       )
     )
-  
-  # # Converter os arquivos A em Z (Coeficientes técnicos para matriz monetária)
-  ## Versão 3.7!
-  # value_added <- 
-  #   read.csv(paste0("temp/",temp_year,"/value_added.csv"), sep = "|")[3:14,3:7989] %>% 
-  #   unlist() %>%
-  #   as.numeric() %>%
-  #   newDim(c(12,7987)) %>%
-  #   colSums()
-  # 
-  # uses <- 
-  #   read.csv(paste0("temp/",temp_year,"/use.csv"), sep = "|")[3:9802,4:7990] %>% 
-  #   unlist() %>%
-  #   as.numeric() %>%
-  #   newDim(c(9800,7987)) %>%
-  #   colSums()
-  # 
-  # produto <- value_added + uses
-  # 
-  # m_io_source[1,,1:nums$input] <-
-  #   (read.delim(file = paste0("temp/",temp_year,"/A.txt"),
-  #               header = FALSE)[4:nums$rows,3:nums$cols_intermediate_inputs]  %>%
-  #      unlist() %>%
-  #      as.numeric()) *
-  #   (produto %>% 
-  #      rep(each = 7987) %>% 
-  #      newDim(c(7987,7987)))
   
   gc(reset = TRUE)
 

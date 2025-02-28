@@ -1,8 +1,8 @@
 # Converte os dados do Exiobase para USD
 
 # Converte os dados da fonte
-sea_source[,-(10:23),,] <- 
-  sea_source[,-(10:23),,] *
+sea_source[,-(10:21),,] <- 
+  sea_source[,-(10:21),,] *
   rep(sea_sectors[,"exchange.r.us",,], each = 10)
 
 # Converte os dados já calculados
