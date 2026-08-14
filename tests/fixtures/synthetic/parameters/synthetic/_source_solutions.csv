@@ -1,0 +1,4 @@
+names;sector_solution;country_solution;stage;order
+abstract_labour.emp.s.mv;LAB;sum;0;1
+gross_output.s.us;GO*1000000;sum;0;2
+price.marker;PRICE;mean;0;3

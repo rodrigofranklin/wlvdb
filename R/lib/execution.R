@@ -486,7 +486,8 @@ wlv_run_script <- function(
     runner = sys.source,
     preamble = character(),
     root = NULL) {
-  values$my.cluster <- cluster
+  # Preserve the binding on the sequential path: `$<- NULL` would remove it.
+  values["my.cluster"] <- list(cluster)
   run_environment <- wlv_new_run_environment(values)
   label <- if (!is.null(values$method_version)) {
     sprintf("Method `%s`", values$method_version)
@@ -540,7 +541,7 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
   script <- file.path(plan$root, "R", "lib", "computations.R")
   if (plan$mode == "recalculate") {
     values$at_stage <- plan$at_stage
-    values$sea_vars <- plan$sea_vars
+    values["sea_vars"] <- list(plan$sea_vars)
     script <- file.path(plan$root, "R", "lib", "re_computations.R")
   }
   wlv_run_script(
