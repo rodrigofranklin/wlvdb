@@ -10,6 +10,13 @@
 if (!exists("wlv_download_verified", mode = "function", inherits = FALSE)) {
   sys.source("R/utils/preparation_downloads.R", envir = environment())
 }
+if (!exists(
+  "wlv_add_synthetic_depreciation_component",
+  mode = "function",
+  inherits = FALSE
+)) {
+  sys.source("R/lib/functions.R", envir = environment())
+}
 
 dir.create("source_data", recursive = TRUE, showWarnings = FALSE)
 dir.create("source_data/euklems", recursive = TRUE, showWarnings = FALSE)
@@ -73,6 +80,72 @@ wlv_assert_euklems_table <- function(value, label) {
 wlv_assert_euklems_table(euklems, "EU KLEMS capital data")
 wlv_assert_euklems_table(euklems.na, "EU KLEMS national-accounts data")
 
+wlv_normalize_euklems_years <- function(value) {
+  if (
+    !(is.character(value) || is.numeric(value)) ||
+    !length(value) ||
+    anyNA(value)
+  ) {
+    stop(
+      "`wlv_euklems_years` must be a non-empty vector of integer years.",
+      call. = FALSE
+    )
+  }
+  character_years <- as.character(value)
+  numeric_years <- suppressWarnings(as.integer(character_years))
+  if (
+    anyNA(numeric_years) ||
+    any(as.character(numeric_years) != character_years) ||
+    anyDuplicated(numeric_years)
+  ) {
+    stop(
+      "`wlv_euklems_years` must contain unique integer years in canonical form.",
+      call. = FALSE
+    )
+  }
+  as.character(numeric_years)
+}
+
+requested_euklems_years <- if (
+    exists("wlv_euklems_years", inherits = FALSE)
+  ) {
+  get("wlv_euklems_years", inherits = FALSE)
+} else {
+  1995:2010
+}
+requested_euklems_years <- wlv_normalize_euklems_years(
+  requested_euklems_years
+)
+
+capital_years <- unique(as.character(euklems$year))
+national_accounts_years <- unique(as.character(euklems.na$year))
+missing_capital_years <- setdiff(requested_euklems_years, capital_years)
+missing_national_accounts_years <- setdiff(
+  requested_euklems_years,
+  national_accounts_years
+)
+if (length(missing_capital_years) || length(missing_national_accounts_years)) {
+  stop(
+    sprintf(
+      paste0(
+        "EU KLEMS does not cover every requested year; capital missing: %s; ",
+        "national accounts missing: %s."
+      ),
+      if (length(missing_capital_years)) {
+        paste(missing_capital_years, collapse = ", ")
+      } else {
+        "none"
+      },
+      if (length(missing_national_accounts_years)) {
+        paste(missing_national_accounts_years, collapse = ", ")
+      } else {
+        "none"
+      }
+    ),
+    call. = FALSE
+  )
+}
+
 # depreciation rate: obtained in EUKLEMS documentation
 dep.rates <- 
   as.data.frame(read.csv2("complementar/euklems/dep_rates.csv", header = TRUE))
@@ -83,7 +156,7 @@ dep.rates <-
 agg <-
   read.csv2("complementar/euklems/aggregation.csv")
 
-for (year in as.character(1995:2010)) {
+for (year in requested_euklems_years) {
   print(paste0("Obtaining capital composition data to the year ",year,"..."))
   
   # assign variables
@@ -252,7 +325,9 @@ for (year in as.character(1995:2010)) {
     
     ek.dep.temp <- ek.dep.rate[ek.dep.rate$sector == "TOT",]
     ek.dep.temp$sector <- x
-    ek.dep.temp[, lists$ek_variables] <- 0
+    # `NA` records that this aggregate has no direct depreciation rate. It is
+    # synthesized from its components below; an explicit direct rate must win.
+    ek.dep.temp[, lists$ek_variables] <- NA_real_
     ek.dep.rate <- rbind(ek.dep.rate, ek.dep.temp)
   }
   
@@ -268,7 +343,10 @@ for (year in as.character(1995:2010)) {
   }
   
   # depreciation rate (weighted by capital stock goods' sectoral proportions)
-  
+
+  direct_dep_rate_provided <- !is.na(as.matrix(
+    ek.dep.rate[, lists$ek_variables, drop = FALSE]
+  ))
   ek.dep.rate[is.na(ek.dep.rate)] <- 0
   
   for (x in which(agg[,3] %in% c("needed", "new"))) {
@@ -279,11 +357,26 @@ for (year in as.character(1995:2010)) {
       ek.k$country %in% ek.k$country[filter1] &
       ek.k[,2] == agg$disaggregated[x]
     
-    ek.dep.rate[filter1, lists$ek_variables] <- 
-      ek.dep.rate[filter1, lists$ek_variables] +
-      (ek.dep.rate[filter2, lists$ek_variables] * 
-         ek.k[filter2, lists$ek_variables] /
-         ek.k[filter1, lists$ek_variables])
+    ek.dep.rate[filter1, lists$ek_variables] <-
+      wlv_add_synthetic_depreciation_component(
+        aggregate_rate = as.matrix(
+          ek.dep.rate[filter1, lists$ek_variables, drop = FALSE]
+        ),
+        component_rate = as.matrix(
+          ek.dep.rate[filter2, lists$ek_variables, drop = FALSE]
+        ),
+        component_stock = as.matrix(
+          ek.k[filter2, lists$ek_variables, drop = FALSE]
+        ),
+        aggregate_stock = as.matrix(
+          ek.k[filter1, lists$ek_variables, drop = FALSE]
+        ),
+        direct_rate_provided = direct_dep_rate_provided[
+          filter1,
+          ,
+          drop = FALSE
+        ]
+      )
   }
   
   ek.dep.rate[is.na(ek.dep.rate)] <- 0
@@ -368,6 +461,9 @@ rm(agg, dep.rates, ek.dep.rate, ek.dep.rate.md, ek.dep.temp, ek.k, ek.k.md,
    ek.va, ek.va.prop, ek.va.prop2, ek.temp, euklems, euklems.na, lists, nums,
    countries_to_exclude, filter1, filter2, sectors, totals, x, filter.na, 
    filter.ek, capital_manifest, national_accounts_manifest,
-   euklems_download_manifest, wlv_assert_euklems_table)
+   euklems_download_manifest, wlv_assert_euklems_table,
+   wlv_normalize_euklems_years, requested_euklems_years,
+   capital_years, national_accounts_years, missing_capital_years,
+   missing_national_accounts_years, direct_dep_rate_provided)
 
 gc()

@@ -1,5 +1,17 @@
 preflight_environment <- new.env(parent = baseenv())
 sys.source(
+  file.path(wlv_test_root, "R", "lib", "wiodr13_validation.R"),
+  envir = preflight_environment
+)
+sys.source(
+  file.path(wlv_test_root, "R", "lib", "wiodr16_allocation.R"),
+  envir = preflight_environment
+)
+sys.source(
+  file.path(wlv_test_root, "R", "lib", "wiodr16_validation.R"),
+  envir = preflight_environment
+)
+sys.source(
   file.path(wlv_test_root, "R", "lib", "execution.R"),
   envir = preflight_environment
 )
@@ -251,6 +263,38 @@ test_that("WIOD13 source sector labels must match the selected method", {
   )
 })
 
+test_that("WIOD16 scientific validation and sector matching happen before execution", {
+  fixture <- wlv_make_preflight_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+  validations <- 0L
+
+  writeLines(
+    c("sector.source;sector", "fixture;Fixture sector"),
+    file.path(fixture$root, "methods", fixture$method, "_sectors.csv")
+  )
+  plan <- wlv_fixture_request(fixture)
+  plan$methods$source <- "wiodr16"
+
+  validated <- preflight_environment$wlv_validate_data(
+    plan,
+    wiodr16_validator = function(source_dir) {
+      validations <<- validations + 1L
+      list(sectors = "fixture")
+    }
+  )
+  expect_s3_class(validated, "wlv_run_plan")
+  expect_identical(validations, 1L)
+
+  expect_error(
+    preflight_environment$wlv_validate_data(
+      plan,
+      wiodr16_validator = function(source_dir) list(sectors = "different")
+    ),
+    "WIOD16 source sectors do not match method",
+    fixed = TRUE
+  )
+})
+
 test_that("source fst files require sidecar metadata", {
   fixture <- wlv_make_preflight_fixture()
   on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
@@ -361,6 +405,74 @@ test_that("WIOD13 reduction inputs use same-year depreciation data", {
   dir.create(euklems_dir, recursive = TRUE)
   file.create(file.path(euklems_dir, expected_files))
   expect_no_error(preflight_environment$wlv_validate_data(plan))
+})
+
+test_that("WIOD16 EU KLEMS preflight requires year and year-plus-one inputs", {
+  fixture <- wlv_make_preflight_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+
+  saveRDS(
+    list(dim = c(2L, 1L, 1L), c("2000", "2001"), "row", "column"),
+    file.path(fixture$source_path, "m_io-source.fst.meta")
+  )
+  expected_files <- c(
+    "ekk_2000.fst", "ekk_2001.fst",
+    "ekdeprate_2001.fst", "ekdeprate_2002.fst"
+  )
+  expect_setequal(
+    basename(preflight_environment$wlv_euklems_files(
+      fixture$root,
+      file.path(fixture$source_path, "m_io-source.fst"),
+      "wiodr16/euklems.R"
+    )),
+    expected_files
+  )
+
+  plan <- wlv_fixture_request(fixture)
+  plan$configuration[[fixture$method]]$matrices$computation <- "wiodr16/euklems.R"
+  expect_error(
+    preflight_environment$wlv_validate_data(plan),
+    "EUKLEMS|ekk_2000\\.fst|ekdeprate_2002\\.fst"
+  )
+})
+
+test_that("WIOD16 EU KLEMS preflight validates the files used by the method", {
+  fixture <- wlv_make_preflight_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+  writeLines(
+    c(
+      "sector.source;sector;euklems.capital;euklems.sector",
+      "fixture;Fixture sector;K_ONE;A"
+    ),
+    file.path(fixture$root, "methods", fixture$method, "_sectors.csv")
+  )
+
+  plan <- wlv_fixture_request(fixture)
+  plan$methods$source <- "wiodr16"
+  plan$configuration[[fixture$method]]$matrices$computation <- "wiodr16/euklems.R"
+  euklems_dir <- file.path(fixture$root, "source_data", "euklems")
+  dir.create(euklems_dir, recursive = TRUE)
+  euklems <- expand.grid(
+    country = c("UK", "EL", "MD"),
+    sector = "A",
+    stringsAsFactors = FALSE
+  )
+  euklems$K_ONE <- seq_len(nrow(euklems))
+  fst::write_fst(euklems, file.path(euklems_dir, "ekk_2000.fst"))
+  fst::write_fst(euklems, file.path(euklems_dir, "ekdeprate_2001.fst"))
+
+  validator <- function(source_dir) list(sectors = "fixture")
+  expect_no_error(
+    preflight_environment$wlv_validate_data(plan, wiodr16_validator = validator)
+  )
+
+  euklems$K_ONE[[1L]] <- Inf
+  fst::write_fst(euklems, file.path(euklems_dir, "ekdeprate_2001.fst"))
+  expect_error(
+    preflight_environment$wlv_validate_data(plan, wiodr16_validator = validator),
+    "non-finite value",
+    fixed = TRUE
+  )
 })
 
 test_that("recalculation result files require sidecar metadata", {

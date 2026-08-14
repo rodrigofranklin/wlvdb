@@ -330,10 +330,11 @@ wlv_io_period_key <- function(path) {
   paste(wlv_io_years(path), collapse = "\034")
 }
 
-wlv_wiodr13_euklems_files <- function(root, source_io, matrix_scripts) {
+wlv_euklems_files <- function(root, source_io, matrix_scripts) {
   depreciation_offsets <- c(
     "wiodr13/euklems.R" = 1L,
-    "wiodr13/euklems-reduction_problem.R" = 0L
+    "wiodr13/euklems-reduction_problem.R" = 0L,
+    "wiodr16/euklems.R" = 1L
   )
   depreciation_offsets <- unname(
     depreciation_offsets[intersect(names(depreciation_offsets), matrix_scripts)]
@@ -347,7 +348,7 @@ wlv_wiodr13_euklems_files <- function(root, source_io, matrix_scripts) {
   if (anyNA(numeric_years) || any(as.character(numeric_years) != years)) {
     stop(
       sprintf(
-        "WIOD13 matrix metadata must use integer years; found: %s",
+        "WIOD matrix metadata must use integer years; found: %s",
         paste(years, collapse = ", ")
       ),
       call. = FALSE
@@ -365,14 +366,23 @@ wlv_wiodr13_euklems_files <- function(root, source_io, matrix_scripts) {
   )
 }
 
-wlv_validate_data <- function(plan, wiodr13_validator = NULL) {
+wlv_wiodr13_euklems_files <- wlv_euklems_files
+
+wlv_validate_data <- function(
+    plan,
+    wiodr13_validator = NULL,
+    wiodr16_validator = NULL) {
   if (!inherits(plan, "wlv_run_plan")) {
     stop("`plan` must be produced by wlv_validate_request().", call. = FALSE)
   }
 
   data_plan <- vector("list", nrow(plan$methods))
   names(data_plan) <- plan$method_names
-  wiodr13_validation <- NULL
+  scientific_validations <- list(wiodr13 = NULL, wiodr16 = NULL)
+  scientific_validators <- list(
+    wiodr13 = wiodr13_validator,
+    wiodr16 = wiodr16_validator
+  )
 
   for (index in seq_len(nrow(plan$methods))) {
     method <- plan$methods[index, ]
@@ -396,19 +406,25 @@ wlv_validate_data <- function(plan, wiodr13_validator = NULL) {
         paste0(source_io, ".meta"),
         sprintf("source matrix metadata for method `%s`", method$method)
       )
-      if (identical(method$source, "wiodr13")) {
-        if (is.null(wiodr13_validation)) {
-          if (is.null(wiodr13_validator)) {
-            wiodr13_validator <- get0(
-              "wlv_validate_wiodr13_prepared",
+      if (method$source %in% names(scientific_validations)) {
+        source_name <- method$source
+        source_label <- toupper(sub("r", "", source_name, fixed = TRUE))
+        if (is.null(scientific_validations[[source_name]])) {
+          scientific_validator <- scientific_validators[[source_name]]
+          if (is.null(scientific_validator)) {
+            scientific_validator <- get0(
+              sprintf("wlv_validate_%s_prepared", source_name),
               mode = "function",
               inherits = TRUE
             )
           }
-          if (!is.function(wiodr13_validator)) {
-            stop("The WIOD13 post-preparation validator is not loaded.", call. = FALSE)
+          if (!is.function(scientific_validator)) {
+            stop(
+              sprintf("The %s post-preparation validator is not loaded.", source_label),
+              call. = FALSE
+            )
           }
-          wiodr13_validation <- wiodr13_validator(method$source_dir)
+          scientific_validations[[source_name]] <- scientific_validator(method$source_dir)
         }
 
         method_sectors <- utils::read.csv2(
@@ -417,20 +433,24 @@ wlv_validate_data <- function(plan, wiodr13_validator = NULL) {
         )
         if (!"sector.source" %in% names(method_sectors)) {
           stop(
-            sprintf("WIOD13 method `%s` does not declare `sector.source`.", method$method),
+            sprintf("%s method `%s` does not declare `sector.source`.", source_label, method$method),
             call. = FALSE
           )
         }
         method_sector_labels <- as.character(method_sectors$sector.source)
-        if (!identical(wiodr13_validation$sectors, method_sector_labels)) {
+        if (!identical(
+          scientific_validations[[source_name]]$sectors,
+          method_sector_labels
+        )) {
           stop(
             sprintf(
               paste0(
-                "WIOD13 source sectors do not match method `%s`; ",
+                "%s source sectors do not match method `%s`; ",
                 "source: %s; method: %s."
               ),
+              source_label,
               method$method,
-              paste(wiodr13_validation$sectors, collapse = ", "),
+              paste(scientific_validations[[source_name]]$sectors, collapse = ", "),
               paste(method_sector_labels, collapse = ", ")
             ),
             call. = FALSE
@@ -439,22 +459,24 @@ wlv_validate_data <- function(plan, wiodr13_validator = NULL) {
       }
       matrices <- plan$configuration[[method$method]]$matrices$computation
       euklems_files <- if (plan$mode == "calculate") {
-        wlv_wiodr13_euklems_files(plan$root, source_io, matrices)
+        wlv_euklems_files(plan$root, source_io, matrices)
       } else {
         character()
       }
       if (length(euklems_files)) {
         wlv_require_files(
           euklems_files,
-          sprintf("WIOD13 EUKLEMS data for method `%s`", method$method)
+          sprintf("WIOD EUKLEMS data for method `%s`", method$method)
         )
-        if (identical(method$source, "wiodr13")) {
+        if (method$source %in% names(scientific_validations)) {
+          source_label <- toupper(sub("r", "", method$source, fixed = TRUE))
           required_sector_columns <- c("euklems.capital", "euklems.sector")
           missing_sector_columns <- setdiff(required_sector_columns, names(method_sectors))
           if (length(missing_sector_columns)) {
             stop(
               sprintf(
-                "WIOD13 method `%s` lacks EU KLEMS sector columns: %s.",
+                "%s method `%s` lacks EU KLEMS sector columns: %s.",
+                source_label,
                 method$method,
                 paste(missing_sector_columns, collapse = ", ")
               ),
@@ -462,12 +484,15 @@ wlv_validate_data <- function(plan, wiodr13_validator = NULL) {
             )
           }
           euklems_validator <- get0(
-            "wlv_validate_wiodr13_euklems",
+            sprintf("wlv_validate_%s_euklems", method$source),
             mode = "function",
             inherits = TRUE
           )
           if (!is.function(euklems_validator)) {
-            stop("The WIOD13 EU KLEMS validator is not loaded.", call. = FALSE)
+            stop(
+              sprintf("The %s EU KLEMS validator is not loaded.", source_label),
+              call. = FALSE
+            )
           }
           euklems_validator(
             euklems_files,
