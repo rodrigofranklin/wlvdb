@@ -20,7 +20,7 @@ jobs:
       CI: "true"
       WLV_WORKERS: "1"
       R_ENVIRON_USER: "${{ github.workspace }}/.github/Renviron.ci"
-      RENV_PATHS_ROOT: "${{ runner.temp }}/renv"
+      RENV_PATHS_ROOT: "${{ github.workspace }}/../.renv-cache"
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
