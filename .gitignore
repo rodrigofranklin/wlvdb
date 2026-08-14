@@ -9,3 +9,7 @@ resultsx
 results_nuvem
 source_data
 source_datax
+/renv/library/
+/renv/local/
+/renv/staging/
+/renv/cellar/
