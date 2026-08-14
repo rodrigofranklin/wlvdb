@@ -1,0 +1,5 @@
+profile;artifact;kind;sidecar;operations
+synthetic_core;m_io.fst;fst_array;TRUE;calculate|recalculate
+synthetic_core;sea.fst;fst_array;TRUE;calculate|recalculate
+synthetic_core;countries.csv;csv;FALSE;calculate|recalculate
+synthetic_core;demand.csv;csv;FALSE;calculate|recalculate

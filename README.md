@@ -14,21 +14,26 @@ Also included preliminary estimates on:
 - Profit rates;
 - different approximation to values - direct prices, sraffian prices
 
-Available by region, country and sector from 1995 to 2014, or from 1990 to 2024 , depending of source' s 
+Temporal coverage varies by source and is declared in the canonical support
+matrix below; unverified legacy coverage is intentionally left unspecified.
 
 
 
 
-# current stage of the project
+## Method and source support
 
-Four data sources already included:
+The canonical support matrix is generated from the repository's
+machine-readable catalog and published in
+[`docs/methods.md`](docs/methods.md). In that matrix, `stable` means that the
+declared lifecycle is recovered, validated, tested, and documented;
+`experimental` requires explicit opt-in and is not yet a supported scientific
+release; and `disabled` means execution remains blocked until its documented
+recovery work is complete.
 
-- World Input Output Database release 2013 (WIOD13)
-- World Input Output Database release 2016 (WIOD16)
-- EXIOBASE (v 3.8.2, v. 3.7, v.3.8.1)*
-- EORA26*
-
- *work in progress
+WIOD13 and WIOD16 are currently the recovered source families. Their reference
+methods are stable, while the alternative WIOD methods remain experimental.
+EXIOBASE and EORA sources remain experimental, and their methods are disabled
+until their preparation and calculation lifecycles are recovered.
 
 ## Safe startup and main function
 
@@ -51,8 +56,10 @@ source("R/main.R")
 get_wlv("wiodr13")
 ```
 
-Use `Rscript --vanilla scripts/run_wlv.R --help` for all command-line options,
-or add `--check` to validate the environment and method without calculating.
+Use `Rscript --vanilla scripts/run_wlv.R --list-methods` to inspect status,
+coverage, and supported operations without loading project dependencies or
+source data. Use `--help` for all command-line options, or add `--check` to
+validate the environment and method without calculating.
 To rebuild and validate a source without immediately starting the calculation,
 use `--method wiodr13 --prepare-only` or `--method wiodr16 --prepare-only`.
 Pinned sources, checksums, temporal coverage, and compatibility rules are
@@ -73,6 +80,7 @@ The function accepts the following arguments:
 * papern - number of the paper to eventually trigger further tables and/or graphs that compare different methods, cross-sectional and longitudinal indicators, any custom analysis to be included in the paper referred to by the same number.
 * prepaper - wether to actually trigger the preparation of such custom analysis (calls corresponding script from papers/ folder)
 * workers - positive integer controlling PSOCK workers. The default is `1`, which runs sequentially without creating a cluster
+* allow_experimental - boolean explicit opt-in for methods marked `experimental`. Defaults to `FALSE`; methods marked `disabled` remain blocked
 
 
  ## Repository Folder Structure

@@ -47,6 +47,115 @@ wlv_safe_name <- function(value) {
     grepl("^[A-Za-z0-9][A-Za-z0-9._-]*$", value)
 }
 
+wlv_validate_requested_operations <- function(
+    requested_operations,
+    mode,
+    repeat_pp) {
+  if (is.null(requested_operations)) {
+    requested_operations <- if (mode == "recalculate") {
+      "recalculate"
+    } else {
+      c(if (repeat_pp) "prepare", "calculate")
+    }
+  }
+  if (
+    !is.character(requested_operations) ||
+    !length(requested_operations) ||
+    anyNA(requested_operations)
+  ) {
+    stop(
+      "`requested_operations` must be a non-empty character vector without NA.",
+      call. = FALSE
+    )
+  }
+  requested_operations <- unique(requested_operations)
+  allowed <- c("prepare", "calculate", "recalculate")
+  invalid <- setdiff(requested_operations, allowed)
+  if (length(invalid)) {
+    stop(
+      sprintf(
+        "Invalid requested operation(s): %s.",
+        paste(invalid, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  if (
+    (mode == "recalculate" && !identical(requested_operations, "recalculate")) ||
+    (mode == "calculate" && "recalculate" %in% requested_operations)
+  ) {
+    stop(
+      sprintf(
+        "Requested operations are incompatible with `%s` mode: %s.",
+        mode,
+        paste(requested_operations, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  requested_operations
+}
+
+wlv_assert_catalog_access <- function(
+    methods,
+    requested_operations,
+    allow_experimental) {
+  for (index in seq_len(nrow(methods))) {
+    method <- methods[index, , drop = FALSE]
+    limitation <- method$limitations[[1L]]
+    detail <- if (nzchar(limitation)) paste0(" ", limitation) else ""
+
+    if (method$source_status[[1L]] == "disabled") {
+      stop(
+        sprintf(
+          "Source `%s` used by method `%s` is disabled.",
+          method$source[[1L]],
+          method$method[[1L]]
+        ),
+        call. = FALSE
+      )
+    }
+    if (method$status[[1L]] == "disabled") {
+      stop(
+        sprintf("Method `%s` is disabled.%s", method$method[[1L]], detail),
+        call. = FALSE
+      )
+    }
+    if (method$status[[1L]] == "experimental" && !allow_experimental) {
+      stop(
+        sprintf(
+          paste0(
+            "Method `%s` is experimental.%s ",
+            "Set `allow_experimental = TRUE` (CLI: `--allow-experimental`) ",
+            "to opt in explicitly."
+          ),
+          method$method[[1L]],
+          detail
+        ),
+        call. = FALSE
+      )
+    }
+
+    capabilities <- c(
+      prepare = method$can_prepare[[1L]],
+      calculate = method$can_calculate[[1L]],
+      recalculate = method$can_recalculate[[1L]]
+    )
+    unavailable <- requested_operations[!capabilities[requested_operations]]
+    if (length(unavailable)) {
+      stop(
+        sprintf(
+          "Method `%s` does not support operation(s): %s.",
+          method$method[[1L]],
+          paste(unavailable, collapse = ", ")
+        ),
+        call. = FALSE
+      )
+    }
+  }
+  invisible(methods)
+}
+
 wlv_effective_parameter_group <- function(
     root,
     method,
@@ -176,12 +285,24 @@ wlv_validate_request <- function(
     mode = c("calculate", "recalculate"),
     at_stage = 1L,
     sea_vars = NULL,
-    root = ".") {
+    root = ".",
+    allow_experimental = FALSE,
+    requested_operations = NULL,
+    catalog = NULL) {
   mode <- match.arg(mode)
   repeat_pp <- wlv_validate_flag(repeat_pp, "repeat_pp")
   prepaper <- wlv_validate_flag(prepaper, "prepaper")
+  allow_experimental <- wlv_validate_flag(
+    allow_experimental,
+    "allow_experimental"
+  )
   workers <- wlv_validate_workers(workers)
   papern <- wlv_validate_integer(papern, "papern", minimum = 0L)
+  requested_operations <- wlv_validate_requested_operations(
+    requested_operations,
+    mode = mode,
+    repeat_pp = repeat_pp
+  )
 
   if (!is.character(methods) || !length(methods) || anyNA(methods)) {
     stop("`methods` must be a non-empty character vector.", call. = FALSE)
@@ -203,7 +324,37 @@ wlv_validate_request <- function(
   }
 
   root <- normalizePath(root, mustWork = TRUE)
-  rows <- lapply(methods, function(method) {
+  if (is.null(catalog)) {
+    catalog <- wlv_load_catalog(root)
+  } else {
+    wlv_catalog_assert(catalog)
+    if (!identical(normalizePath(catalog$root, mustWork = TRUE), root)) {
+      stop("`catalog` belongs to a different project root.", call. = FALSE)
+    }
+  }
+  catalog_methods <- wlv_catalog_method_table(catalog)
+  unknown <- setdiff(methods, catalog_methods$method)
+  if (length(unknown)) {
+    stop(
+      sprintf("Unknown method: %s", paste(unknown, collapse = ", ")),
+      call. = FALSE
+    )
+  }
+  selected_methods <- catalog_methods[
+    match(methods, catalog_methods$method),
+    ,
+    drop = FALSE
+  ]
+  wlv_assert_catalog_access(
+    selected_methods,
+    requested_operations = requested_operations,
+    allow_experimental = allow_experimental
+  )
+
+  rows <- lapply(seq_len(nrow(selected_methods)), function(index) {
+    selected <- selected_methods[index, , drop = FALSE]
+    method <- selected$method[[1L]]
+    source_record <- wlv_catalog_source(catalog, selected$source[[1L]])
     method_dir <- file.path(root, "methods", method)
     parameter_file <- file.path(method_dir, "_parameters.csv")
     sectors_file <- file.path(method_dir, "_sectors.csv")
@@ -229,28 +380,44 @@ wlv_validate_request <- function(
         )
       }
     )
-    sources <- unique(parameters$source)
-    sources <- sources[!is.na(sources) & nzchar(sources)]
-    if (length(sources) != 1L || !wlv_safe_name(sources[[1]])) {
-      stop(sprintf("Method `%s` must declare exactly one safe source.", method), call. = FALSE)
-    }
-    source <- sources[[1]]
-    preparer <- file.path(root, "R", "utils", sprintf("prepare_%s_data.R", source))
-    if (repeat_pp && !file.exists(preparer)) {
+    declared_sources <- unique(parameters$source)
+    declared_sources <- declared_sources[
+      !is.na(declared_sources) & nzchar(declared_sources)
+    ]
+    parameter_set <- source_record$parameter_set[[1L]]
+    if (
+      length(declared_sources) != 1L ||
+      !identical(declared_sources[[1L]], parameter_set)
+    ) {
       stop(
-        sprintf("No preparation script exists for source `%s`: %s", source, preparer),
+        sprintf(
+          "Method `%s` must declare catalog parameter set `%s`.",
+          method,
+          parameter_set
+        ),
         call. = FALSE
       )
     }
+    preparer <- source_record$preparer[[1L]]
+    preparer <- if (nzchar(preparer)) file.path(root, preparer) else ""
 
     data.frame(
       method = method,
-      source = source,
+      source = source_record$source[[1L]],
+      parameter_set = parameter_set,
       method_dir = method_dir,
-      source_dir = file.path(root, "source_data", source),
+      source_dir = file.path(root, source_record$data_dir[[1L]]),
       parameter_file = parameter_file,
       sectors_file = sectors_file,
       preparer = preparer,
+      validator_script = source_record$validator_script[[1L]],
+      validator_function = source_record$validator_function[[1L]],
+      artifact_profile = source_record$artifact_profile[[1L]],
+      status = selected$status[[1L]],
+      source_status = selected$source_status[[1L]],
+      can_prepare = selected$can_prepare[[1L]],
+      can_calculate = selected$can_calculate[[1L]],
+      can_recalculate = selected$can_recalculate[[1L]],
       stringsAsFactors = FALSE
     )
   })
@@ -260,7 +427,7 @@ wlv_validate_request <- function(
     wlv_validate_method_references(
       root = root,
       method = method_plan$method[[index]],
-      source = method_plan$source[[index]],
+      source = method_plan$parameter_set[[index]],
       mode = mode
     )
   })
@@ -275,6 +442,9 @@ wlv_validate_request <- function(
     list(
       root = root,
       mode = mode,
+      requested_operations = requested_operations,
+      allow_experimental = allow_experimental,
+      catalog = catalog,
       methods = method_plan,
       configuration = configuration,
       method_names = method_plan$method,
@@ -303,6 +473,154 @@ wlv_require_files <- function(paths, context) {
 
 wlv_list_io_files <- function(path) {
   sort(list.files(path, pattern = "^m_io.*\\.fst$", full.names = TRUE))
+}
+
+wlv_load_catalog_validator <- function(plan, method) {
+  script <- method$validator_script[[1L]]
+  function_name <- method$validator_function[[1L]]
+  if (!nzchar(script) || !nzchar(function_name)) {
+    stop(
+      sprintf(
+        "Source `%s` has no catalog-declared validator.",
+        method$source[[1L]]
+      ),
+      call. = FALSE
+    )
+  }
+
+  validator_environment <- new.env(
+    parent = baseenv()
+  )
+  previous_directory <- getwd()
+  on.exit(setwd(previous_directory), add = TRUE)
+  setwd(plan$root)
+  tryCatch(
+    sys.source(
+      file.path(plan$root, script),
+      envir = validator_environment,
+      chdir = FALSE
+    ),
+    error = function(error) {
+      stop(
+        sprintf(
+          "Cannot load validator `%s` for source `%s`: %s",
+          script,
+          method$source[[1L]],
+          conditionMessage(error)
+        ),
+        call. = FALSE
+      )
+    }
+  )
+  validator <- get0(
+    function_name,
+    envir = validator_environment,
+    mode = "function",
+    inherits = FALSE
+  )
+  if (!is.function(validator)) {
+    stop(
+      sprintf(
+        "Validator `%s` does not define catalog function `%s`.",
+        script,
+        function_name
+      ),
+      call. = FALSE
+    )
+  }
+
+  list(validate = validator, environment = validator_environment)
+}
+
+wlv_resolve_source_artifacts <- function(plan, method, needs_io) {
+  profile <- method$artifact_profile[[1L]]
+  if (!nzchar(profile)) {
+    stop(
+      sprintf(
+        "Source `%s` has no artifact profile for method `%s`.",
+        method$source[[1L]],
+        method$method[[1L]]
+      ),
+      call. = FALSE
+    )
+  }
+
+  specifications <- lapply(plan$requested_operations, function(operation) {
+    value <- wlv_catalog_artifacts(
+      plan$catalog,
+      profile,
+      operation = operation
+    )
+    if (!nrow(value)) {
+      stop(
+        sprintf(
+          "Artifact profile `%s` declares no artifacts for operation `%s`.",
+          profile,
+          operation
+        ),
+        call. = FALSE
+      )
+    }
+    value
+  })
+  specifications <- do.call(rbind, specifications)
+  specification_keys <- paste(
+    specifications$profile,
+    specifications$artifact,
+    sep = "/"
+  )
+  specifications <- specifications[
+    !duplicated(specification_keys),
+    ,
+    drop = FALSE
+  ]
+
+  required <- character()
+  input_output <- character()
+  for (index in seq_len(nrow(specifications))) {
+    specification <- specifications[index, , drop = FALSE]
+    is_input_output <- startsWith(specification$artifact[[1L]], "m_io")
+    if (is_input_output && !needs_io) {
+      next
+    }
+
+    artifact_path <- file.path(
+      method$source_dir[[1L]],
+      specification$artifact[[1L]]
+    )
+    paths <- if (specification$kind[[1L]] == "fst_array_glob") {
+      sort(Sys.glob(artifact_path))
+    } else {
+      artifact_path
+    }
+    if (!length(paths)) {
+      stop(
+        sprintf(
+          "Missing source data for method `%s` matching artifact `%s`.",
+          method$method[[1L]],
+          specification$artifact[[1L]]
+        ),
+        call. = FALSE
+      )
+    }
+
+    required <- c(required, paths)
+    if (specification$sidecar[[1L]]) {
+      required <- c(required, paste0(paths, ".meta"))
+    }
+    if (is_input_output) {
+      input_output <- c(input_output, paths)
+    }
+  }
+
+  wlv_require_files(
+    unique(required),
+    sprintf("catalog-declared source data for method `%s`", method$method[[1L]])
+  )
+  list(
+    required = unique(required),
+    input_output = sort(unique(input_output))
+  )
 }
 
 wlv_io_years <- function(path) {
@@ -378,52 +696,59 @@ wlv_validate_data <- function(
 
   data_plan <- vector("list", nrow(plan$methods))
   names(data_plan) <- plan$method_names
-  scientific_validations <- list(wiodr13 = NULL, wiodr16 = NULL)
-  scientific_validators <- list(
+  source_names <- unique(plan$methods$source)
+  scientific_validations <- stats::setNames(
+    vector("list", length(source_names)),
+    source_names
+  )
+  validator_overrides <- list(
     wiodr13 = wiodr13_validator,
     wiodr16 = wiodr16_validator
   )
+  validator_environments <- stats::setNames(
+    vector("list", length(source_names)),
+    source_names
+  )
 
   for (index in seq_len(nrow(plan$methods))) {
-    method <- plan$methods[index, ]
-    source_required <- file.path(
-      method$source_dir,
-      c("countries.csv", "demand.csv", "sea.fst", "sea.fst.meta")
-    )
-    wlv_require_files(source_required, sprintf("source data for method `%s`", method$method))
-
+    method <- plan$methods[index, , drop = FALSE]
     needs_io <- plan$mode == "calculate" || plan$at_stage <= 4L
+    source_artifacts <- wlv_resolve_source_artifacts(
+      plan,
+      method,
+      needs_io = needs_io
+    )
     method_data <- list()
     if (needs_io) {
-      source_io <- wlv_list_io_files(method$source_dir)
+      source_io <- source_artifacts$input_output
       if (!length(source_io)) {
         stop(
-          sprintf("No source m_io*.fst files exist for method `%s`.", method$method),
+          sprintf(
+            "Artifact profile `%s` declares no input-output array for method `%s`.",
+            method$artifact_profile[[1L]],
+            method$method[[1L]]
+          ),
           call. = FALSE
         )
       }
-      wlv_require_files(
-        paste0(source_io, ".meta"),
-        sprintf("source matrix metadata for method `%s`", method$method)
-      )
-      if (method$source %in% names(scientific_validations)) {
-        source_name <- method$source
+      source_name <- method$source
+      scientific_validator <- validator_overrides[[source_name]]
+      validator_function <- method$validator_function
+      has_scientific_validator <- is.function(scientific_validator) ||
+        nzchar(validator_function)
+      if (has_scientific_validator) {
         source_label <- toupper(sub("r", "", source_name, fixed = TRUE))
         if (is.null(scientific_validations[[source_name]])) {
-          scientific_validator <- scientific_validators[[source_name]]
-          if (is.null(scientific_validator)) {
-            scientific_validator <- get0(
-              sprintf("wlv_validate_%s_prepared", source_name),
-              mode = "function",
-              inherits = TRUE
+          validator_bundle <- if (is.function(scientific_validator)) {
+            list(
+              validate = scientific_validator,
+              environment = environment(scientific_validator)
             )
+          } else {
+            wlv_load_catalog_validator(plan, method)
           }
-          if (!is.function(scientific_validator)) {
-            stop(
-              sprintf("The %s post-preparation validator is not loaded.", source_label),
-              call. = FALSE
-            )
-          }
+          scientific_validator <- validator_bundle$validate
+          validator_environments[[source_name]] <- validator_bundle$environment
           scientific_validations[[source_name]] <- scientific_validator(method$source_dir)
         }
 
@@ -438,10 +763,11 @@ wlv_validate_data <- function(
           )
         }
         method_sector_labels <- as.character(method_sectors$sector.source)
-        if (!identical(
-          scientific_validations[[source_name]]$sectors,
-          method_sector_labels
-        )) {
+        validated_sectors <- scientific_validations[[source_name]]$sectors
+        if (
+          !is.null(validated_sectors) &&
+          !identical(validated_sectors, method_sector_labels)
+        ) {
           stop(
             sprintf(
               paste0(
@@ -450,7 +776,7 @@ wlv_validate_data <- function(
               ),
               source_label,
               method$method,
-              paste(scientific_validations[[source_name]]$sectors, collapse = ", "),
+              paste(validated_sectors, collapse = ", "),
               paste(method_sector_labels, collapse = ", ")
             ),
             call. = FALSE
@@ -468,8 +794,8 @@ wlv_validate_data <- function(
           euklems_files,
           sprintf("WIOD EUKLEMS data for method `%s`", method$method)
         )
-        if (method$source %in% names(scientific_validations)) {
-          source_label <- toupper(sub("r", "", method$source, fixed = TRUE))
+        if (!is.null(scientific_validations[[source_name]])) {
+          source_label <- toupper(sub("r", "", source_name, fixed = TRUE))
           required_sector_columns <- c("euklems.capital", "euklems.sector")
           missing_sector_columns <- setdiff(required_sector_columns, names(method_sectors))
           if (length(missing_sector_columns)) {
@@ -485,9 +811,17 @@ wlv_validate_data <- function(
           }
           euklems_validator <- get0(
             sprintf("wlv_validate_%s_euklems", method$source),
+            envir = validator_environments[[source_name]],
             mode = "function",
             inherits = TRUE
           )
+          if (!is.function(euklems_validator)) {
+            euklems_validator <- get0(
+              sprintf("wlv_validate_%s_euklems", method$source),
+              mode = "function",
+              inherits = TRUE
+            )
+          }
           if (!is.function(euklems_validator)) {
             stop(
               sprintf("The %s EU KLEMS validator is not loaded.", source_label),

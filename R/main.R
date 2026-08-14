@@ -4,19 +4,22 @@
 #                                                                             #
 ###############################################################################
 
+source("R/lib/catalog.R", local = TRUE)
 source("R/lib/dependencies.R", local = TRUE)
-source("R/lib/wiodr13_validation.R", local = TRUE)
-source("R/lib/wiodr16_validation.R", local = TRUE)
 source("R/lib/execution.R", local = TRUE)
 
-method_list <- basename(list.dirs("methods", recursive = FALSE, full.names = TRUE))
+method_catalog <- wlv_load_catalog(".")
+method_list <- wlv_catalog_method_table(method_catalog)$method
 
-prepare_wlv <- function(methods = "wiodr13") {
+prepare_wlv <- function(methods = "wiodr13", allow_experimental = FALSE) {
   plan <- wlv_validate_request(
     methods = methods,
     repeat_pp = TRUE,
     workers = 1L,
-    mode = "calculate"
+    mode = "calculate",
+    requested_operations = "prepare",
+    allow_experimental = allow_experimental,
+    catalog = method_catalog
   )
   wlv_assert_dependencies(include_preparation = TRUE)
   wlv_prepare_sources(plan)
@@ -30,14 +33,17 @@ get_wlv <- function(
     repeat_pp = FALSE,
     papern = 0,
     prepaper = FALSE,
-    workers = getOption("wlv.workers", 1L)) {
+    workers = getOption("wlv.workers", 1L),
+    allow_experimental = FALSE) {
   plan <- wlv_validate_request(
     methods = methods,
     repeat_pp = repeat_pp,
     papern = papern,
     prepaper = prepaper,
     workers = workers,
-    mode = "calculate"
+    mode = "calculate",
+    allow_experimental = allow_experimental,
+    catalog = method_catalog
   )
   wlv_assert_dependencies(
     include_preparation = plan$repeat_pp,
@@ -69,7 +75,8 @@ recalc_wlv <- function(
     sea_vars = NULL,
     papern = 0,
     prepaper = FALSE,
-    workers = getOption("wlv.workers", 1L)) {
+    workers = getOption("wlv.workers", 1L),
+    allow_experimental = FALSE) {
   plan <- wlv_validate_request(
     methods = methods,
     papern = papern,
@@ -77,7 +84,9 @@ recalc_wlv <- function(
     workers = workers,
     mode = "recalculate",
     at_stage = at_stage,
-    sea_vars = sea_vars
+    sea_vars = sea_vars,
+    allow_experimental = allow_experimental,
+    catalog = method_catalog
   )
   wlv_assert_dependencies(include_papers = plan$prepaper)
   plan <- wlv_validate_data(plan)

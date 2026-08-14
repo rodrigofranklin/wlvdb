@@ -27,6 +27,8 @@ jobs:
         with:
           r-version: "4.6.1"
           use-public-rspm: true
+      - name: Validate the method catalog and generated support matrix
+        run: Rscript --vanilla scripts/render_method_catalog.R --check
       - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v4
         with:
           path: |

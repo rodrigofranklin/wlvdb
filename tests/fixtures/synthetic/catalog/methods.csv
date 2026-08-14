@@ -1,0 +1,2 @@
+method;source;code;description;status;can_calculate;can_recalculate;test;documentation;limitations
+synthetic;synthetic;SYNTHETIC;Synthetic integration fixture;experimental;TRUE;TRUE;;;Synthetic method used only by integration tests.

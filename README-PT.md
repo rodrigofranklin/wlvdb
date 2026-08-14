@@ -11,16 +11,15 @@ Também inclui estimativas preliminares em:
 - Troca desigual; 
 - taxas de exploração; 
 - Taxas de lucro; 
-- Diferente aproximação aos valores - preços diretos, valores em tempo de trabalho abstrato, preços sraffianos disponíveis por região, país e setor de 1995 a 2014, ou de 1990 a 2024, dependendo da fase atual da inclusão da fonte ao projeto
+- Diferentes aproximações aos valores — preços diretos, valores em tempo de trabalho abstrato e preços sraffianos.
 
-##Fontes de dados já incluídas: 
+## Suporte de métodos e fontes
 
-- Banco de Dados Mundial de Insumo-Produto, release 2013  (WIOD13) 
-- Banco de Dados Mundial de Insumo-Produto, release 2016 (WIOD16) 
-- Exiobase (V 3.8.2, v. 3.7, V.3.8.1) * 
-- EORA26 *
-
- * Trabalho em andamento 
+A cobertura temporal e as operações disponíveis estão na
+[matriz canônica de suporte](docs/methods.md). WIOD13 e WIOD16 são as famílias
+recuperadas; seus métodos de referência são estáveis e os métodos alternativos
+permanecem experimentais. As fontes EXIOBASE e EORA são experimentais, e seus
+métodos permanecem desabilitados até que a recuperação seja concluída.
 
 ## Inicialização segura e função principal
 

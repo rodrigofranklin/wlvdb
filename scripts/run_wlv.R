@@ -11,8 +11,9 @@ usage <- function() {
       "  --paper NUMBER      Select the paper script number (default: 0).",
       "  --prepaper          Run the selected paper script after calculation.",
       "  --workers NUMBER    Number of workers; 1 is sequential (default: WLV_WORKERS or 1).",
+      "  --allow-experimental  Explicitly allow methods marked as experimental.",
       "  --check             Validate the environment and arguments, then exit.",
-      "  --list-methods      Print the available method names and exit.",
+      "  --list-methods[=FORMAT]  List methods and exit; FORMAT is table, names, or csv.",
       "  -h, --help          Print this help and exit.",
       sep = "\n"
     ),
@@ -29,8 +30,9 @@ parse_cli <- function(args) {
     papern = 0L,
     prepaper = FALSE,
     workers = suppressWarnings(as.numeric(Sys.getenv("WLV_WORKERS", unset = "1"))),
+    allow_experimental = FALSE,
     check = FALSE,
-    list_methods = FALSE,
+    list_methods = NULL,
     help = FALSE
   )
 
@@ -48,8 +50,12 @@ parse_cli <- function(args) {
       result$prepaper <- TRUE
     } else if (argument == "--check") {
       result$check <- TRUE
+    } else if (argument == "--allow-experimental") {
+      result$allow_experimental <- TRUE
     } else if (argument == "--list-methods") {
-      result$list_methods <- TRUE
+      result$list_methods <- "table"
+    } else if (grepl("^--list-methods=", argument)) {
+      result$list_methods <- sub("^--list-methods=", "", argument)
     } else if (grepl("^--workers=", argument)) {
       result$workers <- suppressWarnings(as.numeric(sub("^--workers=", "", argument)))
     } else if (argument == "--workers") {
@@ -83,6 +89,12 @@ parse_cli <- function(args) {
   if (is.na(result$papern) || result$papern < 0L) {
     stop("--paper must be a non-negative integer.", call. = FALSE)
   }
+  if (
+    !is.null(result$list_methods) &&
+    !(result$list_methods %in% c("table", "names", "csv"))
+  ) {
+    stop("--list-methods format must be table, names, or csv.", call. = FALSE)
+  }
 
   result$methods <- unique(trimws(unlist(strsplit(result$methods, ",", fixed = TRUE))))
   result$methods <- result$methods[nzchar(result$methods)]
@@ -110,13 +122,23 @@ script_path <- normalizePath(sub("^--file=", "", script_arg[[1]]), mustWork = TR
 project_root <- normalizePath(file.path(dirname(script_path), ".."), mustWork = TRUE)
 setwd(project_root)
 
-source(file.path("renv", "activate.R"), local = TRUE)
-sys.source(file.path("R", "main.R"), envir = .GlobalEnv)
-
-if (args$list_methods) {
-  cat(paste(method_list, collapse = "\n"), "\n", sep = "")
+if (!is.null(args$list_methods)) {
+  catalog_environment <- new.env(parent = baseenv())
+  sys.source(file.path("R", "lib", "catalog.R"), envir = catalog_environment)
+  catalog <- catalog_environment$wlv_load_catalog(project_root)
+  output <- catalog_environment$wlv_format_catalog_table(
+    catalog,
+    format = args$list_methods
+  )
+  cat(output, sep = "\n")
+  if (length(output)) {
+    cat("\n")
+  }
   quit(save = "no", status = 0L)
 }
+
+source(file.path("renv", "activate.R"), local = TRUE)
+sys.source(file.path("R", "main.R"), envir = .GlobalEnv)
 
 if (!length(args$methods)) {
   stop("At least one --method is required.", call. = FALSE)
@@ -131,13 +153,21 @@ if (length(unknown)) {
   )
 }
 
+requested_operations <- if (args$prepare_only) {
+  "prepare"
+} else {
+  c(if (args$repeat_pp) "prepare", "calculate")
+}
 request <- wlv_validate_request(
   methods = args$methods,
   repeat_pp = args$repeat_pp,
   papern = args$papern,
   prepaper = args$prepaper,
   workers = args$workers,
-  mode = "calculate"
+  mode = "calculate",
+  requested_operations = requested_operations,
+  allow_experimental = args$allow_experimental,
+  catalog = method_catalog
 )
 
 wlv_assert_dependencies(
@@ -152,7 +182,10 @@ if (args$check) {
 }
 
 if (args$prepare_only) {
-  prepare_wlv(methods = args$methods)
+  prepare_wlv(
+    methods = args$methods,
+    allow_experimental = args$allow_experimental
+  )
   cat("Source data are prepared and valid.\n")
   quit(save = "no", status = 0L)
 }
@@ -162,5 +195,6 @@ get_wlv(
   repeat_pp = args$repeat_pp,
   papern = args$papern,
   prepaper = args$prepaper,
-  workers = args$workers
+  workers = args$workers,
+  allow_experimental = args$allow_experimental
 )
