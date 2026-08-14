@@ -41,10 +41,8 @@ source("R/modules/variables/sea_sectors.R")
 # computations  ----
 #######################.
 
-# obtain list of m_io files
-lists$m_io_files <- 
-  dir(path = paste0("source_data/",source_version),
-      pattern = "m_io.*.fst$", full.names = T )
+# Use the exact files that passed preflight validation.
+lists$m_io_files <- wlv_data$source_io
 
 for(current_m_io in lists$m_io_files) {
   print("lets prepare the computation")

@@ -63,6 +63,7 @@ La función acepta los siguientes argumentos:
 * repeat_pp : Verdadero / Falso para indicar si se debe ejecutar la preparación completa de descarga y datos de origen. Por defecto, falso .
 * papern : referencia al número del paper sobre el que computar  tablas y / o gráficos que comparen diferentes métodos, indicadores transversales y longitudinales, es decir, cualquier análisis personalizado que se incluye en análisis identificado por ese número. 
 * prepaper: Verdadero / Falso: si se debe ejecutar, de hecho, la preparación de dicho análisis personalizado (realizando la llamada correspondiente en el script de la carpeta *papers*) 
+* workers: entero positivo que controla los workers PSOCK. El valor predeterminado es `1`, que ejecuta secuencialmente sin crear un clúster
 
 ## Estructura / organización de la carpeta del repositorio 
 

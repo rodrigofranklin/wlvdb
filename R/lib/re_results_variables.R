@@ -48,4 +48,7 @@ if (file.exists(paste0("results/",method_version,"/sea_countries.fst"))) {
   sea_countries[,names(sea_countries_temp[1,,1]),] <- sea_countries_temp
 }
 
-rm(sea_sectors_temp, sea_countries_temp)
+rm(sea_sectors_temp)
+if (exists("sea_countries_temp", inherits = FALSE)) {
+  rm(sea_countries_temp)
+}

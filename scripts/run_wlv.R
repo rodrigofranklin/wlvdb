@@ -9,6 +9,7 @@ usage <- function() {
       "  --repeat-pp         Download and prepare source data before calculation.",
       "  --paper NUMBER      Select the paper script number (default: 0).",
       "  --prepaper          Run the selected paper script after calculation.",
+      "  --workers NUMBER    Number of workers; 1 is sequential (default: WLV_WORKERS or 1).",
       "  --check             Validate the environment and arguments, then exit.",
       "  --list-methods      Print the available method names and exit.",
       "  -h, --help          Print this help and exit.",
@@ -25,6 +26,7 @@ parse_cli <- function(args) {
     repeat_pp = FALSE,
     papern = 0L,
     prepaper = FALSE,
+    workers = suppressWarnings(as.numeric(Sys.getenv("WLV_WORKERS", unset = "1"))),
     check = FALSE,
     list_methods = FALSE,
     help = FALSE
@@ -43,6 +45,14 @@ parse_cli <- function(args) {
       result$check <- TRUE
     } else if (argument == "--list-methods") {
       result$list_methods <- TRUE
+    } else if (grepl("^--workers=", argument)) {
+      result$workers <- suppressWarnings(as.numeric(sub("^--workers=", "", argument)))
+    } else if (argument == "--workers") {
+      i <- i + 1L
+      if (i > length(args)) {
+        stop("--workers requires a number.", call. = FALSE)
+      }
+      result$workers <- suppressWarnings(as.numeric(args[[i]]))
     } else if (grepl("^--method=", argument)) {
       result$methods <- c(result$methods, sub("^--method=", "", argument))
     } else if (argument == "--method") {
@@ -116,9 +126,18 @@ if (length(unknown)) {
   )
 }
 
+request <- wlv_validate_request(
+  methods = args$methods,
+  repeat_pp = args$repeat_pp,
+  papern = args$papern,
+  prepaper = args$prepaper,
+  workers = args$workers,
+  mode = "calculate"
+)
+
 wlv_assert_dependencies(
-  include_preparation = args$repeat_pp,
-  include_papers = args$prepaper,
+  include_preparation = request$repeat_pp,
+  include_papers = request$prepaper,
   attach = !args$check
 )
 
@@ -131,5 +150,6 @@ get_wlv(
   methods = args$methods,
   repeat_pp = args$repeat_pp,
   papern = args$papern,
-  prepaper = args$prepaper
+  prepaper = args$prepaper,
+  workers = args$workers
 )

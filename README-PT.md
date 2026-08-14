@@ -60,6 +60,7 @@ A função aceita os seguintes argumentos:
 * repeat_pp - Verdadeiro/Falso para indicar se o download completo e a preparação de dados de origem devem ser executados. Por padrão, falso 
 * paper - número do papel para complementarmente computar tabelas e / ou gráficos que comparem diferentes métodos, indicadores transversais e longitudinais, ou seja, qualquer análise personalizada a ser incluída no trabalho referido pelo mesmo número. 
 * prepaper - Verdadeiro/Falso - se desencadear, de fato, a preparação de tal análise personalizada (realizando a chamada correspondente nos script da pasta *papers*) 
+* workers - inteiro positivo que controla os workers PSOCK. O padrão é `1`, que executa sequencialmente sem criar cluster
 
 ## Estrutura de pastas/ organização do repositório 
 
