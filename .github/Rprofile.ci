@@ -1,0 +1,4 @@
+local({
+  repository <- Sys.getenv("RSPM", unset = "https://cloud.r-project.org")
+  options(repos = c(CRAN = repository))
+})
