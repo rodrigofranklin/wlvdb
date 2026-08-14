@@ -12,6 +12,51 @@ clean <- function(x) {
   return(x)
 }
 
+wlv_wiodr13_euklems_country_codes <- function(countries) {
+  countrycode::countrycode(
+    countries,
+    origin = "iso3c",
+    destination = "iso2c",
+    custom_match = c(
+      GBR = "UK",
+      GRC = "EL",
+      ROW = NA_character_
+    )
+  )
+}
+
+wlv_distribute_capital_stock <- function(weights, capital_stock) {
+  if (!is.matrix(weights) || !is.numeric(weights)) {
+    stop("`weights` must be a numeric matrix.", call. = FALSE)
+  }
+  if (
+    !is.numeric(capital_stock) ||
+    length(capital_stock) != ncol(weights) ||
+    anyNA(capital_stock) ||
+    any(!is.finite(capital_stock))
+  ) {
+    stop(
+      "`capital_stock` must contain one finite number per weight column.",
+      call. = FALSE
+    )
+  }
+
+  totals <- colSums(weights)
+  invalid_columns <- !is.finite(totals) | totals == 0
+  distribution <- sweep(weights, 2L, totals, "/")
+  distribution[, invalid_columns] <- 0
+  distribution[!is.finite(distribution)] <- 0
+  result <- sweep(distribution, 2L, capital_stock, "*")
+  attr(result, "wlv.unallocated_columns") <- which(
+    invalid_columns & capital_stock != 0
+  )
+  result
+}
+
+wlv_sum_input_flows <- function(intermediate_consumption, depreciation) {
+  clean(intermediate_consumption) + clean(depreciation)
+}
+
 cnames <- function(a,b) {
   #match column named "names"  from a and b
   match(a$names,b$names)

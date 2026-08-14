@@ -195,6 +195,62 @@ test_that("missing input data fails before cluster creation", {
   expect_identical(starts, 0L)
 })
 
+test_that("WIOD13 scientific validation fails before cluster creation", {
+  fixture <- wlv_make_preflight_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+  starts <- 0L
+  validations <- 0L
+
+  writeLines(
+    c("sector.source;sector", "fixture;Fixture sector"),
+    file.path(fixture$root, "methods", fixture$method, "_sectors.csv")
+  )
+  plan <- wlv_fixture_request(fixture)
+  plan$methods$source <- "wiodr13"
+
+  expect_error({
+    plan <- preflight_environment$wlv_validate_data(
+      plan,
+      wiodr13_validator = function(source_dir) {
+        validations <<- validations + 1L
+        stop("scientific validation sentinel", call. = FALSE)
+      }
+    )
+    preflight_environment$wlv_with_cluster(
+      workers = 2L,
+      run = function(cluster) invisible(NULL),
+      make_cluster = function(workers) {
+        starts <<- starts + 1L
+        structure(list(), class = "wlv_test_cluster")
+      }
+    )
+  }, "scientific validation sentinel", fixed = TRUE)
+
+  expect_identical(validations, 1L)
+  expect_identical(starts, 0L)
+})
+
+test_that("WIOD13 source sector labels must match the selected method", {
+  fixture <- wlv_make_preflight_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+
+  writeLines(
+    c("sector.source;sector", "method_sector;Fixture sector"),
+    file.path(fixture$root, "methods", fixture$method, "_sectors.csv")
+  )
+  plan <- wlv_fixture_request(fixture)
+  plan$methods$source <- "wiodr13"
+
+  expect_error(
+    preflight_environment$wlv_validate_data(
+      plan,
+      wiodr13_validator = function(source_dir) list(sectors = "source_sector")
+    ),
+    "source sectors do not match method",
+    fixed = TRUE
+  )
+})
+
 test_that("source fst files require sidecar metadata", {
   fixture <- wlv_make_preflight_fixture()
   on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
@@ -205,6 +261,106 @@ test_that("source fst files require sidecar metadata", {
     preflight_environment$wlv_validate_data(plan),
     "[Mm]eta|sea\\.fst\\.meta"
   )
+})
+
+test_that("WIOD13 EUKLEMS inputs fail before cluster creation", {
+  fixture <- wlv_make_preflight_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+  starts <- 0L
+
+  saveRDS(
+    list(dim = c(2L, 1L, 1L), c("1999", "2000"), "row", "column"),
+    file.path(fixture$source_path, "m_io-source.fst.meta")
+  )
+
+  plan <- wlv_fixture_request(fixture)
+  plan$configuration[[fixture$method]]$matrices$computation <-
+    "wiodr13/euklems.R"
+  expected_files <- c(
+    "ekk_1999.fst", "ekk_2000.fst",
+    "ekdeprate_2000.fst", "ekdeprate_2001.fst"
+  )
+  expect_setequal(
+    basename(preflight_environment$wlv_wiodr13_euklems_files(
+      fixture$root,
+      file.path(fixture$source_path, "m_io-source.fst"),
+      "wiodr13/euklems.R"
+    )),
+    expected_files
+  )
+
+  expect_error({
+    plan <- preflight_environment$wlv_validate_data(plan)
+    preflight_environment$wlv_with_cluster(
+      workers = 2L,
+      run = function(cluster) invisible(NULL),
+      make_cluster = function(workers) {
+        starts <<- starts + 1L
+        structure(list(), class = "wlv_test_cluster")
+      }
+    )
+  }, "EUKLEMS|ekk_1999\\.fst|ekdeprate_2001\\.fst")
+  expect_identical(starts, 0L)
+
+  euklems_dir <- file.path(fixture$root, "source_data", "euklems")
+  dir.create(euklems_dir, recursive = TRUE)
+  file.create(file.path(euklems_dir, expected_files))
+  expect_no_error(preflight_environment$wlv_validate_data(plan))
+
+  recalculate_plan <- wlv_fixture_request(
+    fixture,
+    mode = "recalculate",
+    at_stage = 5L
+  )
+  recalculate_plan$configuration[[fixture$method]]$matrices$computation <-
+    "wiodr13/euklems.R"
+  unlink(euklems_dir, recursive = TRUE, force = TRUE)
+  expect_no_error(preflight_environment$wlv_validate_data(recalculate_plan))
+})
+
+test_that("WIOD13 reduction inputs use same-year depreciation data", {
+  fixture <- wlv_make_preflight_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+  starts <- 0L
+
+  saveRDS(
+    list(dim = c(2L, 1L, 1L), c("1999", "2000"), "row", "column"),
+    file.path(fixture$source_path, "m_io-source.fst.meta")
+  )
+
+  plan <- wlv_fixture_request(fixture)
+  plan$configuration[[fixture$method]]$matrices$computation <-
+    "wiodr13/euklems-reduction_problem.R"
+  expected_files <- c(
+    "ekk_1999.fst", "ekk_2000.fst",
+    "ekdeprate_1999.fst", "ekdeprate_2000.fst"
+  )
+  expect_setequal(
+    basename(preflight_environment$wlv_wiodr13_euklems_files(
+      fixture$root,
+      file.path(fixture$source_path, "m_io-source.fst"),
+      "wiodr13/euklems-reduction_problem.R"
+    )),
+    expected_files
+  )
+
+  expect_error({
+    plan <- preflight_environment$wlv_validate_data(plan)
+    preflight_environment$wlv_with_cluster(
+      workers = 2L,
+      run = function(cluster) invisible(NULL),
+      make_cluster = function(workers) {
+        starts <<- starts + 1L
+        structure(list(), class = "wlv_test_cluster")
+      }
+    )
+  }, "EUKLEMS|ekdeprate_1999\\.fst")
+  expect_identical(starts, 0L)
+
+  euklems_dir <- file.path(fixture$root, "source_data", "euklems")
+  dir.create(euklems_dir, recursive = TRUE)
+  file.create(file.path(euklems_dir, expected_files))
+  expect_no_error(preflight_environment$wlv_validate_data(plan))
 })
 
 test_that("recalculation result files require sidecar metadata", {

@@ -6,6 +6,7 @@ test_that("main can be sourced without attaching packages", {
 
   sys.source(file.path(wlv_test_root, "R", "main.R"), envir = environment)
 
+  expect_true(is.function(environment$prepare_wlv))
   expect_true(is.function(environment$get_wlv))
   expect_true(is.function(environment$recalc_wlv))
   expect_identical(search(), search_before)
@@ -29,6 +30,27 @@ test_that("command line entrypoint provides help without project data", {
 
   expect_null(attr(output, "status"))
   expect_true(any(grepl("--method", output, fixed = TRUE)))
+  expect_true(any(grepl("--prepare-only", output, fixed = TRUE)))
+})
+
+test_that("prepare-only can be checked without downloading data", {
+  rscript <- file.path(
+    R.home("bin"),
+    if (.Platform$OS.type == "windows") "Rscript.exe" else "Rscript"
+  )
+  output <- system2(
+    rscript,
+    c(
+      "--vanilla",
+      shQuote(file.path(wlv_test_root, "scripts", "run_wlv.R")),
+      "--method", "wiodr13", "--prepare-only", "--check"
+    ),
+    stdout = TRUE,
+    stderr = TRUE
+  )
+
+  expect_null(attr(output, "status"))
+  expect_true(any(grepl("Environment and arguments are valid", output, fixed = TRUE)))
 })
 
 test_that("command line validation rejects unknown and unsafe methods", {

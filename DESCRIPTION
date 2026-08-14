@@ -27,6 +27,7 @@ Suggests:
     ggthemes,
     hrbrthemes,
     MLmetrics,
+    openssl,
     R.matlab,
     readODS,
     readxl,

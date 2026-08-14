@@ -24,7 +24,7 @@ zcountries <- (rows$country|>rep(each = nums$years))[sea_sectors[,code,,] == 0] 
 for (country in zcountries) {
   zyears <- (lists$years|>rep(times = nums$sectors))[sea_sectors[,code,,country] == 0]
   for (year in zyears) {
-    zsector <- lists$sector[sea_sectors[year,code,,country] == 0]
+    zsector <- lists$sectors[sea_sectors[year,code,,country] == 0]
     sea_sectors[year,code,zsector,country] <- 
       mean(sea_sectors[
         year,

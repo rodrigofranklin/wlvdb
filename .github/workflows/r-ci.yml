@@ -43,7 +43,7 @@ jobs:
         run: |
           Push-Location "${{ runner.temp }}"
           try {
-            Rscript --vanilla "${{ github.workspace }}/scripts/run_wlv.R" --method wiodr13 --check
+            Rscript --vanilla "${{ github.workspace }}/scripts/run_wlv.R" --method wiodr13 --prepare-only --check
           } finally {
             Pop-Location
           }
@@ -54,7 +54,11 @@ jobs:
           files <- list.files("R", pattern = "\\.[Rr]$", recursive = TRUE, full.names = TRUE)
           invisible(lapply(files, parse))
           source("R/main.R")
-          stopifnot(is.function(get_wlv), is.function(recalc_wlv))
+          stopifnot(
+            is.function(prepare_wlv),
+            is.function(get_wlv),
+            is.function(recalc_wlv)
+          )
       - name: Run unit and synthetic integration tests
         shell: Rscript {0}
         run: |
