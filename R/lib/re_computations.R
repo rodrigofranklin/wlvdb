@@ -42,15 +42,10 @@ if (at_stage == 1) {
 #######################.
 
 if (at_stage <= 4) {
-  lists$m_io_results_files <- 
-    dir(path = paste0("results/",method_version),
-        pattern = "m_io.*.fst$", full.names = T )
-
-  lists$m_io_source_files <- 
-    dir(path = paste0("source_data/",source_version),
-        pattern = "m_io.*.fst$", full.names = T )
+  lists$m_io_results_files <- wlv_data$result_io
+  lists$m_io_source_files <- wlv_data$source_io
   
-  for(current_m_io in 1:length(lists$m_io_results_files)) {
+  for(current_m_io in seq_along(lists$m_io_results_files)) {
     print("lets prepare the computation")
     source("R/lib/re_prepare_computation.R")
     

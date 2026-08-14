@@ -10,13 +10,13 @@ lists$years <- unlist(dimnames(m_io_source)[1])
 nums$years <- length(lists$years)
 
 # Define função paralelizada se houver + de 1 ano.
-if (nums$years == 1) {
+if (is.null(my.cluster) || nums$years == 1) {
   myApply <- function (...) {
-    apply(...)
+    base::apply(...)
   }
 } else {
   myApply <- function (...) {
-    parApply(cl = my.cluster,...)
+    parallel::parApply(cl = my.cluster, ...)
   }
 }
 

@@ -67,6 +67,7 @@ The function accepts the following arguments:
 * repeat_pp - boolean to indicate if full download and preparation of source data should be performed . Defaults to FALSE
 * papern - number of the paper to eventually trigger further tables and/or graphs that compare different methods, cross-sectional and longitudinal indicators, any custom analysis to be included in the paper referred to by the same number.
 * prepaper - wether to actually trigger the preparation of such custom analysis (calls corresponding script from papers/ folder)
+* workers - positive integer controlling PSOCK workers. The default is `1`, which runs sequentially without creating a cluster
 
 
  ## Repository Folder Structure

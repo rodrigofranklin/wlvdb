@@ -19,15 +19,22 @@ load_parameters <- function(pg,paths = c(method_path,src_path,com_path)) {
   param <- param[!duplicated(param$names),]
 }
 
-#Def param groups and unambiguous patterns 
-param_groups <- 
-  data.frame(group_pattern = c("[^e]._matrices","reduced","solutions","assumptions"),
-             object = c("matrices","reduced_matrices","sea_variables","assumptions"))
+if (exists("wlv_parameters", inherits = FALSE)) {
+  matrices <- wlv_parameters$matrices
+  reduced_matrices <- wlv_parameters$reduced_matrices
+  sea_variables <- wlv_parameters$solutions
+  assumptions <- wlv_parameters$assumptions
+} else {
+  # Legacy fallback for direct sourcing outside the validated entrypoint.
+  param_groups <-
+    data.frame(group_pattern = c("[^e]._matrices", "reduced", "solutions", "assumptions"),
+               object = c("matrices", "reduced_matrices", "sea_variables", "assumptions"))
 
-for(i in 1:nrow(param_groups)){
-  a <- load_parameters(param_groups$group_pattern[i])
-  assign(param_groups$object[i],a)
-  print(paste0("Loaded ",param_groups$object[i]," parameters"))
+  for (i in seq_len(nrow(param_groups))) {
+    a <- load_parameters(param_groups$group_pattern[i])
+    assign(param_groups$object[i], a)
+    print(paste0("Loaded ", param_groups$object[i], " parameters"))
+  }
 }
 
 #Ordena as variáveis que precisam ser calculadas primeiro
@@ -52,4 +59,7 @@ parameters$description <- paste0(parameters$description," The following sectors 
   "are deemed as unproductives: ", unproductive_sectors,".")
 
 #clear environment
-rm(a, param_groups, productive_sectors, unproductive_sectors)
+rm(list = intersect(
+  c("a", "param_groups", "productive_sectors", "unproductive_sectors"),
+  ls(envir = environment(), all.names = TRUE)
+), envir = environment())

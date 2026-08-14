@@ -87,14 +87,14 @@ loren <- function(ano) {
   puntocols <- c(paste(rep(lists$countries, each = 56),lists$sectors,sep="."),findemcntry)
   dimnames(wiot)[[1]] <- withpoint
   dimnames(wiot)[[2]] <- puntocols
-  assign(paste0("wiot_",ano),wiot,envir = .GlobalEnv)
+  assign(paste0("wiot_", ano), wiot, envir = environment(loren))
   rm(wiot)
 }
 
 lapply(2000:2014,loren)
 wiots <- ls(pattern="wiot_")
 
-m_io <- abind(lapply(wiots,get),along = 3)
+m_io <- abind(mget(wiots, envir = environment(), inherits = FALSE), along = 3)
 dimnames(m_io)[[3]] <- 2000:2014
 
 m_io <- aperm(m_io,c(3,1,2))

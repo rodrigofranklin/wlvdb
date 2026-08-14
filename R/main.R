@@ -1,94 +1,81 @@
-###############################################################################.
-#                                                                              #
-#                       World Labour Values Database                           #
-#                                                                              #
-###############################################################################.
-
-
-# Versions computations ----
+###############################################################################
+#                                                                             #
+#                       World Labour Values Database                          #
+#                                                                             #
+###############################################################################
 
 source("R/lib/dependencies.R", local = TRUE)
+source("R/lib/execution.R", local = TRUE)
 
-method_list <- gsub("methods/","",list.dirs("methods",recursive = F))
+method_list <- basename(list.dirs("methods", recursive = FALSE, full.names = TRUE))
 
-get_wlv <- function (methods = "wiodr13", repeat_pp = F,
-                   papern = 0, prepaper = F) {
+get_wlv <- function(
+    methods = "wiodr13",
+    repeat_pp = FALSE,
+    papern = 0,
+    prepaper = FALSE,
+    workers = getOption("wlv.workers", 1L)) {
+  plan <- wlv_validate_request(
+    methods = methods,
+    repeat_pp = repeat_pp,
+    papern = papern,
+    prepaper = prepaper,
+    workers = workers,
+    mode = "calculate"
+  )
   wlv_assert_dependencies(
-    include_preparation = repeat_pp,
-    include_papers = prepaper
+    include_preparation = plan$repeat_pp,
+    include_papers = plan$prepaper
   )
 
-  #Load functions
-  source("R/lib/functions.R")
-  
-  #Starts parallel computation
-  source("R/lib/parallelization_start.R")
-  
-  for (method_version in methods) {
-    if (repeat_pp == T ) {
-      a <-
-        read.csv2(
-          paste0("methods/",method_version,"/_parameters.csv"))
-      
-      a <- a$source
-      # Prepare corresponding version ----
-      print(paste("Preparing",
-                  a,
-                  "data collection and primary organization..."))
-      source(paste0("R/utils/prepare_",a,"_data.R"))
-      
-    }
-    
-    print(paste0("Calculating ", method_version,"..."))
-    assign("method_version", method_version, envir=globalenv())
-    assign("methods", methods, envir=globalenv())
-    source("R/lib/computations.R")
+  if (plan$repeat_pp) {
+    wlv_prepare_sources(plan)
   }
-  
-  if(prepaper == T) {
-    # Select and save ----
-    source(paste0("R/utils/papers/paper_",papern,"_selection.R"))
+  plan <- wlv_validate_data(plan)
+
+  run_environments <- wlv_with_cluster(plan$workers, function(cluster) {
+    lapply(plan$method_names, function(method) {
+      message(sprintf("Calculating %s...", method))
+      wlv_run_method(plan, method, cluster = cluster)
+    })
+  })
+
+  if (plan$prepaper) {
+    wlv_run_paper(plan, run_environments[[length(run_environments)]])
   }
 
-  #Stops parallel computation
-  source("R/lib/parallelization_stop.R")
-
-  gc()
-  
+  invisible(plan$method_names)
 }
 
-# Function to recalculate just data from sea_variables and sea_countries
-# Can also be used to include new variables
-recalc_wlv <- function (methods = "wiodr13", at_stage = 1,
-                    sea_vars = NULL, papern = 0, prepaper = F) {
-  wlv_assert_dependencies(include_papers = prepaper)
+recalc_wlv <- function(
+    methods = "wiodr13",
+    at_stage = 1,
+    sea_vars = NULL,
+    papern = 0,
+    prepaper = FALSE,
+    workers = getOption("wlv.workers", 1L)) {
+  plan <- wlv_validate_request(
+    methods = methods,
+    papern = papern,
+    prepaper = prepaper,
+    workers = workers,
+    mode = "recalculate",
+    at_stage = at_stage,
+    sea_vars = sea_vars
+  )
+  wlv_assert_dependencies(include_papers = plan$prepaper)
+  plan <- wlv_validate_data(plan)
 
-  #Load functions
-  source("R/lib/functions.R")
-  
-  #Starts parallel computation
-  source("R/lib/parallelization_start.R")
-  
-  assign("methods", methods, envir=globalenv())
-  assign("at_stage", at_stage, envir=globalenv())
-  assign("sea_vars", sea_vars, envir=globalenv())
-  
-  for (method_version in methods) {
+  run_environments <- wlv_with_cluster(plan$workers, function(cluster) {
+    lapply(plan$method_names, function(method) {
+      message(sprintf("Recalculating %s...", method))
+      wlv_run_method(plan, method, cluster = cluster)
+    })
+  })
 
-    print(paste0("Calculating ", method_version,"..."))
-    assign("method_version", method_version, envir=globalenv())
-    source("R/lib/re_computations.R")
+  if (plan$prepaper) {
+    wlv_run_paper(plan, run_environments[[length(run_environments)]])
   }
-  
-  if(prepaper == T) {
-    # Select and save ----
-    
-    source(paste0("papers/paper_",papern,"_selection.R"))
-  }
-  
-  #Stops parallel computation
-  source("R/lib/parallelization_stop.R")
 
-  gc()
-  
+  invisible(plan$method_names)
 }
