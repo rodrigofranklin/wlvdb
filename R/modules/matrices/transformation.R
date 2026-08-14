@@ -31,10 +31,10 @@ print("Finished loading leontief intermediates")
 # Step 2: calculates -(A+D)
 # -(A+D) = (T+C) * <X>^(-1)
 leontief <- (-1) *
-  (((m_io_source[,n,n] %>%
-     newDim(c(a, d, d))) +
-  (m_io[,"k_depreciation",n,n] %>%
-     newDim(c(a, d, d)))) /
+  (wlv_sum_input_flows(
+    m_io_source[, n, n] %>% newDim(c(a, d, d)),
+    m_io[, "k_depreciation", n, n] %>% newDim(c(a, d, d))
+  ) /
   leontief * rep(filter, each = a)) %>%
   clean
 

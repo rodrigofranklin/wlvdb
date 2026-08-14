@@ -53,6 +53,10 @@ get_wlv("wiodr13")
 
 Use `Rscript --vanilla scripts/run_wlv.R --help` for all command-line options,
 or add `--check` to validate the environment and method without calculating.
+To rebuild and validate WIOD13 without immediately starting the calculation,
+use `--method wiodr13 --prepare-only`. The pinned sources, checksums, temporal
+coverage, and compatibility rules are documented in
+[`docs/wiodr13.md`](docs/wiodr13.md).
 
 ### get_wlv function
 

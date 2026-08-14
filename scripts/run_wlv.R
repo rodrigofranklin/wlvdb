@@ -7,6 +7,7 @@ usage <- function() {
       "Options:",
       "  --method NAME       Method to calculate; repeat or use comma-separated names.",
       "  --repeat-pp         Download and prepare source data before calculation.",
+      "  --prepare-only      Download, prepare, and validate source data without calculating.",
       "  --paper NUMBER      Select the paper script number (default: 0).",
       "  --prepaper          Run the selected paper script after calculation.",
       "  --workers NUMBER    Number of workers; 1 is sequential (default: WLV_WORKERS or 1).",
@@ -24,6 +25,7 @@ parse_cli <- function(args) {
   result <- list(
     methods = character(),
     repeat_pp = FALSE,
+    prepare_only = FALSE,
     papern = 0L,
     prepaper = FALSE,
     workers = suppressWarnings(as.numeric(Sys.getenv("WLV_WORKERS", unset = "1"))),
@@ -39,6 +41,9 @@ parse_cli <- function(args) {
       result$help <- TRUE
     } else if (argument == "--repeat-pp") {
       result$repeat_pp <- TRUE
+    } else if (argument == "--prepare-only") {
+      result$repeat_pp <- TRUE
+      result$prepare_only <- TRUE
     } else if (argument %in% c("--prepaper", "--prepare-paper")) {
       result$prepaper <- TRUE
     } else if (argument == "--check") {
@@ -143,6 +148,12 @@ wlv_assert_dependencies(
 
 if (args$check) {
   cat("Environment and arguments are valid.\n")
+  quit(save = "no", status = 0L)
+}
+
+if (args$prepare_only) {
+  prepare_wlv(methods = args$methods)
+  cat("Source data are prepared and valid.\n")
   quit(save = "no", status = 0L)
 }
 

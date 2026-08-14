@@ -19,9 +19,11 @@ for (year in lists$years) {
   # Information obtained from the _sectors.csv file
   rows$s_ek <- sectors$euklems.sector
   rows$k_ek <- sectors$euklems.capital
-  rows$p_ek <- 
-    rep(ISO_3166_1$Alpha_2[match(lists$countries, ISO_3166_1$Alpha_3)],
-        each=nums$sectors)
+  rows$p_ek <-
+    rep(
+      wlv_wiodr13_euklems_country_codes(lists$countries),
+      each = nums$sectors
+    )
   rows$pwiod_sek <- paste0(rows$country, rows$s_ek)
   
   # Load data ----
@@ -73,10 +75,23 @@ for (year in lists$years) {
   
   # then distributes the capital stock by the proportions of 
   # the distributed gfcf
-  k_composition <- prop.table(k_composition, margin = 2) * 
-    matrix(sea_sectors[year,"capital_stock.s.us",,], 
-           nrow=nums$input, ncol=nums$input,
-           byrow= TRUE)
+  k_composition <- wlv_distribute_capital_stock(
+    k_composition,
+    as.numeric(sea_sectors[year, "capital_stock.s.us", , ])
+  )
+  unallocated_columns <- attr(k_composition, "wlv.unallocated_columns")
+  if (length(unallocated_columns)) {
+    message(sprintf(
+      paste0(
+        "Capital stock has no WIOD GFCF allocation weights for %s sector(s) ",
+        "in %s; their composition and depreciation are set to zero: %s"
+      ),
+      length(unallocated_columns),
+      year,
+      paste(utils::head(lists$input[unallocated_columns], 5L), collapse = ", ")
+    ))
+  }
+  attr(k_composition, "wlv.unallocated_columns") <- NULL
   
   m_io[year,"k_composition",
        1:nums$input,1:nums$input] <- 

@@ -7,25 +7,71 @@
 
 # download euklems ----
 
-# capital stocks data
-options(timeout = max(300, getOption("timeout")))
-if (!file.exists("source_data/euklems/Statistical_Capital.rds")) {
-  download.file(
-    "http://euklems.eu/bulk/Statistical_Capital.rds",
-    "source_data/euklems/Statistical_Capital.rds")
+if (!exists("wlv_download_verified", mode = "function", inherits = FALSE)) {
+  sys.source("R/utils/preparation_downloads.R", envir = environment())
 }
 
-# national accounts (only to use value added information, needed for
-# disaggregation purposes)
-if (!file.exists("source_data/euklems/Statistical_National-Accounts.rds")) {
-  download.file(
-    "http://euklems.eu/bulk/Statistical_National-Accounts.rds",
-    "source_data/euklems/Statistical_National-Accounts.rds")
+dir.create("source_data", recursive = TRUE, showWarnings = FALSE)
+dir.create("source_data/euklems", recursive = TRUE, showWarnings = FALSE)
+if (!dir.exists("source_data/euklems")) {
+  stop("Cannot create EU KLEMS source-data directory.", call. = FALSE)
 }
+
+euklems_download_manifest <- list(
+  capital = list(
+    url = "https://euklems.eu/bulk/Statistical_Capital.rds",
+    destination = "source_data/euklems/Statistical_Capital.rds",
+    size = 129637707,
+    hash_algorithm = "sha256",
+    hash = "77bf752a4c79c0e324e6be31164e8f27fdc100c89b08f68c3a227da7c7ab3b44"
+  ),
+  national_accounts = list(
+    url = "https://euklems.eu/bulk/Statistical_National-Accounts.rds",
+    destination = "source_data/euklems/Statistical_National-Accounts.rds",
+    size = 44200266,
+    hash_algorithm = "sha256",
+    hash = "c6f7b65eb263839ea824fe223a8cf5fc13fad444db5b7a857b6aa01b29d0a4f2"
+  )
+)
+
+capital_manifest <- euklems_download_manifest$capital
+wlv_download_verified(
+  url = capital_manifest$url,
+  destination = capital_manifest$destination,
+  expected_size = capital_manifest$size,
+  expected_hash = capital_manifest$hash,
+  hash_algorithm = capital_manifest$hash_algorithm
+)
+
+national_accounts_manifest <- euklems_download_manifest$national_accounts
+wlv_download_verified(
+  url = national_accounts_manifest$url,
+  destination = national_accounts_manifest$destination,
+  expected_size = national_accounts_manifest$size,
+  expected_hash = national_accounts_manifest$hash,
+  hash_algorithm = national_accounts_manifest$hash_algorithm
+)
 
 # prepare data ----
-euklems <- readRDS("source_data/euklems/Statistical_Capital.rds")
-euklems.na <- readRDS("source_data/euklems/Statistical_National-Accounts.rds")
+euklems <- readRDS(capital_manifest$destination)
+euklems.na <- readRDS(national_accounts_manifest$destination)
+
+wlv_assert_euklems_table <- function(value, label) {
+  required_columns <- c("country", "code", "var", "year", "value")
+  if (!is.data.frame(value) || !nrow(value)) {
+    stop(sprintf("%s is not a non-empty data frame.", label), call. = FALSE)
+  }
+  missing <- setdiff(required_columns, names(value))
+  if (length(missing)) {
+    stop(
+      sprintf("%s lacks columns: %s", label, paste(missing, collapse = ", ")),
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+wlv_assert_euklems_table(euklems, "EU KLEMS capital data")
+wlv_assert_euklems_table(euklems.na, "EU KLEMS national-accounts data")
 
 # depreciation rate: obtained in EUKLEMS documentation
 dep.rates <- 
@@ -42,8 +88,8 @@ for (year in as.character(1995:2010)) {
   
   # assign variables
   lists <- NULL
-  lists$countries <- unique(euklems$country) %>% unlist() %>% as.character()
-  lists$sectors <- unique(euklems$code) %>% unlist() %>% as.character()
+  lists$countries <- as.character(unlist(unique(euklems$country)))
+  lists$sectors <- as.character(unlist(unique(euklems$code)))
   lists$ek_variables <- c("K_GFCF",
                           "K_IT",
                           "K_CT",
@@ -61,31 +107,31 @@ for (year in as.character(1995:2010)) {
   nums$sectors <- length(lists$sectors)
   nums$ek_variables <-length(lists$ek_variables)
   
-  ek.k <- data.frame(country = 
-                       (lists$countries %>%
-                          rep(each = nums$sectors)))
+  ek.k <- data.frame(country = rep(lists$countries, each = nums$sectors))
   ek.k$sector <- lists$sectors
   ek.va = ek.dep.rate <- ek.k
   
   # select data ----
   # extract Value Added and depreciation rate information
   filter.na <- (euklems.na$var=="VA") & (euklems.na$year==as.numeric(year))
-  ek.va$va <- left_join(
+  ek.va$va <- dplyr::left_join(
     ek.va,
     euklems.na[filter.na,],
     by = c("country", "sector" = "code")
   )$value
   
   ek.dep.rate <- 
-    left_join(ek.dep.rate,
-              dep.rates, 
-              by = c("sector" = "code"))
+    dplyr::left_join(
+      ek.dep.rate,
+      dep.rates,
+      by = c("sector" = "code")
+    )
   
   # select capital information from source
   for (x in lists$ek_variables) {
-    filter.ek <- euklems$var==x & euklems$year==year
+    filter.ek <- euklems$var == x & euklems$year == as.numeric(year)
     ek.k$temp <- 
-      left_join(
+      dplyr::left_join(
         ek.k,
         euklems[filter.ek,],
         by = c("country", "sector" = "code")
@@ -300,8 +346,16 @@ for (year in as.character(1995:2010)) {
   ek.k <- rbind(ek.k, ek.k.md)
   ek.dep.rate <- rbind(ek.dep.rate, ek.dep.rate.md)
   
-  write_fst(ek.k, paste0("source_data/euklems/ekk_",year,".fst"))
-  write_fst(ek.dep.rate, paste0("source_data/euklems/ekdeprate_",year,".fst"))
+  wlv_write_fst_atomic(
+    ek.k,
+    paste0("source_data/euklems/ekk_", year, ".fst"),
+    writer = fst::write_fst
+  )
+  wlv_write_fst_atomic(
+    ek.dep.rate,
+    paste0("source_data/euklems/ekdeprate_", year, ".fst"),
+    writer = fst::write_fst
+  )
 }
 
 # clear variables and data ----
@@ -313,6 +367,7 @@ for (year in as.character(1995:2010)) {
 rm(agg, dep.rates, ek.dep.rate, ek.dep.rate.md, ek.dep.temp, ek.k, ek.k.md,
    ek.va, ek.va.prop, ek.va.prop2, ek.temp, euklems, euklems.na, lists, nums,
    countries_to_exclude, filter1, filter2, sectors, totals, x, filter.na, 
-   filter.ek)
+   filter.ek, capital_manifest, national_accounts_manifest,
+   euklems_download_manifest, wlv_assert_euklems_table)
 
 gc()

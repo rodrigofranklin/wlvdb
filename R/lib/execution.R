@@ -305,7 +305,7 @@ wlv_list_io_files <- function(path) {
   sort(list.files(path, pattern = "^m_io.*\\.fst$", full.names = TRUE))
 }
 
-wlv_io_period_key <- function(path) {
+wlv_io_years <- function(path) {
   metadata_path <- paste0(path, ".meta")
   metadata <- tryCatch(
     readRDS(metadata_path),
@@ -323,16 +323,56 @@ wlv_io_period_key <- function(path) {
       call. = FALSE
     )
   }
-  paste(as.character(years), collapse = "\034")
+  as.character(years)
 }
 
-wlv_validate_data <- function(plan) {
+wlv_io_period_key <- function(path) {
+  paste(wlv_io_years(path), collapse = "\034")
+}
+
+wlv_wiodr13_euklems_files <- function(root, source_io, matrix_scripts) {
+  depreciation_offsets <- c(
+    "wiodr13/euklems.R" = 1L,
+    "wiodr13/euklems-reduction_problem.R" = 0L
+  )
+  depreciation_offsets <- unname(
+    depreciation_offsets[intersect(names(depreciation_offsets), matrix_scripts)]
+  )
+  if (!length(depreciation_offsets)) {
+    return(character())
+  }
+
+  years <- sort(unique(unlist(lapply(source_io, wlv_io_years), use.names = FALSE)))
+  numeric_years <- suppressWarnings(as.integer(years))
+  if (anyNA(numeric_years) || any(as.character(numeric_years) != years)) {
+    stop(
+      sprintf(
+        "WIOD13 matrix metadata must use integer years; found: %s",
+        paste(years, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+
+  depreciation_years <- sort(unique(unlist(
+    lapply(depreciation_offsets, function(offset) numeric_years + offset),
+    use.names = FALSE
+  )))
+  euklems_dir <- file.path(root, "source_data", "euklems")
+  c(
+    file.path(euklems_dir, sprintf("ekk_%s.fst", years)),
+    file.path(euklems_dir, sprintf("ekdeprate_%s.fst", depreciation_years))
+  )
+}
+
+wlv_validate_data <- function(plan, wiodr13_validator = NULL) {
   if (!inherits(plan, "wlv_run_plan")) {
     stop("`plan` must be produced by wlv_validate_request().", call. = FALSE)
   }
 
   data_plan <- vector("list", nrow(plan$methods))
   names(data_plan) <- plan$method_names
+  wiodr13_validation <- NULL
 
   for (index in seq_len(nrow(plan$methods))) {
     method <- plan$methods[index, ]
@@ -356,6 +396,86 @@ wlv_validate_data <- function(plan) {
         paste0(source_io, ".meta"),
         sprintf("source matrix metadata for method `%s`", method$method)
       )
+      if (identical(method$source, "wiodr13")) {
+        if (is.null(wiodr13_validation)) {
+          if (is.null(wiodr13_validator)) {
+            wiodr13_validator <- get0(
+              "wlv_validate_wiodr13_prepared",
+              mode = "function",
+              inherits = TRUE
+            )
+          }
+          if (!is.function(wiodr13_validator)) {
+            stop("The WIOD13 post-preparation validator is not loaded.", call. = FALSE)
+          }
+          wiodr13_validation <- wiodr13_validator(method$source_dir)
+        }
+
+        method_sectors <- utils::read.csv2(
+          method$sectors_file,
+          stringsAsFactors = FALSE
+        )
+        if (!"sector.source" %in% names(method_sectors)) {
+          stop(
+            sprintf("WIOD13 method `%s` does not declare `sector.source`.", method$method),
+            call. = FALSE
+          )
+        }
+        method_sector_labels <- as.character(method_sectors$sector.source)
+        if (!identical(wiodr13_validation$sectors, method_sector_labels)) {
+          stop(
+            sprintf(
+              paste0(
+                "WIOD13 source sectors do not match method `%s`; ",
+                "source: %s; method: %s."
+              ),
+              method$method,
+              paste(wiodr13_validation$sectors, collapse = ", "),
+              paste(method_sector_labels, collapse = ", ")
+            ),
+            call. = FALSE
+          )
+        }
+      }
+      matrices <- plan$configuration[[method$method]]$matrices$computation
+      euklems_files <- if (plan$mode == "calculate") {
+        wlv_wiodr13_euklems_files(plan$root, source_io, matrices)
+      } else {
+        character()
+      }
+      if (length(euklems_files)) {
+        wlv_require_files(
+          euklems_files,
+          sprintf("WIOD13 EUKLEMS data for method `%s`", method$method)
+        )
+        if (identical(method$source, "wiodr13")) {
+          required_sector_columns <- c("euklems.capital", "euklems.sector")
+          missing_sector_columns <- setdiff(required_sector_columns, names(method_sectors))
+          if (length(missing_sector_columns)) {
+            stop(
+              sprintf(
+                "WIOD13 method `%s` lacks EU KLEMS sector columns: %s.",
+                method$method,
+                paste(missing_sector_columns, collapse = ", ")
+              ),
+              call. = FALSE
+            )
+          }
+          euklems_validator <- get0(
+            "wlv_validate_wiodr13_euklems",
+            mode = "function",
+            inherits = TRUE
+          )
+          if (!is.function(euklems_validator)) {
+            stop("The WIOD13 EU KLEMS validator is not loaded.", call. = FALSE)
+          }
+          euklems_validator(
+            euklems_files,
+            required_variables = method_sectors$euklems.capital,
+            required_sectors = method_sectors$euklems.sector
+          )
+        }
+      }
       method_data$source_io <- source_io
     }
 

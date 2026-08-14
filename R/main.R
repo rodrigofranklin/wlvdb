@@ -5,9 +5,24 @@
 ###############################################################################
 
 source("R/lib/dependencies.R", local = TRUE)
+source("R/lib/wiodr13_validation.R", local = TRUE)
 source("R/lib/execution.R", local = TRUE)
 
 method_list <- basename(list.dirs("methods", recursive = FALSE, full.names = TRUE))
+
+prepare_wlv <- function(methods = "wiodr13") {
+  plan <- wlv_validate_request(
+    methods = methods,
+    repeat_pp = TRUE,
+    workers = 1L,
+    mode = "calculate"
+  )
+  wlv_assert_dependencies(include_preparation = TRUE)
+  wlv_prepare_sources(plan)
+  plan <- wlv_validate_data(plan)
+
+  invisible(plan$method_names)
+}
 
 get_wlv <- function(
     methods = "wiodr13",

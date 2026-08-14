@@ -3,7 +3,7 @@ wlv_dependency_groups <- list(
     "abind", "countrycode", "dplyr", "fst", "lubridate", "magrittr",
     "readr", "rvest", "tidyr", "xml2"
   ),
-  preparation = c("R.matlab", "readODS", "readxl", "WDI"),
+  preparation = c("openssl", "R.matlab", "readODS", "readxl", "WDI"),
   papers = c(
     "forcats", "ggplot2", "ggthemes", "hrbrthemes", "MLmetrics", "REdaS",
     "scales", "tibble", "writexl"
