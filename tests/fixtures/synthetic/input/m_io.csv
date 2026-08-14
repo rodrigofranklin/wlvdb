@@ -1,0 +1,17 @@
+year;input;output;value_millions
+2000;A.S;A.S;2
+2000;A.S;B.S;1
+2000;A.S;A.HH;5
+2000;A.S;B.HH;2
+2000;B.S;A.S;1
+2000;B.S;B.S;3
+2000;B.S;A.HH;2
+2000;B.S;B.HH;6
+2001;A.S;A.S;3
+2001;A.S;B.S;1
+2001;A.S;A.HH;6
+2001;A.S;B.HH;2
+2001;B.S;A.S;2
+2001;B.S;B.S;2
+2001;B.S;A.HH;3
+2001;B.S;B.HH;7

@@ -9,6 +9,42 @@ nums$m_io_variables <- length(lists$m_io_variables)
 nums$m_countries_variables <- length(lists$m_countries_variables)
 nums$sea_variables <- length(lists$sea_variables)
 
+# Reuse the indicator metadata written by the original calculation. If an old
+# result predates that file, create the same structure used by a full run.
+meta_indicators_path <- paste0("results/", method_version, "/meta_indicators.RDS")
+if (file.exists(meta_indicators_path)) {
+  meta_indicators <- readRDS(meta_indicators_path)
+} else {
+  meta_indicators <- data.frame(
+    code = lists$sea_variables,
+    name = NA_character_,
+    description = NA_character_,
+    observation = NA_character_,
+    group = NA_character_,
+    type = NA_character_,
+    reverted = NA,
+    stringsAsFactors = FALSE,
+    row.names = lists$sea_variables
+  )
+}
+
+missing_indicators <- setdiff(lists$sea_variables, meta_indicators$code)
+if (length(missing_indicators)) {
+  additions <- data.frame(
+    code = missing_indicators,
+    name = NA_character_,
+    description = NA_character_,
+    observation = NA_character_,
+    group = NA_character_,
+    type = NA_character_,
+    reverted = NA,
+    stringsAsFactors = FALSE,
+    row.names = missing_indicators
+  )
+  meta_indicators <- rbind(meta_indicators, additions)
+}
+row.names(meta_indicators) <- meta_indicators$code
+
 # Recriates results variables in case of new variables
 # sea_sectors -> vectors of results per sector
 sea_sectors <- array(NA,
@@ -52,3 +88,7 @@ rm(sea_sectors_temp)
 if (exists("sea_countries_temp", inherits = FALSE)) {
   rm(sea_countries_temp)
 }
+rm(list = intersect(
+  c("meta_indicators_path", "missing_indicators", "additions"),
+  ls(envir = environment(), all.names = TRUE)
+), envir = environment())

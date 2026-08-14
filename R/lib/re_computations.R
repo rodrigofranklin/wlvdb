@@ -89,4 +89,7 @@ print("Writing...")
 write_fst_array(sea_sectors,paste0("results/",method_version,"/sea_sectors.fst"))
 write_fst_array(sea_countries,paste0("results/",method_version,"/sea_countries.fst"))
 
-rm(basket_zero, basket_value_zero)
+rm(list = intersect(
+  c("basket_zero", "basket_value_zero"),
+  ls(envir = environment(), all.names = TRUE)
+), envir = environment())

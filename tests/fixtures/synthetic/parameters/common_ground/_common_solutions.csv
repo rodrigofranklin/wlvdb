@@ -1,0 +1,3 @@
+names;sector_solution;country_solution;stage;order
+value.m.mv;common/value.m.mv.R;mean;4;1
+gross_output.s.mv;common/gross_output.s.mv.R;sum;4;2

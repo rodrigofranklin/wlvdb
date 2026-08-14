@@ -13,7 +13,8 @@ if (stage == 1) { # Stage 0 is computed only before computing stage 1 variables
   # Stage 0 variables, adjusting scale as specified in parameters
   
   # Copy variables from sea_source to sea_sectors (indicated in parameters)
-  for (loop in grep(".R", sea_variables$sector_solution, invert = TRUE)) {
+  raw_solutions <- !grepl("\\.[Rr]$", sea_variables$sector_solution)
+  for (loop in which(raw_solutions)) {
     temp <- unlist(strsplit(sea_variables$sector_solution[loop], "[*]"))
     sea_sectors[, sea_variables$names[loop], lists$sectors, lists$countries] <- 
       sea_source[, temp[1], lists$sectors, lists$countries]
@@ -28,7 +29,8 @@ if (stage == 1) { # Stage 0 is computed only before computing stage 1 variables
       as.numeric(temp[2])
   }
   
-  rm(temp)
+  rm(list = intersect("temp", ls(envir = environment(), all.names = TRUE)))
+  rm(raw_solutions)
 }
 
 # Computing stages 1 to 5, as define by "stage" variable
@@ -40,4 +42,4 @@ for (loop in sea_variables$sector_solution[which(sea_variables$stage==stage)]) {
 }
 
 print(paste("Finished stage",stage))
-rm(loop)
+rm(list = intersect("loop", ls(envir = environment(), all.names = TRUE)))

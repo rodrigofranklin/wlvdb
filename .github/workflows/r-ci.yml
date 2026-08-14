@@ -55,8 +55,13 @@ jobs:
           invisible(lapply(files, parse))
           source("R/main.R")
           stopifnot(is.function(get_wlv), is.function(recalc_wlv))
-      - name: Run tests
+      - name: Run unit and synthetic integration tests
         shell: Rscript {0}
         run: |
           source("renv/activate.R")
-          testthat::test_dir("tests/testthat", reporter = "summary")
+          testthat::test_dir(
+            "tests/testthat",
+            reporter = "summary",
+            stop_on_failure = TRUE,
+            stop_on_warning = TRUE
+          )

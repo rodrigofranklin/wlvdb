@@ -118,4 +118,7 @@ write_fst_array(sea_countries,paste0("results/",method_version,"/sea_countries.f
 
 source("R/lib/write_labels.R")
 
-rm(basket_zero, basket_value_zero)
+rm(list = intersect(
+  c("basket_zero", "basket_value_zero"),
+  ls(envir = environment(), all.names = TRUE)
+), envir = environment())
