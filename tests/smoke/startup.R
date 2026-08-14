@@ -50,6 +50,8 @@ sandbox <- tempfile("wlvdb-startup-")
 dir.create(sandbox)
 on.exit(unlink(sandbox, recursive = TRUE, force = TRUE), add = TRUE)
 invisible(file.copy(profile_path, file.path(sandbox, ".Rprofile")))
+child_script <- file.path(sandbox, "child.R")
+writeLines("cat('Real startup passed.\\n')", child_script)
 
 snapshot_files <- function(path) {
   files <- list.files(path, all.files = TRUE, recursive = TRUE,
@@ -80,7 +82,7 @@ rscript <- file.path(R.home("bin"), if (.Platform$OS.type == "windows") "Rscript
 child_output <- system2(
   rscript,
   c("--no-environ", "--no-site-file", "--no-restore", "--no-save",
-    "-e", shQuote("cat('Real startup passed.\\n')")),
+    shQuote(child_script)),
   stdout = TRUE,
   stderr = TRUE
 )
@@ -93,6 +95,16 @@ if (is.na(old_profile)) {
 }
 sandbox_after <- snapshot_files(sandbox)
 
-stopifnot(child_status == 0L, identical(sandbox_before, sandbox_after))
+if (child_status != 0L) {
+  stop(
+    paste(
+      "The isolated R startup subprocess failed:",
+      paste(child_output, collapse = "\n"),
+      sep = "\n"
+    ),
+    call. = FALSE
+  )
+}
+stopifnot(identical(sandbox_before, sandbox_after))
 
 cat("Safe startup smoke test passed.\n")
