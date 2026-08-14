@@ -1,4 +1,8 @@
 # Capital stock - constant USD prices
+if (!exists("wlv_wiodr16_sanitize_capital_stock", mode = "function")) {
+  source("R/lib/wiodr16_allocation.R")
+}
+
 code <- "capital_stock.s.cu"
 
 meta_indicators[code,"name"] <- "Capital stock (constant USD)"
@@ -19,3 +23,17 @@ sea_sectors[,code,,] <-
      rep(times = nums$years) %>% 
      newDim(c(nums$sectors, nums$countries, nums$years)) %>% 
      aperm(c(3,1,2)))
+
+for (year in lists$years) {
+  capital_stock <- as.numeric(sea_sectors[year, code, , ])
+  capital_stock <- wlv_wiodr16_clean_structural_nonfinite_stock(
+    capital_stock,
+    lists$input
+  )
+  sea_sectors[year, code, , ] <- wlv_wiodr16_sanitize_capital_stock(
+    capital_stock,
+    year,
+    lists$input
+  )
+}
+rm(capital_stock)

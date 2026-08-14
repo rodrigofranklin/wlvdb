@@ -6,6 +6,7 @@
 
 source("R/lib/dependencies.R", local = TRUE)
 source("R/lib/wiodr13_validation.R", local = TRUE)
+source("R/lib/wiodr16_validation.R", local = TRUE)
 source("R/lib/execution.R", local = TRUE)
 
 method_list <- basename(list.dirs("methods", recursive = FALSE, full.names = TRUE))
