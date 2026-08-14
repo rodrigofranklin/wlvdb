@@ -24,25 +24,28 @@ También incluye estimaciones preliminares sobre:
   
  * Trabajo en progreso (EORA sujeto a restricciones) 
  
- ## Inicio Automático y función principal 
- 
- Cuando se abre el proyecto, automáticamente: 
- 
- - Detecta qué paquetes no están instalados, y los instala en silencio;
- - Realiza la secuencia de comandos R / main.R, que carga la función ** get_wlv **
- - Reproduce un mensaje de bienvenida 
+## Inicio seguro y función principal
+
+Abrir el proyecto no instala paquetes, no actualiza el checkout Git, no
+restaura un espacio de trabajo guardado y no inicia cálculos. Restaure las
+dependencias explícitamente y cargue las funciones principales desde la raíz
+del repositorio:
+
+```r
+source("R/main.R")
+get_wlv("wiodr13")
+```
  
  ### Función get_wlv  
  
 La función ** get_wlv **  es una función que ejecuta todos los cálculos y genera archivos con las estimaciones en la carpeta de resultados con todas las variables y matrices, sectoriales (M_IO, y m_countries) , y cuentas socioeconómicas del país y sectoriales (sea_Countries y sea_Sectors) correspondientes a las estimaciones no ortodoxas. 
 
-Por ejemplo, para calcular el método estándar actual con los datos de WIOD16, solo hace falta que se ejecute "" WIOD16
-
-ˋget_wlv("WIOD16")
+Por ejemplo, para calcular el método estándar actual con WIOD13, ejecute
+`get_wlv("wiodr13")` después de cargar `R/main.R`.
 
 La función acepta los siguientes argumentos: 
 
-* methods: una cadena o un vector de carácteres como ˋc ("WIOD13","WIOD16")ˋ  especificando los métodos a calcular o recalcular. Por defecto, "WIOD13" 
+* methods: una cadena o un vector de caracteres como `c("wiodr13", "wiodr16")`, especificando los métodos a calcular o recalcular. Por defecto, `"wiodr13"`
 * repeat_pp : Verdadero / Falso para indicar si se debe ejecutar la preparación completa de descarga y datos de origen. Por defecto, falso .
 * papern : referencia al número del paper sobre el que computar  tablas y / o gráficos que comparen diferentes métodos, indicadores transversales y longitudinales, es decir, cualquier análisis personalizado que se incluye en análisis identificado por ese número. 
 * prepaper: Verdadero / Falso: si se debe ejecutar, de hecho, la preparación de dicho análisis personalizado (realizando la llamada correspondiente en el script de la carpeta *papers*) 

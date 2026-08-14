@@ -30,24 +30,27 @@ Four data sources already included:
 
  *work in progress
 
-## Autostart and main function
+## Safe startup and main function
 
-When the project is opened, it automatically:
+Opening the project does not install packages, update the Git checkout, load a
+saved workspace, or start a calculation. Restore the required dependencies
+explicitly, then load the main functions from the repository root:
 
-- detects which packages are not installed, installs them silently;
-- sources R/main.R script, which loads the function **get_wlv**
-- Provides a Welcome message
+```r
+source("R/main.R")
+get_wlv("wiodr13")
+```
 
 ### get_wlv function
 
 get_wlv is a function that wraps all calculations and outputs files to the results folder with all variables, and arrays with Country and Sector Socio-Economic Accounts(SEAs).
 
 
-For example, to calculate the current standard procedure with WIOD16 data, one only needs to call get_wlv("WIOD13").
+For example, to calculate the current standard procedure with WIOD13 data, call `get_wlv("wiodr13")` after loading `R/main.R`.
 
 The function accepts the following arguments:
 
-* methods - a string or a character vector like c("WIOD13","WIOD16") for the methods to be calculated. Defaults to "WIOD13"
+* methods - a string or a character vector like `c("wiodr13", "wiodr16")` for the methods to be calculated. Defaults to `"wiodr13"`
 * repeat_pp - boolean to indicate if full download and preparation of source data should be performed . Defaults to FALSE
 * papern - number of the paper to eventually trigger further tables and/or graphs that compare different methods, cross-sectional and longitudinal indicators, any custom analysis to be included in the paper referred to by the same number.
 * prepaper - wether to actually trigger the preparation of such custom analysis (calls corresponding script from papers/ folder)

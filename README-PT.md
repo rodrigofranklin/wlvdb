@@ -22,25 +22,27 @@ Também inclui estimativas preliminares em:
 
  * Trabalho em andamento 
 
-## Início automático e função principal 
+## Inicialização segura e função principal
 
-Quando o projeto é aberto, ele automaticamente: 
+Abrir o projeto não instala pacotes, não atualiza o checkout Git, não restaura
+um workspace salvo e não inicia cálculos. Restaure as dependências
+explicitamente e, na raiz do repositório, carregue as funções principais:
 
-- detecta quais pacotes não estão instalados, e os instala silenciosamente; 
-- Executa o script R/main.r, que carrega a função  ** get_wlv ** 
-- fornece uma mensagem de boas-vindas 
+```r
+source("R/main.R")
+get_wlv("wiodr13")
+```
 
 ### Função get_wlv 
 
 **get_wlv** é uma função que executa todos os cálculos e grava arquivos para a pasta de resultados com todas as variáveis e matrizes com país e contas socioeconômicas setoriais (sea_countries e sea_sectors). 
 
-Por exemplo, para calcular o método padrão atual com dados do WIOD16, só é necessário executar
-
-ˋget_wlv("WIOD16")ˋ 
+Por exemplo, para calcular o método padrão atual com dados do WIOD13, execute
+`get_wlv("wiodr13")` depois de carregar `R/main.R`.
 
 A função aceita os seguintes argumentos: 
 
-* methods - uma string ou um vetor de caracteres como ˋc("WIOD13", "WIOD16")ˋ   para os métodos a serem calculados. Por padrão  "WIOD13" 
+* methods - uma string ou um vetor de caracteres como `c("wiodr13", "wiodr16")` para os métodos a serem calculados. Por padrão, `"wiodr13"`
 * repeat_pp - Verdadeiro/Falso para indicar se o download completo e a preparação de dados de origem devem ser executados. Por padrão, falso 
 * paper - número do papel para complementarmente computar tabelas e / ou gráficos que comparem diferentes métodos, indicadores transversais e longitudinais, ou seja, qualquer análise personalizada a ser incluída no trabalho referido pelo mesmo número. 
 * prepaper - Verdadeiro/Falso - se desencadear, de fato, a preparação de tal análise personalizada (realizando a chamada correspondente nos script da pasta *papers*) 
