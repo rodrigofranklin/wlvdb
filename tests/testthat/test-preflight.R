@@ -1,5 +1,9 @@
 preflight_environment <- new.env(parent = baseenv())
 sys.source(
+  file.path(wlv_test_root, "R", "lib", "catalog.R"),
+  envir = preflight_environment
+)
+sys.source(
   file.path(wlv_test_root, "R", "lib", "wiodr13_validation.R"),
   envir = preflight_environment
 )
@@ -31,11 +35,15 @@ wlv_touch_with_metadata <- function(path, years = "2000") {
   invisible(path)
 }
 
-wlv_make_preflight_fixture <- function() {
+wlv_make_preflight_fixture <- function(
+    method_status = "experimental",
+    can_calculate = TRUE,
+    can_recalculate = TRUE) {
   root <- tempfile("wlv-preflight-")
   method <- "demo"
   source <- "fixture_source"
 
+  dir.create(file.path(root, "catalog"), recursive = TRUE)
   dir.create(file.path(root, "methods", method), recursive = TRUE)
   dir.create(file.path(root, "R", "utils", "papers"), recursive = TRUE)
   dir.create(file.path(root, "parameters", source), recursive = TRUE)
@@ -66,6 +74,62 @@ wlv_make_preflight_fixture <- function() {
     "invisible(NULL)",
     file.path(root, "R", "utils", "papers", "paper_0_selection.R")
   )
+
+  sources_catalog <- data.frame(
+    source = source,
+    status = "experimental",
+    year_start = "2000",
+    year_end = "2000",
+    parameter_set = source,
+    data_dir = paste("source_data", source, sep = "/"),
+    can_prepare = "TRUE",
+    preparer = paste("R", "utils", paste0("prepare_", source, "_data.R"), sep = "/"),
+    validator_script = "",
+    validator_function = "",
+    artifact_profile = "fixture_core",
+    documentation = "",
+    limitations = "Synthetic source used only by preflight tests.",
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+  methods_catalog <- data.frame(
+    method = method,
+    source = source,
+    code = "demo",
+    description = "Fixture method",
+    status = method_status,
+    can_calculate = if (can_calculate) "TRUE" else "FALSE",
+    can_recalculate = if (can_recalculate) "TRUE" else "FALSE",
+    test = "",
+    documentation = "",
+    limitations = "Synthetic method used only by preflight tests.",
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+  artifacts_catalog <- data.frame(
+    profile = rep("fixture_core", 4L),
+    artifact = c("m_io*.fst", "sea.fst", "countries.csv", "demand.csv"),
+    kind = c("fst_array_glob", "fst_array", "csv", "csv"),
+    sidecar = c("TRUE", "TRUE", "FALSE", "FALSE"),
+    operations = rep("prepare|calculate|recalculate", 4L),
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+  catalogs <- list(
+    sources = sources_catalog,
+    methods = methods_catalog,
+    `artifact-profiles` = artifacts_catalog
+  )
+  for (name in names(catalogs)) {
+    utils::write.table(
+      catalogs[[name]],
+      file.path(root, "catalog", paste0(name, ".csv")),
+      sep = ";",
+      row.names = FALSE,
+      col.names = TRUE,
+      quote = FALSE
+    )
+  }
 
   writeLines(
     c("names;computation;order", "fixture_assumption;fixture-assumption.R;1"),
@@ -116,15 +180,21 @@ wlv_make_preflight_fixture <- function() {
     method = method,
     source = source,
     source_path = source_path,
-    results_path = results_path
+    results_path = results_path,
+    methods_catalog = file.path(root, "catalog", "methods.csv")
   )
 }
 
-wlv_fixture_request <- function(fixture, mode = "calculate", ...) {
+wlv_fixture_request <- function(
+    fixture,
+    mode = "calculate",
+    allow_experimental = TRUE,
+    ...) {
   preflight_environment$wlv_validate_request(
     methods = fixture$method,
     mode = mode,
     root = fixture$root,
+    allow_experimental = allow_experimental,
     ...
   )
 }
@@ -142,6 +212,151 @@ test_that("request validation rejects unknown methods and traversal", {
       "[Mm]ethod"
     )
   }
+})
+
+test_that("experimental methods require an explicit opt-in", {
+  fixture <- wlv_make_preflight_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+
+  expect_error(
+    wlv_fixture_request(fixture, allow_experimental = FALSE),
+    "experimental",
+    fixed = TRUE
+  )
+  expect_s3_class(
+    wlv_fixture_request(fixture, allow_experimental = TRUE),
+    "wlv_run_plan"
+  )
+})
+
+test_that("disabled methods remain blocked with experimental opt-in", {
+  fixture <- wlv_make_preflight_fixture(
+    method_status = "disabled",
+    can_calculate = FALSE,
+    can_recalculate = FALSE
+  )
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+
+  for (allow_experimental in c(FALSE, TRUE)) {
+    expect_error(
+      wlv_fixture_request(
+        fixture,
+        allow_experimental = allow_experimental
+      ),
+      "disabled",
+      fixed = TRUE
+    )
+  }
+})
+
+test_that("disabled sources remain blocked with experimental opt-in", {
+  fixture <- wlv_make_preflight_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+
+  sources_path <- file.path(fixture$root, "catalog", "sources.csv")
+  sources <- utils::read.csv2(
+    sources_path,
+    stringsAsFactors = FALSE,
+    colClasses = "character"
+  )
+  sources$status <- "disabled"
+  sources$can_prepare <- "FALSE"
+  sources$preparer <- ""
+  utils::write.table(
+    sources,
+    sources_path,
+    sep = ";",
+    row.names = FALSE,
+    col.names = TRUE,
+    quote = FALSE
+  )
+
+  expect_error(
+    wlv_fixture_request(fixture, allow_experimental = TRUE),
+    "Source `fixture_source` used by method `demo` is disabled.",
+    fixed = TRUE
+  )
+})
+
+test_that("catalog capabilities are enforced before method validation", {
+  fixture <- wlv_make_preflight_fixture(can_calculate = FALSE)
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+
+  expect_error(
+    wlv_fixture_request(fixture),
+    "does not support operation(s): calculate",
+    fixed = TRUE
+  )
+  expect_s3_class(
+    wlv_fixture_request(
+      fixture,
+      repeat_pp = TRUE,
+      requested_operations = "prepare"
+    ),
+    "wlv_run_plan"
+  )
+})
+
+test_that("a blocked batch aborts before running any preparer", {
+  fixture <- wlv_make_preflight_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+
+  blocked <- "blocked"
+  dir.create(file.path(fixture$root, "methods", blocked))
+  file.copy(
+    file.path(fixture$root, "methods", fixture$method, c("_parameters.csv", "_sectors.csv")),
+    file.path(fixture$root, "methods", blocked),
+    overwrite = TRUE
+  )
+  writeLines(
+    c(
+      "source;code;name;description",
+      paste(fixture$source, "BLOCKED", "Fixture method", "", sep = ";")
+    ),
+    file.path(fixture$root, "methods", blocked, "_parameters.csv")
+  )
+  methods <- utils::read.csv2(
+    fixture$methods_catalog,
+    stringsAsFactors = FALSE,
+    colClasses = "character"
+  )
+  blocked_method <- methods[1L, , drop = FALSE]
+  blocked_method$method <- blocked
+  blocked_method$code <- "BLOCKED"
+  blocked_method$status <- "disabled"
+  blocked_method$can_calculate <- "FALSE"
+  blocked_method$can_recalculate <- "FALSE"
+  blocked_method$limitations <- "Deliberately blocked by the integration test."
+  utils::write.table(
+    rbind(methods, blocked_method),
+    fixture$methods_catalog,
+    sep = ";",
+    row.names = FALSE,
+    col.names = TRUE,
+    quote = FALSE
+  )
+
+  marker <- file.path(fixture$root, "preparer-ran")
+  writeLines(
+    "file.create(file.path(getwd(), 'preparer-ran'))",
+    file.path(
+      fixture$root,
+      "R",
+      "utils",
+      paste0("prepare_", fixture$source, "_data.R")
+    )
+  )
+
+  expect_error({
+    plan <- preflight_environment$wlv_validate_request(
+      methods = c(fixture$method, blocked),
+      repeat_pp = TRUE,
+      root = fixture$root,
+      allow_experimental = TRUE
+    )
+    preflight_environment$wlv_prepare_sources(plan)
+  }, "disabled", fixed = TRUE)
+  expect_false(file.exists(marker))
 })
 
 test_that("request validation checks the selected data preparer", {
@@ -185,6 +400,49 @@ test_that("request validation resolves overrides before checking modules", {
   expect_error(wlv_fixture_request(fixture), "fixture-matrix\\.R")
 })
 
+test_that("source validators are loaded from the catalog in isolation", {
+  fixture <- wlv_make_preflight_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+
+  validator_path <- file.path(fixture$root, "R", "lib", "fixture_validation.R")
+  dir.create(dirname(validator_path), recursive = TRUE, showWarnings = FALSE)
+  writeLines(
+    paste(
+      "wlv_validate_fixture_prepared <- function(source_dir)",
+      "list(sectors = 'fixture')"
+    ),
+    validator_path
+  )
+  sources_path <- file.path(fixture$root, "catalog", "sources.csv")
+  sources <- utils::read.csv2(
+    sources_path,
+    stringsAsFactors = FALSE,
+    colClasses = "character"
+  )
+  sources$validator_script <- "R/lib/fixture_validation.R"
+  sources$validator_function <- "wlv_validate_fixture_prepared"
+  utils::write.table(
+    sources,
+    sources_path,
+    sep = ";",
+    row.names = FALSE,
+    col.names = TRUE,
+    quote = FALSE
+  )
+  writeLines(
+    c("sector.source;sector", "fixture;Fixture sector"),
+    file.path(fixture$root, "methods", fixture$method, "_sectors.csv")
+  )
+
+  plan <- wlv_fixture_request(fixture)
+  expect_s3_class(preflight_environment$wlv_validate_data(plan), "wlv_run_plan")
+  expect_false(exists(
+    "wlv_validate_fixture_prepared",
+    envir = preflight_environment,
+    inherits = FALSE
+  ))
+})
+
 test_that("missing input data fails before cluster creation", {
   fixture <- wlv_make_preflight_fixture()
   on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
@@ -205,6 +463,39 @@ test_that("missing input data fails before cluster creation", {
   }, "[Mm]issing|[Aa]usente|demand\\.csv")
 
   expect_identical(starts, 0L)
+})
+
+test_that("artifact validation covers every requested operation", {
+  fixture <- wlv_make_preflight_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+
+  artifacts_path <- file.path(
+    fixture$root,
+    "catalog",
+    "artifact-profiles.csv"
+  )
+  artifacts <- utils::read.csv2(
+    artifacts_path,
+    stringsAsFactors = FALSE,
+    colClasses = "character"
+  )
+  artifacts$operations[artifacts$artifact == "demand.csv"] <- "prepare"
+  utils::write.table(
+    artifacts,
+    artifacts_path,
+    sep = ";",
+    row.names = FALSE,
+    col.names = TRUE,
+    quote = FALSE
+  )
+
+  plan <- wlv_fixture_request(fixture, repeat_pp = TRUE)
+  unlink(file.path(fixture$source_path, "demand.csv"))
+  expect_error(
+    preflight_environment$wlv_validate_data(plan),
+    "demand.csv",
+    fixed = TRUE
+  )
 })
 
 test_that("WIOD13 scientific validation fails before cluster creation", {

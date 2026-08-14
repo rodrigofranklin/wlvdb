@@ -1,0 +1,355 @@
+usage <- function() {
+  cat(
+    paste(
+      "Usage:",
+      "  Rscript --vanilla scripts/render_method_catalog.R [--check]",
+      "",
+      "Options:",
+      "  --check     Fail if docs/methods.md is not synchronized with the catalog.",
+      "  -h, --help  Print this help and exit.",
+      sep = "\n"
+    ),
+    "\n",
+    sep = ""
+  )
+}
+
+parse_args <- function(args) {
+  unknown <- setdiff(args, c("--check", "-h", "--help"))
+  if (length(unknown)) {
+    stop(sprintf("Unknown argument: %s", unknown[[1L]]), call. = FALSE)
+  }
+
+  list(
+    check = "--check" %in% args,
+    help = any(args %in% c("-h", "--help"))
+  )
+}
+
+catalog_component <- function(catalog, name, aliases = character()) {
+  candidates <- c(name, aliases)
+  present <- candidates[candidates %in% names(catalog)]
+  if (!length(present)) {
+    stop(
+      sprintf("The loaded catalog does not contain '%s'.", name),
+      call. = FALSE
+    )
+  }
+  catalog[[present[[1L]]]]
+}
+
+assert_columns <- function(data, component, columns) {
+  missing <- setdiff(columns, names(data))
+  if (length(missing)) {
+    stop(
+      sprintf(
+        "Catalog component '%s' is missing columns: %s.",
+        component,
+        paste(missing, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+}
+
+markdown_cell <- function(value) {
+  if (length(value) == 0L || is.na(value) || !nzchar(trimws(as.character(value)))) {
+    return("—")
+  }
+
+  value <- gsub("[\r\n]+", " ", as.character(value))
+  value <- gsub("|", "\\|", value, fixed = TRUE)
+  trimws(value)
+}
+
+markdown_code <- function(value) {
+  value <- markdown_cell(value)
+  if (identical(value, "—")) value else sprintf("`%s`", value)
+}
+
+markdown_link <- function(value) {
+  value <- markdown_cell(value)
+  if (identical(value, "—")) {
+    return(value)
+  }
+
+  value <- gsub("\\\\", "/", value)
+  if (grepl("^https?://", value)) {
+    return(sprintf("[link](%s)", value))
+  }
+
+  target <- if (startsWith(value, "docs/")) {
+    sub("^docs/", "", value)
+  } else {
+    paste0("../", value)
+  }
+  sprintf("[%s](%s)", markdown_cell(value), target)
+}
+
+yes_no <- function(value) {
+  if (isTRUE(value)) "yes" else "no"
+}
+
+year_range <- function(start, end) {
+  if (is.na(start) && is.na(end)) {
+    return("—")
+  }
+  if (is.na(start)) {
+    return(sprintf("≤ %s", end))
+  }
+  if (is.na(end)) {
+    return(sprintf("≥ %s", start))
+  }
+  if (identical(as.integer(start), as.integer(end))) {
+    return(as.character(as.integer(start)))
+  }
+  sprintf("%d–%d", as.integer(start), as.integer(end))
+}
+
+markdown_table <- function(headers, rows) {
+  if (!length(rows)) {
+    stop("Cannot render an empty Markdown table.", call. = FALSE)
+  }
+
+  c(
+    paste0("| ", paste(headers, collapse = " | "), " |"),
+    paste0("| ", paste(rep("---", length(headers)), collapse = " | "), " |"),
+    vapply(
+      rows,
+      function(row) paste0("| ", paste(row, collapse = " | "), " |"),
+      character(1L),
+      USE.NAMES = FALSE
+    )
+  )
+}
+
+render_method_rows <- function(methods, sources) {
+  methods <- methods[order(methods$method), , drop = FALSE]
+
+  lapply(seq_len(nrow(methods)), function(i) {
+    method <- methods[i, , drop = FALSE]
+    source <- sources[sources$source == method$source, , drop = FALSE]
+    if (nrow(source) != 1L) {
+      stop(
+        sprintf("Method '%s' does not resolve to exactly one source.", method$method),
+        call. = FALSE
+      )
+    }
+
+    c(
+      markdown_code(method$method),
+      markdown_code(method$source),
+      markdown_code(method$status),
+      markdown_code(source$status),
+      year_range(source$year_start, source$year_end),
+      yes_no(source$can_prepare),
+      yes_no(method$can_calculate),
+      yes_no(method$can_recalculate),
+      markdown_cell(method$description),
+      markdown_link(method$test),
+      markdown_link(method$documentation),
+      markdown_cell(method$limitations)
+    )
+  })
+}
+
+render_source_rows <- function(sources) {
+  sources <- sources[order(sources$source), , drop = FALSE]
+
+  lapply(seq_len(nrow(sources)), function(i) {
+    source <- sources[i, , drop = FALSE]
+    validator <- if (nzchar(source$validator_script) && nzchar(source$validator_function)) {
+      sprintf("%s (`%s`)", markdown_link(source$validator_script), source$validator_function)
+    } else {
+      "—"
+    }
+
+    c(
+      markdown_code(source$source),
+      markdown_code(source$status),
+      year_range(source$year_start, source$year_end),
+      markdown_code(source$parameter_set),
+      markdown_code(source$data_dir),
+      yes_no(source$can_prepare),
+      markdown_link(source$preparer),
+      validator,
+      markdown_code(source$artifact_profile),
+      markdown_link(source$documentation),
+      markdown_cell(source$limitations)
+    )
+  })
+}
+
+render_artifact_rows <- function(artifacts) {
+  artifacts <- artifacts[
+    order(artifacts$profile, artifacts$operations, artifacts$artifact),
+    ,
+    drop = FALSE
+  ]
+
+  lapply(seq_len(nrow(artifacts)), function(i) {
+    artifact <- artifacts[i, , drop = FALSE]
+    c(
+      markdown_code(artifact$profile),
+      markdown_code(artifact$operations),
+      markdown_code(artifact$artifact),
+      markdown_code(artifact$kind),
+      markdown_code(artifact$sidecar)
+    )
+  })
+}
+
+render_document <- function(catalog) {
+  methods <- catalog_component(catalog, "methods")
+  sources <- catalog_component(catalog, "sources")
+  artifacts <- catalog_component(
+    catalog,
+    "artifacts",
+    aliases = c("artifact_profiles")
+  )
+
+  assert_columns(
+    methods,
+    "methods",
+    c(
+      "method", "source", "description", "status", "can_calculate",
+      "can_recalculate", "test", "documentation", "limitations"
+    )
+  )
+  assert_columns(
+    sources,
+    "sources",
+    c(
+      "source", "status", "year_start", "year_end", "parameter_set",
+      "data_dir", "can_prepare", "preparer", "validator_script",
+      "validator_function", "artifact_profile", "documentation", "limitations"
+    )
+  )
+  assert_columns(
+    artifacts,
+    "artifacts",
+    c("profile", "artifact", "kind", "sidecar", "operations")
+  )
+
+  method_table <- markdown_table(
+    c(
+      "Method", "Source", "Method status", "Source status", "Coverage",
+      "Prepare", "Calculate", "Recalculate", "Description", "Test/fixture",
+      "Documentation", "Known limitations"
+    ),
+    render_method_rows(methods, sources)
+  )
+  source_table <- markdown_table(
+    c(
+      "Source", "Status", "Coverage", "Parameter set", "Data directory",
+      "Prepare", "Preparer", "Validator", "Artifact profile", "Documentation",
+      "Known limitations"
+    ),
+    render_source_rows(sources)
+  )
+  artifact_table <- markdown_table(
+    c("Profile", "Operations", "Artifact", "Kind", "Required sidecar"),
+    render_artifact_rows(artifacts)
+  )
+
+  c(
+    "# Method and source support",
+    "",
+    "<!-- Generated by scripts/render_method_catalog.R; do not edit manually. -->",
+    "",
+    "This matrix is generated from the canonical, machine-readable registries in",
+    "[`catalog/methods.csv`](../catalog/methods.csv),",
+    "[`catalog/sources.csv`](../catalog/sources.csv), and",
+    "[`catalog/artifact-profiles.csv`](../catalog/artifact-profiles.csv).",
+    "Regenerate it with `Rscript --vanilla scripts/render_method_catalog.R` and",
+    "verify synchronization with `Rscript --vanilla scripts/render_method_catalog.R --check`.",
+    "",
+    "## Status semantics",
+    "",
+    "- `stable`: the declared operations are supported by recovered preparation, validation, tests, and documentation.",
+    "- `experimental`: the method or source is available for development and evaluation, but requires explicit opt-in with `--allow-experimental` and is not yet a supported scientific release.",
+    "- `disabled`: execution is blocked, including with experimental opt-in, until the listed recovery work is complete.",
+    "",
+    "A method and its source have independent statuses. For example, a source may remain experimental while methods that depend on its incomplete lifecycle are disabled. Capabilities are also explicit: a directory or script existing in the repository does not by itself mean that preparation, calculation, or recalculation is supported.",
+    "",
+    "## Methods",
+    "",
+    "Preparation is a source capability and is repeated here for convenience.",
+    "",
+    method_table,
+    "",
+    "## Sources",
+    "",
+    source_table,
+    "",
+    "## Expected artifact profiles",
+    "",
+    "Artifact profiles describe the files required for the operations declared by each source.",
+    "",
+    artifact_table
+  )
+}
+
+raw_args <- commandArgs(trailingOnly = TRUE)
+args <- parse_args(raw_args)
+if (args$help) {
+  usage()
+  quit(save = "no", status = 0L)
+}
+
+script_arg <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
+if (!length(script_arg)) {
+  stop("Run this file with Rscript.", call. = FALSE)
+}
+
+script_path <- normalizePath(
+  sub("^--file=", "", script_arg[[1L]]),
+  winslash = "/",
+  mustWork = TRUE
+)
+project_root <- normalizePath(
+  file.path(dirname(script_path), ".."),
+  winslash = "/",
+  mustWork = TRUE
+)
+
+catalog_environment <- new.env(parent = baseenv())
+sys.source(
+  file.path(project_root, "R", "lib", "catalog.R"),
+  envir = catalog_environment,
+  chdir = TRUE
+)
+if (!exists("wlv_load_catalog", envir = catalog_environment, inherits = FALSE)) {
+  stop("R/lib/catalog.R does not define wlv_load_catalog().", call. = FALSE)
+}
+
+catalog <- catalog_environment$wlv_load_catalog(project_root)
+document <- render_document(catalog)
+output_path <- file.path(project_root, "docs", "methods.md")
+
+if (args$check) {
+  if (!file.exists(output_path)) {
+    stop(
+      "docs/methods.md is missing; run scripts/render_method_catalog.R.",
+      call. = FALSE
+    )
+  }
+
+  existing <- readLines(output_path, warn = FALSE, encoding = "UTF-8")
+  if (!identical(existing, document)) {
+    stop(
+      paste(
+        "docs/methods.md is out of date; regenerate it with",
+        "Rscript --vanilla scripts/render_method_catalog.R."
+      ),
+      call. = FALSE
+    )
+  }
+
+  cat("docs/methods.md is synchronized with the method catalog.\n")
+  quit(save = "no", status = 0L)
+}
+
+dir.create(dirname(output_path), recursive = TRUE, showWarnings = FALSE)
+writeLines(document, output_path, useBytes = TRUE)
+cat(sprintf("Wrote %s.\n", output_path))

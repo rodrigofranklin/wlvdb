@@ -181,7 +181,11 @@ wlv_run_synthetic_calculation <- function(fixture, workers = 1L) {
   runtime <- new.env(parent = globalenv())
   sys.source(file.path(fixture$root, "R", "main.R"), envir = runtime)
   output <- capture.output(
-    result <- runtime$get_wlv(fixture$method, workers = workers),
+    result <- runtime$get_wlv(
+      fixture$method,
+      workers = workers,
+      allow_experimental = TRUE
+    ),
     type = "output"
   )
 
@@ -202,7 +206,8 @@ wlv_recalculate_synthetic_fixture <- function(
       fixture$method,
       at_stage = at_stage,
       sea_vars = sea_vars,
-      workers = workers
+      workers = workers,
+      allow_experimental = TRUE
     ),
     type = "output"
   )

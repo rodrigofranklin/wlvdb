@@ -13,16 +13,13 @@ También incluye estimaciones preliminares sobre:
 - Tasas de beneficio; 
 - Diferentes enfoque a los valores: precios directos, valores en tiempo de trabajo abstracto, precios sraffianos,
 
- Disponibles por región, país y sector de 1995 a 2014, o de 1990 a 2024, según disponibilidad de cada fuente
- 
-  ## Fuentes de datos ya incluidas:
-  
-  - Base de datos Mundial de Insumo Producto, versión 2013 (WIOD13)
-  - Base de datos Mundial de Insumo Producto, versión 2016 (WIOD16)
-  - EXIOBASE (v 3.8.2, v. 3.7, v.3.8.1) *
-  - EORA26 * 
-  
- * Trabajo en progreso (EORA sujeto a restricciones) 
+## Soporte de métodos y fuentes
+
+La cobertura temporal y las operaciones disponibles se publican en la
+[matriz canónica de soporte](docs/methods.md). WIOD13 y WIOD16 son las familias
+recuperadas; sus métodos de referencia son estables y los métodos alternativos
+siguen siendo experimentales. Las fuentes EXIOBASE y EORA son experimentales,
+y sus métodos permanecen deshabilitados hasta completar su recuperación.
  
 ## Inicio seguro y función principal
 

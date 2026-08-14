@@ -1,0 +1,6 @@
+profile;artifact;kind;sidecar;operations
+wiod_core;m_io*.fst;fst_array_glob;TRUE;prepare|calculate|recalculate
+wiod_core;sea.fst;fst_array;TRUE;prepare|calculate|recalculate
+wiod_core;countries.csv;csv;FALSE;prepare|calculate|recalculate
+wiod_core;sectors.csv;csv;FALSE;prepare|calculate|recalculate
+wiod_core;demand.csv;csv;FALSE;prepare|calculate|recalculate
