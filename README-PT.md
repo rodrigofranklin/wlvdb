@@ -25,13 +25,27 @@ Também inclui estimativas preliminares em:
 ## Inicialização segura e função principal
 
 Abrir o projeto não instala pacotes, não atualiza o checkout Git, não restaura
-um workspace salvo e não inicia cálculos. Restaure as dependências
-explicitamente e, na raiz do repositório, carregue as funções principais:
+um workspace salvo e não inicia cálculos. Na raiz do repositório, restaure uma
+vez as versões exatas dos pacotes e execute um método explicitamente:
+
+```sh
+Rscript --vanilla scripts/bootstrap.R
+Rscript --vanilla scripts/run_wlv.R --method wiodr13
+```
+
+O bootstrap restaura o `renv.lock`; ele não baixa os dados econômicos de
+origem. Para trabalhar interativamente depois do bootstrap, ative a biblioteca
+do projeto e carregue as funções principais de forma explícita:
 
 ```r
+source("renv/activate.R")
 source("R/main.R")
 get_wlv("wiodr13")
 ```
+
+Use `Rscript --vanilla scripts/run_wlv.R --help` para ver todas as opções da
+linha de comando, ou acrescente `--check` para validar o ambiente e o método
+sem iniciar cálculos.
 
 ### Função get_wlv 
 

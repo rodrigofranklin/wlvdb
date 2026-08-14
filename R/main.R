@@ -7,10 +7,17 @@
 
 # Versions computations ----
 
+source("R/lib/dependencies.R", local = TRUE)
+
 method_list <- gsub("methods/","",list.dirs("methods",recursive = F))
 
 get_wlv <- function (methods = "wiodr13", repeat_pp = F,
                    papern = 0, prepaper = F) {
+  wlv_assert_dependencies(
+    include_preparation = repeat_pp,
+    include_papers = prepaper
+  )
+
   #Load functions
   source("R/lib/functions.R")
   
@@ -54,6 +61,8 @@ get_wlv <- function (methods = "wiodr13", repeat_pp = F,
 # Can also be used to include new variables
 recalc_wlv <- function (methods = "wiodr13", at_stage = 1,
                     sea_vars = NULL, papern = 0, prepaper = F) {
+  wlv_assert_dependencies(include_papers = prepaper)
+
   #Load functions
   source("R/lib/functions.R")
   

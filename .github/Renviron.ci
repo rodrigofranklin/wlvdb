@@ -1,0 +1,1 @@
+# Intentionally empty: CI must not inherit a user-level R environment.

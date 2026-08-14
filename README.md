@@ -33,13 +33,26 @@ Four data sources already included:
 ## Safe startup and main function
 
 Opening the project does not install packages, update the Git checkout, load a
-saved workspace, or start a calculation. Restore the required dependencies
-explicitly, then load the main functions from the repository root:
+saved workspace, or start a calculation. From the repository root, restore the
+exact package versions once and run a method explicitly:
+
+```sh
+Rscript --vanilla scripts/bootstrap.R
+Rscript --vanilla scripts/run_wlv.R --method wiodr13
+```
+
+The bootstrap restores `renv.lock`; it does not download the economic source
+data. To work interactively after bootstrapping, activate the project library
+and load the main functions explicitly:
 
 ```r
+source("renv/activate.R")
 source("R/main.R")
 get_wlv("wiodr13")
 ```
+
+Use `Rscript --vanilla scripts/run_wlv.R --help` for all command-line options,
+or add `--check` to validate the environment and method without calculating.
 
 ### get_wlv function
 

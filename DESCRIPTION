@@ -1,0 +1,40 @@
+Package: wlvdb
+Type: Project
+Title: World Labour Values Database
+Version: 0.0.0.9000
+Authors@R: person("Rodrigo", "Franklin", role = c("aut", "cre"),
+    email = "rodrigo.franklin.br@gmail.com")
+Description: Reproducible computations and data preparation routines for the
+    World Labour Values Database.
+License: GPL (>= 3)
+Encoding: UTF-8
+Depends:
+    R (>= 4.1.0)
+Imports:
+    abind,
+    countrycode,
+    dplyr,
+    fst,
+    lubridate,
+    magrittr,
+    readr,
+    rvest,
+    tidyr,
+    xml2
+Suggests:
+    forcats,
+    ggplot2,
+    ggthemes,
+    hrbrthemes,
+    MLmetrics,
+    R.matlab,
+    readODS,
+    readxl,
+    REdaS,
+    renv (>= 1.2.4),
+    scales,
+    testthat (>= 3.2.0),
+    tibble,
+    WDI,
+    writexl
+Config/testthat/edition: 3

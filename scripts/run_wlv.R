@@ -1,0 +1,135 @@
+usage <- function() {
+  cat(
+    paste(
+      "Usage:",
+      "  Rscript --vanilla scripts/run_wlv.R [options]",
+      "",
+      "Options:",
+      "  --method NAME       Method to calculate; repeat or use comma-separated names.",
+      "  --repeat-pp         Download and prepare source data before calculation.",
+      "  --paper NUMBER      Select the paper script number (default: 0).",
+      "  --prepaper          Run the selected paper script after calculation.",
+      "  --check             Validate the environment and arguments, then exit.",
+      "  --list-methods      Print the available method names and exit.",
+      "  -h, --help          Print this help and exit.",
+      sep = "\n"
+    ),
+    "\n",
+    sep = ""
+  )
+}
+
+parse_cli <- function(args) {
+  result <- list(
+    methods = character(),
+    repeat_pp = FALSE,
+    papern = 0L,
+    prepaper = FALSE,
+    check = FALSE,
+    list_methods = FALSE,
+    help = FALSE
+  )
+
+  i <- 1L
+  while (i <= length(args)) {
+    argument <- args[[i]]
+    if (argument %in% c("-h", "--help")) {
+      result$help <- TRUE
+    } else if (argument == "--repeat-pp") {
+      result$repeat_pp <- TRUE
+    } else if (argument %in% c("--prepaper", "--prepare-paper")) {
+      result$prepaper <- TRUE
+    } else if (argument == "--check") {
+      result$check <- TRUE
+    } else if (argument == "--list-methods") {
+      result$list_methods <- TRUE
+    } else if (grepl("^--method=", argument)) {
+      result$methods <- c(result$methods, sub("^--method=", "", argument))
+    } else if (argument == "--method") {
+      i <- i + 1L
+      if (i > length(args)) {
+        stop("--method requires a value.", call. = FALSE)
+      }
+      result$methods <- c(result$methods, args[[i]])
+    } else if (grepl("^--paper=", argument)) {
+      result$papern <- suppressWarnings(as.integer(sub("^--paper=", "", argument)))
+    } else if (argument == "--paper") {
+      i <- i + 1L
+      if (i > length(args)) {
+        stop("--paper requires a number.", call. = FALSE)
+      }
+      result$papern <- suppressWarnings(as.integer(args[[i]]))
+    } else {
+      stop(sprintf("Unknown argument: %s", argument), call. = FALSE)
+    }
+    i <- i + 1L
+  }
+
+  if (is.na(result$papern) || result$papern < 0L) {
+    stop("--paper must be a non-negative integer.", call. = FALSE)
+  }
+
+  result$methods <- unique(trimws(unlist(strsplit(result$methods, ",", fixed = TRUE))))
+  result$methods <- result$methods[nzchar(result$methods)]
+  result
+}
+
+raw_args <- commandArgs(trailingOnly = TRUE)
+if (!length(raw_args)) {
+  usage()
+  quit(save = "no", status = 2L)
+}
+
+args <- parse_cli(raw_args)
+if (args$help) {
+  usage()
+  quit(save = "no", status = 0L)
+}
+
+script_arg <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
+if (!length(script_arg)) {
+  stop("Run this file with Rscript.", call. = FALSE)
+}
+
+script_path <- normalizePath(sub("^--file=", "", script_arg[[1]]), mustWork = TRUE)
+project_root <- normalizePath(file.path(dirname(script_path), ".."), mustWork = TRUE)
+setwd(project_root)
+
+source(file.path("renv", "activate.R"), local = TRUE)
+sys.source(file.path("R", "main.R"), envir = .GlobalEnv)
+
+if (args$list_methods) {
+  cat(paste(method_list, collapse = "\n"), "\n", sep = "")
+  quit(save = "no", status = 0L)
+}
+
+if (!length(args$methods)) {
+  stop("At least one --method is required.", call. = FALSE)
+}
+
+valid_syntax <- grepl("^[A-Za-z0-9][A-Za-z0-9._-]*$", args$methods)
+unknown <- args$methods[!valid_syntax | !(args$methods %in% method_list)]
+if (length(unknown)) {
+  stop(
+    sprintf("Unknown or invalid method: %s", paste(unknown, collapse = ", ")),
+    call. = FALSE
+  )
+}
+
+wlv_assert_dependencies(
+  include_preparation = args$repeat_pp,
+  include_papers = args$prepaper,
+  attach = !args$check
+)
+
+if (args$check) {
+  cat("Environment and arguments are valid.\n")
+  quit(save = "no", status = 0L)
+}
+
+get_wlv(
+  methods = args$methods,
+  repeat_pp = args$repeat_pp,
+  papern = args$papern,
+  prepaper = args$prepaper
+)
