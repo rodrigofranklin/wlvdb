@@ -6,6 +6,9 @@ if (!exists("wlv_download_verified", mode = "function", inherits = FALSE)) {
 if (!exists("write_fst_array", mode = "function", inherits = FALSE)) {
   sys.source("R/lib/functions.R", envir = environment())
 }
+if (!exists("wlv_wiodr13_validate_workbook_missingness", mode = "function", inherits = FALSE)) {
+  sys.source("R/lib/wiodr13_validation.R", envir = environment())
+}
 
 dir.create("source_data", recursive = TRUE, showWarnings = FALSE)
 dir.create("source_data/wiodr13", recursive = TRUE, showWarnings = FALSE)
@@ -106,31 +109,21 @@ if (anyDuplicated(sea[c("country", "variable", "code")])) {
   stop("WIOD13 SEA contains duplicate country-variable-sector rows.", call. = FALSE)
 }
 sea_year_columns <- as.character(1995:2009)
-sea_missing_by_year <- vapply(
-  sea[sea_year_columns],
-  function(values) sum(is.na(values)),
-  integer(1)
+sea_missingness <- wlv_wiodr13_validate_workbook_missingness(
+  sea,
+  years = sea_year_columns
 )
-expected_missing_by_year <- c(rep(371L, 13L), 1861L, 2073L)
-names(expected_missing_by_year) <- sea_year_columns
-sea_missing_values <- sum(sea_missing_by_year)
-if (!identical(sea_missing_by_year, expected_missing_by_year)) {
-  stop(
-    sprintf(
-      paste0(
-        "WIOD13 SEA missing-observation profile differs from the official workbook: ",
-        "%s."
-      ),
-      paste(names(sea_missing_by_year), sea_missing_by_year, sep = "=", collapse = ", ")
-    ),
-    call. = FALSE
-  )
-}
+sea_missing_by_year <- sea_missingness$by_year
+sea_missing_values <- sea_missingness$count
 message(
   sprintf(
-    "WIOD13 SEA: replacing %s missing observations with zero for 1995-2009 (%s).",
+    paste0(
+      "WIOD13 SEA: replacing %s pinned missing observations with zero for ",
+      "1995-2009 (%s; md5=%s)."
+    ),
     sea_missing_values,
-    paste(names(sea_missing_by_year), sea_missing_by_year, sep = "=", collapse = ", ")
+    paste(names(sea_missing_by_year), sea_missing_by_year, sep = "=", collapse = ", "),
+    sea_missingness$md5
   )
 )
 for (year_column in sea_year_columns) {
@@ -310,7 +303,9 @@ rm(
   wiodr13_download_manifest, wiodr13_mat_paths, missing_mat_paths,
   required_sea_columns, missing_sea_columns, wlv_assert_wiot_dimensions,
   wlv_validate_wiodr13_sea_workbook, sea_year_columns, sea_missing_values,
-  sea_missing_by_year, expected_missing_by_year, year_column
+  sea_missing_by_year, sea_missingness, year_column,
+  wlv_wiodr13_validate_workbook_missingness,
+  wlv_wiodr13_workbook_missingness_signature
 )
 gc()
 

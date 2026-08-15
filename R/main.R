@@ -6,6 +6,8 @@
 
 source("R/lib/catalog.R", local = TRUE)
 source("R/lib/dependencies.R", local = TRUE)
+source("R/lib/missingness.R", local = TRUE)
+source("R/lib/result_contracts.R", local = TRUE)
 source("R/lib/execution.R", local = TRUE)
 
 method_catalog <- wlv_load_catalog(".")

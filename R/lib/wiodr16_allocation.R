@@ -65,17 +65,43 @@ wlv_wiodr16_expected_negative_va_ratios <- function() {
 
 wlv_wiodr16_expected_source_va_exception <- function() {
   data.frame(
-    year = "2007",
-    variable = "VA_USD",
-    sector = "J58",
-    country = "ROU",
-    value = -17.404439964866128,
+    year = c(
+      "2000", "2000", "2001", "2002", "2004", "2004", "2005", "2005",
+      "2005", "2006", "2007", "2007", "2008", "2011", "2011", "2011",
+      "2012", "2012", "2012", "2013", "2013", "2013", "2014", "2014",
+      "2014", "2014"
+    ),
+    variable = rep("VA_USD", 26L),
+    sector = c(
+      "C19", "B", "C19", "C19", "C19", "T", "C19", "T", "B", "C19",
+      "C19", "J58", "C19", "C19", "H51", "B", "C19", "B", "D35",
+      "C19", "H50", "H53", "C19", "C19", "H50", "B"
+    ),
+    country = c(
+      "BRA", "MLT", "BRA", "BRA", "BRA", "JPN", "BRA", "JPN", "MLT",
+      "BRA", "BRA", "ROU", "BRA", "BRA", "LVA", "MLT", "BRA", "MLT",
+      "MLT", "BRA", "LUX", "LUX", "BGR", "BRA", "LUX", "MLT"
+    ),
+    value = c(
+      -1751.6965443734994, -1.2567961085037498, -2336.753754971835,
+      -2012.337601105467, -1528.9750243169362, -1.2919767759740355e-11,
+      -2600.4489938552415, -8.46649520099163e-12, -0.56913483029886713,
+      -7569.6282062174187, -3351.4276018643263, -17.404439964866128,
+      -11940.50491142658, -6098.6535800000347, -34.246179518853182,
+      -11.638690810474539,
+      -13902.23128,
+      -42.360757700503441, -0.36994411521583848, -13089.912069000002,
+      -55.753616993808798, -125.65482444003439, -203.94872075799785,
+      -12221.259959420464, -54.051464909195879, -2.3004445006018308
+    ),
     stringsAsFactors = FALSE
   )
 }
 
 wlv_wiodr16_expected_gfcf_fallbacks <- function() {
-  common <- c("MEX.T", "MEX.U", "TUR.T", "TWN.T", "USA.T")
+  common <- c(
+    "MEX.T", "MEX.U", "TUR.T", "TWN.T", "USA.T", "ROW.T", "ROW.U"
+  )
   data.frame(
     year = c(
       rep(as.character(2000:2014), each = length(common)),
@@ -260,19 +286,22 @@ wlv_wiodr16_clean_structural_nonfinite_stock <- function(
   }
   wlv_wiodr16_validate_input_labels(input_labels, length(capital_stock))
 
-  non_finite <- !is.finite(capital_stock)
+  invalid_numeric <- is.nan(capital_stock) | is.infinite(capital_stock)
+  if (any(invalid_numeric)) {
+    stop("WIOD16 capital stock contains NaN or infinite values.", call. = FALSE)
+  }
+  missing <- is.na(capital_stock)
   structural_row <- startsWith(input_labels, "ROW.")
-  unexpected <- which(non_finite & !structural_row)
+  unexpected <- which(missing & !structural_row)
   if (length(unexpected)) {
     stop(
       sprintf(
-        "WIOD16 capital stock is non-finite outside structural ROW: %s.",
+        "WIOD16 capital stock is missing outside structural ROW: %s.",
         paste(input_labels[unexpected], collapse = ", ")
       ),
       call. = FALSE
     )
   }
-  capital_stock[non_finite & structural_row] <- 0
   capital_stock
 }
 
@@ -321,6 +350,14 @@ wlv_wiodr16_validate_negative_euklems_weights <- function(
 
 wlv_wiodr16_sanitize_euklems_weights <- function(value, year) {
   observed <- wlv_wiodr16_validate_negative_euklems_weights(value, year)
+  observed$policy_id <- rep(
+    "wiodr16_negative_euklems_weights_v1",
+    nrow(observed)
+  )
+  observed$action <- rep(
+    "truncate_allowlisted_negative_euklems_weight",
+    nrow(observed)
+  )
   variables <- names(value)[vapply(value, is.numeric, logical(1))]
   for (variable in variables) {
     value[[variable]][value[[variable]] < 0] <- 0
@@ -329,7 +366,12 @@ wlv_wiodr16_sanitize_euklems_weights <- function(value, year) {
   value
 }
 
-wlv_wiodr16_sanitize_va_ratios <- function(ratios, year, input_labels) {
+wlv_wiodr16_sanitize_va_ratios <- function(
+    ratios,
+    year,
+    input_labels,
+    numerator = NULL,
+    denominator = NULL) {
   if (
     !is.numeric(ratios) ||
     !is.character(input_labels) ||
@@ -340,6 +382,27 @@ wlv_wiodr16_sanitize_va_ratios <- function(ratios, year, input_labels) {
   }
   wlv_wiodr16_validate_input_labels(input_labels, length(ratios))
   year <- wlv_wiodr16_validate_year(year)
+  invalid_numeric <- is.na(ratios) | is.infinite(ratios)
+  zero_over_zero <- is.nan(ratios)
+  if (any(invalid_numeric)) {
+    conformable_inputs <-
+      is.numeric(numerator) && is.numeric(denominator) &&
+      length(numerator) == length(ratios) &&
+      length(denominator) == length(ratios)
+    if (!conformable_inputs) {
+      stop("WIOD16 value-added ratios contain missing or non-finite values.", call. = FALSE)
+    }
+    allowed_zero <-
+      zero_over_zero & numerator == 0 & denominator == 0 &
+      is.finite(numerator) & is.finite(denominator)
+    if (any(invalid_numeric & !allowed_zero)) {
+      stop(
+        "WIOD16 value-added ratios contain an unexpected missing or non-finite value.",
+        call. = FALSE
+      )
+    }
+    ratios[allowed_zero] <- 0
+  }
   positions <- which(is.finite(ratios) & ratios < 0)
   observed <- data.frame(
     year = rep(year, length(positions)),
@@ -359,28 +422,42 @@ wlv_wiodr16_sanitize_va_ratios <- function(ratios, year, input_labels) {
     keys = c("year", "input"),
     label = "negative value-added allocation ratios"
   )
+  observed$country <- sub("[.].*$", "", observed$input)
+  observed$sector <- sub("^[^.]+[.]", "", observed$input)
+  observed$policy_id <- rep("wiodr16_negative_va_ratio_v1", nrow(observed))
+  observed$action <- rep(
+    "absolute_allowlisted_negative_va_ratio",
+    nrow(observed)
+  )
   ratios[positions] <- abs(ratios[positions])
-  ratios[!is.finite(ratios)] <- 0
   attr(ratios, "wlv.absolute_va_ratios") <- observed
+  attr(ratios, "wlv.zero_va_ratios") <- which(zero_over_zero)
   ratios
 }
 
 wlv_wiodr16_sanitize_capital_stock <- function(capital_stock, year, input_labels) {
   if (
     !is.numeric(capital_stock) ||
-    anyNA(capital_stock) ||
-    any(!is.finite(capital_stock)) ||
     !is.character(input_labels) ||
     length(capital_stock) != length(input_labels)
   ) {
     stop("Invalid WIOD16 capital-stock vector.", call. = FALSE)
   }
   wlv_wiodr16_validate_input_labels(input_labels, length(capital_stock))
+  invalid_numeric <- is.nan(capital_stock) | is.infinite(capital_stock)
+  structural_row <- startsWith(input_labels, "ROW.")
+  if (
+    any(invalid_numeric) ||
+    any(is.na(capital_stock) & !structural_row)
+  ) {
+    stop("Invalid WIOD16 capital-stock vector.", call. = FALSE)
+  }
   year <- wlv_wiodr16_validate_year(year)
-  positions <- which(capital_stock < 0)
+  positions <- which(!is.na(capital_stock) & capital_stock < 0)
   observed <- data.frame(
     year = rep(year, length(positions)),
     input = input_labels[positions],
+    value = capital_stock[positions],
     stringsAsFactors = FALSE
   )
   expected <- wlv_wiodr16_expected_negative_source_k()
@@ -400,6 +477,16 @@ wlv_wiodr16_sanitize_capital_stock <- function(capital_stock, year, input_labels
     keys = c("year", "input"),
     label = "negative derived capital stock",
     compare_values = FALSE
+  )
+  observed$country <- sub("[.].*$", "", observed$input)
+  observed$sector <- sub("^[^.]+[.]", "", observed$input)
+  observed$policy_id <- rep(
+    "wiodr16_negative_capital_stock_v1",
+    nrow(observed)
+  )
+  observed$action <- rep(
+    "truncate_allowlisted_negative_capital_stock",
+    nrow(observed)
   )
   capital_stock[positions] <- 0
   attr(capital_stock, "wlv.truncated_negative_stock") <- observed

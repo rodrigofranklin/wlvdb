@@ -11,22 +11,19 @@ meta_indicators[code,"type"] <- "usd"
 meta_indicators[code,"group"] <- "Others"
 meta_indicators[code,"reverted"] <- FALSE
 
-sea_sectors[,code,,] <-
-  as.numeric(sea_source[,"VA",lists$sectors,]) / 
-  as.numeric(sea_source[,"VA_USD",lists$sectors,])
-
-# Nan values are replaced by country's mean
-temp_exchange_mean <- sea_sectors[,"exchange.r.us",,] %>%
-  apply( 1, tapply, rows$num_country, mean, na.rm = TRUE) %>%
-  rep(each = nums$sectors) %>%
-  newDim(c(nums$sectors,nums$countries,nums$years)) %>%
-  aperm(c(3,1,2))
-
-sea_sectors[,"exchange.r.us",,][
-  is.nan(sea_sectors[,"exchange.r.us",,])] <- 
-  temp_exchange_mean[is.nan(sea_sectors[,"exchange.r.us",,])]
+exchange_numerator <- sea_source[, "VA", lists$sectors, ]
+exchange_denominator <- sea_source[, "VA_USD", lists$sectors, ]
+sea_sectors[, code, , ] <- wlv_exchange_rate_by_country(
+  exchange_numerator,
+  exchange_denominator,
+  runtime = if (exists("wlv_contract_runtime", inherits = FALSE)) {
+    wlv_contract_runtime
+  } else {
+    NULL
+  }
+)
 
 # Desconsidera os pequenos desvios na taxa dos EUA
 sea_sectors[,"exchange.r.us",,"USA"] <- 1
 
-rm(temp_exchange_mean)
+rm(exchange_numerator, exchange_denominator)

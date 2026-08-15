@@ -30,13 +30,40 @@ leontief <-
 print("Finished loading leontief intermediates")
 # Step 2: calculates -(A+D)
 # -(A+D) = (T+C) * <X>^(-1)
-leontief <- (-1) *
-  (wlv_sum_input_flows(
-    m_io_source[, n, n] %>% newDim(c(a, d, d)),
-    m_io[, "k_depreciation", n, n] %>% newDim(c(a, d, d))
-  ) /
-  leontief * rep(filter, each = a)) %>%
-  clean
+leontief_numerator <- wlv_sum_input_flows(
+  m_io_source[, n, n] %>% newDim(c(a, d, d)),
+  m_io[, "k_depreciation", n, n] %>% newDim(c(a, d, d))
+) * rep(filter, each = a)
+if (exists("wlv_contract_runtime", inherits = FALSE)) {
+  leontief_numerator <- wlv_allowlisted_leontief_zero_output(
+    wlv_contract_runtime,
+    leontief_numerator,
+    leontief,
+    years = lists$years,
+    inputs = lists$input,
+    outputs = lists$input
+  )
+  leontief <- (-1) * wlv_safe_divide_runtime(
+    wlv_contract_runtime,
+    leontief_numerator,
+    leontief,
+    zero = "zero_if_both_zero",
+    artifact = "m_io",
+    indicator = "leontief_input_ratio",
+    checkpoint = "after_matrices",
+    stage = 3L,
+    module = "transformation.R",
+    axes = c(year = 1L, sector = 2L, output = 3L)
+  )
+} else {
+  invalid <- leontief == 0 & leontief_numerator != 0
+  if (any(invalid)) {
+    stop("Leontief inputs contain a nonzero flow over zero output.", call. = FALSE)
+  }
+  both_zero <- leontief == 0 & leontief_numerator == 0
+  leontief <- (-1) * (leontief_numerator / leontief)
+  leontief[both_zero] <- 0
+}
 
 # Steo 3: adds I (indentity matrix).
 leontief <- leontief + rep(diag(d), each = a)
@@ -59,12 +86,33 @@ print("End of invertion...")
 
 # labour_requirements represent the amount of direct labour 
 # required per unit of output 
-labour_requirements <- 
-  ((sea_sectors[lists$years,"abstract_labour.emp.s.mv",,] / 
-     sea_sectors[lists$years,"gross_output.s.us",,]) * 
-  rep(rows$productive, each = a)) %>%
-  newDim(c(a, d)) %>%
-  clean
+labour_numerator <-
+  sea_sectors[lists$years, "abstract_labour.emp.s.mv", , ] *
+  rep(rows$productive, each = a)
+labour_denominator <- sea_sectors[lists$years, "gross_output.s.us", , ]
+if (exists("wlv_contract_runtime", inherits = FALSE)) {
+  labour_requirements <- wlv_safe_divide_runtime(
+    wlv_contract_runtime,
+    labour_numerator,
+    labour_denominator,
+    zero = "zero_if_both_zero",
+    artifact = "sea_sectors",
+    indicator = "labour_requirements",
+    checkpoint = "after_matrices",
+    stage = 3L,
+    module = "transformation.R",
+    axes = c(year = 1L, sector = 2L)
+  ) %>% newDim(c(a, d))
+} else {
+  invalid <- labour_denominator == 0 & labour_numerator != 0
+  if (any(invalid)) {
+    stop("Labour requirements contain nonzero labour over zero output.", call. = FALSE)
+  }
+  both_zero <- labour_denominator == 0 & labour_numerator == 0
+  labour_requirements <- labour_numerator / labour_denominator
+  labour_requirements[both_zero] <- 0
+  labour_requirements <- labour_requirements %>% newDim(c(a, d))
+}
 
 # lambda represents labour values per unit of output
 # (i.e., per $ 1.00 of each sector)
@@ -80,5 +128,12 @@ m_io[, "values", n, 1:nums$output] <-
 print("End of transformation.")
 
 # clear environment
-rm(year, a, d, n, filter, labour_requirements, leontief)
+rm(
+  year, a, d, n, filter, labour_requirements, leontief,
+  leontief_numerator, labour_numerator, labour_denominator
+)
+rm(list = intersect(
+  c("invalid", "both_zero"),
+  ls(envir = environment(), all.names = TRUE)
+), envir = environment())
 gc()

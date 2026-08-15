@@ -2,6 +2,9 @@
 if (!exists("wlv_wiodr16_sanitize_capital_stock", mode = "function")) {
   source("R/lib/wiodr16_allocation.R")
 }
+if (!exists("wlv_record_observed_transformations", mode = "function")) {
+  source("R/lib/gfcf_contracts.R")
+}
 
 code <- "capital_stock.s.us"
 
@@ -24,10 +27,29 @@ for (year in lists$years) {
     capital_stock,
     lists$input
   )
-  sea_sectors[year, code, , ] <- wlv_wiodr16_sanitize_capital_stock(
+  sanitized_stock <- wlv_wiodr16_sanitize_capital_stock(
     capital_stock,
     year,
     lists$input
   )
+  truncated_stock <- attr(sanitized_stock, "wlv.truncated_negative_stock")
+  if (
+    nrow(truncated_stock) &&
+    exists("wlv_contract_runtime", inherits = FALSE)
+  ) {
+    wlv_record_observed_transformations(
+      wlv_contract_runtime,
+      truncated_stock,
+      artifact = "sea_sectors",
+      indicator = code,
+      checkpoint = "after_stage_1",
+      stage = 1L,
+      module = "wiodr16/capital_stock.s.us.R",
+      coordinate_columns = c(
+        year = "year", country = "country", sector = "sector"
+      )
+    )
+  }
+  sea_sectors[year, code, , ] <- sanitized_stock
 }
-rm(capital_stock)
+rm(capital_stock, sanitized_stock, truncated_stock)

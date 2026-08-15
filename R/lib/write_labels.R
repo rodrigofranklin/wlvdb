@@ -70,8 +70,16 @@ if (file.exists("results/meta_indicators.csv")) {
   meta_indicators_panel <- rbind(temp_meta, meta_indicators_panel)
 }
 
-indicators_en |> write.csv2("results/indicators_en.csv", row.names = FALSE)
-meta_indicators_panel |> write.csv2("results/meta_indicators.csv", row.names = FALSE)
-meta_indicators |> saveRDS(paste0("results/",method_version,"/meta_indicators.RDS"))
-parameters |> write.csv2(paste0("results/",method_version,"/_parameters.csv"),
-                         row.names = FALSE, na = "")
+wlv_pending_indicators_en <- indicators_en
+wlv_pending_meta_indicators <- meta_indicators_panel
+wlv_write_method_result_metadata(
+  wlv_result_dir,
+  wlv_method_result_metadata(
+    parameters = parameters,
+    assumptions = assumptions,
+    matrices = matrices,
+    solutions = sea_variables,
+    sectors = sectors,
+    meta_indicators = meta_indicators
+  )
+)

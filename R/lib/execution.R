@@ -321,6 +321,15 @@ wlv_validate_request <- function(
     if (!is.null(sea_vars) && (!is.character(sea_vars) || anyNA(sea_vars))) {
       stop("`sea_vars` must be NULL or a character vector without NA.", call. = FALSE)
     }
+    if (at_stage == 1L && !is.null(sea_vars)) {
+      stop(
+        paste0(
+          "Selective `sea_vars` recalculation is unsafe at stage 1 because ",
+          "structural assumptions update multiple dependent indicators."
+        ),
+        call. = FALSE
+      )
+    }
   }
 
   root <- normalizePath(root, mustWork = TRUE)
@@ -413,6 +422,7 @@ wlv_validate_request <- function(
       validator_script = source_record$validator_script[[1L]],
       validator_function = source_record$validator_function[[1L]],
       artifact_profile = source_record$artifact_profile[[1L]],
+      missingness_policy = source_record$missingness_policy[[1L]],
       status = selected$status[[1L]],
       source_status = selected$source_status[[1L]],
       can_prepare = selected$can_prepare[[1L]],
@@ -987,6 +997,9 @@ wlv_run_script <- function(
       run_environment
     },
     error = function(error) {
+      if (inherits(error, "wlv_contract_error")) {
+        stop(error)
+      }
       wrapped <- simpleError(
         sprintf("%s failed: %s", label, conditionMessage(error)),
         call = conditionCall(error)
@@ -1010,12 +1023,405 @@ wlv_prepare_sources <- function(plan) {
   }))
 }
 
+wlv_result_path_is_within <- function(path, parent) {
+  path <- normalizePath(path, winslash = "/", mustWork = FALSE)
+  parent <- normalizePath(parent, winslash = "/", mustWork = TRUE)
+  startsWith(path, paste0(sub("/+$", "", parent), "/"))
+}
+
+wlv_acquire_result_lock <- function(results_root, method) {
+  dir.create(results_root, recursive = TRUE, showWarnings = FALSE)
+  results_root <- normalizePath(results_root, winslash = "/", mustWork = TRUE)
+  lock <- file.path(results_root, ".lock-results")
+  if (!wlv_result_path_is_within(lock, results_root) ||
+      !startsWith(basename(lock), ".lock-")) {
+    stop("Refusing to create an unsafe result lock path.", call. = FALSE)
+  }
+  if (!dir.create(lock, recursive = FALSE, showWarnings = FALSE)) {
+    stop(
+      sprintf(
+        paste0(
+          "Results are already locked by another method run (requested: `%s`). ",
+          "If no run is active, remove `%s` after verifying that it is stale."
+        ),
+        method,
+        lock
+      ),
+      call. = FALSE
+    )
+  }
+  normalizePath(lock, winslash = "/", mustWork = TRUE)
+}
+
+wlv_release_result_lock <- function(lock, results_root) {
+  if (is.null(lock) || !dir.exists(lock)) {
+    return(invisible(NULL))
+  }
+  if (!wlv_result_path_is_within(lock, results_root) ||
+      !startsWith(basename(lock), ".lock-")) {
+    stop(sprintf("Refusing to remove unsafe result lock `%s`.", lock), call. = FALSE)
+  }
+  unlink(lock, recursive = TRUE, force = TRUE)
+  if (dir.exists(lock)) {
+    stop(sprintf("Could not remove result lock `%s`.", lock), call. = FALSE)
+  }
+  invisible(NULL)
+}
+
+wlv_create_result_staging <- function(root, method, existing = NULL) {
+  results_root <- file.path(root, "results")
+  dir.create(results_root, recursive = TRUE, showWarnings = FALSE)
+  results_root <- normalizePath(results_root, winslash = "/", mustWork = TRUE)
+  staging <- tempfile(
+    pattern = sprintf(".staging-%s-", method),
+    tmpdir = results_root
+  )
+  if (!wlv_result_path_is_within(staging, results_root)) {
+    stop("Refusing to create result staging outside the results directory.", call. = FALSE)
+  }
+  if (!dir.create(staging, recursive = FALSE, showWarnings = FALSE)) {
+    stop(sprintf("Could not create result staging directory `%s`.", staging), call. = FALSE)
+  }
+
+  if (!is.null(existing) && dir.exists(existing)) {
+    entries <- list.files(
+      existing,
+      full.names = TRUE,
+      all.files = TRUE,
+      no.. = TRUE
+    )
+    if (length(entries)) {
+      copied <- file.copy(
+        entries,
+        staging,
+        recursive = TRUE,
+        copy.mode = TRUE,
+        copy.date = TRUE
+      )
+      if (!all(copied)) {
+        unlink(staging, recursive = TRUE, force = TRUE)
+        stop(
+          sprintf(
+            "Could not copy existing result file(s) into staging: %s.",
+            paste(basename(entries[!copied]), collapse = ", ")
+          ),
+          call. = FALSE
+        )
+      }
+    }
+  }
+
+  normalizePath(staging, winslash = "/", mustWork = TRUE)
+}
+
+wlv_remove_result_staging <- function(staging, results_root) {
+  if (is.null(staging) || !dir.exists(staging)) {
+    return(invisible(NULL))
+  }
+  if (!wlv_result_path_is_within(staging, results_root) ||
+      !startsWith(basename(staging), ".staging-")) {
+    stop(sprintf("Refusing to remove unsafe staging path `%s`.", staging), call. = FALSE)
+  }
+  unlink(staging, recursive = TRUE, force = TRUE)
+  if (dir.exists(staging)) {
+    stop(sprintf("Could not remove result staging directory `%s`.", staging), call. = FALSE)
+  }
+  invisible(NULL)
+}
+
+wlv_publish_result_staging <- function(staging, final, results_root) {
+  if (!dir.exists(staging) || !wlv_result_path_is_within(staging, results_root)) {
+    stop("Result staging directory is missing or unsafe.", call. = FALSE)
+  }
+  final_parent <- dirname(final)
+  if (!identical(
+    normalizePath(final_parent, winslash = "/", mustWork = TRUE),
+    normalizePath(results_root, winslash = "/", mustWork = TRUE)
+  )) {
+    stop("Refusing to publish results outside the results directory.", call. = FALSE)
+  }
+
+  backup <- tempfile(
+    pattern = sprintf(".backup-%s-", basename(final)),
+    tmpdir = results_root
+  )
+  had_final <- dir.exists(final)
+  if (had_final && !file.rename(final, backup)) {
+    stop(sprintf("Could not move existing results `%s` to a backup.", final), call. = FALSE)
+  }
+
+  installed <- FALSE
+  complete <- FALSE
+  on.exit({
+    if (!complete) {
+      recovery_failures <- character()
+      if (installed && dir.exists(final) && !dir.exists(staging)) {
+        if (!file.rename(final, staging)) {
+          recovery_failures <- c(
+            recovery_failures,
+            sprintf("new result remains at `%s`", final)
+          )
+        }
+      }
+      if (had_final && dir.exists(backup) && !dir.exists(final)) {
+        if (!file.rename(backup, final)) {
+          recovery_failures <- c(
+            recovery_failures,
+            sprintf("prior result remains at `%s`", backup)
+          )
+        }
+      }
+      if (length(recovery_failures)) {
+        stop(
+          sprintf(
+            paste0(
+              "Result promotion failed and automatic restoration did not ",
+              "complete; manual recovery required: %s."
+            ),
+            paste(recovery_failures, collapse = "; ")
+          ),
+          call. = FALSE
+        )
+      }
+    }
+  }, add = TRUE)
+  if (!file.rename(staging, final)) {
+    restored <- !had_final ||
+      (dir.exists(backup) && !dir.exists(final) && file.rename(backup, final))
+    complete <- TRUE
+    if (!restored) {
+      stop(
+        sprintf(
+          paste0(
+            "Result promotion failed and automatic restoration did not ",
+            "complete; manual recovery required: prior result remains at `%s`."
+          ),
+          backup
+        ),
+        call. = FALSE
+      )
+    }
+    stop(sprintf("Could not promote staged results to `%s`.", final), call. = FALSE)
+  }
+  installed <- TRUE
+  transaction <- list(
+    staging = staging,
+    final = final,
+    backup = backup,
+    had_final = had_final,
+    installed = installed,
+    results_root = results_root
+  )
+  complete <- TRUE
+  transaction
+}
+
+wlv_rollback_result_staging <- function(transaction) {
+  if (is.null(transaction)) {
+    return(invisible(NULL))
+  }
+  staging <- transaction$staging
+  final <- transaction$final
+  backup <- transaction$backup
+  results_root <- transaction$results_root
+  if (!wlv_result_path_is_within(final, results_root) ||
+      !wlv_result_path_is_within(staging, results_root) ||
+      !wlv_result_path_is_within(backup, results_root)) {
+    stop("Refusing to roll back unsafe result paths.", call. = FALSE)
+  }
+  if (isTRUE(transaction$installed) && dir.exists(final)) {
+    if (dir.exists(staging) || !file.rename(final, staging)) {
+      stop(
+        sprintf(
+          "Could not move new results `%s` back to staging; the new results remain published.",
+          final
+        ),
+        call. = FALSE
+      )
+    }
+  }
+  if (isTRUE(transaction$had_final) && dir.exists(backup)) {
+    if (dir.exists(final) || !file.rename(backup, final)) {
+      recovered_new <- !dir.exists(final) && dir.exists(staging) &&
+        file.rename(staging, final)
+      stop(
+        sprintf(
+          paste0(
+            "Could not restore prior results `%s`; %s."
+          ),
+          final,
+          if (recovered_new) {
+            "the new results were restored to keep the published generation coherent"
+          } else {
+            "manual recovery is required before another run"
+          }
+        ),
+        call. = FALSE
+      )
+    }
+  }
+  invisible(transaction)
+}
+
+wlv_reinstate_new_result_staging <- function(transaction) {
+  if (is.null(transaction)) {
+    return(invisible(NULL))
+  }
+  staging <- transaction$staging
+  final <- transaction$final
+  backup <- transaction$backup
+  results_root <- transaction$results_root
+  if (!wlv_result_path_is_within(final, results_root) ||
+      !wlv_result_path_is_within(staging, results_root) ||
+      !wlv_result_path_is_within(backup, results_root)) {
+    stop("Refusing to reinstate unsafe result paths.", call. = FALSE)
+  }
+  if (!dir.exists(staging)) {
+    stop("The new result staging directory is unavailable for recovery.", call. = FALSE)
+  }
+  moved_prior <- FALSE
+  complete <- FALSE
+  on.exit({
+    if (!complete && moved_prior && dir.exists(backup) && !dir.exists(final)) {
+      file.rename(backup, final)
+    }
+  }, add = TRUE)
+  if (dir.exists(final)) {
+    if (dir.exists(backup) || !file.rename(final, backup)) {
+      stop("Could not retain prior results while reinstating the new generation.", call. = FALSE)
+    }
+    moved_prior <- TRUE
+  }
+  if (!file.rename(staging, final)) {
+    stop("Could not reinstate the new result generation.", call. = FALSE)
+  }
+  complete <- TRUE
+  invisible(transaction)
+}
+
+wlv_finalize_result_staging <- function(transaction) {
+  if (is.null(transaction) || !isTRUE(transaction$had_final)) {
+    return(invisible(transaction))
+  }
+  backup <- transaction$backup
+  results_root <- transaction$results_root
+  if (dir.exists(backup)) {
+    if (!wlv_result_path_is_within(backup, results_root) ||
+        !startsWith(basename(backup), ".backup-")) {
+      stop(sprintf("Refusing to remove unsafe backup path `%s`.", backup), call. = FALSE)
+    }
+    unlink(backup, recursive = TRUE, force = TRUE)
+    if (dir.exists(backup)) {
+      warning(sprintf("Could not remove old result backup `%s`.", backup), call. = FALSE)
+    }
+  }
+  invisible(transaction)
+}
+
+wlv_load_run_missingness_policy <- function(plan, method) {
+  policy_id <- if ("missingness_policy" %in% names(method)) {
+    method$missingness_policy[[1L]]
+  } else {
+    ""
+  }
+  if (!nzchar(policy_id)) {
+    return(wlv_strict_missingness_policy(
+      source = method$source[[1L]],
+      policy_id = sprintf("%s_strict", method$source[[1L]])
+    ))
+  }
+
+  record <- wlv_catalog_missingness_policy(plan$catalog, policy_id)
+  script <- file.path(plan$root, record$script[[1L]])
+  factory_name <- record$factory[[1L]]
+  policy_environment <- new.env(parent = environment(wlv_load_run_missingness_policy))
+  sys.source(script, envir = policy_environment)
+  factory <- get0(factory_name, envir = policy_environment, mode = "function", inherits = TRUE)
+  if (!is.function(factory)) {
+    stop(
+      sprintf("Missingness policy `%s` factory `%s` is unavailable.", policy_id, factory_name),
+      call. = FALSE
+    )
+  }
+  policy <- factory()
+  if (!inherits(policy, "wlv_missingness_policy") ||
+      !identical(policy$policy_id, policy_id) ||
+      !identical(policy$source, method$source[[1L]])) {
+    stop(
+      sprintf("Missingness policy factory `%s` returned an incompatible policy.", factory_name),
+      call. = FALSE
+    )
+  }
+  policy
+}
+
 wlv_run_method <- function(plan, method, cluster = NULL) {
+  method_record <- plan$methods[match(method, plan$methods$method), , drop = FALSE]
+  final_result_dir <- file.path(plan$root, "results", method)
+  results_root <- file.path(plan$root, "results")
+  result_lock <- wlv_acquire_result_lock(results_root, method)
+  lock_open <- TRUE
+  on.exit({
+    if (lock_open) {
+      try(wlv_release_result_lock(result_lock, results_root), silent = TRUE)
+    }
+  }, add = TRUE)
+  existing_result_dir <- if (dir.exists(final_result_dir)) {
+    normalizePath(final_result_dir, winslash = "/", mustWork = TRUE)
+  } else {
+    normalizePath(final_result_dir, winslash = "/", mustWork = FALSE)
+  }
+  staging <- wlv_create_result_staging(
+    plan$root,
+    method,
+    existing = if (plan$mode == "recalculate") existing_result_dir else NULL
+  )
+  staging_open <- TRUE
+  on.exit({
+    if (staging_open && dir.exists(staging)) {
+      try(wlv_remove_result_staging(staging, results_root), silent = TRUE)
+    }
+  }, add = TRUE)
+
+  missingness_policy <- wlv_load_run_missingness_policy(plan, method_record)
+  contract_runtime <- wlv_new_contract_runtime(
+    method = method,
+    source = method_record$source[[1L]],
+    policy = missingness_policy
+  )
+  run_data <- plan$data[[method]]
+  if (plan$mode == "recalculate") {
+    wlv_load_contract_report(
+      contract_runtime,
+      file.path(staging, "_anomalies.csv")
+    )
+    if (length(run_data$result_io)) {
+      run_data$result_io <- file.path(staging, basename(run_data$result_io))
+      missing_snapshot_io <- run_data$result_io[!file.exists(run_data$result_io)]
+      if (length(missing_snapshot_io)) {
+        stop(
+          sprintf(
+            "The recalculation snapshot lacks result matrix file(s): %s.",
+            paste(basename(missing_snapshot_io), collapse = ", ")
+          ),
+          call. = FALSE
+        )
+      }
+    }
+  }
   values <- list(
     method_version = method,
     methods = plan$method_names,
-    wlv_data = plan$data[[method]],
-    wlv_parameters = plan$configuration[[method]]
+    wlv_data = run_data,
+    wlv_parameters = plan$configuration[[method]],
+    wlv_result_dir = staging,
+    wlv_existing_result_dir = if (plan$mode == "recalculate") {
+      staging
+    } else {
+      existing_result_dir
+    },
+    wlv_missingness_policy = missingness_policy,
+    wlv_contract_runtime = contract_runtime
   )
   script <- file.path(plan$root, "R", "lib", "computations.R")
   if (plan$mode == "recalculate") {
@@ -1023,13 +1429,167 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
     values["sea_vars"] <- list(plan$sea_vars)
     script <- file.path(plan$root, "R", "lib", "re_computations.R")
   }
-  wlv_run_script(
-    script,
-    values = values,
-    cluster = cluster,
-    preamble = file.path(plan$root, "R", "lib", "functions.R"),
-    root = plan$root
+  run_environment <- tryCatch(
+    {
+      run_environment <- wlv_run_script(
+        script,
+        values = values,
+        cluster = cluster,
+        preamble = file.path(
+          plan$root,
+          "R",
+          "lib",
+          c("functions.R", "missingness.R", "result_contracts.R")
+        ),
+        root = plan$root
+      )
+      wlv_write_contract_states(
+        contract_runtime,
+        staging,
+        reader = run_environment$read_fst_array
+      )
+      wlv_write_contract_report(
+        contract_runtime,
+        file.path(staging, "_anomalies.csv")
+      )
+      expected_metadata <- wlv_method_result_metadata(
+        parameters = run_environment$parameters,
+        assumptions = run_environment$assumptions,
+        matrices = run_environment$matrices,
+        solutions = run_environment$sea_variables,
+        sectors = run_environment$sectors,
+        meta_indicators = run_environment$meta_indicators
+      )
+      wlv_validate_staged_results(
+        staging,
+        method = method,
+        mode = plan$mode,
+        runtime = contract_runtime,
+        expected_metadata = expected_metadata,
+        at_stage = if (plan$mode == "recalculate") plan$at_stage else NULL,
+        reader = run_environment$read_fst_array
+      )
+      run_environment
+    },
+    error = function(error) {
+      wlv_write_failed_contract_report(
+        contract_runtime,
+        results_root = results_root,
+        error = error
+      )
+      stop(error)
+    }
   )
+  metadata_transaction <- NULL
+  result_transaction <- NULL
+  publication_committed <- FALSE
+  on.exit({
+    if (!publication_committed) {
+      result_rolled_back <- tryCatch(
+        {
+          wlv_rollback_result_staging(result_transaction)
+          TRUE
+        },
+        error = function(error) {
+          message("Result rollback warning: ", conditionMessage(error))
+          FALSE
+        }
+      )
+      if (result_rolled_back) {
+        metadata_rolled_back <- tryCatch(
+          {
+            wlv_rollback_global_metadata(metadata_transaction)
+            TRUE
+          },
+          error = function(error) {
+            message("Global metadata rollback warning: ", conditionMessage(error))
+            FALSE
+          }
+        )
+        if (!metadata_rolled_back && !is.null(result_transaction)) {
+          reinstated <- tryCatch(
+            {
+              wlv_reinstate_new_result_staging(result_transaction)
+              staging_open <- FALSE
+              wlv_finalize_result_staging(result_transaction)
+              TRUE
+            },
+            error = function(error) {
+              message("Result recovery warning: ", conditionMessage(error))
+              FALSE
+            }
+          )
+          if (reinstated) {
+            message(
+              paste0(
+                "The new result generation was retained because global ",
+                "metadata rollback did not complete."
+              )
+            )
+          } else {
+            message("Manual result/metadata recovery is required before another run.")
+          }
+        }
+      } else {
+        message(
+          paste0(
+            "Global metadata was left on the new generation because result ",
+            "rollback did not complete."
+          )
+        )
+      }
+    }
+  }, add = TRUE)
+  cleanup_warnings <- character()
+  suspendInterrupts({
+    metadata_transaction <- wlv_begin_global_metadata_transaction(
+      run_environment,
+      results_root
+    )
+    result_transaction <- wlv_publish_result_staging(
+      staging,
+      final_result_dir,
+      results_root
+    )
+    staging_open <- FALSE
+    publication_committed <- TRUE
+    withCallingHandlers(
+      {
+        wlv_finalize_result_staging(result_transaction)
+        wlv_finalize_global_metadata(metadata_transaction)
+      },
+      warning = function(warning) {
+        cleanup_warnings <<- c(cleanup_warnings, conditionMessage(warning))
+        invokeRestart("muffleWarning")
+      }
+    )
+  })
+  if (length(cleanup_warnings)) {
+    message(
+      "Published successfully; cleanup warning(s): ",
+      paste(unique(cleanup_warnings), collapse = " ")
+    )
+  }
+  lock_released <- tryCatch(
+    {
+      wlv_release_result_lock(result_lock, results_root)
+      TRUE
+    },
+    error = function(error) {
+      message(
+        paste0(
+          "Published successfully; result lock cleanup warning: ",
+          conditionMessage(error),
+          " Verify and remove the stale lock before the next run."
+        )
+      )
+      FALSE
+    }
+  )
+  if (lock_released) {
+    lock_open <- FALSE
+  }
+  run_environment
 }
 
 wlv_run_paper <- function(plan, run_environment) {

@@ -16,6 +16,81 @@ wlv_wiodr13_validate_labels <- function(values, name) {
   unname(values)
 }
 
+wlv_wiodr13_workbook_missingness_signature <- function(
+    sea,
+    years = as.character(1995:2009)) {
+  identifier_columns <- c("country", "variable", "code")
+  required <- c(identifier_columns, years)
+  if (!is.data.frame(sea) || length(years) == 0L || anyNA(years) ||
+      any(!nzchar(years)) || length(setdiff(required, names(sea)))) {
+    stop("Invalid WIOD13 SEA table for missingness signature.", call. = FALSE)
+  }
+  if (anyNA(sea[identifier_columns])) {
+    stop("WIOD13 SEA identifiers contain missing values.", call. = FALSE)
+  }
+  missing <- which(is.na(as.matrix(sea[years])), arr.ind = TRUE)
+  keys <- if (nrow(missing)) {
+    sort(
+      paste(
+        years[missing[, 2L]],
+        sea$country[missing[, 1L]],
+        sea$variable[missing[, 1L]],
+        sea$code[missing[, 1L]],
+        sep = "|"
+      ),
+      method = "radix"
+    )
+  } else {
+    character()
+  }
+  hash_file <- tempfile("wlv-wiodr13-sea-missing-", fileext = ".txt")
+  on.exit(unlink(hash_file), add = TRUE)
+  connection <- file(hash_file, open = "wb")
+  writeBin(charToRaw(enc2utf8(paste(keys, collapse = "\n"))), connection)
+  close(connection)
+  by_year <- vapply(
+    sea[years],
+    function(values) sum(is.na(values)),
+    integer(1L)
+  )
+  list(
+    count = length(keys),
+    by_year = by_year,
+    md5 = unname(tools::md5sum(hash_file))
+  )
+}
+
+wlv_wiodr13_validate_workbook_missingness <- function(
+    sea,
+    years = as.character(1995:2009),
+    expected_by_year = stats::setNames(
+      c(rep(371L, 13L), 1861L, 2073L),
+      as.character(1995:2009)
+    ),
+    expected_count = 8757L,
+    expected_md5 = "c6d680700338a625abc5e3df78b61c0a") {
+  signature <- wlv_wiodr13_workbook_missingness_signature(sea, years)
+  valid <-
+    identical(names(signature$by_year), names(expected_by_year)) &&
+    identical(as.integer(signature$by_year), as.integer(expected_by_year)) &&
+    identical(as.integer(signature$count), as.integer(expected_count)) &&
+    identical(signature$md5, expected_md5)
+  if (!valid) {
+    stop(
+      sprintf(
+        paste0(
+          "WIOD13 SEA missingness differs from the pinned coordinate signature ",
+          "(count=%s, md5=%s)."
+        ),
+        signature$count,
+        signature$md5
+      ),
+      call. = FALSE
+    )
+  }
+  invisible(signature)
+}
+
 wlv_wiodr13_expected_dimensions <- function(countries, sectors, demands) {
   countries <- wlv_wiodr13_validate_labels(countries, "countries")
   sectors <- wlv_wiodr13_validate_labels(sectors, "sectors")

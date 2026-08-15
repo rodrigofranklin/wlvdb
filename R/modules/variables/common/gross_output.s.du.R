@@ -12,13 +12,23 @@ meta_indicators[code,"type"] <- "usd"
 meta_indicators[code,"group"] <- "Product"
 meta_indicators[code,"reverted"] <- FALSE
 
-k <- 
-  (sea_sectors[lists$years,"gross_output.s.us",,] %>%
-     newDim(c(nums$years, nums$sectors, nums$countries)) %>%
-     apply(1, sum, na.rm = TRUE)) /
-  (sea_sectors[lists$years,"gross_output.s.mv",,] %>%
-     newDim(c(nums$years, nums$sectors, nums$countries)) %>%
-     apply(1, sum, na.rm = TRUE))
+direct_price_numerator <-
+  sea_sectors[lists$years, "gross_output.s.us", , ] %>%
+  newDim(c(nums$years, nums$sectors, nums$countries)) %>%
+  apply(1, sum)
+direct_price_denominator <-
+  sea_sectors[lists$years, "gross_output.s.mv", , ] %>%
+  newDim(c(nums$years, nums$sectors, nums$countries)) %>%
+  apply(1, sum)
+k <- if (exists("wlv_contract_runtime", inherits = FALSE)) {
+  wlv_safe_divide_runtime(
+    wlv_contract_runtime, direct_price_numerator, direct_price_denominator,
+    zero = "error", artifact = "sea_sectors",
+    indicator = "direct_price_coefficient", checkpoint = "after_stage_5",
+    stage = 5L, module = "common/gross_output.s.du.R", axes = c(year = 1L)
+  )
+} else direct_price_numerator / direct_price_denominator
 
 sea_sectors[lists$years,code,,] <- 
   sea_sectors[lists$years,"gross_output.s.mv",,] * rep(k, times = nums$input)
+rm(direct_price_numerator, direct_price_denominator)

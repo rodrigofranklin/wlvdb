@@ -2,13 +2,15 @@ wlv_catalog_schemas <- list(
   sources = c(
     "source", "status", "year_start", "year_end", "parameter_set",
     "data_dir", "can_prepare", "preparer", "validator_script",
-    "validator_function", "artifact_profile", "documentation", "limitations"
+    "validator_function", "artifact_profile", "missingness_policy",
+    "documentation", "limitations"
   ),
   methods = c(
     "method", "source", "code", "description", "status", "can_calculate",
     "can_recalculate", "test", "documentation", "limitations"
   ),
-  artifacts = c("profile", "artifact", "kind", "sidecar", "operations")
+  artifacts = c("profile", "artifact", "kind", "sidecar", "operations"),
+  missingness = c("policy", "script", "factory", "documentation")
 )
 
 wlv_catalog_stop <- function(message, ...) {
@@ -22,12 +24,11 @@ wlv_catalog_read_csv <- function(path, schema, name) {
 
   value <- tryCatch(
     utils::read.csv2(
-      path,
+      text = readLines(path, encoding = "UTF-8", warn = FALSE),
       stringsAsFactors = FALSE,
       colClasses = "character",
       check.names = FALSE,
       na.strings = NULL,
-      fileEncoding = "UTF-8",
       strip.white = FALSE,
       comment.char = ""
     ),
@@ -322,6 +323,16 @@ wlv_catalog_validate_sources <- function(sources, root) {
     )
   }
 
+  policy_present <- nzchar(sources$missingness_policy)
+  invalid_policy <- policy_present &
+    !grepl("^[a-z][a-z0-9_]*$", sources$missingness_policy)
+  if (any(invalid_policy)) {
+    wlv_catalog_stop(
+      "The sources catalog contains invalid `missingness_policy` identifiers: %s.",
+      paste(unique(sources$missingness_policy[invalid_policy]), collapse = ", ")
+    )
+  }
+
   missing_parameter_sets <- unique(sources$parameter_set[
     !dir.exists(file.path(root, "parameters", sources$parameter_set))
   ])
@@ -354,11 +365,12 @@ wlv_catalog_validate_sources <- function(sources, root) {
       !nzchar(sources$validator_script) |
       !nzchar(sources$validator_function) |
       !nzchar(sources$artifact_profile) |
+      !nzchar(sources$missingness_policy) |
       !nzchar(sources$documentation)
   )
   if (any(incomplete_stable)) {
     wlv_catalog_stop(
-      "Stable source(s) must declare preparation, validation, artifacts, and documentation: %s.",
+      "Stable source(s) must declare preparation, validation, artifacts, a missingness policy, and documentation: %s.",
       paste(sources$source[incomplete_stable], collapse = ", ")
     )
   }
@@ -451,6 +463,47 @@ wlv_catalog_validate_artifacts <- function(artifacts) {
   }
 
   artifacts
+}
+
+wlv_catalog_validate_missingness_policies <- function(policies, root) {
+  name <- "missingness policies"
+  wlv_catalog_validate_required(
+    policies,
+    c("policy", "script", "factory", "documentation"),
+    name
+  )
+  wlv_catalog_validate_ids(policies$policy, "policy", name)
+  wlv_catalog_validate_unique(policies$policy, "policy", name)
+  for (column in c("script", "documentation")) {
+    wlv_catalog_validate_paths(policies[[column]], column, name)
+    wlv_catalog_require_declared_files(root, policies[[column]], column, name)
+  }
+
+  invalid_factory <- !grepl(
+    "^[A-Za-z.][A-Za-z0-9._]*$",
+    policies$factory
+  )
+  if (any(invalid_factory)) {
+    wlv_catalog_stop(
+      "The missingness policies catalog contains invalid `factory` names: %s.",
+      paste(unique(policies$factory[invalid_factory]), collapse = ", ")
+    )
+  }
+
+  for (index in seq_len(nrow(policies))) {
+    path <- file.path(root, policies$script[[index]])
+    factory <- policies$factory[[index]]
+    if (!wlv_catalog_validator_is_defined(path, factory)) {
+      wlv_catalog_stop(
+        "Missingness policy factory `%s` is not defined in `%s` for policy `%s`.",
+        factory,
+        policies$script[[index]],
+        policies$policy[[index]]
+      )
+    }
+  }
+
+  policies
 }
 
 wlv_catalog_validate_methods <- function(methods, sources, root) {
@@ -590,12 +643,15 @@ wlv_catalog_validate_methods <- function(methods, sources, root) {
     }
     parameters <- tryCatch(
       utils::read.csv2(
-        parameter_file,
+        text = readLines(
+          parameter_file,
+          encoding = "latin1",
+          warn = FALSE
+        ),
         stringsAsFactors = FALSE,
         colClasses = "character",
         check.names = FALSE,
-        na.strings = NULL,
-        fileEncoding = "latin1"
+        na.strings = NULL
       ),
       error = function(error) {
         wlv_catalog_stop(
@@ -654,7 +710,11 @@ wlv_catalog_validate_methods <- function(methods, sources, root) {
   methods
 }
 
-wlv_catalog_validate_cross_references <- function(sources, methods, artifacts) {
+wlv_catalog_validate_cross_references <- function(
+    sources,
+    methods,
+    artifacts,
+    missingness_policies) {
   profiles <- unique(artifacts$profile)
   missing_profiles <- setdiff(
     unique(sources$artifact_profile[nzchar(sources$artifact_profile)]),
@@ -664,6 +724,17 @@ wlv_catalog_validate_cross_references <- function(sources, methods, artifacts) {
     wlv_catalog_stop(
       "The sources catalog refers to unknown artifact profile(s): %s.",
       paste(missing_profiles, collapse = ", ")
+    )
+  }
+
+  missing_policies <- setdiff(
+    unique(sources$missingness_policy[nzchar(sources$missingness_policy)]),
+    missingness_policies$policy
+  )
+  if (length(missing_policies)) {
+    wlv_catalog_stop(
+      "The sources catalog refers to unknown missingness policy or policies: %s.",
+      paste(missing_policies, collapse = ", ")
     )
   }
 
@@ -738,18 +809,33 @@ wlv_load_catalog <- function(root = ".") {
     wlv_catalog_schemas$artifacts,
     "artifact profiles"
   )
+  missingness_policies <- wlv_catalog_read_csv(
+    file.path(catalog_dir, "missingness-policies.csv"),
+    wlv_catalog_schemas$missingness,
+    "missingness policies"
+  )
 
   sources <- wlv_catalog_validate_sources(sources, root)
   artifacts <- wlv_catalog_validate_artifacts(artifacts)
+  missingness_policies <- wlv_catalog_validate_missingness_policies(
+    missingness_policies,
+    root
+  )
   methods <- wlv_catalog_validate_methods(methods, sources, root)
-  wlv_catalog_validate_cross_references(sources, methods, artifacts)
+  wlv_catalog_validate_cross_references(
+    sources,
+    methods,
+    artifacts,
+    missingness_policies
+  )
 
   structure(
     list(
       root = root,
       sources = sources,
       methods = methods,
-      artifacts = artifacts
+      artifacts = artifacts,
+      missingness_policies = missingness_policies
     ),
     class = c("wlv_catalog", "list")
   )
@@ -790,6 +876,21 @@ wlv_catalog_source <- function(catalog, source) {
     wlv_catalog_stop("Unknown source `%s`.", source)
   }
   catalog$sources[row, , drop = FALSE]
+}
+
+wlv_catalog_missingness_policy <- function(catalog, policy) {
+  wlv_catalog_assert(catalog)
+  if (
+    !is.character(policy) || length(policy) != 1L || is.na(policy) ||
+      !grepl("^[a-z][a-z0-9_]*$", policy)
+  ) {
+    wlv_catalog_stop("`policy` must be one valid missingness policy identifier.")
+  }
+  row <- catalog$missingness_policies$policy == policy
+  if (!any(row)) {
+    wlv_catalog_stop("Unknown missingness policy `%s`.", policy)
+  }
+  catalog$missingness_policies[row, , drop = FALSE]
 }
 
 wlv_catalog_artifacts <- function(catalog, profile, operation = NULL) {
@@ -851,6 +952,7 @@ wlv_catalog_method_table <- function(catalog) {
     source = catalog$methods$source,
     status = catalog$methods$status,
     source_status = sources$status,
+    missingness_policy = sources$missingness_policy,
     year_start = sources$year_start,
     year_end = sources$year_end,
     years = wlv_catalog_format_years(sources$year_start, sources$year_end),

@@ -31,6 +31,21 @@ for (assumption in assumptions$computation) {
   print(paste0("sourcing: ",assumption))
   source(paste0("R/modules/assumptions/",assumption))
 }
+if (exists("wlv_contract_runtime", inherits = FALSE)) {
+  wlv_contract_clear_states(
+    wlv_contract_runtime,
+    "sea_sectors",
+    sea_variables$names[sea_variables$stage <= 1L]
+  )
+  wlv_validate_sea_stage(
+    wlv_contract_runtime,
+    sea_sectors,
+    sea_variables,
+    stage = 1L,
+    checkpoint = "after_assumptions",
+    years = lists$years
+  )
+}
 
 # Other assumptions
 # (eg, reduction problem) 
@@ -54,6 +69,13 @@ for(current_m_io in lists$m_io_files) {
     print(paste("Sourcing from ",paste0("R/modules/matrices/",matrix_script)))
     source(paste0("R/modules/matrices/",matrix_script))
   }
+  if (exists("wlv_contract_runtime", inherits = FALSE)) {
+    wlv_validate_m_io_contract(
+      wlv_contract_runtime,
+      m_io,
+      checkpoint = "after_matrices"
+    )
+  }
 
   # reduces input-output matrices to country matrices.
   # filter to eliminate internal trade
@@ -61,6 +83,13 @@ for(current_m_io in lists$m_io_files) {
   filter <- rep(1-diag(nums$countries), each = nums$years)
   for (matrix_script in reduced_matrices$computation) {
     source(paste0("R/modules/reduced_matrices/",matrix_script))
+  }
+  if (exists("wlv_contract_runtime", inherits = FALSE)) {
+    wlv_validate_m_countries_contract(
+      wlv_contract_runtime,
+      m_countries[lists$years, , , , drop = FALSE],
+      checkpoint = "after_reduced_matrices"
+    )
   }
   print("End of matrix reduction.")
   
@@ -71,19 +100,29 @@ for(current_m_io in lists$m_io_files) {
   # write
   print("Writing...")
   if (nums$years == 1) {
-    write_fst_array(m_io,paste0("results/",method_version,"/m_io",lists$years[1],".fst"))
+    current_result_io <- file.path(
+      wlv_result_dir,
+      paste0("m_io", lists$years[1], ".fst")
+    )
   } else {
-    write_fst_array(m_io,paste0("results/",method_version,"/m_io",lists$years[1],"-",
-                        lists$years[nums$years],".fst"))
+    current_result_io <- file.path(
+      wlv_result_dir,
+      paste0("m_io", lists$years[1], "-", lists$years[nums$years], ".fst")
+    )
   }
+  write_fst_array(m_io, current_result_io)
 
   # just in case of blackout
   print("Temporary writing...")
-  write_fst_array(m_countries,paste0("results/",method_version,"/m_countries.fst"))
-  write_fst_array(sea_sectors,paste0("results/",method_version,"/sea_sectors.fst"))
+  write_fst_array(m_countries, file.path(wlv_result_dir, "m_countries.fst"))
+  write_fst_array(sea_sectors, file.path(wlv_result_dir, "sea_sectors.fst"))
 
   # clear environment
-  #rm(lambda, m_io_source, m_io, balance_factor, filter, matrix_script)
+  rm(lambda, m_io_source, m_io, balance_factor, filter)
+  rm(list = intersect(
+    "matrix_script",
+    ls(envir = environment(), all.names = TRUE)
+  ), envir = environment())
   gc()
 }
 
@@ -95,6 +134,10 @@ gc()
 # all years
 lists$years <- names(sea_source[,1,1,1])
 nums$years <- length(lists$years)
+
+if (identical(source_version, "wiodr13")) {
+  source("R/modules/variables/wiodr13/normalize_price_indices.R")
+}
 
 #######################.
 # results variables
@@ -112,9 +155,28 @@ source("R/modules/variables/sea_countries.R")
 #######################.
 
 print("Writing...")
-write_fst_array(m_countries,paste0("results/",method_version,"/m_countries.fst"))
-write_fst_array(sea_sectors,paste0("results/",method_version,"/sea_sectors.fst"))
-write_fst_array(sea_countries,paste0("results/",method_version,"/sea_countries.fst"))
+if (exists("wlv_contract_runtime", inherits = FALSE)) {
+  wlv_validate_sea_stage(
+    wlv_contract_runtime,
+    sea_sectors,
+    sea_variables,
+    stage = 5L,
+    checkpoint = "pre_publish"
+  )
+  wlv_validate_sea_countries_contract(
+    wlv_contract_runtime,
+    sea_countries,
+    checkpoint = "pre_publish"
+  )
+  wlv_validate_m_countries_contract(
+    wlv_contract_runtime,
+    m_countries,
+    checkpoint = "pre_publish"
+  )
+}
+write_fst_array(m_countries, file.path(wlv_result_dir, "m_countries.fst"))
+write_fst_array(sea_sectors, file.path(wlv_result_dir, "sea_sectors.fst"))
+write_fst_array(sea_countries, file.path(wlv_result_dir, "sea_countries.fst"))
 
 source("R/lib/write_labels.R")
 

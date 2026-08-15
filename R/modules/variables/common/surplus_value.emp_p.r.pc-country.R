@@ -1,32 +1,70 @@
-# Exploitation rate of employed persons in productive sectors, by country and
-# for the world. The world value is a ratio of totals, not a mean of rates.
-emp_p_numerator <- aperm(
-  apply(
-    sea_sectors[, "abstract_labour.emp.s.mv", , ] *
-      rep(rows$productive, each = nums$years),
-    1,
-    tapply,
-    rows$num_country,
-    sum,
-    na.rm = TRUE
-  ),
-  c(2, 1)
-)
-emp_p_denominator <- aperm(
-  apply(
-    sea_sectors[, "labour_force_value.emp.s.mv", , ] *
-      rep(rows$productive, each = nums$years),
-    1,
-    tapply,
-    rows$num_country,
-    sum,
-    na.rm = TRUE
-  ),
-  c(2, 1)
-)
-sea_countries[, "surplus_value.emp_p.r.pc", lists$countries] <-
-  emp_p_numerator / emp_p_denominator - 1
-sea_countries[, "surplus_value.emp_p.r.pc", "WWW"] <-
-  rowSums(emp_p_numerator) / rowSums(emp_p_denominator) - 1
+# Exploitation rate of persons engaged in productive sectors. Numerator and
+# denominator use the same available-component mask, avoiding mixed coverage.
+country_indicator <- "surplus_value.emp_p.r.pc"
+productive_filter <- rep(rows$productive, each = nums$years)
+ratio_numerator <-
+  sea_sectors[, "abstract_labour.emp.s.mv", , ] * productive_filter
+ratio_denominator <-
+  sea_sectors[, "labour_force_value.emp.s.mv", , ] * productive_filter
 
-rm(emp_p_numerator, emp_p_denominator)
+if (exists("wlv_contract_runtime", inherits = FALSE)) {
+  country_ratio <- wlv_ratio_of_aggregates_runtime(
+    wlv_contract_runtime,
+    ratio_numerator,
+    ratio_denominator,
+    margin = c(1L, 3L),
+    indicator = country_indicator,
+    numerator_indicator = "abstract_labour.emp.s.mv",
+    denominator_indicator = "labour_force_value.emp.s.mv",
+    checkpoint = "after_country_module",
+    module = "common/surplus_value.emp_p.r.pc-country.R",
+    input_axes = c(year = 1L, sector = 2L, country = 3L),
+    output_axes = c(year = 1L, country = 2L)
+  )
+  world_ratio <- wlv_ratio_of_aggregates_runtime(
+    wlv_contract_runtime,
+    ratio_numerator,
+    ratio_denominator,
+    margin = 1L,
+    indicator = country_indicator,
+    numerator_indicator = "abstract_labour.emp.s.mv",
+    denominator_indicator = "labour_force_value.emp.s.mv",
+    checkpoint = "after_country_module",
+    module = "common/surplus_value.emp_p.r.pc-country.R",
+    input_axes = c(year = 1L, sector = 2L, country = 3L),
+    output_axes = c(year = 1L)
+  )
+} else {
+  country_ratio <- aperm(
+    apply(ratio_numerator, 1L, tapply, rows$num_country, sum, na.rm = TRUE),
+    c(2L, 1L)
+  ) / aperm(
+    apply(ratio_denominator, 1L, tapply, rows$num_country, sum, na.rm = TRUE),
+    c(2L, 1L)
+  )
+  world_ratio <- apply(ratio_numerator, 1L, sum, na.rm = TRUE) /
+    apply(ratio_denominator, 1L, sum, na.rm = TRUE)
+}
+sea_countries[, country_indicator, lists$countries] <- country_ratio - 1
+sea_countries[, country_indicator, "WWW"] <- world_ratio - 1
+
+if (exists("wlv_contract_runtime", inherits = FALSE)) {
+  complete_states <- array(
+    "finite",
+    dim = dim(sea_countries[, country_indicator, , drop = FALSE]),
+    dimnames = dimnames(sea_countries[, country_indicator, , drop = FALSE])
+  )
+  complete_states[, 1L, lists$countries] <- attr(country_ratio, "wlv_state")
+  complete_states[, 1L, "WWW"] <- attr(world_ratio, "wlv_state")
+  wlv_contract_register_states(
+    wlv_contract_runtime, "sea_countries", country_indicator, complete_states
+  )
+}
+rm(
+  country_indicator, productive_filter, ratio_numerator, ratio_denominator,
+  country_ratio, world_ratio
+)
+rm(list = intersect(
+  "complete_states",
+  ls(envir = environment(), all.names = TRUE)
+), envir = environment())

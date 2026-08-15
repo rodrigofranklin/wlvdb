@@ -4,14 +4,6 @@ newDim <- function(x, dimensions) {
   return(x)
 }
 
-clean <- function(x) {
-  # eliminates NaN, NA and Inf of a variable
-  x[is.nan(x)] <- 0
-  x[is.na(x)] <- 0
-  x[is.infinite(x)] <- 0
-  return(x)
-}
-
 wlv_euklems_country_codes <- function(countries) {
   if (
     !is.character(countries) ||
@@ -178,9 +170,16 @@ wlv_read_wiodr16_china_hours_per_worker <- function(
   t(hours)
 }
 
-wlv_distribute_capital_stock <- function(weights, capital_stock) {
-  if (!is.matrix(weights) || !is.numeric(weights)) {
-    stop("`weights` must be a numeric matrix.", call. = FALSE)
+wlv_distribute_capital_stock <- function(
+    weights,
+    capital_stock,
+    fallback_weights = NULL,
+    tolerance = 1e-10) {
+  if (
+    !is.matrix(weights) || !is.numeric(weights) || anyNA(weights) ||
+    any(!is.finite(weights))
+  ) {
+    stop("`weights` must be a finite numeric matrix.", call. = FALSE)
   }
   if (
     !is.numeric(capital_stock) ||
@@ -193,16 +192,58 @@ wlv_distribute_capital_stock <- function(weights, capital_stock) {
       call. = FALSE
     )
   }
+  if (
+    length(tolerance) != 1L || !is.numeric(tolerance) || is.na(tolerance) ||
+    !is.finite(tolerance) || tolerance < 0
+  ) {
+    stop("`tolerance` must be one finite non-negative number.", call. = FALSE)
+  }
 
   totals <- colSums(weights)
-  invalid_columns <- !is.finite(totals) | totals == 0
+  invalid_columns <- totals == 0
+  fallback_columns <- which(invalid_columns & capital_stock != 0)
+  if (length(fallback_columns)) {
+    if (
+      is.null(fallback_weights) || !is.matrix(fallback_weights) ||
+      !is.numeric(fallback_weights) ||
+      !identical(dim(fallback_weights), dim(weights)) ||
+      anyNA(fallback_weights) || any(!is.finite(fallback_weights)) ||
+      any(fallback_weights < 0)
+    ) {
+      stop(
+        paste0(
+          "Positive or negative capital stock without primary weights requires ",
+          "a conformable finite non-negative fallback matrix."
+        ),
+        call. = FALSE
+      )
+    }
+    fallback_totals <- colSums(fallback_weights)
+    unresolved <- fallback_columns[fallback_totals[fallback_columns] <= 0]
+    if (length(unresolved)) {
+      stop(
+        sprintf(
+          "Capital stock has no primary or fallback weights in column(s): %s.",
+          paste(unresolved, collapse = ", ")
+        ),
+        call. = FALSE
+      )
+    }
+    weights[, fallback_columns] <- fallback_weights[, fallback_columns, drop = FALSE]
+    totals[fallback_columns] <- fallback_totals[fallback_columns]
+  }
   distribution <- sweep(weights, 2L, totals, "/")
-  distribution[, invalid_columns] <- 0
-  distribution[!is.finite(distribution)] <- 0
+  zero_stock_columns <- totals == 0 & capital_stock == 0
+  distribution[, zero_stock_columns] <- 0
+  if (any(!is.finite(distribution))) {
+    stop("Capital-stock weights produced a non-finite distribution.", call. = FALSE)
+  }
   result <- sweep(distribution, 2L, capital_stock, "*")
-  attr(result, "wlv.unallocated_columns") <- which(
-    invalid_columns & capital_stock != 0
-  )
+  residual <- abs(colSums(result) - capital_stock)
+  if (any(residual > tolerance * pmax(1, abs(capital_stock)))) {
+    stop("Capital-stock allocation does not conserve column totals.", call. = FALSE)
+  }
+  attr(result, "wlv.fallback_columns") <- fallback_columns
   result
 }
 
@@ -236,16 +277,67 @@ wlv_add_synthetic_depreciation_component <- function(
     )
   }
 
-  weighted_component <- component_rate * component_stock / aggregate_stock
-  weighted_component[!is.finite(weighted_component)] <- 0
+  invalid_input <- vapply(
+    numeric_values,
+    function(value) anyNA(value) || any(!is.finite(value)),
+    logical(1L)
+  )
+  if (any(invalid_input)) {
+    stop("Depreciation rates and stocks must be finite.", call. = FALSE)
+  }
+  zero_stock <- aggregate_stock == 0
+  invalid_zero <- zero_stock & component_stock != 0
+  if (any(invalid_zero)) {
+    stop(
+      "A positive depreciation component cannot have zero aggregate stock.",
+      call. = FALSE
+    )
+  }
+  weighted_component <- component_rate * component_stock
+  weighted_component[!zero_stock] <-
+    weighted_component[!zero_stock] / aggregate_stock[!zero_stock]
+  weighted_component[zero_stock] <- 0
   synthesize <- !direct_rate_provided
   aggregate_rate[synthesize] <-
     aggregate_rate[synthesize] + weighted_component[synthesize]
   aggregate_rate
 }
 
-wlv_sum_input_flows <- function(intermediate_consumption, depreciation) {
-  clean(intermediate_consumption) + clean(depreciation)
+wlv_sum_input_flows <- function(
+    intermediate_consumption,
+    depreciation,
+    structural_missing = NULL) {
+  if (
+    !is.numeric(intermediate_consumption) || !is.numeric(depreciation) ||
+    !identical(dim(intermediate_consumption), dim(depreciation))
+  ) {
+    stop("Input-flow arrays must be conformable numeric values.", call. = FALSE)
+  }
+  if (anyNA(intermediate_consumption) || any(!is.finite(intermediate_consumption))) {
+    stop("Intermediate consumption must be fully finite.", call. = FALSE)
+  }
+  if (any(is.nan(depreciation)) || any(is.infinite(depreciation))) {
+    stop("Depreciation contains NaN or infinite values.", call. = FALSE)
+  }
+  if (is.null(structural_missing)) {
+    structural_missing <- rep(FALSE, length(depreciation))
+    dim(structural_missing) <- dim(depreciation)
+  }
+  if (
+    !is.logical(structural_missing) || anyNA(structural_missing) ||
+    !identical(dim(structural_missing), dim(depreciation))
+  ) {
+    stop("`structural_missing` must be a conformable logical mask.", call. = FALSE)
+  }
+  unexpected <- is.na(depreciation) & !structural_missing
+  if (any(unexpected)) {
+    stop("Depreciation contains an undeclared missing value.", call. = FALSE)
+  }
+  if (any(structural_missing & !is.na(depreciation))) {
+    stop("The depreciation structural-missing mask is not exact.", call. = FALSE)
+  }
+  depreciation[structural_missing] <- 0
+  intermediate_consumption + depreciation
 }
 
 cnames <- function(a,b) {

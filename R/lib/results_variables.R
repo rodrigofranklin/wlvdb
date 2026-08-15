@@ -53,23 +53,26 @@ sea_countries <- array(NA,
                                     lists$sea_variables,
                                     c(lists$countries,"WWW")))
 
-# Creates folder in "results"
-dir.create("results", showWarnings = FALSE)
-dir.create(paste0("results/",method_version), showWarnings = FALSE)
+# The validated entrypoint provides an isolated staging directory. Direct
+# sourcing keeps a narrowly scoped compatibility fallback.
+if (!exists("wlv_result_dir", inherits = FALSE)) {
+  wlv_result_dir <- file.path("results", method_version)
+  dir.create(wlv_result_dir, recursive = TRUE, showWarnings = FALSE)
+}
 
 # Save infos
 write.csv2(parameters,
-           paste0("results/",method_version,"/_parameters.csv"),
+           file.path(wlv_result_dir, "_parameters.csv"),
            row.names = FALSE, na = "")
 write.csv2(assumptions,
-           paste0("results/",method_version,"/_method_assumptions.csv"),
+           file.path(wlv_result_dir, "_method_assumptions.csv"),
            row.names = FALSE, na = "")
 write.csv2(matrices,
-           paste0("results/",method_version,"/_method_matrices.csv"),
+           file.path(wlv_result_dir, "_method_matrices.csv"),
            row.names = FALSE, na = "")
 write.csv2(sea_variables,
-           paste0("results/",method_version,"/_method_solutions.csv"),
+           file.path(wlv_result_dir, "_method_solutions.csv"),
            row.names = FALSE, na = "")
 write.csv2(sectors,
-           paste0("results/",method_version,"/_sectors.csv"),
+           file.path(wlv_result_dir, "_sectors.csv"),
            row.names = FALSE, na = "")

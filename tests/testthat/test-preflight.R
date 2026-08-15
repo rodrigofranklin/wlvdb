@@ -46,6 +46,8 @@ wlv_make_preflight_fixture <- function(
   dir.create(file.path(root, "catalog"), recursive = TRUE)
   dir.create(file.path(root, "methods", method), recursive = TRUE)
   dir.create(file.path(root, "R", "utils", "papers"), recursive = TRUE)
+  dir.create(file.path(root, "R", "lib"), recursive = TRUE)
+  dir.create(file.path(root, "docs"), recursive = TRUE)
   dir.create(file.path(root, "parameters", source), recursive = TRUE)
   dir.create(file.path(root, "parameters", "common_ground"), recursive = TRUE)
   dir.create(file.path(root, "R", "modules", "assumptions"), recursive = TRUE)
@@ -87,6 +89,7 @@ wlv_make_preflight_fixture <- function(
     validator_script = "",
     validator_function = "",
     artifact_profile = "fixture_core",
+    missingness_policy = "fixture_v1",
     documentation = "",
     limitations = "Synthetic source used only by preflight tests.",
     check.names = FALSE,
@@ -115,10 +118,19 @@ wlv_make_preflight_fixture <- function(
     check.names = FALSE,
     stringsAsFactors = FALSE
   )
+  missingness_policies_catalog <- data.frame(
+    policy = "fixture_v1",
+    script = "R/lib/fixture_missingness.R",
+    factory = "wlv_fixture_missingness_policy",
+    documentation = "docs/fixture-missingness.md",
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
   catalogs <- list(
     sources = sources_catalog,
     methods = methods_catalog,
-    `artifact-profiles` = artifacts_catalog
+    `artifact-profiles` = artifacts_catalog,
+    `missingness-policies` = missingness_policies_catalog
   )
   for (name in names(catalogs)) {
     utils::write.table(
@@ -130,6 +142,15 @@ wlv_make_preflight_fixture <- function(
       quote = FALSE
     )
   }
+
+  writeLines(
+    "wlv_fixture_missingness_policy <- function(...) list(policy_id = 'fixture_v1')",
+    file.path(root, "R", "lib", "fixture_missingness.R")
+  )
+  writeLines(
+    "# Fixture missingness policy",
+    file.path(root, "docs", "fixture-missingness.md")
+  )
 
   writeLines(
     c("names;computation;order", "fixture_assumption;fixture-assumption.R;1"),
@@ -227,6 +248,28 @@ test_that("experimental methods require an explicit opt-in", {
     wlv_fixture_request(fixture, allow_experimental = TRUE),
     "wlv_run_plan"
   )
+})
+
+test_that("stage-1 recalculation cannot select a partial indicator set", {
+  fixture <- wlv_make_preflight_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+
+  expect_error(
+    wlv_fixture_request(
+      fixture,
+      mode = "recalculate",
+      at_stage = 1L,
+      sea_vars = "emp.s.un"
+    ),
+    "unsafe at stage 1",
+    fixed = TRUE
+  )
+  expect_no_error(wlv_fixture_request(
+    fixture,
+    mode = "recalculate",
+    at_stage = 1L,
+    sea_vars = NULL
+  ))
 })
 
 test_that("disabled methods remain blocked with experimental opt-in", {

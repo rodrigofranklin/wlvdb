@@ -45,6 +45,7 @@ wlv_make_catalog_fixture <- function() {
     validator_script = "R/lib/demo_validation.R",
     validator_function = "wlv_validate_demo_prepared",
     artifact_profile = "demo_core",
+    missingness_policy = "demo_v1",
     documentation = "docs/demo.md",
     limitations = "",
     stringsAsFactors = FALSE,
@@ -76,12 +77,24 @@ wlv_make_catalog_fixture <- function() {
     stringsAsFactors = FALSE,
     check.names = FALSE
   )
+  missingness_policies <- data.frame(
+    policy = "demo_v1",
+    script = "R/lib/demo_missingness.R",
+    factory = "wlv_demo_missingness_policy",
+    documentation = "docs/demo.md",
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
 
   wlv_catalog_test_write(file.path(root, "catalog", "sources.csv"), sources)
   wlv_catalog_test_write(file.path(root, "catalog", "methods.csv"), methods)
   wlv_catalog_test_write(
     file.path(root, "catalog", "artifact-profiles.csv"),
     artifacts
+  )
+  wlv_catalog_test_write(
+    file.path(root, "catalog", "missingness-policies.csv"),
+    missingness_policies
   )
   wlv_catalog_test_write(
     file.path(root, "methods", "demo", "_parameters.csv"),
@@ -101,6 +114,10 @@ wlv_make_catalog_fixture <- function() {
   writeLines(
     "wlv_validate_demo_prepared <- function(...) invisible(TRUE)",
     file.path(root, "R", "lib", "demo_validation.R")
+  )
+  writeLines(
+    "wlv_demo_missingness_policy <- function(...) list(policy_id = 'demo_v1')",
+    file.path(root, "R", "lib", "demo_missingness.R")
   )
   writeLines(
     "# Demonstration source contract",
@@ -157,6 +174,11 @@ test_that("repository catalog classifies every method and source explicitly", {
   )
   expect_identical(exiobase395$parameter_set, "exiobase")
   expect_identical(exiobase395$data_dir, "source_data/exiobase395")
+  expect_equal(nrow(catalog$missingness_policies), 2L)
+  expect_setequal(
+    catalog$sources$missingness_policy[catalog$sources$status == "stable"],
+    c("wiodr13_v1", "wiodr16_v1")
+  )
 })
 
 test_that("catalog accessors and output formats are deterministic", {
@@ -167,8 +189,8 @@ test_that("catalog accessors and output formats are deterministic", {
     names(methods),
     c(
       "method", "code", "description", "source", "status", "source_status",
-      "year_start", "year_end", "years", "can_prepare", "can_calculate",
-      "can_recalculate", "test", "documentation", "limitations"
+      "missingness_policy", "year_start", "year_end", "years", "can_prepare",
+      "can_calculate", "can_recalculate", "test", "documentation", "limitations"
     )
   )
   expect_identical(methods$years[methods$method == "wiodr13"], "1995-2009")
@@ -178,6 +200,11 @@ test_that("catalog accessors and output formats are deterministic", {
 
   method <- catalog_environment$wlv_catalog_method(catalog, "wiodr13")
   expect_identical(method$code, "WIOD13")
+  policy <- catalog_environment$wlv_catalog_missingness_policy(
+    catalog,
+    "wiodr13_v1"
+  )
+  expect_identical(policy$factory, "wlv_wiodr13_missingness_policy")
   artifacts <- catalog_environment$wlv_catalog_artifacts(
     catalog,
     "wiod_core",
@@ -212,6 +239,10 @@ test_that("catalog accessors and output formats are deterministic", {
   expect_error(
     catalog_environment$wlv_catalog_artifacts(catalog, "wiod_core", "publish"),
     "operation"
+  )
+  expect_error(
+    catalog_environment$wlv_catalog_missingness_policy(catalog, "missing"),
+    "Unknown missingness policy"
   )
 })
 
@@ -273,6 +304,14 @@ test_that("catalog schema rejects invalid enums, booleans, years, and paths", {
         value
       },
       message = "operations"
+    ),
+    list(
+      file = "missingness-policies.csv",
+      edit = function(value) {
+        value$factory[[1L]] <- "unsafe factory"
+        value
+      },
+      message = "invalid `factory`"
     )
   )
 
@@ -374,6 +413,17 @@ test_that("catalog enforces foreign keys and uniqueness", {
     catalog_environment$wlv_load_catalog(root),
     "duplicate `profile/artifact`"
   )
+
+  unlink(root, recursive = TRUE, force = TRUE)
+  root <- wlv_make_catalog_fixture()
+  wlv_catalog_test_edit(root, "sources.csv", function(value) {
+    value$missingness_policy <- "unknown_policy"
+    value
+  })
+  expect_error(
+    catalog_environment$wlv_load_catalog(root),
+    "unknown missingness policy"
+  )
 })
 
 test_that("calculation capabilities require a source artifact profile", {
@@ -428,6 +478,17 @@ test_that("stable entries require complete and existing contracts", {
 
   unlink(root, recursive = TRUE, force = TRUE)
   root <- wlv_make_catalog_fixture()
+  wlv_catalog_test_edit(root, "sources.csv", function(value) {
+    value$missingness_policy <- ""
+    value
+  })
+  expect_error(
+    catalog_environment$wlv_load_catalog(root),
+    "Stable source.*missingness policy"
+  )
+
+  unlink(root, recursive = TRUE, force = TRUE)
+  root <- wlv_make_catalog_fixture()
   wlv_catalog_test_edit(root, "methods.csv", function(value) {
     value$test <- ""
     value
@@ -457,6 +518,17 @@ test_that("stable entries require complete and existing contracts", {
   expect_error(
     catalog_environment$wlv_load_catalog(root),
     "Validator `wlv_missing_validator` is not defined"
+  )
+
+  unlink(root, recursive = TRUE, force = TRUE)
+  root <- wlv_make_catalog_fixture()
+  wlv_catalog_test_edit(root, "missingness-policies.csv", function(value) {
+    value$factory <- "wlv_missing_policy_factory"
+    value
+  })
+  expect_error(
+    catalog_environment$wlv_load_catalog(root),
+    "Missingness policy factory `wlv_missing_policy_factory` is not defined"
   )
 
   unlink(root, recursive = TRUE, force = TRUE)

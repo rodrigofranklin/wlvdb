@@ -75,30 +75,78 @@ non-finite values.
 The prepared source files remain unchanged. Their scientifically relevant
 negative observations are pinned by exact position and value before the
 calculation starts: `K[2012:2014, C33, PRT]` is respectively `-313.147`,
-`-554.413` and `-873.203` million national-currency units, and
-`VA_USD[2007, J58, ROU]` is `-17.404439964866128`. The full EU KLEMS capital
-tables are likewise checked against an exact allowlist of 21 negative cells in
+`-554.413` and `-873.203` million national-currency units. All 26 negative
+`VA_USD` cells are likewise position- and value-pinned; one example is
+`VA_USD[2007, J58, ROU] = -17.404439964866128`. The full EU KLEMS capital
+tables are checked against an exact allowlist of 21 negative cells in
 2010-2015. An added, missing or numerically changed anomaly aborts validation.
 
 Only the derived WIOD16 allocation layer is sanitized. The three known
-negative capital stocks and the 21 known negative EU KLEMS weights are set to
-zero. The Romanian `J58` value-added disaggregation ratio in 2007 is checked
+negative capital stocks are set to zero. Of the 21 negative EU KLEMS weights
+validated across 2010-2015, 19 belong to the `ekk_2010`-`ekk_2014` composition
+tables used by the calculation and are set to zero; the two `ekk_2015` cells
+are validated during preflight but are not composition inputs for 2000-2014.
+Every effective stock and weight truncation is recorded with its original
+value and coordinates as `truncate_allowlisted_negative_capital_stock` under
+`wiodr16_negative_capital_stock_v1` or
+`truncate_allowlisted_negative_euklems_weight` under
+`wiodr16_negative_euklems_weights_v1`. The source contains 26 exactly pinned
+negative `VA_USD` observations
+(including very small numerical residuals in `JPN.T`); they are preserved.
+Only the Romanian `J58` value-added disaggregation ratio in 2007 remains
+negative after the EU KLEMS sector aggregation and is checked
 against `-0.027559192993556868` and then made absolute; because every element
 of that allocation column shares this scalar, its sign cancels during
 normalization, while the explicit treatment avoids a transient negative
-composition. No WIOD13 allocation helper or source file is changed by this
-policy.
+composition. This action is recorded as
+`absolute_allowlisted_negative_va_ratio` under
+`wiodr16_negative_va_ratio_v1`. These WIOD16-specific allowlists do not apply
+to WIOD13.
 
-EU KLEMS provides zero total weights for five positive-stock columns in 2000
-(`MEX.T`, `MEX.U`, `TUR.T`, `TWN.T`, `USA.T`) and the same five plus `LUX.T`
-in every year from 2001 through 2014. Truncating the allowlisted negative EU
-KLEMS weights also leaves `EST.H51` without a positive weight in 2012. These 90
-country-sector-year cases use
-the composition of their own country's non-negative `c60` GFCF column as the
-fallback distribution. Any other positive stock without a positive finite
-weight total, or an allowlisted fallback whose GFCF total is not positive,
-aborts the calculation. Every allocated column is finally checked to be
-finite, non-negative and exactly stock-conserving within numeric tolerance.
+The allocation also checks all 649 negative `c60` GFCF source cells as one
+exact set before truncating them. The radix-sorted UTF-8 keys
+`year|input|output`, joined by newline, must have MD5
+`5b638a35212f2b91cab933f19a037caa`. Every accepted cell is recorded with its
+original value and coordinates as `truncate_allowlisted_negative_gfcf` under
+`wiodr16_negative_gfcf_v1`; any added, removed, or relocated negative aborts.
+
+Primary EU KLEMS-derived weights have zero total for seven positive-stock
+columns in every year from 2000 through 2014: `MEX.T`, `MEX.U`, `TUR.T`,
+`TWN.T`, `USA.T`, `ROW.T`, and `ROW.U`. `LUX.T` has the same condition in
+2001-2014, and truncating the allowlisted negative EU KLEMS weights leaves
+`EST.H51` without a positive weight in 2012. These 105 + 14 + 1 = 120 exact
+country-sector-year cases use their own country's non-negative `c60` GFCF
+column as the fallback distribution and are audited as
+`fallback_to_national_gfcf_weights` under
+`wiodr16_national_gfcf_fallback_v1`. Any other positive stock without a
+positive finite weight total, or an allowlisted fallback whose GFCF total is
+not positive, aborts the calculation. Every allocated column is finally
+checked to be finite, non-negative and exactly stock-conserving within numeric
+tolerance.
+
+## Explicit runtime zero-denominator policies
+
+Outside the structural `CHN` and `ROW` source-missing masks, the employee-hours
+formula encounters exactly 1,915 zero `EMPE` denominators. In 1,914 of them,
+`EMP` is also zero, so total hours worked by persons engaged is explicitly zero;
+each decision is audited as `zero_hours_when_persons_engaged_zero`. The sole
+remaining coordinate is `H_EMPE/EMPE/EMP[2001, M72, MLT] = 0.009/0/0.01`. It
+uses the aggregate 2001 Malta employee-hours-per-employee ratio and is audited
+as `fallback_to_country_employee_hours`. Any additional coordinate or any
+change to that exact source triple aborts.
+
+The Rest-of-World capital assumption selects `IND` as the country with the
+lowest positive total capital stock per labour hour in every year. Indian
+sectoral labour hours are exactly zero in the following 11 sectors:
+`C33`, `E37-E39`, `H53`, `J58`, `J59_J60`, `K66`, `M72`, `M73`, `M74_M75`,
+`T`, and `U`. In `M73`, Rest-of-World hours are also zero, producing 15 explicit
+zeros over 2000-2014. For each of the other ten sectors, nonzero Rest-of-World
+hours are multiplied by India's country-wide capital-per-hour intensity,
+producing 150 fallback decisions. The two actions are recorded respectively as
+`zero_row_capital_when_hours_zero` and
+`fallback_to_reference_country_capital_intensity` under
+`wiodr16_row_capital_intensity_v1`; a different reference country or sector set
+aborts.
 
 ## China labour-input supplement
 

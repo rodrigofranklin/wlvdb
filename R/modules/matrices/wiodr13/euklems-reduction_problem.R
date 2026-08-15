@@ -6,11 +6,44 @@
 #
 ####
 
+if (!exists("wlv_wiodr_sanitize_negative_gfcf", mode = "function")) {
+  source("R/lib/gfcf_contracts.R")
+}
+
 ## Distribute capital stock from EUKLEMS data
 
 # temporary matrices for depreciation rate and capital composition
 dep_ratio = k_composition <- matrix(1, nrow = nums$input, 
                                     ncol = nums$input)
+
+gfcf_columns <- which(columns$sector == "c41")
+gfcf_by_country <- wlv_wiodr_sanitize_negative_gfcf(
+  m_io_source[
+    lists$years,
+    seq_len(nums$input),
+    gfcf_columns,
+    drop = FALSE
+  ],
+  method = "wiodr13"
+)
+truncated_gfcf <- attr(gfcf_by_country, "wlv.truncated_negative_gfcf")
+if (
+  nrow(truncated_gfcf) &&
+  exists("wlv_contract_runtime", inherits = FALSE)
+) {
+  wlv_record_observed_transformations(
+    wlv_contract_runtime,
+    truncated_gfcf,
+    artifact = "m_io",
+    indicator = "gross_fixed_capital_formation",
+    checkpoint = "after_matrices",
+    stage = 3L,
+    module = "wiodr13/euklems-reduction_problem.R",
+    coordinate_columns = c(
+      year = "year", country = "country", sector = "input", output = "output"
+    )
+  )
+}
 
 for (year in lists$years) {
   print(paste0("Distributing capital stock. Year: ", year, "..."))
@@ -43,10 +76,21 @@ for (year in lists$years) {
   # aggregates -> sum of WIOD VA representing a single sector in EUKLEMS
   aggregates <- tapply(as.numeric(sea_sectors[year,"gdp.s.us", ,]), 
                        rows$pwiod_sek, sum, na.rm = FALSE)
+  disaggregation_numerator <- as.numeric(
+    sea_sectors[year, "gdp.s.us", , ]
+  )
+  disaggregation_denominator <- as.numeric(aggregates[rows$pwiod_sek])
+  invalid_zero <- disaggregation_denominator == 0 &
+    disaggregation_numerator != 0
+  if (any(invalid_zero)) {
+    stop("WIOD13 value-added disaggregation has nonzero over zero.", call. = FALSE)
+  }
+  both_zero <- disaggregation_denominator == 0 &
+    disaggregation_numerator == 0
+  disaggregation_ratio <- disaggregation_numerator / disaggregation_denominator
+  disaggregation_ratio[both_zero] <- 0
   k_composition[,1:nums$input] <- 
-    rep(as.numeric(sea_sectors[year,"gdp.s.us", ,]) / 
-          aggregates[rows$pwiod_sek], 
-        each = nums$input)
+    rep(disaggregation_ratio, each = nums$input)
   
   # disaggregate the rate of distribution of types of k by sectors according 
   # to value added
@@ -62,12 +106,11 @@ for (year in lists$years) {
   
   ## Apply
   # creates an NxN matrix with the gfcf of each country (column "c41")
-  gfcf <- 
-    as.data.frame(
-      m_io_source[year,1:nums$input,
-                  grep("c41", columns$sector)])
-  gfcf <- as.matrix(gfcf[rep(names(gfcf), each = nums$sectors)])
-  gfcf[gfcf<0] <- 0
+  gfcf_year <- gfcf_by_country[year, , , drop = FALSE]
+  dim(gfcf_year) <- c(nums$input, nums$countries)
+  gfcf <- gfcf_year[
+    , rep(seq_len(nums$countries), each = nums$sectors), drop = FALSE
+  ]
   
   # First, it distributes the gfcf of each country according to 
   # the composition of capital in the euklems 
@@ -77,21 +120,22 @@ for (year in lists$years) {
   # the distributed gfcf
   k_composition <- wlv_distribute_capital_stock(
     k_composition,
-    as.numeric(sea_sectors[year, "capital_stock.s.us", , ])
+    as.numeric(sea_sectors[year, "capital_stock.s.us", , ]),
+    fallback_weights = gfcf
   )
-  unallocated_columns <- attr(k_composition, "wlv.unallocated_columns")
-  if (length(unallocated_columns)) {
+  fallback_columns <- attr(k_composition, "wlv.fallback_columns")
+  if (length(fallback_columns)) {
     message(sprintf(
       paste0(
-        "Capital stock has no WIOD GFCF allocation weights for %s sector(s) ",
-        "in %s; their composition and depreciation are set to zero: %s"
+        "Used the explicit national-GFCF fallback for %s capital-stock ",
+        "sector(s) without primary weights in %s: %s"
       ),
-      length(unallocated_columns),
+      length(fallback_columns),
       year,
-      paste(utils::head(lists$input[unallocated_columns], 5L), collapse = ", ")
+      paste(utils::head(lists$input[fallback_columns], 5L), collapse = ", ")
     ))
   }
-  attr(k_composition, "wlv.unallocated_columns") <- NULL
+  attr(k_composition, "wlv.fallback_columns") <- NULL
   
   m_io[year,"k_composition",
        1:nums$input,1:nums$input] <- 
@@ -104,4 +148,13 @@ for (year in lists$years) {
 }
 
 # clear temporary variables
-rm (dep_ratio, k_composition, ek_k, ek_dep_rate, aggregates, gfcf)
+rm(
+  dep_ratio, k_composition, ek_k, ek_dep_rate, aggregates, gfcf,
+  disaggregation_numerator, disaggregation_denominator, disaggregation_ratio,
+  invalid_zero, both_zero, gfcf_year, gfcf_by_country, gfcf_columns,
+  truncated_gfcf
+)
+rm(list = intersect(
+  "fallback_columns",
+  ls(envir = environment(), all.names = TRUE)
+), envir = environment())

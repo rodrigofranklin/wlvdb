@@ -15,6 +15,13 @@ if (stage == 1) { # Stage 0 is computed only before computing stage 1 variables
   # Copy variables from sea_source to sea_sectors (indicated in parameters)
   raw_solutions <- !grepl("\\.[Rr]$", sea_variables$sector_solution)
   for (loop in which(raw_solutions)) {
+    if (exists("wlv_contract_runtime", inherits = FALSE)) {
+      wlv_contract_clear_states(
+        wlv_contract_runtime,
+        "sea_sectors",
+        sea_variables$names[[loop]]
+      )
+    }
     temp <- unlist(strsplit(sea_variables$sector_solution[loop], "[*]"))
     sea_sectors[, sea_variables$names[loop], lists$sectors, lists$countries] <- 
       sea_source[, temp[1], lists$sectors, lists$countries]
@@ -36,10 +43,57 @@ if (stage == 1) { # Stage 0 is computed only before computing stage 1 variables
 # Computing stages 1 to 5, as define by "stage" variable
 for (loop in sea_variables$sector_solution[which(sea_variables$stage==stage)]) {
   print(paste("Sourcing from stage",stage,"script",gsub(".*/","",loop)))
+  if (exists("wlv_contract_runtime", inherits = FALSE)) {
+    wlv_contract_clear_states(
+      wlv_contract_runtime,
+      "sea_sectors",
+      sea_variables$names[
+        sea_variables$stage == stage & sea_variables$sector_solution == loop
+      ]
+    )
+  }
   source(paste0("R/modules/variables/",loop))
-  sea_sectors <- clean(sea_sectors)
+  if (exists("wlv_contract_runtime", inherits = FALSE)) {
+    checkpoint <- paste0("after_stage_", stage)
+    module_indicators <- sea_variables$names[
+      sea_variables$stage == stage & sea_variables$sector_solution == loop
+    ]
+    for (module_indicator in module_indicators) {
+      wlv_validate_sea_indicator(
+        wlv_contract_runtime,
+        sea_sectors,
+        module_indicator,
+        checkpoint = checkpoint,
+        stage = stage,
+        module = loop,
+        years = lists$years
+      )
+    }
+    wlv_assert_sea_no_special_values(
+      wlv_contract_runtime,
+      sea_sectors,
+      checkpoint = checkpoint,
+      stage = stage,
+      module = loop
+    )
+  }
   print(paste("Finished sourcing script",gsub(".*/","",loop),"from stage",stage))
 }
 
+if (exists("wlv_contract_runtime", inherits = FALSE)) {
+  checkpoint <- paste0("after_stage_", stage)
+  wlv_validate_sea_stage(
+    wlv_contract_runtime,
+    sea_sectors,
+    sea_variables,
+    stage = stage,
+    checkpoint = checkpoint,
+    years = lists$years
+  )
+}
+
 print(paste("Finished stage",stage))
-rm(list = intersect("loop", ls(envir = environment(), all.names = TRUE)))
+rm(list = intersect(
+  c("loop", "checkpoint", "module_indicators", "module_indicator"),
+  ls(envir = environment(), all.names = TRUE)
+))

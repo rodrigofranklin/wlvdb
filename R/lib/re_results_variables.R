@@ -11,7 +11,13 @@ nums$sea_variables <- length(lists$sea_variables)
 
 # Reuse the indicator metadata written by the original calculation. If an old
 # result predates that file, create the same structure used by a full run.
-meta_indicators_path <- paste0("results/", method_version, "/meta_indicators.RDS")
+if (!exists("wlv_existing_result_dir", inherits = FALSE)) {
+  wlv_existing_result_dir <- file.path("results", method_version)
+}
+if (!exists("wlv_result_dir", inherits = FALSE)) {
+  wlv_result_dir <- wlv_existing_result_dir
+}
+meta_indicators_path <- file.path(wlv_existing_result_dir, "meta_indicators.RDS")
 if (file.exists(meta_indicators_path)) {
   meta_indicators <- readRDS(meta_indicators_path)
 } else {
@@ -70,18 +76,57 @@ sea_countries <- array(NA,
 ## load variables  ----
 
 m_countries <- 
-  read_fst_array(paste0("results/",method_version,"/m_countries.fst"))
+  read_fst_array(file.path(wlv_existing_result_dir, "m_countries.fst"))
 
 # sea_sectors -> vectors of results per sector
 sea_sectors_temp <- 
-  read_fst_array(paste0("results/",method_version,"/sea_sectors.fst"))
+  read_fst_array(file.path(wlv_existing_result_dir, "sea_sectors.fst"))
 sea_sectors[,names(sea_sectors_temp[1,,1,1]),,] <- sea_sectors_temp
 
 # sea_countries -> vectors of results per country
-if (file.exists(paste0("results/",method_version,"/sea_countries.fst"))) {
+if (file.exists(file.path(wlv_existing_result_dir, "sea_countries.fst"))) {
   sea_countries_temp <- 
-    read_fst_array(paste0("results/",method_version,"/sea_countries.fst"))
+    read_fst_array(file.path(wlv_existing_result_dir, "sea_countries.fst"))
   sea_countries[,names(sea_countries_temp[1,,1]),] <- sea_countries_temp
+}
+
+if (exists("wlv_contract_runtime", inherits = FALSE)) {
+  persisted_sea_countries <- if (
+    exists("sea_countries_temp", inherits = FALSE)
+  ) {
+    sea_countries_temp
+  } else {
+    sea_countries
+  }
+  wlv_load_contract_states(
+    wlv_contract_runtime,
+    file.path(wlv_existing_result_dir, "_states.csv"),
+    values = list(
+      sea_sectors = sea_sectors_temp,
+      sea_countries = persisted_sea_countries
+    )
+  )
+  wlv_validate_m_countries_contract(
+    wlv_contract_runtime,
+    m_countries,
+    checkpoint = "recalc_input"
+  )
+  wlv_validate_sea_stage(
+    wlv_contract_runtime,
+    sea_sectors_temp,
+    sea_variables[
+      sea_variables$names %in% dimnames(sea_sectors_temp)[[2L]],
+      ,
+      drop = FALSE
+    ],
+    stage = 5L,
+    checkpoint = "recalc_input"
+  )
+  wlv_validate_sea_countries_contract(
+    wlv_contract_runtime,
+    persisted_sea_countries,
+    checkpoint = "recalc_input"
+  )
 }
 
 rm(sea_sectors_temp)
@@ -89,6 +134,9 @@ if (exists("sea_countries_temp", inherits = FALSE)) {
   rm(sea_countries_temp)
 }
 rm(list = intersect(
-  c("meta_indicators_path", "missing_indicators", "additions"),
+  c(
+    "meta_indicators_path", "missing_indicators", "additions",
+    "persisted_sea_countries"
+  ),
   ls(envir = environment(), all.names = TRUE)
 ), envir = environment())

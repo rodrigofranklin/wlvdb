@@ -43,19 +43,38 @@ sea_sectors[,"hours_worked.emp.s.hr",,"ROW"] <-
   sum_h_emp_sector/sum_emp_sector
 
 for (x in lists$years) {
-  temp_data <-
-    sea_sectors[x,"capital_stock.s.us",,] %>% 
-    tapply(rows$country, sum, na.rm = TRUE) / 
-    sea_sectors[x,"hours_worked.emp.s.hr",,] %>% 
+  country_capital <-
+    sea_sectors[x,"capital_stock.s.us",,] %>%
     tapply(rows$country, sum, na.rm = TRUE)
+  country_hours <-
+    sea_sectors[x,"hours_worked.emp.s.hr",,] %>%
+    tapply(rows$country, sum, na.rm = TRUE)
+  temp_data <- country_capital / country_hours
   
   temp_data[temp_data==0] <- Inf
   least_developed <- names(which.min(temp_data[which(temp_data|>names()!="ROW")]))
 
-  sea_sectors[x,"capital_stock.s.us",,"ROW"] <- 
-    sea_sectors[x,"hours_worked.emp.s.hr",, "ROW"] *
-    sea_sectors[x,"capital_stock.s.us",,least_developed] /
-    sea_sectors[x,"hours_worked.emp.s.hr",,least_developed]
+  row_hours <- sea_sectors[x,"hours_worked.emp.s.hr",, "ROW"]
+  reference_capital <- sea_sectors[x,"capital_stock.s.us",,least_developed]
+  reference_hours <- sea_sectors[x,"hours_worked.emp.s.hr",,least_developed]
+  names(row_hours) <- lists$sectors
+  names(reference_capital) <- lists$sectors
+  names(reference_hours) <- lists$sectors
+  if (exists("wlv_contract_runtime", inherits = FALSE)) {
+    sea_sectors[x,"capital_stock.s.us",,"ROW"] <-
+      wlv_row_capital_stock_runtime(
+        wlv_contract_runtime,
+        row_hours,
+        reference_capital,
+        reference_hours,
+        temp_data[[least_developed]],
+        x,
+        least_developed
+      )
+  } else {
+    sea_sectors[x,"capital_stock.s.us",,"ROW"] <-
+      row_hours * reference_capital / reference_hours
+  }
 }
 
 # Espelha o índice de preços dos EUA para o resto do mundo
@@ -63,4 +82,5 @@ sea_sectors[,"go_price.r.id",,"ROW"] <- sea_sectors[,"go_price.r.id",,"USA"]
 
 # Clear all variables that will no longer be used
 rm(row_emp_data, emp_row_total, sum_emp_sector, sum_h_emp_sector, sum_va_sector,
-   least_developed, x, pre_row, row_position)
+   least_developed, x, pre_row, row_position, country_capital, country_hours,
+   temp_data, row_hours, reference_capital, reference_hours)

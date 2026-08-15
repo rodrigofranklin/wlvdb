@@ -302,6 +302,10 @@ test_that("WIOD16 capital allocation handles UK, Greece, fallback and zero weigh
     file.path(wlv_test_root, "R", "lib", "wiodr16_allocation.R"),
     envir = environment
   )
+  sys.source(
+    file.path(wlv_test_root, "R", "lib", "gfcf_contracts.R"),
+    envir = environment
+  )
   environment$lists <- list(
     years = "2000",
     countries = countries,

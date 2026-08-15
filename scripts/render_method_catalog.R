@@ -174,8 +174,23 @@ render_source_rows <- function(sources) {
       markdown_link(source$preparer),
       validator,
       markdown_code(source$artifact_profile),
+      markdown_code(source$missingness_policy),
       markdown_link(source$documentation),
       markdown_cell(source$limitations)
+    )
+  })
+}
+
+render_missingness_policy_rows <- function(policies) {
+  policies <- policies[order(policies$policy), , drop = FALSE]
+
+  lapply(seq_len(nrow(policies)), function(i) {
+    policy <- policies[i, , drop = FALSE]
+    c(
+      markdown_code(policy$policy),
+      markdown_link(policy$script),
+      markdown_code(policy$factory),
+      markdown_link(policy$documentation)
     )
   })
 }
@@ -207,6 +222,11 @@ render_document <- function(catalog) {
     "artifacts",
     aliases = c("artifact_profiles")
   )
+  missingness_policies <- catalog_component(
+    catalog,
+    "missingness_policies",
+    aliases = c("missingness")
+  )
 
   assert_columns(
     methods,
@@ -222,13 +242,19 @@ render_document <- function(catalog) {
     c(
       "source", "status", "year_start", "year_end", "parameter_set",
       "data_dir", "can_prepare", "preparer", "validator_script",
-      "validator_function", "artifact_profile", "documentation", "limitations"
+      "validator_function", "artifact_profile", "missingness_policy",
+      "documentation", "limitations"
     )
   )
   assert_columns(
     artifacts,
     "artifacts",
     c("profile", "artifact", "kind", "sidecar", "operations")
+  )
+  assert_columns(
+    missingness_policies,
+    "missingness_policies",
+    c("policy", "script", "factory", "documentation")
   )
 
   method_table <- markdown_table(
@@ -242,10 +268,14 @@ render_document <- function(catalog) {
   source_table <- markdown_table(
     c(
       "Source", "Status", "Coverage", "Parameter set", "Data directory",
-      "Prepare", "Preparer", "Validator", "Artifact profile", "Documentation",
-      "Known limitations"
+      "Prepare", "Preparer", "Validator", "Artifact profile",
+      "Missingness policy", "Documentation", "Known limitations"
     ),
     render_source_rows(sources)
+  )
+  missingness_policy_table <- markdown_table(
+    c("Policy", "Script", "Factory", "Documentation"),
+    render_missingness_policy_rows(missingness_policies)
   )
   artifact_table <- markdown_table(
     c("Profile", "Operations", "Artifact", "Kind", "Required sidecar"),
@@ -259,8 +289,9 @@ render_document <- function(catalog) {
     "",
     "This matrix is generated from the canonical, machine-readable registries in",
     "[`catalog/methods.csv`](../catalog/methods.csv),",
-    "[`catalog/sources.csv`](../catalog/sources.csv), and",
-    "[`catalog/artifact-profiles.csv`](../catalog/artifact-profiles.csv).",
+    "[`catalog/sources.csv`](../catalog/sources.csv),",
+    "[`catalog/artifact-profiles.csv`](../catalog/artifact-profiles.csv), and",
+    "[`catalog/missingness-policies.csv`](../catalog/missingness-policies.csv).",
     "Regenerate it with `Rscript --vanilla scripts/render_method_catalog.R` and",
     "verify synchronization with `Rscript --vanilla scripts/render_method_catalog.R --check`.",
     "",
@@ -281,6 +312,12 @@ render_document <- function(catalog) {
     "## Sources",
     "",
     source_table,
+    "",
+    "## Missingness policies",
+    "",
+    "Sources reference versioned policy factories; catalog loading validates declarations without executing them.",
+    "",
+    missingness_policy_table,
     "",
     "## Expected artifact profiles",
     "",

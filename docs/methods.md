@@ -4,8 +4,9 @@
 
 This matrix is generated from the canonical, machine-readable registries in
 [`catalog/methods.csv`](../catalog/methods.csv),
-[`catalog/sources.csv`](../catalog/sources.csv), and
-[`catalog/artifact-profiles.csv`](../catalog/artifact-profiles.csv).
+[`catalog/sources.csv`](../catalog/sources.csv),
+[`catalog/artifact-profiles.csv`](../catalog/artifact-profiles.csv), and
+[`catalog/missingness-policies.csv`](../catalog/missingness-policies.csv).
 Regenerate it with `Rscript --vanilla scripts/render_method_catalog.R` and
 verify synchronization with `Rscript --vanilla scripts/render_method_catalog.R --check`.
 
@@ -43,15 +44,24 @@ Preparation is a source capability and is repeated here for convenience.
 
 ## Sources
 
-| Source | Status | Coverage | Parameter set | Data directory | Prepare | Preparer | Validator | Artifact profile | Documentation | Known limitations |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `eora26` | `experimental` | 1990–2016 | `eora26` | `source_data/eora26` | no | — | — | — | — | Legacy preparation requires manual inputs and has no validated source contract. |
-| `exiobase37` | `experimental` | — | `exiobase37` | `source_data/exiobase37` | no | — | — | — | — | Legacy EXIOBASE 3.7 support has no pinned preparer or validator, and temporal coverage has not been revalidated. |
-| `exiobase381` | `experimental` | — | `exiobase381` | `source_data/exiobase381` | no | — | — | — | — | Legacy EXIOBASE 3.8.1 support has no pinned preparer or validator, and temporal coverage has not been revalidated. |
-| `exiobase382` | `experimental` | — | `exiobase` | `source_data/exiobase382` | no | — | — | — | — | Shares a legacy parameter set and has no version-pinned preparation contract, and temporal coverage has not been revalidated. |
-| `exiobase395` | `experimental` | 1995–2022 | `exiobase` | `source_data/exiobase395` | no | — | — | — | — | Recovery is pending before EXIOBASE 3.9.5 can be enabled. |
-| `wiodr13` | `stable` | 1995–2009 | `wiodr13` | `source_data/wiodr13` | yes | [R/utils/prepare_wiodr13_data.R](../R/utils/prepare_wiodr13_data.R) | [R/lib/wiodr13_validation.R](../R/lib/wiodr13_validation.R) (`wlv_validate_wiodr13_prepared`) | `wiod_core` | [docs/wiodr13.md](wiodr13.md) | — |
-| `wiodr16` | `stable` | 2000–2014 | `wiodr16` | `source_data/wiodr16` | yes | [R/utils/prepare_wiodr16_data.R](../R/utils/prepare_wiodr16_data.R) | [R/lib/wiodr16_validation.R](../R/lib/wiodr16_validation.R) (`wlv_validate_wiodr16_prepared`) | `wiod_core` | [docs/wiodr16.md](wiodr16.md) | — |
+| Source | Status | Coverage | Parameter set | Data directory | Prepare | Preparer | Validator | Artifact profile | Missingness policy | Documentation | Known limitations |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `eora26` | `experimental` | 1990–2016 | `eora26` | `source_data/eora26` | no | — | — | — | — | — | Legacy preparation requires manual inputs and has no validated source contract. |
+| `exiobase37` | `experimental` | — | `exiobase37` | `source_data/exiobase37` | no | — | — | — | — | — | Legacy EXIOBASE 3.7 support has no pinned preparer or validator, and temporal coverage has not been revalidated. |
+| `exiobase381` | `experimental` | — | `exiobase381` | `source_data/exiobase381` | no | — | — | — | — | — | Legacy EXIOBASE 3.8.1 support has no pinned preparer or validator, and temporal coverage has not been revalidated. |
+| `exiobase382` | `experimental` | — | `exiobase` | `source_data/exiobase382` | no | — | — | — | — | — | Shares a legacy parameter set and has no version-pinned preparation contract, and temporal coverage has not been revalidated. |
+| `exiobase395` | `experimental` | 1995–2022 | `exiobase` | `source_data/exiobase395` | no | — | — | — | — | — | Recovery is pending before EXIOBASE 3.9.5 can be enabled. |
+| `wiodr13` | `stable` | 1995–2009 | `wiodr13` | `source_data/wiodr13` | yes | [R/utils/prepare_wiodr13_data.R](../R/utils/prepare_wiodr13_data.R) | [R/lib/wiodr13_validation.R](../R/lib/wiodr13_validation.R) (`wlv_validate_wiodr13_prepared`) | `wiod_core` | `wiodr13_v1` | [docs/wiodr13.md](wiodr13.md) | — |
+| `wiodr16` | `stable` | 2000–2014 | `wiodr16` | `source_data/wiodr16` | yes | [R/utils/prepare_wiodr16_data.R](../R/utils/prepare_wiodr16_data.R) | [R/lib/wiodr16_validation.R](../R/lib/wiodr16_validation.R) (`wlv_validate_wiodr16_prepared`) | `wiod_core` | `wiodr16_v1` | [docs/wiodr16.md](wiodr16.md) | — |
+
+## Missingness policies
+
+Sources reference versioned policy factories; catalog loading validates declarations without executing them.
+
+| Policy | Script | Factory | Documentation |
+| --- | --- | --- | --- |
+| `wiodr13_v1` | [R/lib/missingness.R](../R/lib/missingness.R) | `wlv_wiodr13_missingness_policy` | [docs/missingness.md](missingness.md) |
+| `wiodr16_v1` | [R/lib/missingness.R](../R/lib/missingness.R) | `wlv_wiodr16_missingness_policy` | [docs/missingness.md](missingness.md) |
 
 ## Expected artifact profiles
 

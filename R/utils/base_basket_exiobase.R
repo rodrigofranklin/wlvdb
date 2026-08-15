@@ -22,5 +22,8 @@ basebasket <- array(as.matrix(expbbskt),
                              dimnames = list(dimnames(basebasket)[[1]],
                                              c(shc,"ROW","WWW"),
                                              base_year))
-write_fst_array(basebasket,paste0("results/",method_version,"/base_basket.fst"))
+if (!exists("wlv_result_dir", inherits = FALSE)) {
+  wlv_result_dir <- file.path("results", method_version)
+}
+write_fst_array(basebasket, file.path(wlv_result_dir, "base_basket.fst"))
 

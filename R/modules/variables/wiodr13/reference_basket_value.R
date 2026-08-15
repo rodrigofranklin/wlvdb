@@ -126,12 +126,12 @@ exrate <- array(cpi_gdp_er[,,"VATOTAL"]/cpi_gdp_er[,,"VA"],c(dim(cpi_gdp_er)[-3]
 
 cpi_gdp_er <- abind(cpi_gdp_er,exrate, along = 3)
 
-write_fst_array(cpi_gdp_er,paste0("results/",method_version,"/cpis_gdps_er.fst"))
+write_fst_array(cpi_gdp_er, file.path(wlv_result_dir, "cpis_gdps_er.fst"))
 
 
 #Check if there is a base basket file already in results, otherwise sets first year as base year
 
-a <- list.files(paste0("results/",method_version),pattern = "base_basket.fst$",full.names = T)
+a <- list.files(wlv_result_dir, pattern = "base_basket.fst$", full.names = TRUE)
 
 if(length(a)>0 ) {
   basebasket <- read_fst_array(a)
@@ -141,7 +141,7 @@ if(length(a)>0 ) {
   source("R/utils/base_basket_exiobase.R")
 }
 basebasket <- basebasket[,c(ciso2c2,"WWW")]
-cpi_gdp_er <- read_fst_array(paste0("results/",method_version,"/cpis_gdps_er.fst"))
+cpi_gdp_er <- read_fst_array(file.path(wlv_result_dir, "cpis_gdps_er.fst"))
 lambdas <- array(as.numeric(lambda),c(nums$years,nums$countries_sectors,nums$countries),
                  dimnames = list(lists$years,lists$input,lists$countries))
 
@@ -202,4 +202,4 @@ dim(er) <- c(nums$years,1,nums$countries+1)
 
 
 
-write_fst_array(sea_countries,paste0("results/",method_version,"/sea_countries.fst"))
+write_fst_array(sea_countries, file.path(wlv_result_dir, "sea_countries.fst"))

@@ -13,10 +13,7 @@ meta_indicators[code,"type"] <- "percent"
 meta_indicators[code,"group"] <- "Rate of surplus value"
 meta_indicators[code,"reverted"] <- TRUE
 
-sea_sectors[,code,,] <- 
-  ((sea_sectors[,"abstract_labour.empe.s.mv",,] * 
-      sea_sectors[,"hours_worked.empe_hs.r.pc",,]) /
-     (sea_sectors[,"labour_force_value.s.mv",,] *
-        sea_sectors[,"compensation.empe_hs.r.pc",,])) -1
+skill_code <- "hs"
+source("R/modules/variables/wiodr13/surplus_value.empe_skill.r.pc.R")
 
 

@@ -5,6 +5,21 @@ sys.source(
 )
 
 test_that("WIOD16 source anomalies are exact and value-pinned", {
+  expected_va <-
+    wiodr16_allocation_environment$wlv_wiodr16_expected_source_va_exception()
+  expect_identical(nrow(expected_va), 26L)
+  expect_identical(
+    anyDuplicated(expected_va[c("year", "variable", "sector", "country")]),
+    0L
+  )
+  expect_equal(
+    expected_va$value[
+      expected_va$year == "2007" & expected_va$sector == "J58" &
+        expected_va$country == "ROU"
+    ],
+    -17.404439964866128
+  )
+
   years <- c("2007", "2012", "2013", "2014")
   variables <- c("K", "VA_USD")
   sectors <- c("C33", "J58")
@@ -44,6 +59,8 @@ test_that("WIOD16 source anomalies are exact and value-pinned", {
 test_that("all 21 known EU KLEMS negatives, including 2015, are exact", {
   expected <-
     wiodr16_allocation_environment$wlv_wiodr16_expected_negative_euklems_weights()
+  expect_identical(sum(expected$year %in% as.character(2000:2014)), 19L)
+  expect_identical(sum(expected$year == "2015"), 2L)
   validate <-
     wiodr16_allocation_environment$wlv_wiodr16_validate_negative_euklems_weights
   sanitize <-
@@ -67,6 +84,14 @@ test_that("all 21 known EU KLEMS negatives, including 2015, are exact", {
     expect_identical(
       nrow(attr(cleaned, "wlv.truncated_negative_weights")),
       nrow(anomaly)
+    )
+    expect_identical(
+      unique(attr(cleaned, "wlv.truncated_negative_weights")$policy_id),
+      "wiodr16_negative_euklems_weights_v1"
+    )
+    expect_identical(
+      unique(attr(cleaned, "wlv.truncated_negative_weights")$action),
+      "truncate_allowlisted_negative_euklems_weight"
     )
     value
   })
@@ -96,10 +121,43 @@ test_that("the ROU value-added ratio is the only negative ratio made absolute", 
   result <- sanitize(c(1, expected$value, 0), "2007", c("A.S1", "ROU.J58", "B.S2"))
   expect_equal(as.numeric(result), c(1, abs(expected$value), 0))
   expect_identical(nrow(attr(result, "wlv.absolute_va_ratios")), 1L)
+  expect_identical(
+    attr(result, "wlv.absolute_va_ratios")[
+      1L, c("country", "sector", "policy_id", "action")
+    ],
+    data.frame(
+      country = "ROU",
+      sector = "J58",
+      policy_id = "wiodr16_negative_va_ratio_v1",
+      action = "absolute_allowlisted_negative_va_ratio",
+      stringsAsFactors = FALSE
+    )
+  )
 
   expect_error(
     sanitize(c(-0.1, expected$value), "2007", c("A.S1", "ROU.J58")),
     "unexpected",
+    fixed = TRUE
+  )
+
+  zero_ratio <- sanitize(
+    c(NaN, 1),
+    "2007",
+    c("A.ZERO", "B.S2"),
+    numerator = c(0, 1),
+    denominator = c(0, 1)
+  )
+  expect_equal(as.numeric(zero_ratio), c(0, 1))
+  expect_identical(attr(zero_ratio, "wlv.zero_va_ratios"), 1L)
+  expect_error(
+    sanitize(
+      c(Inf, 1),
+      "2007",
+      c("A.BAD", "B.S2"),
+      numerator = c(1, 1),
+      denominator = c(0, 1)
+    ),
+    "unexpected missing or non-finite",
     fixed = TRUE
   )
 })
@@ -110,14 +168,27 @@ test_that("WIOD16 allocation truncates known stock and uses only exact GFCF fall
   allocate <- wiodr16_allocation_environment$wlv_wiodr16_allocate_capital
   fallbacks <-
     wiodr16_allocation_environment$wlv_wiodr16_expected_gfcf_fallbacks()
-  expect_identical(nrow(fallbacks), 90L)
+  expect_identical(nrow(fallbacks), 120L)
   expect_identical(
     as.integer(table(factor(fallbacks$year, levels = as.character(2000:2014)))),
-    c(5L, rep(6L, 11L), 7L, 6L, 6L)
+    c(7L, rep(8L, 11L), 9L, 8L, 8L)
   )
   labels <- c("PRT.C33", "MEX.T")
   stock <- sanitize_stock(c(-5, 20), "2012", labels)
   expect_equal(as.numeric(stock), c(0, 20))
+  expect_equal(attr(stock, "wlv.truncated_negative_stock")$value, -5)
+  expect_identical(
+    attr(stock, "wlv.truncated_negative_stock")[
+      1L, c("country", "sector", "policy_id", "action")
+    ],
+    data.frame(
+      country = "PRT",
+      sector = "C33",
+      policy_id = "wiodr16_negative_capital_stock_v1",
+      action = "truncate_allowlisted_negative_capital_stock",
+      stringsAsFactors = FALSE
+    )
+  )
 
   weights <- matrix(c(1, 0, 0, 0), nrow = 2L)
   fallback <- matrix(c(1, 0, 3, 1), nrow = 2L)
@@ -171,7 +242,7 @@ test_that("WIOD16 allocation truncates known stock and uses only exact GFCF fall
   )
 })
 
-test_that("WIOD16 stock modules zero structural non-finite values before sanitizing", {
+test_that("WIOD16 stock modules preserve structural missing values before assumptions", {
   environment <- new.env(parent = globalenv())
   sys.source(
     file.path(wlv_test_root, "R", "lib", "functions.R"),
@@ -180,6 +251,23 @@ test_that("WIOD16 stock modules zero structural non-finite values before sanitiz
   sys.source(
     file.path(wlv_test_root, "R", "lib", "wiodr16_allocation.R"),
     envir = environment
+  )
+  sys.source(
+    file.path(wlv_test_root, "R", "lib", "missingness.R"),
+    envir = environment
+  )
+  sys.source(
+    file.path(wlv_test_root, "R", "lib", "result_contracts.R"),
+    envir = environment
+  )
+  sys.source(
+    file.path(wlv_test_root, "R", "lib", "gfcf_contracts.R"),
+    envir = environment
+  )
+  environment$wlv_contract_runtime <- environment$wlv_new_contract_runtime(
+    method = "wiodr16",
+    source = "wiodr16",
+    policy = environment$wlv_wiodr16_missingness_policy()
   )
   environment$`%>%` <- magrittr::`%>%`
   environment$lists <- list(
@@ -220,14 +308,14 @@ test_that("WIOD16 stock modules zero structural non-finite values before sanitiz
       c(1, NA_real_),
       c("PRT.C33", "ROW.C33")
     ),
-    c(1, 0)
+    c(1, NA_real_)
   )
   expect_error(
     environment$wlv_wiodr16_clean_structural_nonfinite_stock(
       c(Inf, NA_real_),
       c("PRT.C33", "ROW.C33")
     ),
-    "outside structural ROW",
+    "NaN or infinite",
     fixed = TRUE
   )
 
@@ -240,9 +328,21 @@ test_that("WIOD16 stock modules zero structural non-finite values before sanitiz
       envir = environment
     ))
   }
-  expect_true(all(is.finite(environment$sea_sectors[, variables[3:4], , ])))
   expect_equal(
     as.numeric(environment$sea_sectors[, variables[3:4], , ]),
-    rep(0, 4L)
+    c(0, 0, NA_real_, NA_real_)
   )
+  stock_events <- environment$wlv_contract_runtime$anomalies
+  expect_identical(nrow(stock_events), 2L)
+  expect_identical(
+    stock_events$indicator,
+    c("capital_stock.s.us", "capital_stock.s.cu")
+  )
+  expect_identical(stock_events$country, rep("PRT", 2L))
+  expect_identical(stock_events$sector, rep("C33", 2L))
+  expect_identical(
+    stock_events$action,
+    rep("truncate_allowlisted_negative_capital_stock", 2L)
+  )
+  expect_true(all(as.numeric(stock_events$original_value) < 0))
 })

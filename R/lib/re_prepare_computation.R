@@ -9,6 +9,14 @@ m_io_source <-
 
 print("loaded m_io files")
 
+if (exists("wlv_contract_runtime", inherits = FALSE)) {
+  wlv_validate_m_io_contract(
+    wlv_contract_runtime,
+    m_io,
+    checkpoint = "recalc_input"
+  )
+}
+
 # Adjusts lists$years and nums$years to the years in m_io_source
 lists$years <- unlist(dimnames(m_io_source)[1])
 nums$years <- length(lists$years)

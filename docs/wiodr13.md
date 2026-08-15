@@ -24,8 +24,11 @@ uses the revised WIOT file for 2008-2009 and EU KLEMS depreciation information
 through 2010. Extending the period must be introduced as a separately reviewed
 method version rather than silently changing historical results.
 
-The legacy preparation also maps missing numeric cells in the official SEA
-workbook to zero. The preparation reports the number of affected cells. SEA
+The legacy preparation also maps the official SEA workbook's 8,757 missing
+numeric cells to zero. This exception is accepted only when its exact
+`year|country|variable|sector` coordinate set has MD5
+`c6d680700338a625abc5e3df78b61c0a`; a positional change aborts even if all
+annual counts remain unchanged. The preparation reports the count and hash. SEA
 variables not supplied for the Rest of the World remain explicitly missing;
 the method's Rest-of-World assumption handles the required derived values.
 These compatibility rules are documented here so they are not mistaken for
@@ -33,21 +36,48 @@ observed zeros or source measurements.
 
 ## Calculation safeguards restored
 
-The recovered calculation also makes three historical edge cases explicit:
+The recovered calculation also makes historical edge cases explicit:
 
 - WIOD country codes `GBR` and `GRC` map to the EU KLEMS conventions `UK` and
   `EL`; they must not silently fall back to the synthetic mean country.
-- When a sector has capital stock but no WIOD GFCF weights with which to
-  allocate it, its composition and depreciation matrix column is set to zero
-  and reported. Intermediate-consumption flows remain intact; an undefined
-  depreciation value no longer erases them.
+- A positive capital-stock column with no positive primary EU KLEMS allocation
+  weight uses that country's non-negative WIOD GFCF distribution. The pinned
+  1995-2009 run contains exactly 93 such sector-year columns, recorded as
+  `use_national_gfcf_fallback` under `wiodr13_gfcf_fallback_v1`. A missing or
+  non-positive national GFCF basis aborts; every allocated column must conserve
+  its original capital stock within numeric tolerance.
+- Before that distribution, the 24 negative WIOD GFCF source cells are checked
+  as one exact set. The radix-sorted UTF-8 keys `year|input|output`, joined by
+  newline, must have MD5 `61cfd5d08a9934a703335e14968e5b43`. Only those cells
+  are truncated to zero, with their original values and coordinates recorded as
+  `truncate_allowlisted_negative_gfcf` under `wiodr13_negative_gfcf_v1`.
 - World productive exploitation rates are calculated as ratios of global
   totals, rather than left missing or averaged across national rates.
 
+The Leontief transformation also contains 3,150 official nonzero input flows
+whose reported output denominator is zero. They are accepted only as this exact
+versioned set:
+
+| Year | Zero-output column | Coordinates |
+| ---: | --- | ---: |
+| 2005 | `CYP.23` | 781 |
+| 2006 | `CYP.23` | 776 |
+| 2007 | `CYP.23` | 786 |
+| 2005 | `MLT.23` | 807 |
+
+The radix-sorted UTF-8 keys `year|input|output`, joined by newline, must have
+MD5 `f66341eea44e71728bbda6f8e25765ba`. Only after the count, four groups, and
+checksum match are these numerators set to zero for the protected `0 / 0`
+division; every coordinate is audited as `allowlisted_nonzero_over_zero` under
+`wiodr13_leontief_zero_output_v1`. Any added, removed, or changed coordinate
+aborts the calculation.
+
 In the serialized `m_io` result, capital and basket matrices are defined only
 for the 1,435 industry outputs. Their 205 final-demand columns therefore remain
-structurally `NA`; all defined cells and all published sector, country, and
-bilateral results must be finite.
+structurally `NA`; all remaining `m_io` cells must be finite. Published sector
+and country arrays may contain an ordinary `NA` only when its exact coordinate
+and `source_missing` or `not_applicable` meaning is persisted in `_states.csv`
+and passes the semantic round-trip described in `docs/missingness.md`.
 
 ## Rebuild without calculating
 

@@ -24,6 +24,31 @@ test_that("a valid WIOD16 fixture satisfies structure, missingness and accountin
   expect_equal(result$maximum_absolute_gross_output_residual, 0)
 })
 
+test_that("the production WIOD16 missingness mask has the documented cardinality", {
+  years <- as.character(2000:2014)
+  raw_variables <- c("EMPE", "H_EMPE", sprintf("RAW%02d", seq_len(14L)))
+  variables <- c(raw_variables, "VA_USD", "GO_USD")
+  sectors <- sprintf("S%02d", seq_len(56L))
+  countries <- c("CHN", sprintf("C%02d", seq_len(42L)), "ROW")
+  sea <- array(
+    1,
+    dim = c(15L, 18L, 56L, 44L),
+    dimnames = list(years, variables, sectors, countries)
+  )
+  sea[, raw_variables, , "ROW"] <- NA_real_
+  sea[, c("EMPE", "H_EMPE"), , "CHN"] <- NA_real_
+
+  result <- wiodr16_validation_environment$wlv_wiodr16_assert_sea_missingness(
+    sea,
+    countries,
+    raw_variables
+  )
+  expect_identical(result$expected_row_na_count, 13440L)
+  expect_identical(result$expected_china_na_count, 1680L)
+  expect_identical(result$expected_total_na_count, 15120L)
+  expect_identical(result$observed_total_na_count, 15120L)
+})
+
 test_that("WIOD16 enforces source cardinalities and final-demand labels", {
   fixture <- wlv_make_wiodr16_validation_fixture()
   expect_error(

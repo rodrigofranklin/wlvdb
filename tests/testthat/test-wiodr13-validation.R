@@ -146,19 +146,88 @@ test_that("WIOD country codes follow the EU KLEMS conventions", {
   )
 
   weights <- matrix(c(1, 3, 0, 0), nrow = 2L)
+  expect_error(
+    functions_environment$wlv_distribute_capital_stock(
+      weights,
+      capital_stock = c(20, 10)
+    ),
+    "fallback matrix",
+    fixed = TRUE
+  )
   distributed <- functions_environment$wlv_distribute_capital_stock(
     weights,
-    capital_stock = c(20, 10)
+    capital_stock = c(20, 10),
+    fallback_weights = matrix(c(0, 0, 2, 3), nrow = 2L)
   )
   expect_equal(distributed[, 1L], c(5, 15))
-  expect_equal(distributed[, 2L], c(0, 0))
-  expect_identical(attr(distributed, "wlv.unallocated_columns"), 2L)
+  expect_equal(distributed[, 2L], c(4, 6))
+  expect_identical(attr(distributed, "wlv.fallback_columns"), 2L)
+  expect_equal(colSums(distributed), c(20, 10))
 
   intermediate <- matrix(c(4, 2, 1, 3), nrow = 2L)
-  depreciation <- matrix(c(NA, 0.5, NaN, 1), nrow = 2L)
+  depreciation <- matrix(c(NA, 0.5, 0, 1), nrow = 2L)
+  structural_missing <- is.na(depreciation)
   expect_equal(
-    functions_environment$wlv_sum_input_flows(intermediate, depreciation),
+    functions_environment$wlv_sum_input_flows(
+      intermediate,
+      depreciation,
+      structural_missing = structural_missing
+    ),
     intermediate + matrix(c(0, 0.5, 0, 1), nrow = 2L)
+  )
+  expect_error(
+    functions_environment$wlv_sum_input_flows(intermediate, depreciation),
+    "undeclared missing",
+    fixed = TRUE
+  )
+  depreciation[1L, 1L] <- NaN
+  expect_error(
+    functions_environment$wlv_sum_input_flows(
+      intermediate,
+      depreciation,
+      structural_missing = structural_missing
+    ),
+    "NaN or infinite",
+    fixed = TRUE
+  )
+})
+
+test_that("the WIOD13 workbook missingness contract is positional, not count-only", {
+  sea <- data.frame(
+    country = c("A", "B"),
+    variable = c("LAB", "LAB"),
+    code = c("S1", "S1"),
+    `2000` = c(NA_real_, 1),
+    `2001` = c(2, NA_real_),
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+  signature <- wiodr13_validation_environment$
+    wlv_wiodr13_workbook_missingness_signature(sea, c("2000", "2001"))
+  expect_no_error(
+    wiodr13_validation_environment$wlv_wiodr13_validate_workbook_missingness(
+      sea,
+      years = c("2000", "2001"),
+      expected_by_year = c(`2000` = 1L, `2001` = 1L),
+      expected_count = 2L,
+      expected_md5 = signature$md5
+    )
+  )
+
+  swapped <- sea
+  swapped$`2000` <- rev(swapped$`2000`)
+  swapped$`2001` <- rev(swapped$`2001`)
+  expect_equal(unname(colSums(is.na(swapped[c("2000", "2001")]))), c(1, 1))
+  expect_error(
+    wiodr13_validation_environment$wlv_wiodr13_validate_workbook_missingness(
+      swapped,
+      years = c("2000", "2001"),
+      expected_by_year = c(`2000` = 1L, `2001` = 1L),
+      expected_count = 2L,
+      expected_md5 = signature$md5
+    ),
+    "pinned coordinate signature",
+    fixed = TRUE
   )
 })
 

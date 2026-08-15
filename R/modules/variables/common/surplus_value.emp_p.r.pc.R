@@ -13,6 +13,18 @@ meta_indicators[code,"type"] <- "percent"
 meta_indicators[code,"group"] <- "Rate of surplus value"
 meta_indicators[code,"reverted"] <- TRUE
 
-sea_sectors[,code,,] <- 
-  sea_sectors[,"surplus_value.emp.r.pc",,] *
+source_value <- sea_sectors[, "surplus_value.emp.r.pc", , ]
+sea_sectors[,code,,] <-
+  source_value *
   rows$productive %>% rep(each = nums$years)
+if (exists("wlv_contract_runtime", inherits = FALSE)) {
+  wlv_contract_copy_indicator_states(
+    wlv_contract_runtime,
+    artifact = "sea_sectors",
+    source_indicator = "surplus_value.emp.r.pc",
+    target_indicator = code,
+    value = source_value,
+    checkpoint = "after_stage_5"
+  )
+}
+rm(source_value)

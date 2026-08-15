@@ -11,8 +11,19 @@ meta_indicators[code,"type"] <- "hours"
 meta_indicators[code,"group"] <- "Labour and employment"
 meta_indicators[code,"reverted"] <- FALSE
 
-sea_sectors[,code,,] <-
-  sea_source[,"H_EMPE",lists$sectors,] /
-  sea_source[,"EMPE",lists$sectors,] * 
-  sea_source[,"EMP",lists$sectors,] * 1000000
+employee_hours <- sea_source[, "H_EMPE", lists$sectors, ]
+employees <- sea_source[, "EMPE", lists$sectors, ]
+persons_engaged <- sea_source[, "EMP", lists$sectors, ]
+if (exists("wlv_contract_runtime", inherits = FALSE)) {
+  sea_sectors[, code, , ] <- wlv_wiodr16_hours_worked_runtime(
+    wlv_contract_runtime,
+    employee_hours,
+    employees,
+    persons_engaged
+  )
+} else {
+  sea_sectors[, code, , ] <-
+    employee_hours / employees * persons_engaged * 1000000
+}
+rm(employee_hours, employees, persons_engaged)
 

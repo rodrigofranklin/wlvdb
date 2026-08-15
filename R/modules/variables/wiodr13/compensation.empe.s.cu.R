@@ -10,19 +10,35 @@ meta_indicators[code,"type"] <- "usd"
 meta_indicators[code,"group"] <- "Wages and value of labour force"
 meta_indicators[code,"reverted"] <- FALSE
 
-## Change the base year of consumption basket price index
-sea_sectors[,"basket_price.r.pc",,] <- 
-  sea_sectors[,"basket_price.r.pc",,] /
-  (sea_sectors["2000","basket_price.r.pc",,] %>% 
-     rep(times = nums$years)%>% 
-     newDim(c(nums$sectors, nums$countries, nums$years)) %>% 
-     aperm(c(3,1,2)))
-
-sea_sectors[,code,,] <-
-  sea_source[,"COMP",lists$sectors,] * 1000000 / 
-  sea_sectors[,"basket_price.r.pc",,] /
-  (sea_sectors["2000","exchange.r.us",,] %>% 
-     rep(times = nums$years)%>% 
-     newDim(c(nums$sectors, nums$countries, nums$years)) %>% 
-     aperm(c(3,1,2)))
+basket_current <- sea_sectors[, "basket_price.r.pc", , ]
+exchange_base <- sea_sectors["2000", "exchange.r.us", , ] %>%
+  rep(times = nums$years) %>%
+  newDim(c(nums$sectors, nums$countries, nums$years)) %>%
+  aperm(c(3, 1, 2))
+dimnames(exchange_base) <- dimnames(basket_current)
+compensation_numerator <-
+  sea_source[, "COMP", lists$sectors, ] * 1000000
+if (exists("wlv_contract_runtime", inherits = FALSE)) {
+  sea_sectors[, code, , ] <- wlv_sequential_ratio_runtime(
+    wlv_contract_runtime,
+    compensation_numerator,
+    denominators = list(
+      "basket_price.r.pc" = basket_current,
+      "exchange.r.us" = exchange_base
+    ),
+    zero = "not_applicable",
+    artifact = "sea_sectors",
+    indicator = code,
+    checkpoint = "after_stage_5",
+    stage = 5L,
+    module = "wiodr13/compensation.empe.s.cu.R",
+    axes = c(year = 1L, sector = 2L, country = 3L)
+  )
+} else {
+  sea_sectors[, code, , ] <-
+    compensation_numerator / basket_current / exchange_base
+}
+rm(
+  basket_current, exchange_base, compensation_numerator
+)
 
