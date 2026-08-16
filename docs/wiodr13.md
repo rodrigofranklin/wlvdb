@@ -65,6 +65,24 @@ The recovered calculation also makes historical edge cases explicit:
 - World productive exploitation rates are calculated as ratios of global
   totals, rather than left missing or averaged across national rates.
 
+## Closed signed-domain exception
+
+The standard method has one signed capital case: `2006/GBR.23`. Its observed
+`GFCF_P` is `-631.84349265723654`; the resulting capital stock and depreciation
+are respectively `-75458950528.278488` and `-6684967062.9865351`. The
+calculation accepts neither an extra negative cell nor a relocation or magnitude
+change: the SEA coordinate and values, the 824 negative cells in each capital
+matrix, and the method-year Leontief profile of 397 negative coefficients are
+pinned and revalidated before publication.
+
+Because the coefficient domain is signed, the calculation does **not** claim
+Hawkins-Simon productivity for 2006. It instead certifies absolute convergence
+using `abs(C)` and publishes `absolute_convergence_signed`; productivity is
+recorded as `not_applicable`. Exact fingerprints, the reconstructed coefficient
+profile and the distinction between enforced pins and independent audit
+references are documented in
+[`scientific-validation.md`](scientific-validation.md).
+
 The Leontief transformation also contains 3,150 official nonzero input flows
 whose reported output denominator is zero. They are accepted only as this exact
 versioned set:

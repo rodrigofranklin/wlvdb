@@ -11,6 +11,10 @@ sys.source(
   file.path(wlv_test_root, "R", "lib", "gfcf_contracts.R"),
   envir = gfcf_contract_environment
 )
+sys.source(
+  file.path(wlv_test_root, "R", "lib", "gfcf_diagnostics.R"),
+  envir = gfcf_contract_environment
+)
 
 wlv_read_gfcf_source_slice <- function(method, demand) {
   path <- file.path(wlv_test_root, "source_data", method, "m_io.fst")
@@ -249,6 +253,20 @@ test_that("prepared WIOD sources match exact coordinate and magnitude profiles",
     )
     expect_identical(analysis$canonical_unit, "million_usd")
 
+    diagnostic_observations <- gfcf_contract_environment$
+      wlv_wiodr_canonical_gfcf_diagnostic_observations(source, method)
+    diagnostic_artifacts <- gfcf_contract_environment$
+      wlv_gfcf_diagnostic_artifacts(
+        diagnostic_observations,
+        method = method,
+        input_unit = "million_usd"
+      )
+    expect_no_error(gfcf_contract_environment$
+      wlv_validate_gfcf_diagnostic_artifacts(
+        diagnostic_artifacts,
+        method = method
+      ))
+
     result <- gfcf_contract_environment$wlv_wiodr_apply_negative_gfcf_policy(
       source,
       method,
@@ -308,6 +326,8 @@ test_that("prepared WIOD sources match exact coordinate and magnitude profiles",
     rm(
       source,
       analysis,
+      diagnostic_observations,
+      diagnostic_artifacts,
       result,
       magnitude_drift,
       coordinate_drift,

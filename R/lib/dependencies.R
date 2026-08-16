@@ -1,7 +1,7 @@
 wlv_dependency_groups <- list(
   runtime = c(
     "abind", "countrycode", "dplyr", "fst", "lubridate", "magrittr",
-    "readr", "rvest", "tidyr", "xml2"
+    "Matrix", "readr", "rvest", "tidyr", "xml2"
   ),
   preparation = c("openssl", "R.matlab", "readODS", "readxl", "WDI"),
   papers = c(
