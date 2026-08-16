@@ -1,13 +1,14 @@
 # Índice de valores da cesta de consumo
 code <- "basket_value.r.pc"
 
-meta_indicators[code,"name"] <- "Consumption basket value index (2000 = 100)"
+meta_indicators[code,"name"] <- "Consumption basket value index (2000 = 1)"
 meta_indicators[code,"description"] <- 
   paste0("Consumption basket value index reflects changes in the socially ",
          "necessary labour-time to produce a fixed consumption basket ",
          "necessary for reproduction of an avarage worker. The Laspeyres ",
          "formula is used.")
-meta_indicators[code,"observation"] <- NA
+meta_indicators[code,"observation"] <-
+  "Calculated and published on the canonical base-one scale."
 meta_indicators[code,"type"] <- "index"
 meta_indicators[code,"group"] <- "Others"
 meta_indicators[code,"reverted"] <- FALSE
@@ -35,7 +36,7 @@ sea_sectors[lists$years,code,,] <-
       aperm(c(3,1,2))) *
      
      # Aplica a inflação em moeda nacional
-     (((sea_sectors[lists$years,"go_price.r.id",,]/100) / 
+     ((sea_sectors[lists$years,"go_price.r.id",,] /
          # Dividido pelo índice de variação cambial
          sea_sectors[lists$years,"exchange.r.id",,]) %>%
         rep(times = nums$input) %>%

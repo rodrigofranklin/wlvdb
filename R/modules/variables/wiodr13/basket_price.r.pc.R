@@ -1,12 +1,13 @@
 # labour_compensation in constant dollars of 2000
 code <- "basket_price.r.pc"
 
-meta_indicators[code,"name"] <- "Consumption basket price index (2000 = 100)"
+meta_indicators[code,"name"] <- "Consumption basket price index (2000 = 1)"
 meta_indicators[code,"description"] <- 
   paste0("Consumption basket price index reflects changes in the prices for ",
          "average worker of acquiring a fixed basket of goods and services. ",
          "The Laspeyres formula is used.")
-meta_indicators[code,"observation"] <- NA
+meta_indicators[code,"observation"] <-
+  "Calculated and published on the canonical base-one scale."
 meta_indicators[code,"type"] <- "index"
 meta_indicators[code,"group"] <- "Others"
 meta_indicators[code,"reverted"] <- FALSE
@@ -24,7 +25,7 @@ sea_sectors[lists$years,code,,] <-
       rep(times = nums$years) %>%
       newDim(c(nums$input, nums$input, nums$years)) %>% 
       aperm(c(3,1,2))) *
-     ((sea_sectors[lists$years,"go_price.r.id",,]/100) %>%
+     (sea_sectors[lists$years,"go_price.r.id",,] %>%
         rep(times = nums$input) %>%
         newDim(c(nums$years, nums$input, nums$input)))) %>%
   apply(1, colSums, na.rm = TRUE) %>%
