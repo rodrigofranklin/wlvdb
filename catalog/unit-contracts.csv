@@ -1,3 +1,4 @@
 contract;schema_version;source;units;aggregations;documentation
 wiodr13_units_v1;1;wiodr13;contracts/units/wiodr13_v1-units.csv;contracts/units/wiodr13_v1-aggregations.csv;docs/units.md
+wiodr13_units_v2;2;wiodr13;contracts/units/wiodr13_v2-units.csv;contracts/units/wiodr13_v2-aggregations.csv;docs/wiodr13-aggregation-migration.md
 wiodr16_units_v1;1;wiodr16;contracts/units/wiodr16_v1-units.csv;contracts/units/wiodr16_v1-aggregations.csv;docs/units.md
