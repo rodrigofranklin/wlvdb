@@ -10,15 +10,18 @@ wlv_aggregation_runtime_row <- function(
     indicator,
     level,
     strategy,
-    zero_denominator = "") {
+    zero_denominator = "",
+    numerator = "",
+    denominator = "",
+    weight = "") {
   data.frame(
     indicator = indicator,
     level = level,
     strategy = strategy,
     module = "",
-    numerator = "",
-    denominator = "",
-    weight = "",
+    numerator = numerator,
+    denominator = denominator,
+    weight = weight,
     zero_denominator = zero_denominator,
     notes = "",
     stringsAsFactors = FALSE
@@ -147,5 +150,108 @@ test_that("typed states and anomalies flow through missingness runtime", {
   expect_setequal(
     unique(runtime$anomalies$action),
     c("aggregate_available", "preserve_all_missing")
+  )
+})
+
+test_that("world bindings can consume an earlier dependency with runtime states", {
+  environment <- new.env(parent = aggregation_runtime_environment)
+  rows <- rbind(
+    wlv_aggregation_runtime_row("weight", "sector_to_country", "sum"),
+    wlv_aggregation_runtime_row("weight", "country_to_world", "sum"),
+    wlv_aggregation_runtime_row(
+      "metric",
+      "sector_to_country",
+      "weighted_mean",
+      zero_denominator = "not_applicable",
+      weight = "weight"
+    ),
+    wlv_aggregation_runtime_row(
+      "metric",
+      "country_to_world",
+      "weighted_mean",
+      zero_denominator = "not_applicable",
+      weight = "weight"
+    )
+  )
+  environment$wlv_aggregation_registry <- aggregation_runtime_environment$
+    wlv_resolve_aggregation_registry(
+      aggregations = rows,
+      solutions = data.frame(
+        names = c("weight", "metric"),
+        country_solution = c("sum", "mean"),
+        stringsAsFactors = FALSE
+      ),
+      method = "typed_dependencies",
+      stable = TRUE
+    )
+  environment$sea_variables <- data.frame(
+    names = c("weight", "metric"),
+    country_solution = c("sum", "mean"),
+    stringsAsFactors = FALSE
+  )
+  environment$lists <- list(countries = c("A", "B"))
+  environment$sea_sectors <- array(
+    NA_real_,
+    dim = c(1L, 2L, 2L, 2L),
+    dimnames = list(
+      year = "2000",
+      indicator = c("weight", "metric"),
+      sector = c("S1", "S2"),
+      country = c("A", "B")
+    )
+  )
+  environment$sea_sectors[1L, "weight", , "A"] <- c(1, 3)
+  environment$sea_sectors[1L, "weight", , "B"] <- c(2, 6)
+  environment$sea_sectors[1L, "metric", , "A"] <- c(1, 3)
+  environment$sea_sectors[1L, "metric", , "B"] <- c(10, 14)
+  environment$sea_countries <- array(
+    NA_real_,
+    dim = c(1L, 2L, 3L),
+    dimnames = list(
+      year = "2000",
+      indicator = c("weight", "metric"),
+      country = c("A", "B", "WWW")
+    )
+  )
+  environment$wlv_contract_runtime <- aggregation_runtime_environment$
+    wlv_new_contract_runtime(
+      method = "typed_dependencies",
+      source = "typed_dependencies",
+      policy = aggregation_runtime_environment$wlv_strict_missingness_policy(
+        source = "typed_dependencies",
+        policy_id = "typed_dependencies_v1"
+      )
+    )
+
+  expect_output(
+    sys.source(
+      file.path(
+        wlv_test_root,
+        "R",
+        "modules",
+        "variables",
+        "sea_countries.R"
+      ),
+      envir = environment
+    ),
+    "weighted_mean -> weighted_mean",
+    fixed = TRUE
+  )
+  expect_equal(
+    as.numeric(environment$sea_countries[1L, "weight", ]),
+    c(4, 8, 12)
+  )
+  expect_equal(
+    as.numeric(environment$sea_countries[1L, "metric", ]),
+    c(2.5, 13, 9.5)
+  )
+  expect_no_error(
+    aggregation_runtime_environment$wlv_contract_declared_states(
+      environment$wlv_contract_runtime,
+      "sea_countries",
+      "weight",
+      environment$sea_countries[, "weight", , drop = FALSE],
+      "after_country_aggregation"
+    )
   )
 })

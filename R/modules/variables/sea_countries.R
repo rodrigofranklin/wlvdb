@@ -168,6 +168,7 @@ for (loop in which(!formula)) {
 
 # Every country value is now available, so world dependencies do not depend on
 # the textual solution order (for example, a weight may be declared later).
+world_state_values <- list()
 for (loop in which(!formula)) {
   indicator <- sea_variables$names[[loop]]
   world_binding <- world_bindings[[loop]]
@@ -202,7 +203,25 @@ for (loop in which(!formula)) {
   sea_countries[, indicator, "WWW"] <- world_value
 
   if (exists("wlv_contract_runtime", inherits = FALSE)) {
-    world_states <- attr(world_value, "wlv_state", exact = TRUE)
+    world_state_values[[indicator]] <- attr(
+      world_value,
+      "wlv_state",
+      exact = TRUE
+    )
+    # The typed runtime temporarily registers this world-only result. Restore
+    # the country slice while later world bindings may still consume it.
+    wlv_contract_register_states(
+      wlv_contract_runtime,
+      "sea_countries",
+      indicator,
+      country_state_values[[indicator]]
+    )
+  }
+}
+
+if (exists("wlv_contract_runtime", inherits = FALSE)) {
+  for (loop in which(!formula)) {
+    indicator <- sea_variables$names[[loop]]
     complete_states <- array(
       "finite",
       dim = dim(sea_countries[, indicator, , drop = FALSE]),
@@ -210,7 +229,7 @@ for (loop in which(!formula)) {
     )
     complete_states[, 1L, lists$countries] <-
       country_state_values[[indicator]]
-    complete_states[, 1L, "WWW"] <- world_states
+    complete_states[, 1L, "WWW"] <- world_state_values[[indicator]]
     wlv_contract_register_states(
       wlv_contract_runtime,
       "sea_countries",
@@ -259,7 +278,7 @@ rm(list = intersect(
     "world_values", "world_allowed", "world_value", "world_states",
     "complete_states", "module", "value", "country_bindings",
     "world_bindings", "formula", "world_formula", "formula_mismatch",
-    "country_state_values",
+    "country_state_values", "world_state_values",
     "wlv_sea_aggregation_input", "wlv_sea_aggregation_values",
     "wlv_sea_aggregation_states"
   ),
