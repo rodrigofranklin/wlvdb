@@ -1,5 +1,9 @@
 source_normalization_environment <- new.env(parent = baseenv())
 sys.source(
+  file.path(wlv_test_root, "R", "lib", "source_manifest.R"),
+  envir = source_normalization_environment
+)
+sys.source(
   file.path(wlv_test_root, "R", "lib", "source_normalization.R"),
   envir = source_normalization_environment
 )
@@ -30,6 +34,100 @@ wlv_test_source_sea <- function(contract, value = 2) {
   )
   result[2L, variables[[1L]], 1L, 1L] <- NA_real_
   result
+}
+
+wlv_test_normalized_source_writer <- function(value, path) {
+  saveRDS(value, path, version = 3L)
+  saveRDS(
+    list(dim = dim(value), dimnames = dimnames(value)),
+    paste0(path, ".meta"),
+    version = 3L
+  )
+  invisible(path)
+}
+
+wlv_make_source_publication_fixture <- function() {
+  root <- tempfile("wlv-normalized-publication-")
+  dir.create(root)
+  labels <- c(
+    "countries.csv" = "code;name\nA;Country A\n",
+    "sectors.csv" = "code;name\ns1;Sector 1\n",
+    "demand.csv" = "code;name\nc1;Demand 1\n"
+  )
+  for (name in names(labels)) {
+    writeBin(charToRaw(labels[[name]]), file.path(root, name))
+  }
+  contract_paths <- file.path(root, c("unit-contract.csv", "aggregation-contract.csv"))
+  writeBin(
+    charToRaw("contract;artifact;unit\nwiod-test;m_io;current_usd\n"),
+    contract_paths[[1L]]
+  )
+  writeBin(
+    charToRaw("contract;level;operation\nwiod-test;country;sum\n"),
+    contract_paths[[2L]]
+  )
+  contract <-
+    source_normalization_environment$wlv_source_normalization_contract("wiodr13")
+  normalized <- source_normalization_environment$wlv_normalize_source(
+    wlv_test_source_m_io(),
+    wlv_test_source_sea(contract),
+    "wiodr13",
+    contract
+  )
+  list(
+    root = root,
+    labels = labels,
+    contract_paths = contract_paths,
+    normalized = normalized,
+    unit_contract_sidecar = data.frame(
+      contract = "wiod-test",
+      artifact = c("m_io", "sea"),
+      unit = c("current_usd", "declared_by_variable"),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    ),
+    gfcf = data.frame(
+      year = c("2000", "2001"),
+      input = c("A.s1", "A.s2"),
+      output = c("A.c1", "A.c1"),
+      value_million_usd = c(-1, -2),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+  )
+}
+
+wlv_publish_source_fixture <- function(fixture, normalized = fixture$normalized) {
+  source_normalization_environment$wlv_publish_normalized_source(
+    normalized = normalized,
+    source_dir = fixture$root,
+    unit_contract_id = "wiod-test",
+    unit_contract_version = "2026-08-16",
+    unit_contract_paths = fixture$contract_paths,
+    unit_contract_sidecar = fixture$unit_contract_sidecar,
+    gfcf_observations = fixture$gfcf,
+    writer = wlv_test_normalized_source_writer
+  )
+}
+
+wlv_test_file_bytes <- function(path) {
+  readBin(path, what = "raw", n = file.info(path)$size)
+}
+
+wlv_test_directory_snapshot <- function(path) {
+  files <- sort(list.files(path, recursive = TRUE, all.files = TRUE), method = "radix")
+  stats::setNames(
+    lapply(file.path(path, files), wlv_test_file_bytes),
+    files
+  )
+}
+
+wlv_test_flip_last_byte <- function(path) {
+  bytes <- wlv_test_file_bytes(path)
+  stopifnot(length(bytes) > 0L)
+  bytes[[length(bytes)]] <- as.raw(bitwXor(as.integer(bytes[[length(bytes)]]), 1L))
+  writeBin(bytes, path)
+  invisible(path)
 }
 
 test_that("stable WIOD contracts cover every prepared SEA variable", {
@@ -239,5 +337,128 @@ test_that("an already-USD source can declare an identity contract", {
     ),
     "does not match contract source",
     fixed = TRUE
+  )
+})
+
+test_that("normalized source publication hashes every artifact and contract", {
+  fixture <- wlv_make_source_publication_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+
+  manifest <- wlv_publish_source_fixture(fixture)
+  normalized_dir <- file.path(fixture$root, "normalized")
+  expected_artifacts <- c(
+    "_gfcf_canonical.rds",
+    "_normalization_contract.csv",
+    "_source_manifest.csv",
+    "_unit_contract.csv",
+    "countries.csv",
+    "demand.csv",
+    "m_io.fst",
+    "m_io.fst.meta",
+    "sea.fst",
+    "sea.fst.meta",
+    "sectors.csv"
+  )
+  expect_identical(
+    sort(list.files(normalized_dir), method = "radix"),
+    expected_artifacts
+  )
+  expect_identical(
+    source_normalization_environment$wlv_read_source_manifest(
+      file.path(normalized_dir, "_source_manifest.csv")
+    ),
+    manifest
+  )
+  expect_no_error(
+    source_normalization_environment$wlv_verify_source_manifest(
+      manifest,
+      normalized_dir,
+      fixture$contract_paths,
+      expected_contract_id = "wiod-test",
+      expected_contract_version = "2026-08-16"
+    )
+  )
+  expect_identical(
+    manifest$artifact_role[manifest$artifact == "_gfcf_canonical.rds"],
+    "raw_gfcf_diagnostic"
+  )
+
+  reversed_contracts <- source_normalization_environment$wlv_build_source_manifest(
+    source_root = normalized_dir,
+    artifacts = manifest$artifact,
+    artifact_roles = manifest$artifact_role,
+    contract_path = rev(fixture$contract_paths),
+    contract_id = "wiod-test",
+    contract_version = "2026-08-16"
+  )
+  expect_identical(reversed_contracts, manifest)
+
+  for (artifact in c(
+    "m_io.fst", "m_io.fst.meta", "countries.csv", "_gfcf_canonical.rds"
+  )) {
+    path <- file.path(normalized_dir, artifact)
+    original <- wlv_test_file_bytes(path)
+    wlv_test_flip_last_byte(path)
+    expect_error(
+      source_normalization_environment$wlv_verify_source_manifest(
+        manifest,
+        normalized_dir,
+        fixture$contract_paths
+      ),
+      paste0("SHA-256 mismatch for source artifact `", artifact, "`"),
+      fixed = TRUE
+    )
+    writeBin(original, path)
+  }
+
+  wlv_test_flip_last_byte(fixture$contract_paths[[2L]])
+  expect_error(
+    source_normalization_environment$wlv_verify_source_manifest(
+      manifest,
+      normalized_dir,
+      fixture$contract_paths
+    ),
+    "Contract SHA-256 mismatch",
+    fixed = TRUE
+  )
+})
+
+test_that("failed atomic installation restores the previous normalized generation", {
+  fixture <- wlv_make_source_publication_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+  wlv_publish_source_fixture(fixture)
+  normalized_dir <- file.path(fixture$root, "normalized")
+  previous <- wlv_test_directory_snapshot(normalized_dir)
+
+  replacement <- fixture$normalized
+  replacement$m_io[[1L]] <- replacement$m_io[[1L]] + 123
+  base_file_rename <- base::file.rename
+  source_normalization_environment$file.rename <- function(from, to) {
+    is_install <-
+      startsWith(basename(from), ".normalized-staging-") &&
+      identical(basename(to), "normalized")
+    if (is_install) {
+      return(FALSE)
+    }
+    base_file_rename(from, to)
+  }
+  on.exit(
+    rm("file.rename", envir = source_normalization_environment),
+    add = TRUE
+  )
+
+  expect_error(
+    wlv_publish_source_fixture(fixture, replacement),
+    "Could not install the normalized source generation.",
+    fixed = TRUE
+  )
+  expect_identical(wlv_test_directory_snapshot(normalized_dir), previous)
+  expect_length(
+    list.files(
+      fixture$root,
+      pattern = "^[.]normalized-(staging|backup)-",
+      all.files = TRUE
+    ),
+    0L
   )
 })
