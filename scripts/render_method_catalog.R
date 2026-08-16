@@ -54,22 +54,22 @@ assert_columns <- function(data, component, columns) {
 
 markdown_cell <- function(value) {
   if (length(value) == 0L || is.na(value) || !nzchar(trimws(as.character(value)))) {
-    return("—")
+    return(wlv_markdown_em_dash)
   }
 
-  value <- gsub("[\r\n]+", " ", as.character(value))
+  value <- enc2utf8(gsub("[\r\n]+", " ", as.character(value)))
   value <- gsub("|", "\\|", value, fixed = TRUE)
   trimws(value)
 }
 
 markdown_code <- function(value) {
   value <- markdown_cell(value)
-  if (identical(value, "—")) value else sprintf("`%s`", value)
+  if (identical(value, wlv_markdown_em_dash)) value else sprintf("`%s`", value)
 }
 
 markdown_link <- function(value) {
   value <- markdown_cell(value)
-  if (identical(value, "—")) {
+  if (identical(value, wlv_markdown_em_dash)) {
     return(value)
   }
 
@@ -92,18 +92,23 @@ yes_no <- function(value) {
 
 year_range <- function(start, end) {
   if (is.na(start) && is.na(end)) {
-    return("—")
+    return(wlv_markdown_em_dash)
   }
   if (is.na(start)) {
-    return(sprintf("≤ %s", end))
+    return(sprintf("%s %s", wlv_markdown_less_equal, end))
   }
   if (is.na(end)) {
-    return(sprintf("≥ %s", start))
+    return(sprintf("%s %s", wlv_markdown_greater_equal, start))
   }
   if (identical(as.integer(start), as.integer(end))) {
     return(as.character(as.integer(start)))
   }
-  sprintf("%d–%d", as.integer(start), as.integer(end))
+  sprintf(
+    "%d%s%d",
+    as.integer(start),
+    wlv_markdown_en_dash,
+    as.integer(end)
+  )
 }
 
 markdown_table <- function(headers, rows) {
@@ -161,7 +166,7 @@ render_source_rows <- function(sources) {
     validator <- if (nzchar(source$validator_script) && nzchar(source$validator_function)) {
       sprintf("%s (`%s`)", markdown_link(source$validator_script), source$validator_function)
     } else {
-      "—"
+      wlv_markdown_em_dash
     }
 
     c(
@@ -175,8 +180,30 @@ render_source_rows <- function(sources) {
       validator,
       markdown_code(source$artifact_profile),
       markdown_code(source$missingness_policy),
+      markdown_code(source$unit_contract),
       markdown_link(source$documentation),
       markdown_cell(source$limitations)
+    )
+  })
+}
+
+wlv_markdown_em_dash <- intToUtf8(0x2014L)
+wlv_markdown_en_dash <- intToUtf8(0x2013L)
+wlv_markdown_less_equal <- intToUtf8(0x2264L)
+wlv_markdown_greater_equal <- intToUtf8(0x2265L)
+
+render_unit_contract_rows <- function(contracts) {
+  contracts <- contracts[order(contracts$contract), , drop = FALSE]
+
+  lapply(seq_len(nrow(contracts)), function(i) {
+    contract <- contracts[i, , drop = FALSE]
+    c(
+      markdown_code(contract$contract),
+      markdown_code(contract$schema_version),
+      markdown_code(contract$source),
+      markdown_link(contract$units),
+      markdown_link(contract$aggregations),
+      markdown_link(contract$documentation)
     )
   })
 }
@@ -227,6 +254,7 @@ render_document <- function(catalog) {
     "missingness_policies",
     aliases = c("missingness")
   )
+  unit_contracts <- catalog_component(catalog, "unit_contracts")
 
   assert_columns(
     methods,
@@ -243,7 +271,7 @@ render_document <- function(catalog) {
       "source", "status", "year_start", "year_end", "parameter_set",
       "data_dir", "can_prepare", "preparer", "validator_script",
       "validator_function", "artifact_profile", "missingness_policy",
-      "documentation", "limitations"
+      "unit_contract", "documentation", "limitations"
     )
   )
   assert_columns(
@@ -255,6 +283,14 @@ render_document <- function(catalog) {
     missingness_policies,
     "missingness_policies",
     c("policy", "script", "factory", "documentation")
+  )
+  assert_columns(
+    unit_contracts,
+    "unit_contracts",
+    c(
+      "contract", "schema_version", "source", "units", "aggregations",
+      "documentation"
+    )
   )
 
   method_table <- markdown_table(
@@ -269,13 +305,20 @@ render_document <- function(catalog) {
     c(
       "Source", "Status", "Coverage", "Parameter set", "Data directory",
       "Prepare", "Preparer", "Validator", "Artifact profile",
-      "Missingness policy", "Documentation", "Known limitations"
+      "Missingness policy", "Unit contract", "Documentation", "Known limitations"
     ),
     render_source_rows(sources)
   )
   missingness_policy_table <- markdown_table(
     c("Policy", "Script", "Factory", "Documentation"),
     render_missingness_policy_rows(missingness_policies)
+  )
+  unit_contract_table <- markdown_table(
+    c(
+      "Contract", "Schema", "Source", "Unit definitions", "Aggregations",
+      "Documentation"
+    ),
+    render_unit_contract_rows(unit_contracts)
   )
   artifact_table <- markdown_table(
     c("Profile", "Operations", "Artifact", "Kind", "Required sidecar"),
@@ -291,7 +334,8 @@ render_document <- function(catalog) {
     "[`catalog/methods.csv`](../catalog/methods.csv),",
     "[`catalog/sources.csv`](../catalog/sources.csv),",
     "[`catalog/artifact-profiles.csv`](../catalog/artifact-profiles.csv), and",
-    "[`catalog/missingness-policies.csv`](../catalog/missingness-policies.csv).",
+    "[`catalog/missingness-policies.csv`](../catalog/missingness-policies.csv), and",
+    "[`catalog/unit-contracts.csv`](../catalog/unit-contracts.csv).",
     "Regenerate it with `Rscript --vanilla scripts/render_method_catalog.R` and",
     "verify synchronization with `Rscript --vanilla scripts/render_method_catalog.R --check`.",
     "",
@@ -318,6 +362,12 @@ render_document <- function(catalog) {
     "Sources reference versioned policy factories; catalog loading validates declarations without executing them.",
     "",
     missingness_policy_table,
+    "",
+    "## Unit contracts",
+    "",
+    "Stable sources select versioned unit and aggregation declarations; catalog loading validates exact indicator coverage without changing numerical behavior.",
+    "",
+    unit_contract_table,
     "",
     "## Expected artifact profiles",
     "",

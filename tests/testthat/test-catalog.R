@@ -46,6 +46,7 @@ wlv_make_catalog_fixture <- function() {
     validator_function = "wlv_validate_demo_prepared",
     artifact_profile = "demo_core",
     missingness_policy = "demo_v1",
+    unit_contract = "demo_units_v1",
     documentation = "docs/demo.md",
     limitations = "",
     stringsAsFactors = FALSE,
@@ -85,6 +86,44 @@ wlv_make_catalog_fixture <- function() {
     stringsAsFactors = FALSE,
     check.names = FALSE
   )
+  unit_contracts <- data.frame(
+    contract = "demo_units_v1",
+    schema_version = "1",
+    source = "demo_source",
+    units = "contracts/units/demo_v1-units.csv",
+    aggregations = "contracts/units/demo_v1-aggregations.csv",
+    documentation = "docs/demo.md",
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  unit_definitions <- data.frame(
+    indicator = "demo.value",
+    quantity_kind = "monetary",
+    source_unit = "usd",
+    source_scale = "1",
+    canonical_unit = "usd",
+    currency = "usd",
+    price_basis = "current",
+    base_year = "",
+    index_base = "",
+    labour_concept = "not_applicable",
+    notes = "",
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  unit_aggregations <- data.frame(
+    indicator = rep("demo.value", 2L),
+    level = c("sector_to_country", "country_to_world"),
+    strategy = rep("sum", 2L),
+    module = "",
+    numerator = "",
+    denominator = "",
+    weight = "",
+    zero_denominator = "",
+    notes = "",
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
 
   wlv_catalog_test_write(file.path(root, "catalog", "sources.csv"), sources)
   wlv_catalog_test_write(file.path(root, "catalog", "methods.csv"), methods)
@@ -95,6 +134,18 @@ wlv_make_catalog_fixture <- function() {
   wlv_catalog_test_write(
     file.path(root, "catalog", "missingness-policies.csv"),
     missingness_policies
+  )
+  wlv_catalog_test_write(
+    file.path(root, "catalog", "unit-contracts.csv"),
+    unit_contracts
+  )
+  wlv_catalog_test_write(
+    file.path(root, "contracts", "units", "demo_v1-units.csv"),
+    unit_definitions
+  )
+  wlv_catalog_test_write(
+    file.path(root, "contracts", "units", "demo_v1-aggregations.csv"),
+    unit_aggregations
   )
   wlv_catalog_test_write(
     file.path(root, "methods", "demo", "_parameters.csv"),
@@ -122,6 +173,18 @@ wlv_make_catalog_fixture <- function() {
   writeLines(
     "# Demonstration source contract",
     file.path(root, "docs", "demo.md")
+  )
+  wlv_catalog_test_write(
+    file.path(root, "parameters", "raw_demo", "_source_solutions.csv"),
+    data.frame(
+      names = "demo.value",
+      sector_solution = "DEMO",
+      country_solution = "sum",
+      stage = "0",
+      order = "1",
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
   )
   writeLines(
     "# Demonstration method test",
@@ -179,6 +242,11 @@ test_that("repository catalog classifies every method and source explicitly", {
     catalog$sources$missingness_policy[catalog$sources$status == "stable"],
     c("wiodr13_v1", "wiodr16_v1")
   )
+  expect_equal(nrow(catalog$unit_contracts), 2L)
+  expect_setequal(
+    catalog$sources$unit_contract[catalog$sources$status == "stable"],
+    c("wiodr13_units_v1", "wiodr16_units_v1")
+  )
 })
 
 test_that("catalog accessors and output formats are deterministic", {
@@ -189,8 +257,9 @@ test_that("catalog accessors and output formats are deterministic", {
     names(methods),
     c(
       "method", "code", "description", "source", "status", "source_status",
-      "missingness_policy", "year_start", "year_end", "years", "can_prepare",
-      "can_calculate", "can_recalculate", "test", "documentation", "limitations"
+      "missingness_policy", "unit_contract", "year_start", "year_end", "years",
+      "can_prepare", "can_calculate", "can_recalculate", "test",
+      "documentation", "limitations"
     )
   )
   expect_identical(methods$years[methods$method == "wiodr13"], "1995-2009")
@@ -205,6 +274,13 @@ test_that("catalog accessors and output formats are deterministic", {
     "wiodr13_v1"
   )
   expect_identical(policy$factory, "wlv_wiodr13_missingness_policy")
+  unit_contract <- catalog_environment$wlv_catalog_unit_contract(
+    catalog,
+    "wiodr13_units_v1"
+  )
+  expect_identical(unit_contract$metadata$source, "wiodr13")
+  expect_equal(nrow(unit_contract$units), 58L)
+  expect_equal(nrow(unit_contract$aggregations), 116L)
   artifacts <- catalog_environment$wlv_catalog_artifacts(
     catalog,
     "wiod_core",
@@ -243,6 +319,10 @@ test_that("catalog accessors and output formats are deterministic", {
   expect_error(
     catalog_environment$wlv_catalog_missingness_policy(catalog, "missing"),
     "Unknown missingness policy"
+  )
+  expect_error(
+    catalog_environment$wlv_catalog_unit_contract(catalog, "missing"),
+    "Unknown unit contract"
   )
 })
 
@@ -424,6 +504,28 @@ test_that("catalog enforces foreign keys and uniqueness", {
     catalog_environment$wlv_load_catalog(root),
     "unknown missingness policy"
   )
+
+  unlink(root, recursive = TRUE, force = TRUE)
+  root <- wlv_make_catalog_fixture()
+  wlv_catalog_test_edit(root, "sources.csv", function(value) {
+    value$unit_contract <- "unknown_units"
+    value
+  })
+  expect_error(
+    catalog_environment$wlv_load_catalog(root),
+    "unknown unit contract"
+  )
+
+  unlink(root, recursive = TRUE, force = TRUE)
+  root <- wlv_make_catalog_fixture()
+  wlv_catalog_test_edit(root, "unit-contracts.csv", function(value) {
+    value$source <- "unknown_source"
+    value
+  })
+  expect_error(
+    catalog_environment$wlv_load_catalog(root),
+    "unit contracts catalog refers to unknown source"
+  )
 })
 
 test_that("calculation capabilities require a source artifact profile", {
@@ -484,7 +586,18 @@ test_that("stable entries require complete and existing contracts", {
   })
   expect_error(
     catalog_environment$wlv_load_catalog(root),
-    "Stable source.*missingness policy"
+    "Stable source.*missingness and unit contracts"
+  )
+
+  unlink(root, recursive = TRUE, force = TRUE)
+  root <- wlv_make_catalog_fixture()
+  wlv_catalog_test_edit(root, "sources.csv", function(value) {
+    value$unit_contract <- ""
+    value
+  })
+  expect_error(
+    catalog_environment$wlv_load_catalog(root),
+    "Stable source.*unit contracts"
   )
 
   unlink(root, recursive = TRUE, force = TRUE)
@@ -581,5 +694,120 @@ test_that("disabled and non-stable entries expose their limitations", {
   expect_error(
     catalog_environment$wlv_load_catalog(root),
     "Non-stable method.*limitations"
+  )
+})
+
+test_that("stable unit contracts have deterministic exact coverage", {
+  catalog <- catalog_environment$wlv_load_catalog(wlv_test_root)
+  expected <- c(wiodr13_units_v1 = 58L, wiodr16_units_v1 = 50L)
+
+  for (contract in names(expected)) {
+    value <- catalog_environment$wlv_catalog_unit_contract(catalog, contract)
+    expect_equal(nrow(value$units), expected[[contract]])
+    expect_equal(nrow(value$aggregations), 2L * expected[[contract]])
+    expect_setequal(unique(value$aggregations$indicator), value$units$indicator)
+    expect_true(all(table(value$aggregations$indicator) == 2L))
+
+    first <- catalog_environment$wlv_catalog_unit_contract_sidecar(
+      catalog,
+      contract,
+      value$units$indicator
+    )
+    second <- catalog_environment$wlv_catalog_unit_contract_sidecar(
+      catalog,
+      contract,
+      value$units$indicator
+    )
+    expect_identical(first, second)
+    expect_equal(nrow(first), 2L * expected[[contract]])
+    expect_identical(
+      unique(first$indicator),
+      value$units$indicator
+    )
+    expect_identical(
+      first$level[seq.int(1L, nrow(first), by = 2L)],
+      rep("sector_to_country", expected[[contract]])
+    )
+  }
+})
+
+test_that("unit contract schemas and foreign keys reject drift", {
+  cases <- list(
+    list(
+      path = file.path("contracts", "units", "demo_v1-units.csv"),
+      edit = function(value) {
+        value$source_scale <- "0"
+        value
+      },
+      message = "positive `source_scale`"
+    ),
+    list(
+      path = file.path("contracts", "units", "demo_v1-aggregations.csv"),
+      edit = function(value) value[-2L, , drop = FALSE],
+      message = "both aggregation levels"
+    ),
+    list(
+      path = file.path("contracts", "units", "demo_v1-aggregations.csv"),
+      edit = function(value) {
+        value$indicator[[1L]] <- "unknown.value"
+        value
+      },
+      message = "absent from its unit definitions"
+    )
+  )
+
+  for (case in cases) {
+    root <- wlv_make_catalog_fixture()
+    tryCatch(
+      {
+        path <- file.path(root, case$path)
+        value <- utils::read.csv2(
+          path,
+          stringsAsFactors = FALSE,
+          colClasses = "character",
+          check.names = FALSE,
+          na.strings = NULL
+        )
+        wlv_catalog_test_write(path, case$edit(value))
+        expect_error(
+          catalog_environment$wlv_load_catalog(root),
+          case$message,
+          info = case$path
+        )
+      },
+      finally = unlink(root, recursive = TRUE, force = TRUE)
+    )
+  }
+
+  root <- wlv_make_catalog_fixture()
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  unit_path <- file.path(root, "contracts", "units", "demo_v1-units.csv")
+  units <- utils::read.csv2(
+    unit_path,
+    stringsAsFactors = FALSE,
+    colClasses = "character",
+    check.names = FALSE,
+    na.strings = NULL
+  )
+  units$indicator <- "renamed.value"
+  wlv_catalog_test_write(unit_path, units)
+  aggregation_path <- file.path(
+    root,
+    "contracts",
+    "units",
+    "demo_v1-aggregations.csv"
+  )
+  aggregations <- utils::read.csv2(
+    aggregation_path,
+    stringsAsFactors = FALSE,
+    colClasses = "character",
+    check.names = FALSE,
+    na.strings = NULL
+  )
+  aggregations$indicator <- "renamed.value"
+  wlv_catalog_test_write(aggregation_path, aggregations)
+  expect_error(
+    catalog_environment$wlv_load_catalog(root),
+    "does not exactly cover stable method"
   )
 })

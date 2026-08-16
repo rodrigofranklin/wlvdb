@@ -423,6 +423,7 @@ wlv_validate_request <- function(
       validator_function = source_record$validator_function[[1L]],
       artifact_profile = source_record$artifact_profile[[1L]],
       missingness_policy = source_record$missingness_policy[[1L]],
+      unit_contract = source_record$unit_contract[[1L]],
       status = selected$status[[1L]],
       source_status = selected$source_status[[1L]],
       can_prepare = selected$can_prepare[[1L]],
@@ -1455,6 +1456,41 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         contract_runtime,
         file.path(staging, "_anomalies.csv")
       )
+      unit_contract_csv <- list()
+      unit_contract_id <- method_record$unit_contract[[1L]]
+      if (nzchar(unit_contract_id)) {
+        effective_unit_contract <- wlv_catalog_unit_contract_sidecar(
+          plan$catalog,
+          unit_contract_id,
+          indicators = as.character(run_environment$sea_variables$names),
+          require_exact = identical(
+            method_record$status[[1L]],
+            "stable"
+          )
+        )
+        wlv_write_result_csv(
+          effective_unit_contract,
+          file.path(staging, "_unit_contract.csv")
+        )
+        unit_contract_csv <- list(
+          `_unit_contract.csv` = effective_unit_contract
+        )
+      }
+      scientific_csv <- if (
+        exists(
+          "wlv_scientific_diagnostics",
+          envir = run_environment,
+          inherits = FALSE
+        )
+      ) {
+        get(
+          "wlv_scientific_diagnostics",
+          envir = run_environment,
+          inherits = FALSE
+        )
+      } else {
+        list()
+      }
       expected_metadata <- wlv_method_result_metadata(
         parameters = run_environment$parameters,
         assumptions = run_environment$assumptions,
@@ -1462,21 +1498,7 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         solutions = run_environment$sea_variables,
         sectors = run_environment$sectors,
         meta_indicators = run_environment$meta_indicators,
-        extra_csv = if (
-          exists(
-            "wlv_scientific_diagnostics",
-            envir = run_environment,
-            inherits = FALSE
-          )
-        ) {
-          get(
-            "wlv_scientific_diagnostics",
-            envir = run_environment,
-            inherits = FALSE
-          )
-        } else {
-          list()
-        }
+        extra_csv = c(scientific_csv, unit_contract_csv)
       )
       scientific_checks <- wlv_validate_staged_results(
         staging,

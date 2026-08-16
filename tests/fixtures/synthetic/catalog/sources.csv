@@ -1,2 +1,2 @@
-source;status;year_start;year_end;parameter_set;data_dir;can_prepare;preparer;validator_script;validator_function;artifact_profile;missingness_policy;documentation;limitations
-synthetic;experimental;2000;2001;synthetic;source_data/synthetic;FALSE;;;;synthetic_core;synthetic_v1;;Synthetic analytical fixture used only by tests and not a supported external data source.
+source;status;year_start;year_end;parameter_set;data_dir;can_prepare;preparer;validator_script;validator_function;artifact_profile;missingness_policy;unit_contract;documentation;limitations
+synthetic;experimental;2000;2001;synthetic;source_data/synthetic;FALSE;;;;synthetic_core;synthetic_v1;synthetic_units_v1;;Synthetic analytical fixture used only by tests and not a supported external data source.

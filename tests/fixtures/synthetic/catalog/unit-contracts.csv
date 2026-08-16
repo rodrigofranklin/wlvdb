@@ -1,0 +1,2 @@
+contract;schema_version;source;units;aggregations;documentation
+synthetic_units_v1;1;synthetic;contracts/units/synthetic_v1-units.csv;contracts/units/synthetic_v1-aggregations.csv;docs/synthetic-units.md

@@ -3,14 +3,27 @@ wlv_catalog_schemas <- list(
     "source", "status", "year_start", "year_end", "parameter_set",
     "data_dir", "can_prepare", "preparer", "validator_script",
     "validator_function", "artifact_profile", "missingness_policy",
-    "documentation", "limitations"
+    "unit_contract", "documentation", "limitations"
   ),
   methods = c(
     "method", "source", "code", "description", "status", "can_calculate",
     "can_recalculate", "test", "documentation", "limitations"
   ),
   artifacts = c("profile", "artifact", "kind", "sidecar", "operations"),
-  missingness = c("policy", "script", "factory", "documentation")
+  missingness = c("policy", "script", "factory", "documentation"),
+  unit_contracts = c(
+    "contract", "schema_version", "source", "units", "aggregations",
+    "documentation"
+  ),
+  unit_definitions = c(
+    "indicator", "quantity_kind", "source_unit", "source_scale",
+    "canonical_unit", "currency", "price_basis", "base_year", "index_base",
+    "labour_concept", "notes"
+  ),
+  unit_aggregations = c(
+    "indicator", "level", "strategy", "module", "numerator",
+    "denominator", "weight", "zero_denominator", "notes"
+  )
 )
 
 wlv_catalog_stop <- function(message, ...) {
@@ -333,6 +346,19 @@ wlv_catalog_validate_sources <- function(sources, root) {
     )
   }
 
+  unit_contract_present <- nzchar(sources$unit_contract)
+  invalid_unit_contract <- unit_contract_present &
+    !grepl("^[a-z][a-z0-9_]*$", sources$unit_contract)
+  if (any(invalid_unit_contract)) {
+    wlv_catalog_stop(
+      "The sources catalog contains invalid `unit_contract` identifiers: %s.",
+      paste(
+        unique(sources$unit_contract[invalid_unit_contract]),
+        collapse = ", "
+      )
+    )
+  }
+
   missing_parameter_sets <- unique(sources$parameter_set[
     !dir.exists(file.path(root, "parameters", sources$parameter_set))
   ])
@@ -366,11 +392,15 @@ wlv_catalog_validate_sources <- function(sources, root) {
       !nzchar(sources$validator_function) |
       !nzchar(sources$artifact_profile) |
       !nzchar(sources$missingness_policy) |
+      !nzchar(sources$unit_contract) |
       !nzchar(sources$documentation)
   )
   if (any(incomplete_stable)) {
     wlv_catalog_stop(
-      "Stable source(s) must declare preparation, validation, artifacts, a missingness policy, and documentation: %s.",
+      paste0(
+        "Stable source(s) must declare preparation, validation, artifacts, ",
+        "missingness and unit contracts, and documentation: %s."
+      ),
       paste(sources$source[incomplete_stable], collapse = ", ")
     )
   }
@@ -504,6 +534,296 @@ wlv_catalog_validate_missingness_policies <- function(policies, root) {
   }
 
   policies
+}
+
+wlv_catalog_validate_indicator_ids <- function(values, column, name) {
+  invalid <- !grepl("^[A-Za-z][A-Za-z0-9._]*$", values)
+  if (any(invalid)) {
+    wlv_catalog_stop(
+      "The %s contains invalid `%s` identifiers: %s.",
+      name,
+      column,
+      paste(unique(values[invalid]), collapse = ", ")
+    )
+  }
+  invisible(values)
+}
+
+wlv_catalog_parse_positive_numbers <- function(values, column, name) {
+  canonical <- grepl(
+    "^(0|[1-9][0-9]*)([.][0-9]+)?([eE][+-]?[0-9]+)?$",
+    values
+  )
+  numbers <- suppressWarnings(as.numeric(values))
+  invalid <- !canonical | is.na(numbers) | !is.finite(numbers) | numbers <= 0
+  if (any(invalid)) {
+    wlv_catalog_stop(
+      "The %s contains invalid positive `%s` value(s): %s.",
+      name,
+      column,
+      paste(unique(values[invalid]), collapse = ", ")
+    )
+  }
+  numbers
+}
+
+wlv_catalog_validate_unit_definitions <- function(value, contract) {
+  name <- sprintf("unit definitions for contract `%s`", contract)
+  wlv_catalog_validate_required(
+    value,
+    c(
+      "indicator", "quantity_kind", "source_unit", "source_scale",
+      "canonical_unit", "currency", "price_basis", "labour_concept"
+    ),
+    name
+  )
+  wlv_catalog_validate_indicator_ids(value$indicator, "indicator", name)
+  wlv_catalog_validate_unique(value$indicator, "indicator", name)
+  wlv_catalog_validate_enum(
+    value$quantity_kind,
+    c("count", "duration", "index", "labour_value", "monetary", "multiplier", "ratio"),
+    "quantity_kind",
+    name
+  )
+  for (column in c("source_unit", "canonical_unit")) {
+    wlv_catalog_validate_ids(value[[column]], column, name)
+  }
+  value$source_scale <- wlv_catalog_parse_positive_numbers(
+    value$source_scale,
+    "source_scale",
+    name
+  )
+  wlv_catalog_validate_enum(
+    value$currency,
+    c("local_currency", "mixed", "none", "usd"),
+    "currency",
+    name
+  )
+  wlv_catalog_validate_enum(
+    value$price_basis,
+    c("constant", "current", "mixed", "not_applicable"),
+    "price_basis",
+    name
+  )
+  wlv_catalog_validate_enum(
+    value$labour_concept,
+    c(
+      "employees", "employment", "hours_employees",
+      "hours_persons_engaged", "mixed", "not_applicable",
+      "persons_engaged"
+    ),
+    "labour_concept",
+    name
+  )
+
+  has_base_year <- nzchar(value$base_year)
+  invalid_base_year <- has_base_year & !grepl("^[0-9]{4}$", value$base_year)
+  if (any(invalid_base_year)) {
+    wlv_catalog_stop(
+      "The %s contains invalid `base_year` value(s): %s.",
+      name,
+      paste(unique(value$base_year[invalid_base_year]), collapse = ", ")
+    )
+  }
+  has_index_base <- nzchar(value$index_base)
+  index_base <- rep(NA_real_, nrow(value))
+  if (any(has_index_base)) {
+    index_base[has_index_base] <- wlv_catalog_parse_positive_numbers(
+      value$index_base[has_index_base],
+      "index_base",
+      name
+    )
+  }
+  invalid_index_metadata <- value$quantity_kind == "index" &
+    (!has_base_year | !has_index_base)
+  unexpected_index_base <- value$quantity_kind != "index" & has_index_base
+  if (any(invalid_index_metadata | unexpected_index_base)) {
+    wlv_catalog_stop(
+      paste0(
+        "The %s must declare `base_year` and `index_base` for indices, ",
+        "and `index_base` only for indices (row(s): %s)."
+      ),
+      name,
+      paste(which(invalid_index_metadata | unexpected_index_base), collapse = ", ")
+    )
+  }
+  value$base_year[!has_base_year] <- NA_character_
+  value$index_base <- index_base
+  value
+}
+
+wlv_catalog_validate_unit_aggregations <- function(value, units, contract) {
+  name <- sprintf("unit aggregations for contract `%s`", contract)
+  wlv_catalog_validate_required(value, c("indicator", "level", "strategy"), name)
+  wlv_catalog_validate_indicator_ids(value$indicator, "indicator", name)
+  wlv_catalog_validate_enum(
+    value$level,
+    c("country_to_world", "sector_to_country"),
+    "level",
+    name
+  )
+  wlv_catalog_validate_enum(
+    value$strategy,
+    c("formula", "mean", "not_applicable", "ratio_of_sums", "sum", "weighted_mean"),
+    "strategy",
+    name
+  )
+  keys <- paste(value$indicator, value$level, sep = "/")
+  wlv_catalog_validate_unique(keys, "indicator/level", name)
+
+  missing_units <- setdiff(unique(value$indicator), units$indicator)
+  if (length(missing_units)) {
+    wlv_catalog_stop(
+      "The %s refers to indicator(s) absent from its unit definitions: %s.",
+      name,
+      paste(missing_units, collapse = ", ")
+    )
+  }
+  missing_aggregations <- setdiff(units$indicator, unique(value$indicator))
+  if (length(missing_aggregations)) {
+    wlv_catalog_stop(
+      "The %s does not cover unit indicator(s): %s.",
+      name,
+      paste(missing_aggregations, collapse = ", ")
+    )
+  }
+  level_count <- table(factor(value$indicator, levels = units$indicator))
+  if (any(level_count != 2L)) {
+    wlv_catalog_stop(
+      "The %s must declare both aggregation levels exactly once for: %s.",
+      name,
+      paste(names(level_count)[level_count != 2L], collapse = ", ")
+    )
+  }
+
+  has_module <- nzchar(value$module)
+  invalid_module <- has_module & (
+    !vapply(value$module, wlv_catalog_safe_relative_path, logical(1)) |
+      !grepl("[.]R$", value$module)
+  )
+  if (any(invalid_module)) {
+    wlv_catalog_stop(
+      "The %s contains invalid `module` path(s): %s.",
+      name,
+      paste(unique(value$module[invalid_module]), collapse = ", ")
+    )
+  }
+  formula <- value$strategy == "formula"
+  if (any(formula != has_module)) {
+    wlv_catalog_stop(
+      "The %s must declare `module` exactly for `formula` strategies at row(s): %s.",
+      name,
+      paste(which(formula != has_module), collapse = ", ")
+    )
+  }
+
+  dependency_columns <- c("numerator", "denominator", "weight")
+  for (column in dependency_columns) {
+    present <- nzchar(value[[column]])
+    if (any(present)) {
+      wlv_catalog_validate_indicator_ids(value[[column]][present], column, name)
+      missing_dependencies <- setdiff(
+        unique(value[[column]][present]),
+        units$indicator
+      )
+      if (length(missing_dependencies)) {
+        wlv_catalog_stop(
+          "The %s has unknown `%s` indicator(s): %s.",
+          name,
+          column,
+          paste(missing_dependencies, collapse = ", ")
+        )
+      }
+    }
+  }
+  ratio <- value$strategy == "ratio_of_sums"
+  weighted <- value$strategy == "weighted_mean"
+  invalid_dependencies <-
+    (ratio & (!nzchar(value$numerator) | !nzchar(value$denominator) | nzchar(value$weight))) |
+    (weighted & (!nzchar(value$weight) | nzchar(value$numerator) | nzchar(value$denominator))) |
+    (!(ratio | weighted) & vapply(
+      seq_len(nrow(value)),
+      function(index) any(nzchar(unlist(value[index, dependency_columns], use.names = FALSE))),
+      logical(1)
+    ))
+  if (any(invalid_dependencies)) {
+    wlv_catalog_stop(
+      "The %s has dependencies inconsistent with `strategy` at row(s): %s.",
+      name,
+      paste(which(invalid_dependencies), collapse = ", ")
+    )
+  }
+  needs_zero_policy <- ratio | weighted
+  has_zero_policy <- nzchar(value$zero_denominator)
+  invalid_zero_policy <- has_zero_policy &
+    !value$zero_denominator %in% c("error", "not_applicable", "zero")
+  if (any(invalid_zero_policy) || any(needs_zero_policy != has_zero_policy)) {
+    wlv_catalog_stop(
+      paste0(
+        "The %s must declare a valid `zero_denominator` exactly for ratio ",
+        "or weighted strategies (row(s): %s)."
+      ),
+      name,
+      paste(
+        which(invalid_zero_policy | needs_zero_policy != has_zero_policy),
+        collapse = ", "
+      )
+    )
+  }
+  value
+}
+
+wlv_catalog_validate_unit_contracts <- function(contracts, root) {
+  name <- "unit contracts"
+  wlv_catalog_validate_required(
+    contracts,
+    c("contract", "schema_version", "source", "units", "aggregations", "documentation"),
+    name
+  )
+  wlv_catalog_validate_ids(contracts$contract, "contract", name)
+  wlv_catalog_validate_ids(contracts$source, "source", name)
+  wlv_catalog_validate_unique(contracts$contract, "contract", name)
+  wlv_catalog_validate_enum(
+    contracts$schema_version,
+    "1",
+    "schema_version",
+    name
+  )
+  for (column in c("units", "aggregations", "documentation")) {
+    wlv_catalog_validate_paths(contracts[[column]], column, name)
+    wlv_catalog_require_declared_files(root, contracts[[column]], column, name)
+  }
+
+  unit_definitions <- vector("list", nrow(contracts))
+  aggregations <- vector("list", nrow(contracts))
+  names(unit_definitions) <- names(aggregations) <- contracts$contract
+  for (index in seq_len(nrow(contracts))) {
+    contract <- contracts$contract[[index]]
+    units <- wlv_catalog_read_csv(
+      file.path(root, contracts$units[[index]]),
+      wlv_catalog_schemas$unit_definitions,
+      sprintf("unit definitions for contract `%s`", contract)
+    )
+    units <- wlv_catalog_validate_unit_definitions(units, contract)
+    aggregation <- wlv_catalog_read_csv(
+      file.path(root, contracts$aggregations[[index]]),
+      wlv_catalog_schemas$unit_aggregations,
+      sprintf("unit aggregations for contract `%s`", contract)
+    )
+    aggregation <- wlv_catalog_validate_unit_aggregations(
+      aggregation,
+      units,
+      contract
+    )
+    unit_definitions[[contract]] <- units
+    aggregations[[contract]] <- aggregation
+  }
+
+  list(
+    contracts = contracts,
+    unit_definitions = unit_definitions,
+    aggregations = aggregations
+  )
 }
 
 wlv_catalog_validate_methods <- function(methods, sources, root) {
@@ -710,11 +1030,141 @@ wlv_catalog_validate_methods <- function(methods, sources, root) {
   methods
 }
 
+wlv_catalog_effective_solutions <- function(root, method, parameter_set) {
+  paths <- c(
+    file.path(root, "methods", method, "_method_solutions.csv"),
+    file.path(root, "parameters", parameter_set, "_source_solutions.csv"),
+    file.path(root, "parameters", "common_ground", "_common_solutions.csv")
+  )
+  paths <- paths[file.exists(paths)]
+  if (!length(paths)) {
+    wlv_catalog_stop(
+      "Stable method `%s` has no solution parameter fragments.",
+      method
+    )
+  }
+  pieces <- lapply(paths, function(path) {
+    value <- tryCatch(
+      utils::read.csv2(
+        text = readLines(path, encoding = "UTF-8", warn = FALSE),
+        stringsAsFactors = FALSE,
+        colClasses = "character",
+        check.names = FALSE,
+        na.strings = NULL
+      ),
+      error = function(error) {
+        wlv_catalog_stop(
+          "Cannot read solution parameter fragment `%s`: %s",
+          path,
+          conditionMessage(error)
+        )
+      }
+    )
+    required <- c("names", "country_solution")
+    missing <- setdiff(required, names(value))
+    if (length(missing)) {
+      wlv_catalog_stop(
+        "Solution parameter fragment `%s` lacks: %s.",
+        path,
+        paste(missing, collapse = ", ")
+      )
+    }
+    value[required]
+  })
+  value <- do.call(rbind, pieces)
+  invalid <- !nzchar(value$names) | !nzchar(value$country_solution)
+  if (any(invalid)) {
+    wlv_catalog_stop(
+      "Stable method `%s` has empty solution metadata at row(s): %s.",
+      method,
+      paste(which(invalid), collapse = ", ")
+    )
+  }
+  value <- value[!duplicated(value$names), , drop = FALSE]
+  rownames(value) <- NULL
+  value
+}
+
+wlv_catalog_validate_stable_unit_coverage <- function(
+    sources,
+    methods,
+    unit_contract_data,
+    root) {
+  stable_methods <- which(methods$status == "stable")
+  for (method_index in stable_methods) {
+    method <- methods$method[[method_index]]
+    source_index <- match(methods$source[[method_index]], sources$source)
+    contract <- sources$unit_contract[[source_index]]
+    solutions <- wlv_catalog_effective_solutions(
+      root,
+      method,
+      sources$parameter_set[[source_index]]
+    )
+    units <- unit_contract_data$unit_definitions[[contract]]
+    aggregations <- unit_contract_data$aggregations[[contract]]
+    missing_units <- setdiff(solutions$names, units$indicator)
+    extra_units <- setdiff(units$indicator, solutions$names)
+    if (length(missing_units) || length(extra_units)) {
+      details <- c(
+        if (length(missing_units)) {
+          sprintf("missing: %s", paste(missing_units, collapse = ", "))
+        },
+        if (length(extra_units)) {
+          sprintf("unexpected: %s", paste(extra_units, collapse = ", "))
+        }
+      )
+      wlv_catalog_stop(
+        "Unit contract `%s` does not exactly cover stable method `%s` (%s).",
+        contract,
+        method,
+        paste(details, collapse = "; ")
+      )
+    }
+
+    for (solution_index in seq_len(nrow(solutions))) {
+      indicator <- solutions$names[[solution_index]]
+      country_solution <- solutions$country_solution[[solution_index]]
+      rows <- aggregations$indicator == indicator
+      declared <- aggregations[rows, , drop = FALSE]
+      expected_strategy <- if (country_solution %in% c("sum", "mean")) {
+        country_solution
+      } else {
+        "formula"
+      }
+      if (!all(declared$strategy == expected_strategy)) {
+        wlv_catalog_stop(
+          paste0(
+            "Unit contract `%s` aggregation for `%s` does not describe ",
+            "stable method `%s` country solution `%s`."
+          ),
+          contract,
+          indicator,
+          method,
+          country_solution
+        )
+      }
+      if (
+        expected_strategy == "formula" &&
+          !all(declared$module == country_solution)
+      ) {
+        wlv_catalog_stop(
+          "Unit contract `%s` declares the wrong aggregation module for `%s`.",
+          contract,
+          indicator
+        )
+      }
+    }
+  }
+  invisible(TRUE)
+}
+
 wlv_catalog_validate_cross_references <- function(
     sources,
     methods,
     artifacts,
-    missingness_policies) {
+    missingness_policies,
+    unit_contract_data,
+    root) {
   profiles <- unique(artifacts$profile)
   missing_profiles <- setdiff(
     unique(sources$artifact_profile[nzchar(sources$artifact_profile)]),
@@ -736,6 +1186,39 @@ wlv_catalog_validate_cross_references <- function(
       "The sources catalog refers to unknown missingness policy or policies: %s.",
       paste(missing_policies, collapse = ", ")
     )
+  }
+
+  unit_contracts <- unit_contract_data$contracts
+  missing_unit_contracts <- setdiff(
+    unique(sources$unit_contract[nzchar(sources$unit_contract)]),
+    unit_contracts$contract
+  )
+  if (length(missing_unit_contracts)) {
+    wlv_catalog_stop(
+      "The sources catalog refers to unknown unit contract(s): %s.",
+      paste(missing_unit_contracts, collapse = ", ")
+    )
+  }
+  unknown_contract_sources <- setdiff(unit_contracts$source, sources$source)
+  if (length(unknown_contract_sources)) {
+    wlv_catalog_stop(
+      "The unit contracts catalog refers to unknown source(s): %s.",
+      paste(unknown_contract_sources, collapse = ", ")
+    )
+  }
+  for (index in which(nzchar(sources$unit_contract))) {
+    contract_index <- match(sources$unit_contract[[index]], unit_contracts$contract)
+    if (
+      !is.na(contract_index) &&
+        !identical(unit_contracts$source[[contract_index]], sources$source[[index]])
+    ) {
+      wlv_catalog_stop(
+        "Source `%s` unit contract `%s` belongs to source `%s`.",
+        sources$source[[index]],
+        sources$unit_contract[[index]],
+        unit_contracts$source[[contract_index]]
+      )
+    }
   }
 
   stable <- sources$status == "stable"
@@ -783,6 +1266,14 @@ wlv_catalog_validate_cross_references <- function(
     }
   }
 
+
+  wlv_catalog_validate_stable_unit_coverage(
+    sources,
+    methods,
+    unit_contract_data,
+    root
+  )
+
   invisible(TRUE)
 }
 
@@ -814,6 +1305,11 @@ wlv_load_catalog <- function(root = ".") {
     wlv_catalog_schemas$missingness,
     "missingness policies"
   )
+  unit_contracts <- wlv_catalog_read_csv(
+    file.path(catalog_dir, "unit-contracts.csv"),
+    wlv_catalog_schemas$unit_contracts,
+    "unit contracts"
+  )
 
   sources <- wlv_catalog_validate_sources(sources, root)
   artifacts <- wlv_catalog_validate_artifacts(artifacts)
@@ -821,12 +1317,18 @@ wlv_load_catalog <- function(root = ".") {
     missingness_policies,
     root
   )
+  unit_contract_data <- wlv_catalog_validate_unit_contracts(
+    unit_contracts,
+    root
+  )
   methods <- wlv_catalog_validate_methods(methods, sources, root)
   wlv_catalog_validate_cross_references(
     sources,
     methods,
     artifacts,
-    missingness_policies
+    missingness_policies,
+    unit_contract_data,
+    root
   )
 
   structure(
@@ -835,7 +1337,10 @@ wlv_load_catalog <- function(root = ".") {
       sources = sources,
       methods = methods,
       artifacts = artifacts,
-      missingness_policies = missingness_policies
+      missingness_policies = missingness_policies,
+      unit_contracts = unit_contract_data$contracts,
+      unit_definitions = unit_contract_data$unit_definitions,
+      unit_aggregations = unit_contract_data$aggregations
     ),
     class = c("wlv_catalog", "list")
   )
@@ -891,6 +1396,121 @@ wlv_catalog_missingness_policy <- function(catalog, policy) {
     wlv_catalog_stop("Unknown missingness policy `%s`.", policy)
   }
   catalog$missingness_policies[row, , drop = FALSE]
+}
+
+wlv_catalog_unit_contract <- function(catalog, contract) {
+  wlv_catalog_assert(catalog)
+  if (
+    !is.character(contract) || length(contract) != 1L || is.na(contract) ||
+      !grepl("^[a-z][a-z0-9_]*$", contract)
+  ) {
+    wlv_catalog_stop("`contract` must be one valid unit contract identifier.")
+  }
+  row <- catalog$unit_contracts$contract == contract
+  if (!any(row)) {
+    wlv_catalog_stop("Unknown unit contract `%s`.", contract)
+  }
+  list(
+    metadata = catalog$unit_contracts[row, , drop = FALSE],
+    units = catalog$unit_definitions[[contract]],
+    aggregations = catalog$unit_aggregations[[contract]]
+  )
+}
+
+wlv_catalog_unit_contract_sidecar <- function(
+    catalog,
+    contract,
+    indicators = NULL,
+    require_exact = TRUE) {
+  value <- wlv_catalog_unit_contract(catalog, contract)
+  units <- value$units
+  aggregations <- value$aggregations
+  if (is.null(indicators)) {
+    indicators <- units$indicator
+  }
+  if (
+    !is.character(indicators) || !length(indicators) || anyNA(indicators) ||
+      any(!nzchar(indicators)) || anyDuplicated(indicators)
+  ) {
+    wlv_catalog_stop("`indicators` must be unique, non-empty indicator names.")
+  }
+  if (
+    !is.logical(require_exact) || length(require_exact) != 1L ||
+      is.na(require_exact)
+  ) {
+    wlv_catalog_stop("`require_exact` must be TRUE or FALSE.")
+  }
+  missing <- setdiff(indicators, units$indicator)
+  extra <- setdiff(units$indicator, indicators)
+  if (require_exact && (length(missing) || length(extra))) {
+    details <- c(
+      if (length(missing)) sprintf("missing: %s", paste(missing, collapse = ", ")),
+      if (length(extra)) sprintf("unexpected: %s", paste(extra, collapse = ", "))
+    )
+    wlv_catalog_stop(
+      "Unit contract `%s` does not exactly match the effective indicators (%s).",
+      contract,
+      paste(details, collapse = "; ")
+    )
+  }
+  if (!require_exact) {
+    indicators <- indicators[indicators %in% units$indicator]
+    if (!length(indicators)) {
+      wlv_catalog_stop(
+        "Unit contract `%s` has no indicators in the effective result.",
+        contract
+      )
+    }
+    units <- units[units$indicator %in% indicators, , drop = FALSE]
+    aggregations <- aggregations[
+      aggregations$indicator %in% indicators,
+      ,
+      drop = FALSE
+    ]
+  }
+
+  aggregation_order <- match(aggregations$indicator, indicators)
+  level_order <- match(
+    aggregations$level,
+    c("sector_to_country", "country_to_world")
+  )
+  aggregations <- aggregations[
+    order(aggregation_order, level_order),
+    ,
+    drop = FALSE
+  ]
+  units <- units[
+    match(aggregations$indicator, units$indicator),
+    ,
+    drop = FALSE
+  ]
+  metadata <- value$metadata
+  data.frame(
+    contract = rep(metadata$contract[[1L]], nrow(aggregations)),
+    schema_version = rep(metadata$schema_version[[1L]], nrow(aggregations)),
+    source = rep(metadata$source[[1L]], nrow(aggregations)),
+    indicator = aggregations$indicator,
+    quantity_kind = units$quantity_kind,
+    source_unit = units$source_unit,
+    source_scale = units$source_scale,
+    canonical_unit = units$canonical_unit,
+    currency = units$currency,
+    price_basis = units$price_basis,
+    base_year = units$base_year,
+    index_base = units$index_base,
+    labour_concept = units$labour_concept,
+    level = aggregations$level,
+    strategy = aggregations$strategy,
+    module = aggregations$module,
+    numerator = aggregations$numerator,
+    denominator = aggregations$denominator,
+    weight = aggregations$weight,
+    zero_denominator = aggregations$zero_denominator,
+    unit_notes = units$notes,
+    aggregation_notes = aggregations$notes,
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
 }
 
 wlv_catalog_artifacts <- function(catalog, profile, operation = NULL) {
@@ -953,6 +1573,7 @@ wlv_catalog_method_table <- function(catalog) {
     status = catalog$methods$status,
     source_status = sources$status,
     missingness_policy = sources$missingness_policy,
+    unit_contract = sources$unit_contract,
     year_start = sources$year_start,
     year_end = sources$year_end,
     years = wlv_catalog_format_years(sources$year_start, sources$year_end),

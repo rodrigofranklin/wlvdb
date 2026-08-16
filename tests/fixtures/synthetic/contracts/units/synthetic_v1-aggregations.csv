@@ -1,0 +1,11 @@
+indicator;level;strategy;module;numerator;denominator;weight;zero_denominator;notes
+abstract_labour.emp.s.mv;sector_to_country;sum;;;;;;
+abstract_labour.emp.s.mv;country_to_world;sum;;;;;;
+gross_output.s.us;sector_to_country;sum;;;;;;
+gross_output.s.us;country_to_world;sum;;;;;;
+price.marker;sector_to_country;mean;;;;;;
+price.marker;country_to_world;mean;;;;;;
+value.m.mv;sector_to_country;mean;;;;;;
+value.m.mv;country_to_world;mean;;;;;;
+gross_output.s.mv;sector_to_country;sum;;;;;;
+gross_output.s.mv;country_to_world;sum;;;;;;

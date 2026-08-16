@@ -14,7 +14,8 @@ test_that("the synthetic fixture completes the real calculation pipeline", {
     "m_countries.fst", "m_countries.fst.meta",
     "sea_sectors.fst", "sea_sectors.fst.meta",
     "sea_countries.fst", "sea_countries.fst.meta",
-    "meta_indicators.RDS", "_anomalies.csv", "_states.csv"
+    "meta_indicators.RDS", "_anomalies.csv", "_states.csv",
+    "_unit_contract.csv"
   )
   expect_true(all(file.exists(file.path(fixture$root, result_path, expected_files))))
   anomaly_report <- utils::read.csv2(
@@ -27,6 +28,29 @@ test_that("the synthetic fixture completes the real calculation pipeline", {
       "artifact", "indicator", "checkpoint", "stage", "module", "year",
       "country", "sector", "output", "original_value", "policy_id", "action"
     )
+  )
+  unit_contract <- utils::read.csv2(
+    file.path(fixture$root, result_path, "_unit_contract.csv"),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  expect_equal(nrow(unit_contract), 10L)
+  expect_identical(unique(unit_contract$contract), "synthetic_units_v1")
+  expect_identical(unique(unit_contract$schema_version), 1L)
+  expect_identical(
+    unique(unit_contract$indicator),
+    c(
+      "abstract_labour.emp.s.mv", "gross_output.s.us", "price.marker",
+      "value.m.mv", "gross_output.s.mv"
+    )
+  )
+  expect_identical(
+    unit_contract$level[seq.int(1L, nrow(unit_contract), by = 2L)],
+    rep("sector_to_country", 5L)
+  )
+  expect_equal(
+    unit_contract$source_scale[unit_contract$indicator == "gross_output.s.us"],
+    rep(1000000, 2L)
   )
 
   m_io <- wlv_read_fixture_array(fixture, result_path, "m_io2000-2001.fst")
