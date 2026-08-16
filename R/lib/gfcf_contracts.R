@@ -274,6 +274,25 @@ wlv_wiodr_analyze_m_io_negative_gfcf <- function(
   )
 }
 
+wlv_wiodr_canonical_gfcf_diagnostic_observations <- function(value, method) {
+  analysis <- wlv_wiodr_analyze_m_io_negative_gfcf(
+    value,
+    method = method,
+    input_unit = "million_usd"
+  )
+  observed <- analysis$observations
+  observed$value <- observed$value_million_usd
+  observed$policy_id <- rep(
+    paste0(method, "_negative_gfcf_v1"),
+    nrow(observed)
+  )
+  observed$action <- rep(
+    "truncate_allowlisted_negative_gfcf",
+    nrow(observed)
+  )
+  observed
+}
+
 wlv_wiodr_apply_negative_gfcf_policy <- function(
     value,
     method,

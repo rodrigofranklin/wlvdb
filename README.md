@@ -35,6 +35,16 @@ methods are stable, while the alternative WIOD methods remain experimental.
 EXIOBASE and EORA sources remain experimental, and their methods are disabled
 until their preparation and calculation lifecycles are recovered.
 
+Every published WIOD calculation is also subject to a versioned scientific
+contract: structural identities, aggregation and conservation rules, numerical
+error bounds, Leontief stability certificates and recalculation equivalence are
+documented in [`docs/scientific-validation.md`](docs/scientific-validation.md).
+The process-isolated comparison of explicit inversion, direct solution and the
+productive-block solution is reproducible with
+[`scripts/benchmark_leontief.R`](scripts/benchmark_leontief.R); protocol and
+reference measurements are in
+[`docs/leontief-benchmark.md`](docs/leontief-benchmark.md).
+
 ## Safe startup and main function
 
 Opening the project does not install packages, update the Git checkout, load a

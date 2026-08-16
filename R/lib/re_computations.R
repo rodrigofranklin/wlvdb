@@ -136,6 +136,7 @@ sea_variables <- all_sea_variables
 # Matrix modules are intentionally not rerun during a variable recalculation.
 # Load and revalidate their calculation-specific scientific diagnostics so a
 # missing, stale, or altered sidecar cannot be copied through staging silently.
+recalculation_scientific_diagnostics <- list()
 if (source_version %in% c("wiodr13", "wiodr16")) {
   if (!exists("wlv_wiodr_assert_negative_gfcf_profile", mode = "function")) {
     source("R/lib/gfcf_contracts.R")
@@ -143,11 +144,21 @@ if (source_version %in% c("wiodr13", "wiodr16")) {
   if (!exists("wlv_load_gfcf_diagnostic_artifacts", mode = "function")) {
     source("R/lib/gfcf_diagnostics.R")
   }
-  wlv_scientific_diagnostics <- wlv_load_gfcf_diagnostic_artifacts(
+  recalculation_scientific_diagnostics <- wlv_load_gfcf_diagnostic_artifacts(
     wlv_existing_result_dir,
     method = source_version
   )
 }
+if (!exists("wlv_load_leontief_diagnostic_artifact", mode = "function")) {
+  source("R/lib/leontief_diagnostics.R")
+}
+recalculation_scientific_diagnostics[["_leontief_diagnostics.csv"]] <-
+  wlv_load_leontief_diagnostic_artifact(
+    wlv_existing_result_dir,
+    method = method_version,
+    expected_years = lists$years
+  )
+wlv_scientific_diagnostics <- recalculation_scientific_diagnostics
 
 # Later-stage recalculations intentionally do not rerun assumptions. Preserve
 # the method description those assumptions produced in the published snapshot;
@@ -199,7 +210,8 @@ rm(list = intersect(
     "basket_zero", "basket_value_zero", "all_sea_variables",
     "persisted_parameters_path", "persisted_parameters",
     "comparable_columns", "same_configuration", "current_descriptions",
-    "persisted_descriptions", "description_is_preserved_base"
+    "persisted_descriptions", "description_is_preserved_base",
+    "recalculation_scientific_diagnostics"
   ),
   ls(envir = environment(), all.names = TRUE)
 ), envir = environment())

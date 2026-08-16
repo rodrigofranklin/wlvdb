@@ -185,7 +185,14 @@ economically explicit `M73` cells remain zero. Those zero-preservation events
 are audited as `preserve_zero_row_constant_capital` under
 `wiodr16_row_constant_capital_v1`. This reconstruction applies to the modern
 `wiodr16` and `zerodep_2` flows; `wiodr16v09` deliberately keeps the historical
-`row.old.R` assumption and its structurally absent constant-ROW series.
+`row.old.R` assumption and its structurally absent constant-ROW series. The
+legacy method still selects `IND` by total capital per worker. Its sectoral
+employment is zero in the same 11 sectors listed above: `M73` becomes an
+explicit zero, while the other ten use India's aggregate capital-per-worker
+intensity. The 15 zero and 150 fallback decisions are closed under
+`wiodr16v09_row_capital_per_worker_v1`; this repairs undefined `0/0` cells
+without changing the historical worker-based assumption into the modern
+hours-based one.
 
 ## China labour-input supplement
 
@@ -209,6 +216,31 @@ finiteness and the physical unit range are validated before the assumption is
 applied. The historical repository does not contain an executable script for
 the Rev.3-to-Rev.4 mapping, so the exact versioned blob is the reproducible
 artifact for this assumption.
+
+## Scientific and numerical validation
+
+The calculation solves `t(I-C) lambda = direct labour` on the 1,716-dimensional
+productive block (39 productive industries in each of 44 regions), without
+forming an explicit inverse. Each annual result must pass the dimension-derived
+conditioning and error budget, a roundoff-guarded non-negative productivity
+certificate, matrix-to-sector conservation identities, direct aggregation
+checks and exact structural-zero rules. The resulting per-year diagnostics and
+the complete check ledger are published as `_leontief_diagnostics.csv` and
+`_scientific_checks.csv`.
+
+The standard `wiodr16` profile requires non-negative capital and value outputs.
+The experimental `wiodr16v09` profile has the same physical ranges, while
+`zerodep_2` additionally requires sector depreciation and `k_depreciation` to
+be exactly zero. Full calculations and recalculations use the same validation
+contract; recalculations must preserve and revalidate the matrix diagnostics
+they do not recompute. Definitions, limits and the full comparison matrix are
+in [`scientific-validation.md`](scientific-validation.md).
+
+A process-isolated benchmark using the real `wiodr16/2013` fixture found the
+productive-block direct solve 7.45 times faster with 53.5% less peak resident
+memory than explicit inversion on the reference machine. The reproducible
+protocol, raw-artifact schema and interpretation limits are documented in
+[`leontief-benchmark.md`](leontief-benchmark.md).
 
 ## Rebuild
 

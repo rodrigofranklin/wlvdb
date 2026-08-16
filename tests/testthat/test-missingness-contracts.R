@@ -181,6 +181,50 @@ test_that("WIOD16 ROW capital uses a pinned country-intensity fallback", {
   expect_identical(unique(runtime$anomalies$country), "ROW")
 })
 
+test_that("legacy WIOD16 ROW capital keeps its pinned per-worker basis", {
+  runtime <- missingness_environment$wlv_new_contract_runtime(
+    method = "wiodr16v09",
+    source = "wiodr16",
+    policy = missingness_environment$wlv_wiodr16_missingness_policy()
+  )
+  missing_sectors <- c(
+    "C33", "E37-E39", "H53", "J58", "J59_J60", "K66", "M72",
+    "M73", "M74_M75", "T", "U"
+  )
+  sectors <- c("A", missing_sectors)
+  row_workers <- stats::setNames(c(2, rep(2, 7), 0, rep(2, 3)), sectors)
+  reference_capital <- stats::setNames(c(4, rep(0, 11)), sectors)
+  reference_workers <- stats::setNames(c(1, rep(0, 11)), sectors)
+
+  for (year in as.character(2000:2014)) {
+    result <- missingness_environment$wlv_row_capital_stock_runtime(
+      runtime,
+      row_workers,
+      reference_capital,
+      reference_workers,
+      reference_country_intensity = 4,
+      year = year,
+      reference_country = "IND",
+      module = "row/row.old.R",
+      basis = "workers"
+    )
+  }
+  expect_identical(result[["A"]], 8)
+  expect_identical(result[["M73"]], 0)
+  expect_true(all(result[setdiff(missing_sectors, "M73")] == 8))
+  expect_identical(
+    table(runtime$anomalies$action),
+    table(c(
+      rep("fallback_to_reference_country_capital_per_worker", 150L),
+      rep("zero_row_capital_when_workers_zero", 15L)
+    ))
+  )
+  expect_identical(
+    unique(runtime$anomalies$policy_id),
+    "wiodr16v09_row_capital_per_worker_v1"
+  )
+})
+
 test_that("WIOD16 ROW capital rejects every divergence from its pinned policy", {
   make_runtime <- function() {
     missingness_environment$wlv_new_contract_runtime(
@@ -1135,6 +1179,185 @@ test_that("Leontief nonzero-over-zero exceptions are method- and hash-pinned", {
     "differ from the pinned set",
     fixed = TRUE
   )
+})
+
+test_that("streaming Leontief scans preserve the zero-output audit trail", {
+  years <- "2000"
+  inputs <- c("A.S1", "A.S2", "A.U")
+  productive <- c(TRUE, TRUE, FALSE)
+  block <- matrix(
+    c(2, 0, 1, 0),
+    nrow = 2L,
+    byrow = TRUE,
+    dimnames = list(inputs[productive], inputs[productive])
+  )
+  gross_output <- stats::setNames(c(10, 0, 5), inputs)
+  scan <- missingness_environment$wlv_scan_leontief_zero_output_year(
+    block,
+    gross_output,
+    productive,
+    year_index = 1L,
+    year_count = 1L,
+    inputs = inputs
+  )
+  profile <- missingness_environment$wlv_combine_leontief_zero_output_scans(
+    list(scan),
+    years,
+    inputs
+  )
+  policy <- missingness_environment$wlv_strict_missingness_policy(
+    source = "synthetic",
+    policy_id = "synthetic_strict"
+  )
+  streaming_runtime <- missingness_environment$wlv_new_contract_runtime(
+    method = "synthetic",
+    source = "synthetic",
+    policy = policy
+  )
+  profile <-
+    missingness_environment$wlv_validate_leontief_zero_output_profile(
+      streaming_runtime,
+      profile
+    )
+  missingness_environment$wlv_record_leontief_zero_output_profile(
+    streaming_runtime,
+    profile
+  )
+
+  full_numerator <- array(
+    0,
+    dim = c(1L, 3L, 3L),
+    dimnames = list(years, inputs, inputs)
+  )
+  full_numerator[1L, productive, productive] <- block
+  denominator <- array(
+    rep(gross_output, each = length(inputs)),
+    dim = dim(full_numerator),
+    dimnames = dimnames(full_numerator)
+  )
+  legacy_runtime <- missingness_environment$wlv_new_contract_runtime(
+    method = "synthetic",
+    source = "synthetic",
+    policy = policy
+  )
+  adjusted <-
+    missingness_environment$wlv_allowlisted_leontief_zero_output(
+      legacy_runtime,
+      full_numerator,
+      denominator,
+      years,
+      inputs,
+      inputs
+    )
+  missingness_environment$wlv_safe_divide_runtime(
+    legacy_runtime,
+    adjusted,
+    denominator,
+    zero = "zero_if_both_zero",
+    artifact = "m_io",
+    indicator = "leontief_input_ratio",
+    checkpoint = "after_matrices",
+    stage = 3L,
+    module = "transformation.R",
+    axes = c(year = 1L, sector = 2L, output = 3L)
+  )
+
+  expect_identical(streaming_runtime$anomalies, legacy_runtime$anomalies)
+  expect_identical(
+    streaming_runtime$anomalies$action,
+    rep("replace_both_zero_with_zero", length(inputs))
+  )
+  expect_false(any(vapply(profile, is.matrix, logical(1L))))
+})
+
+test_that("streaming Leontief profile validation is atomic", {
+  inputs <- c("A.S1", "A.S2", "A.U")
+  productive <- c(TRUE, TRUE, FALSE)
+  block <- matrix(
+    c(2, 3, 1, 0),
+    nrow = 2L,
+    byrow = TRUE,
+    dimnames = list(inputs[productive], inputs[productive])
+  )
+  scan <- missingness_environment$wlv_scan_leontief_zero_output_year(
+    block,
+    c(10, 0, 5),
+    productive,
+    year_index = 1L,
+    year_count = 1L,
+    inputs = inputs
+  )
+  profile <- missingness_environment$wlv_combine_leontief_zero_output_scans(
+    list(scan),
+    years = "2000",
+    inputs = inputs
+  )
+  runtime <- missingness_environment$wlv_new_contract_runtime(
+    method = "synthetic",
+    source = "synthetic",
+    policy = missingness_environment$wlv_strict_missingness_policy(
+      source = "synthetic",
+      policy_id = "synthetic_strict"
+    )
+  )
+
+  expect_error(
+    missingness_environment$wlv_validate_leontief_zero_output_profile(
+      runtime,
+      profile
+    ),
+    "undeclared nonzero flow",
+    fixed = TRUE
+  )
+  expect_identical(nrow(runtime$anomalies), 0L)
+
+  allowlisted <-
+    missingness_environment$wlv_leontief_zero_output_contract_table(
+      runtime,
+      profile,
+      "invalid"
+    )
+  replaced <-
+    missingness_environment$wlv_leontief_zero_output_contract_table(
+      runtime,
+      profile,
+      "both_zero"
+    )
+  invalid_coordinate <- paste(
+    allowlisted$year,
+    allowlisted$sector,
+    allowlisted$output,
+    sep = "|"
+  )
+  replacement_coordinates <- paste(
+    replaced$year,
+    replaced$sector,
+    replaced$output,
+    sep = "|"
+  )
+  expect_true(all(invalid_coordinate %in% replacement_coordinates))
+  expect_true(all(
+    allowlisted$action == "allowlisted_nonzero_over_zero"
+  ))
+  expect_true(all(
+    replaced$action == "replace_both_zero_with_zero"
+  ))
+  combined_actions <- rbind(allowlisted, replaced)
+  combined_coordinates <- paste(
+    combined_actions$year,
+    combined_actions$sector,
+    combined_actions$output,
+    sep = "|"
+  )
+  for (coordinate in invalid_coordinate) {
+    expect_setequal(
+      combined_actions$action[combined_coordinates == coordinate],
+      c(
+        "allowlisted_nonzero_over_zero",
+        "replace_both_zero_with_zero"
+      )
+    )
+  }
 })
 
 test_that("safe division never accepts missing or non-finite operands", {

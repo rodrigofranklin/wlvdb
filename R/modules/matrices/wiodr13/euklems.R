@@ -30,10 +30,25 @@ gfcf_by_country <- wlv_wiodr_sanitize_negative_gfcf(
   method = "wiodr13"
 )
 truncated_gfcf <- attr(gfcf_by_country, "wlv.truncated_negative_gfcf")
+gfcf_diagnostic_observations <- if (
+  exists("wlv_canonical_gfcf_observations", inherits = FALSE) &&
+  !is.null(wlv_canonical_gfcf_observations)
+) {
+  wlv_canonical_gfcf_observations
+} else {
+  truncated_gfcf
+}
+gfcf_diagnostic_input_unit <- if (
+  identical(gfcf_diagnostic_observations, truncated_gfcf)
+) {
+  "usd"
+} else {
+  "million_usd"
+}
 wlv_scientific_diagnostics <- wlv_gfcf_diagnostic_artifacts(
-  truncated_gfcf,
+  gfcf_diagnostic_observations,
   method = "wiodr13",
-  input_unit = "usd"
+  input_unit = gfcf_diagnostic_input_unit
 )
 if (
   nrow(truncated_gfcf) &&
@@ -218,7 +233,8 @@ rm(
   dep_ratio, k_composition, ek_k, ek_dep_rate, aggregates, gfcf,
   disaggregation_numerator, disaggregation_denominator,
   disaggregation_ratio, numerator_array, denominator_array,
-  gfcf_year, gfcf_by_country, gfcf_columns, truncated_gfcf
+  gfcf_year, gfcf_by_country, gfcf_columns, truncated_gfcf,
+  gfcf_diagnostic_observations, gfcf_diagnostic_input_unit
 )
 rm(list = intersect(
   c(

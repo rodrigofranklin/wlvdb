@@ -66,19 +66,46 @@ sea_sectors[,"hours_worked.emp.s.hr",,"ROW"] <-
 # sea_sectors[,"compensation.empe.s.us",,"ROW"] <-NA
 
 for (x in lists$years) {
-  temp_data <-
-    sea_sectors[x,"capital_stock.s.us",,] %>% 
-    tapply(rows$country, sum, na.rm = TRUE) / 
-    sea_sectors[x,"emp.s.un",,] %>% 
+  country_capital <-
+    sea_sectors[x,"capital_stock.s.us",,] %>%
     tapply(rows$country, sum, na.rm = TRUE)
+  country_workers <-
+    sea_sectors[x,"emp.s.un",,] %>%
+    tapply(rows$country, sum, na.rm = TRUE)
+  temp_data <- country_capital / country_workers
   
   temp_data[temp_data==0] <- Inf
   least_developed <- names(which.min(temp_data))
   
-  sea_sectors[x,"capital_stock.s.us",,"ROW"] <- 
-    sea_sectors[x,"emp.s.un",, "ROW"] *
-    sea_sectors[x,"capital_stock.s.us",,least_developed] /
-    sea_sectors[x,"emp.s.un",,least_developed]
+  row_workers <- sea_sectors[x,"emp.s.un",, "ROW"]
+  reference_capital <-
+    sea_sectors[x,"capital_stock.s.us",,least_developed]
+  reference_workers <- sea_sectors[x,"emp.s.un",,least_developed]
+  names(row_workers) <- lists$sectors
+  names(reference_capital) <- lists$sectors
+  names(reference_workers) <- lists$sectors
+  if (exists("wlv_contract_runtime", inherits = FALSE)) {
+    sea_sectors[x,"capital_stock.s.us",,"ROW"] <-
+      wlv_row_capital_stock_runtime(
+        wlv_contract_runtime,
+        row_workers,
+        reference_capital,
+        reference_workers,
+        temp_data[[least_developed]],
+        x,
+        least_developed,
+        module = "row/row.old.R",
+        basis = "workers"
+      )
+  } else {
+    row_capital <- row_workers * reference_capital / reference_workers
+    zero_reference_workers <- reference_workers == 0
+    row_capital[zero_reference_workers & row_workers == 0] <- 0
+    row_capital[zero_reference_workers & row_workers != 0] <-
+      row_workers[zero_reference_workers & row_workers != 0] *
+      temp_data[[least_developed]]
+    sea_sectors[x,"capital_stock.s.us",,"ROW"] <- row_capital
+  }
 }
 
 # Espelha o índice de preços dos EUA para o resto do mundo
@@ -86,4 +113,10 @@ sea_sectors[,"go_price.r.id",,"ROW"] <- sea_sectors[,"go_price.r.id",,"USA"]
 
 # Clear all variables that will no longer be used
 rm(row_emp_data, emp_row_total, sum_emp_sector, sum_h_emp_sector, sum_va_sector,
-   least_developed, x, pre_row, row_position)
+   least_developed, x, pre_row, row_position, country_capital,
+   country_workers, temp_data, row_workers, reference_capital,
+   reference_workers)
+rm(list = intersect(
+  c("row_capital", "zero_reference_workers"),
+  ls(envir = environment(), all.names = TRUE)
+), envir = environment())

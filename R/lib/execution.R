@@ -1439,7 +1439,10 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
           plan$root,
           "R",
           "lib",
-          c("functions.R", "missingness.R", "result_contracts.R")
+          c(
+            "functions.R", "missingness.R", "leontief_diagnostics.R",
+            "scientific_validation.R", "result_contracts.R"
+          )
         ),
         root = plan$root
       )
@@ -1475,7 +1478,7 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
           list()
         }
       )
-      wlv_validate_staged_results(
+      scientific_checks <- wlv_validate_staged_results(
         staging,
         method = method,
         mode = plan$mode,
@@ -1483,6 +1486,18 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         expected_metadata = expected_metadata,
         at_stage = if (plan$mode == "recalculate") plan$at_stage else NULL,
         reader = run_environment$read_fst_array
+      )
+      scientific_diagnostics <- get0(
+        "wlv_scientific_diagnostics",
+        envir = run_environment,
+        inherits = FALSE,
+        ifnotfound = list()
+      )
+      scientific_diagnostics[["_scientific_checks.csv"]] <- scientific_checks
+      assign(
+        "wlv_scientific_diagnostics",
+        scientific_diagnostics,
+        envir = run_environment
       )
       run_environment
     },

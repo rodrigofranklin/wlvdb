@@ -26,6 +26,34 @@
         "e1071"
       ]
     },
+    "Matrix": {
+      "Package": "Matrix",
+      "Version": "1.7-5",
+      "Source": "Repository",
+      "Depends": [
+        "R (>= 4.4)",
+        "methods"
+      ],
+      "Imports": [
+        "grDevices",
+        "graphics",
+        "grid",
+        "lattice",
+        "stats",
+        "utils"
+      ],
+      "Suggests": [
+        "MASS",
+        "datasets",
+        "sfsmisc",
+        "tools"
+      ],
+      "Enhances": [
+        "SparseM",
+        "graph"
+      ],
+      "Repository": "CRAN"
+    },
     "R.matlab": {
       "Package": "R.matlab",
       "Version": "3.7.0",
@@ -1056,6 +1084,32 @@
         "stats",
         "graphics"
       ]
+    },
+    "lattice": {
+      "Package": "lattice",
+      "Version": "0.22-9",
+      "Source": "Repository",
+      "Depends": [
+        "R (>= 4.0.0)"
+      ],
+      "Imports": [
+        "grid",
+        "grDevices",
+        "graphics",
+        "stats",
+        "utils"
+      ],
+      "Suggests": [
+        "KernSmooth",
+        "MASS",
+        "latticeExtra",
+        "colorspace"
+      ],
+      "Enhances": [
+        "chron",
+        "zoo"
+      ],
+      "Repository": "CRAN"
     },
     "lifecycle": {
       "Package": "lifecycle",

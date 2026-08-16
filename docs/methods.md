@@ -38,7 +38,7 @@ Preparation is a source capability and is repeated here for convenience.
 | `wiodr13` | `wiodr13` | `stable` | `stable` | 1995–2009 | yes | yes | yes | Standard v1.0 | [tests/testthat/test-wiodr13-validation.R](../tests/testthat/test-wiodr13-validation.R) | [docs/wiodr13.md](wiodr13.md) | — |
 | `wiodr13v09` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | yes | yes | Standard v0.9 | — | — | Legacy method version has no independent scientific validation contract. |
 | `wiodr16` | `wiodr16` | `stable` | `stable` | 2000–2014 | yes | yes | yes | Standard v1.0 | [tests/testthat/test-wiodr16-validation.R](../tests/testthat/test-wiodr16-validation.R) | [docs/wiodr16.md](wiodr16.md) | — |
-| `wiodr16v09` | `wiodr16` | `experimental` | `stable` | 2000–2014 | yes | yes | yes | Standard v0.9 | — | — | Legacy method version has no independent scientific validation contract. |
+| `wiodr16v09` | `wiodr16` | `experimental` | `stable` | 2000–2014 | yes | yes | yes | Standard v0.9 | — | — | Experimental legacy profile with its worker-based ROW completion pinned by a versioned scientific contract. |
 | `zerodep_1` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | yes | yes | Zero depreciation | — | — | Counterfactual method requires explicit opt-in and method-specific documentation. |
 | `zerodep_2` | `wiodr16` | `experimental` | `stable` | 2000–2014 | yes | yes | yes | Zero depreciation | — | — | Counterfactual method requires explicit opt-in and method-specific documentation. |
 

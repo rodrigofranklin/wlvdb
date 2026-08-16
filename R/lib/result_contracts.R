@@ -114,34 +114,222 @@ wlv_contract_merge_state_arrays <- function(base, overlay) {
   base
 }
 
-wlv_allowlisted_leontief_zero_output <- function(
-    runtime,
-    numerator,
-    denominator,
+wlv_empty_leontief_zero_output_positions <- function() {
+  data.frame(
+    position = numeric(), year_index = integer(), input_index = integer(),
+    output_index = integer(), numerator = numeric(),
+    stringsAsFactors = FALSE
+  )
+}
+
+wlv_leontief_zero_output_profile <- function(
+    invalid,
+    both_zero,
     years,
     inputs,
     outputs) {
-  wlv_assert_conformable_numeric(numerator, denominator)
+  expected_columns <- names(wlv_empty_leontief_zero_output_positions())
   if (
-    length(dim(numerator)) != 3L ||
-    !identical(dim(numerator), c(length(years), length(inputs), length(outputs)))
+    !is.data.frame(invalid) || !is.data.frame(both_zero) ||
+    !identical(names(invalid), expected_columns) ||
+    !identical(names(both_zero), expected_columns) ||
+    !is.character(years) || !length(years) || anyNA(years) ||
+    any(!nzchar(years)) || anyDuplicated(years) ||
+    !is.character(inputs) || !length(inputs) || anyNA(inputs) ||
+    any(!nzchar(inputs)) || anyDuplicated(inputs) ||
+    !is.character(outputs) || !length(outputs) || anyNA(outputs) ||
+    any(!nzchar(outputs)) || anyDuplicated(outputs)
   ) {
-    stop("Leontief exception coordinates do not match the matrix shape.", call. = FALSE)
+    stop("Invalid streaming Leontief zero-output profile.", call. = FALSE)
   }
-  invalid <- denominator == 0 & numerator != 0
-  if (!any(invalid)) {
-    if (identical(runtime$method, "wiodr13")) {
+  positions <- rbind(invalid, both_zero)
+  if (nrow(positions)) {
+    expected_position <-
+      positions$year_index +
+      (positions$input_index - 1) * length(years) +
+      (positions$output_index - 1) * length(years) * length(inputs)
+    invalid_coordinates <-
+      positions$year_index < 1 | positions$year_index > length(years) |
+      positions$input_index < 1 | positions$input_index > length(inputs) |
+      positions$output_index < 1 | positions$output_index > length(outputs)
+    if (
+      anyNA(positions) || any(!is.finite(positions$numerator)) ||
+      any(invalid_coordinates) ||
+      any(positions$position != expected_position) ||
+      anyDuplicated(positions$position) ||
+      any(invalid$numerator == 0) || any(both_zero$numerator != 0)
+    ) {
+      stop("Invalid streaming Leontief zero-output coordinates.", call. = FALSE)
+    }
+  }
+  invalid <- invalid[order(invalid$position, method = "radix"), , drop = FALSE]
+  both_zero <- both_zero[
+    order(both_zero$position, method = "radix"),
+    ,
+    drop = FALSE
+  ]
+  row.names(invalid) <- NULL
+  row.names(both_zero) <- NULL
+  structure(
+    list(
+      invalid = invalid,
+      both_zero = both_zero,
+      years = years,
+      inputs = inputs,
+      outputs = outputs,
+      validated_method = NULL
+    ),
+    class = c("wlv_leontief_zero_output_profile", "list")
+  )
+}
+
+wlv_scan_leontief_zero_output_year <- function(
+    numerator_block,
+    gross_output,
+    productive,
+    year_index,
+    year_count,
+    inputs,
+    outputs = inputs) {
+  total_dimension <- length(productive)
+  productive_indices <- which(productive)
+  if (
+    !is.matrix(numerator_block) || !is.numeric(numerator_block) ||
+    !identical(dim(numerator_block), rep(length(productive_indices), 2L)) ||
+    anyNA(numerator_block) || any(!is.finite(numerator_block)) ||
+    !is.numeric(gross_output) || length(gross_output) != total_dimension ||
+    anyNA(gross_output) || any(!is.finite(gross_output)) ||
+    !is.logical(productive) || anyNA(productive) || !any(productive) ||
+    !is.numeric(year_index) || length(year_index) != 1L ||
+    year_index != as.integer(year_index) || year_index < 1 ||
+    !is.numeric(year_count) || length(year_count) != 1L ||
+    year_count != as.integer(year_count) || year_count < year_index ||
+    !is.character(inputs) || length(inputs) != total_dimension ||
+    !is.character(outputs) || length(outputs) != total_dimension
+  ) {
+    stop("Invalid annual streaming Leontief zero-output scan.", call. = FALSE)
+  }
+  block_labels <- inputs[productive]
+  if (
+    (!is.null(rownames(numerator_block)) &&
+      !identical(rownames(numerator_block), block_labels)) ||
+    (!is.null(colnames(numerator_block)) &&
+      !identical(colnames(numerator_block), outputs[productive]))
+  ) {
+    stop("Annual Leontief block labels do not match productive sectors.", call. = FALSE)
+  }
+
+  empty <- wlv_empty_leontief_zero_output_positions()
+  zero_outputs <- which(gross_output == 0)
+  if (!length(zero_outputs)) {
+    return(structure(
+      list(year_index = as.integer(year_index), invalid = empty, both_zero = empty),
+      class = c("wlv_leontief_zero_output_scan", "list")
+    ))
+  }
+  invalid_rows <- vector("list", length(zero_outputs))
+  both_zero_rows <- vector("list", length(zero_outputs))
+  for (zero_index in seq_along(zero_outputs)) {
+    output_index <- zero_outputs[[zero_index]]
+    block_output <- match(output_index, productive_indices, nomatch = 0L)
+    nonzero_inputs <- integer()
+    nonzero_values <- numeric()
+    if (block_output) {
+      numerator_column <- numerator_block[, block_output]
+      selected <- numerator_column != 0
+      nonzero_inputs <- productive_indices[selected]
+      nonzero_values <- numerator_column[selected]
+    }
+    position_for <- function(input_index) {
+      year_index +
+        (input_index - 1) * year_count +
+        (output_index - 1) * year_count * total_dimension
+    }
+    if (length(nonzero_inputs)) {
+      invalid_rows[[zero_index]] <- data.frame(
+        position = position_for(nonzero_inputs),
+        year_index = rep(as.integer(year_index), length(nonzero_inputs)),
+        input_index = as.integer(nonzero_inputs),
+        output_index = rep(as.integer(output_index), length(nonzero_inputs)),
+        numerator = as.numeric(nonzero_values),
+        stringsAsFactors = FALSE
+      )
+    }
+    zero_inputs <- setdiff(seq_len(total_dimension), nonzero_inputs)
+    both_zero_rows[[zero_index]] <- data.frame(
+      position = position_for(zero_inputs),
+      year_index = rep(as.integer(year_index), length(zero_inputs)),
+      input_index = as.integer(zero_inputs),
+      output_index = rep(as.integer(output_index), length(zero_inputs)),
+      numerator = rep(0, length(zero_inputs)),
+      stringsAsFactors = FALSE
+    )
+  }
+  bind_positions <- function(values) {
+    values <- values[!vapply(values, is.null, logical(1L))]
+    if (!length(values)) empty else do.call(rbind, values)
+  }
+  structure(
+    list(
+      year_index = as.integer(year_index),
+      invalid = bind_positions(invalid_rows),
+      both_zero = bind_positions(both_zero_rows)
+    ),
+    class = c("wlv_leontief_zero_output_scan", "list")
+  )
+}
+
+wlv_combine_leontief_zero_output_scans <- function(
+    scans,
+    years,
+    inputs,
+    outputs = inputs) {
+  if (
+    !is.list(scans) || length(scans) != length(years) ||
+    any(!vapply(scans, inherits, logical(1L), "wlv_leontief_zero_output_scan")) ||
+    !identical(
+      vapply(scans, `[[`, integer(1L), "year_index"),
+      seq_along(years)
+    )
+  ) {
+    stop("Incomplete annual streaming Leontief zero-output scans.", call. = FALSE)
+  }
+  bind <- function(name) {
+    values <- lapply(scans, `[[`, name)
+    if (!sum(vapply(values, nrow, integer(1L)))) {
+      wlv_empty_leontief_zero_output_positions()
+    } else {
+      do.call(rbind, values)
+    }
+  }
+  wlv_leontief_zero_output_profile(
+    bind("invalid"),
+    bind("both_zero"),
+    years = as.character(years),
+    inputs = as.character(inputs),
+    outputs = as.character(outputs)
+  )
+}
+
+wlv_validate_leontief_zero_output_profile <- function(runtime, profile) {
+  if (!inherits(profile, "wlv_leontief_zero_output_profile")) {
+    stop("Invalid streaming Leontief zero-output profile.", call. = FALSE)
+  }
+  method <- if (is.null(runtime)) "" else runtime$method
+  invalid <- profile$invalid
+  if (!nrow(invalid)) {
+    if (identical(method, "wiodr13")) {
       stop("The pinned WIOD13 Leontief exception set is unexpectedly empty.", call. = FALSE)
     }
-    return(numerator)
+    profile$validated_method <- method
+    return(profile)
   }
-  if (!identical(runtime$method, "wiodr13")) {
+  if (!identical(method, "wiodr13")) {
     stop("Leontief inputs contain an undeclared nonzero flow over zero output.", call. = FALSE)
   }
-  coordinates <- which(invalid, arr.ind = TRUE)
-  observed_years <- years[coordinates[, 1L]]
-  observed_inputs <- inputs[coordinates[, 2L]]
-  observed_outputs <- outputs[coordinates[, 3L]]
+  observed_years <- profile$years[invalid$year_index]
+  observed_inputs <- profile$inputs[invalid$input_index]
+  observed_outputs <- profile$outputs[invalid$output_index]
   keys <- sort(
     paste(observed_years, observed_inputs, observed_outputs, sep = "|"),
     method = "radix"
@@ -179,9 +367,27 @@ wlv_allowlisted_leontief_zero_output <- function(
       call. = FALSE
     )
   }
+  profile$validated_method <- method
+  profile
+}
 
-  original_ratio <- numerator / denominator
-  dimnames(original_ratio) <- list(years, inputs, outputs)
+wlv_leontief_zero_output_contract_table <- function(
+    runtime,
+    profile,
+    type = c("invalid", "both_zero")) {
+  type <- match.arg(type)
+  positions <- if (identical(type, "both_zero")) {
+    replaced_invalid <- profile$invalid
+    replaced_invalid$numerator <- rep(0, nrow(replaced_invalid))
+    combined <- rbind(profile$both_zero, replaced_invalid)
+    combined[order(combined$position, method = "radix"), , drop = FALSE]
+  } else {
+    profile[[type]]
+  }
+  if (!nrow(positions)) {
+    return(wlv_empty_contract_table())
+  }
+  allowlisted <- identical(type, "invalid")
   context <- wlv_contract_context_for(
     runtime,
     artifact = "m_io",
@@ -190,18 +396,105 @@ wlv_allowlisted_leontief_zero_output <- function(
     stage = 3L,
     module = "transformation.R",
     axes = c(year = 1L, sector = 2L, output = 3L),
-    policy_id = "wiodr13_leontief_zero_output_v1"
+    policy_id = if (allowlisted) {
+      "wiodr13_leontief_zero_output_v1"
+    } else {
+      runtime$policy$policy_id
+    }
   )
+  original <- if (allowlisted) positions$numerator / 0 else rep(NaN, nrow(positions))
+  data.frame(
+    artifact = rep(context$artifact, nrow(positions)),
+    indicator = rep(context$indicator, nrow(positions)),
+    checkpoint = rep(context$checkpoint, nrow(positions)),
+    stage = rep(context$stage, nrow(positions)),
+    module = rep(context$module, nrow(positions)),
+    year = profile$years[positions$year_index],
+    country = rep(NA_character_, nrow(positions)),
+    sector = profile$inputs[positions$input_index],
+    output = profile$outputs[positions$output_index],
+    original_value = vapply(original, wlv_format_original_value, character(1L)),
+    policy_id = rep(context$policy_id, nrow(positions)),
+    action = rep(
+      if (allowlisted) {
+        "allowlisted_nonzero_over_zero"
+      } else {
+        "replace_both_zero_with_zero"
+      },
+      nrow(positions)
+    ),
+    stringsAsFactors = FALSE
+  )[wlv_contract_anomaly_columns]
+}
+
+wlv_record_leontief_zero_output_profile <- function(
+    runtime,
+    profile,
+    include_both_zero = TRUE) {
+  if (
+    !inherits(profile, "wlv_leontief_zero_output_profile") ||
+    is.null(profile$validated_method) ||
+    !identical(profile$validated_method, runtime$method)
+  ) {
+    stop("Leontief zero-output profile must be validated before recording.", call. = FALSE)
+  }
   wlv_contract_record(
     runtime,
-    wlv_contract_table(
-      original_ratio,
-      invalid,
-      context,
-      "allowlisted_nonzero_over_zero"
-    )
+    wlv_leontief_zero_output_contract_table(runtime, profile, "invalid")
   )
-  numerator[invalid] <- 0
+  if (isTRUE(include_both_zero)) {
+    wlv_contract_record(
+      runtime,
+      wlv_leontief_zero_output_contract_table(runtime, profile, "both_zero")
+    )
+  }
+  invisible(profile)
+}
+
+wlv_allowlisted_leontief_zero_output <- function(
+    runtime,
+    numerator,
+    denominator,
+    years,
+    inputs,
+    outputs) {
+  wlv_assert_conformable_numeric(numerator, denominator)
+  if (
+    length(dim(numerator)) != 3L ||
+    !identical(dim(numerator), c(length(years), length(inputs), length(outputs)))
+  ) {
+    stop("Leontief exception coordinates do not match the matrix shape.", call. = FALSE)
+  }
+  invalid_mask <- denominator == 0 & numerator != 0
+  both_zero_mask <- denominator == 0 & numerator == 0
+  positions_for <- function(mask) {
+    if (!any(mask)) {
+      return(wlv_empty_leontief_zero_output_positions())
+    }
+    coordinates <- which(mask, arr.ind = TRUE)
+    data.frame(
+      position = as.numeric(which(mask)),
+      year_index = as.integer(coordinates[, 1L]),
+      input_index = as.integer(coordinates[, 2L]),
+      output_index = as.integer(coordinates[, 3L]),
+      numerator = as.numeric(numerator[mask]),
+      stringsAsFactors = FALSE
+    )
+  }
+  profile <- wlv_leontief_zero_output_profile(
+    positions_for(invalid_mask),
+    positions_for(both_zero_mask),
+    years = as.character(years),
+    inputs = as.character(inputs),
+    outputs = as.character(outputs)
+  )
+  profile <- wlv_validate_leontief_zero_output_profile(runtime, profile)
+  wlv_record_leontief_zero_output_profile(
+    runtime,
+    profile,
+    include_both_zero = FALSE
+  )
+  numerator[invalid_mask] <- 0
   numerator
 }
 
@@ -1248,7 +1541,9 @@ wlv_row_capital_stock_runtime <- function(
     year,
     reference_country,
     indicator = "capital_stock.s.us",
-    module = "row/row.R") {
+    module = "row/row.R",
+    basis = c("hours", "workers")) {
+  basis <- match.arg(basis)
   if (
     !is.numeric(row_hours) || !is.numeric(reference_capital) ||
     !is.numeric(reference_hours) ||
@@ -1278,7 +1573,10 @@ wlv_row_capital_stock_runtime <- function(
   invalid_reference <- zero_reference_hours & reference_capital != 0
   if (any(invalid_reference)) {
     stop(
-      "ROW capital-stock reference has capital but zero labour hours.",
+      sprintf(
+        "ROW capital-stock reference has capital but zero labour %s.",
+        basis
+      ),
       call. = FALSE
     )
   }
@@ -1305,6 +1603,15 @@ wlv_row_capital_stock_runtime <- function(
 
     if (!identical(runtime$source, "wiodr16")) {
       violations <- c(violations, sprintf("runtime source=%s", runtime$source))
+    }
+    if (
+      identical(basis, "workers") &&
+      !identical(runtime$method, "wiodr16v09")
+    ) {
+      violations <- c(
+        violations,
+        sprintf("runtime method=%s (expected wiodr16v09)", runtime$method)
+      )
     }
     if (!identical(as.character(reference_country), "IND")) {
       violations <- c(
@@ -1350,7 +1657,8 @@ wlv_row_capital_stock_runtime <- function(
       violations <- c(
         violations,
         sprintf(
-          "zero ROW-hours sectors=%s (expected M73)",
+          "zero ROW-%s sectors=%s (expected M73)",
+          basis,
           paste(observed_zero, collapse = ",")
         )
       )
@@ -1397,7 +1705,11 @@ wlv_row_capital_stock_runtime <- function(
       stage = 1L,
       module = module,
       axes = c(year = 1L, sector = 2L, country = 3L),
-      policy_id = "wiodr16_row_capital_intensity_v1"
+      policy_id = if (identical(basis, "hours")) {
+        "wiodr16_row_capital_intensity_v1"
+      } else {
+        paste0(runtime$method, "_row_capital_per_worker_v1")
+      }
     )
     if (any(country_zero)) {
       mask <- array(
@@ -1411,7 +1723,11 @@ wlv_row_capital_stock_runtime <- function(
           report_value,
           mask,
           context,
-          "zero_row_capital_when_hours_zero"
+          if (identical(basis, "hours")) {
+            "zero_row_capital_when_hours_zero"
+          } else {
+            "zero_row_capital_when_workers_zero"
+          }
         )
       )
     }
@@ -1427,7 +1743,11 @@ wlv_row_capital_stock_runtime <- function(
           report_value,
           mask,
           context,
-          "fallback_to_reference_country_capital_intensity"
+          if (identical(basis, "hours")) {
+            "fallback_to_reference_country_capital_intensity"
+          } else {
+            "fallback_to_reference_country_capital_per_worker"
+          }
         )
       )
     }
@@ -1939,12 +2259,62 @@ wlv_write_failed_contract_report <- function(runtime, results_root, error) {
       wlv_contract_record(runtime, error$anomalies)
     }
   }
+  diagnostics <- file.path(results_root, "diagnostics")
+  timestamp <- format(Sys.time(), "%Y%m%dT%H%M%SZ", tz = "UTC")
+  if (inherits(error, "wlv_scientific_validation_error")) {
+    dir.create(diagnostics, recursive = TRUE, showWarnings = FALSE)
+    scientific_path <- tempfile(
+      pattern = sprintf(
+        "%s-%s-%s-scientific-",
+        runtime$method,
+        timestamp,
+        Sys.getpid()
+      ),
+      tmpdir = diagnostics,
+      fileext = "-failed.csv"
+    )
+    scientific_failure <- data.frame(
+      method = as.character(error$method),
+      check_id = as.character(error$check_id),
+      artifact = as.character(error$artifact),
+      indicator = as.character(error$indicator),
+      scope = as.character(error$scope),
+      message = conditionMessage(error),
+      stringsAsFactors = FALSE
+    )
+    quote_csv_field <- function(value) {
+      paste0('"', gsub('"', '""', enc2utf8(value), fixed = TRUE), '"')
+    }
+    header <- paste(vapply(
+      names(scientific_failure), quote_csv_field, character(1L)
+    ), collapse = ";")
+    record <- paste(vapply(
+      scientific_failure[1L, ],
+      function(value) quote_csv_field(as.character(value)),
+      character(1L)
+    ), collapse = ";")
+    payload <- enc2utf8(paste(header, record, sep = "\r\n"))
+    payload_raw <- charToRaw(payload)
+    roundtrip_payload <- rawToChar(payload_raw)
+    Encoding(roundtrip_payload) <- "UTF-8"
+    if (
+      !identical(utf8ToInt(roundtrip_payload), utf8ToInt(payload)) ||
+        grepl("\ufffd", payload, fixed = TRUE)
+    ) {
+      stop("Scientific failure payload failed UTF-8 round-trip verification.", call. = FALSE)
+    }
+    connection <- file(scientific_path, open = "wb")
+    writeBin(payload_raw, connection)
+    close(connection)
+    persisted_raw <- wlv_read_file_raw(scientific_path)
+    if (!identical(persisted_raw, payload_raw)) {
+      stop("Scientific failure report failed UTF-8 verification.", call. = FALSE)
+    }
+  }
   if (!nrow(runtime$anomalies)) {
     return(invisible(NULL))
   }
-  diagnostics <- file.path(results_root, "diagnostics")
   dir.create(diagnostics, recursive = TRUE, showWarnings = FALSE)
-  timestamp <- format(Sys.time(), "%Y%m%dT%H%M%SZ", tz = "UTC")
   path <- tempfile(
     pattern = sprintf("%s-%s-%s-", runtime$method, timestamp, Sys.getpid()),
     tmpdir = diagnostics,
@@ -2008,8 +2378,19 @@ wlv_write_result_csv <- function(value, path) {
     na = "",
     fileEncoding = "UTF-8"
   )
-  encoded <- readLines(path, warn = FALSE, encoding = "UTF-8")
-  if (any(grepl("\ufffd", encoded, fixed = TRUE))) {
+  size <- file.info(path)$size
+  connection <- file(path, open = "rb")
+  on.exit(close(connection), add = TRUE)
+  bytes <- readBin(connection, what = "raw", n = size)
+  decoded <- tryCatch(
+    iconv(rawToChar(bytes), from = "UTF-8", to = "UTF-8", sub = NA),
+    error = function(error) NA_character_
+  )
+  if (
+    length(decoded) != 1L || is.na(decoded) ||
+    !identical(charToRaw(decoded), bytes) ||
+    grepl("\ufffd", decoded, fixed = TRUE)
+  ) {
     stop(sprintf("Method metadata `%s` failed UTF-8 verification.", path), call. = FALSE)
   }
   invisible(path)
@@ -2042,20 +2423,25 @@ wlv_validate_method_result_metadata <- function(staging, expected) {
       !is.data.frame(expected$meta_indicators)) {
     stop("Invalid expected method result metadata.", call. = FALSE)
   }
-  staged_scientific_sidecars <- list.files(
+  staged_method_sidecars <- list.files(
     staging,
-    pattern = "^_gfcf_negative_.*[.]csv$",
+    pattern = "[.]csv$",
+    all.files = TRUE,
+    ignore.case = TRUE,
     full.names = FALSE
   )
-  unexpected_scientific_sidecars <- setdiff(
-    staged_scientific_sidecars,
-    names(expected$csv)
+  unexpected_method_sidecars <- setdiff(
+    staged_method_sidecars,
+    c(names(expected$csv), "_states.csv", "_anomalies.csv")
   )
-  if (length(unexpected_scientific_sidecars)) {
+  if (length(unexpected_method_sidecars)) {
     stop(
       sprintf(
-        "Staged method metadata contains unexpected scientific sidecar(s): %s.",
-        paste(unexpected_scientific_sidecars, collapse = ", ")
+        paste0(
+          "Staged method metadata contains unexpected scientific sidecar ",
+          "or metadata sidecar(s): %s."
+        ),
+        paste(unexpected_method_sidecars, collapse = ", ")
       ),
       call. = FALSE
     )
@@ -2125,12 +2511,7 @@ wlv_validate_staged_results <- function(
     )
   }
 
-  wlv_validate_method_result_metadata(staging, expected_metadata)
-
-  solutions <- utils::read.csv2(
-    file.path(staging, "_method_solutions.csv"),
-    stringsAsFactors = FALSE
-  )
+  solutions <- expected_metadata$csv[["_method_solutions.csv"]]
   sea_sectors <- reader(file.path(staging, "sea_sectors.fst"))
   wlv_validate_sea_stage(
     runtime,
@@ -2143,6 +2524,14 @@ wlv_validate_staged_results <- function(
   wlv_validate_sea_countries_contract(runtime, sea_countries, "post_roundtrip")
   m_countries <- reader(file.path(staging, "m_countries.fst"))
   wlv_validate_m_countries_contract(runtime, m_countries, "post_roundtrip")
+  scientific_check_parts <- list(wlv_scientific_validate_result_arrays(
+    method = method,
+    sea_sectors = sea_sectors,
+    sea_countries = sea_countries,
+    m_countries = m_countries,
+    solutions = solutions
+  ))
+  scientific_io_years <- character()
 
   persisted_report <- wlv_read_contract_report(
     file.path(staging, "_anomalies.csv")
@@ -2165,6 +2554,16 @@ wlv_validate_staged_results <- function(
       runtime,
       io_value,
       checkpoint = "post_roundtrip"
+    )
+    scientific_check_parts[[length(scientific_check_parts) + 1L]] <-
+      wlv_scientific_validate_io_array(
+        method = method,
+        m_io = io_value,
+        sea_sectors = sea_sectors
+      )
+    scientific_io_years <- c(
+      scientific_io_years,
+      dimnames(io_value)[[1L]]
     )
     rm(io_value)
     gc()
@@ -2205,7 +2604,34 @@ wlv_validate_staged_results <- function(
     sea_countries,
     checkpoint = "post_roundtrip_persisted"
   )
-  invisible(staging)
+  scientific_names <- grep(
+    if (exists("wlv_scientific_sidecar_pattern", mode = "function")) {
+      wlv_scientific_sidecar_pattern()
+    } else {
+      "^_(gfcf_|leontief_|scientific_).*[.]csv$"
+    },
+    names(expected_metadata$csv),
+    value = TRUE
+  )
+  scientific_names <- setdiff(scientific_names, "_scientific_checks.csv")
+  scientific_diagnostics <- expected_metadata$csv[scientific_names]
+  scientific_checks <- wlv_finalize_scientific_checks(
+    checks = scientific_check_parts,
+    method = method,
+    source = runtime$source,
+    years = dimnames(sea_sectors)[[1L]],
+    io_years = scientific_io_years,
+    diagnostics = scientific_diagnostics,
+    require_io = io_required,
+    sea_sectors = sea_sectors
+  )
+  wlv_write_result_csv(
+    scientific_checks,
+    file.path(staging, "_scientific_checks.csv")
+  )
+  expected_metadata$csv[["_scientific_checks.csv"]] <- scientific_checks
+  wlv_validate_method_result_metadata(staging, expected_metadata)
+  invisible(scientific_checks)
 }
 
 wlv_prepare_global_metadata <- function(run_environment, results_root) {

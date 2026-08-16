@@ -120,7 +120,7 @@ for(current_m_io in lists$m_io_files) {
   # clear environment
   rm(lambda, m_io_source, m_io, balance_factor, filter)
   rm(list = intersect(
-    "matrix_script",
+    c("matrix_script", "wlv_canonical_gfcf_observations"),
     ls(envir = environment(), all.names = TRUE)
   ), envir = environment())
   gc()
