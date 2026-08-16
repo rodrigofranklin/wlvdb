@@ -522,6 +522,35 @@ wlv_source_missing_indicators <- function(policy) {
   policy$result_source_missing$row_indicators
 }
 
+wlv_contract_slice_registered_states <- function(registered, value) {
+  if (length(dim(registered)) != length(dim(value))) {
+    return(registered)
+  }
+  registered_labels <- dimnames(registered)
+  value_labels <- dimnames(value)
+  if (is.null(registered_labels) || is.null(value_labels) ||
+      any(vapply(registered_labels, is.null, logical(1L))) ||
+      any(vapply(value_labels, is.null, logical(1L))) ||
+      any(vapply(registered_labels, anyDuplicated, integer(1L))) ||
+      any(vapply(value_labels, anyDuplicated, integer(1L)))) {
+    return(registered)
+  }
+  registered_roles <- names(registered_labels)
+  value_roles <- names(value_labels)
+  if (!is.null(registered_roles) && !is.null(value_roles) &&
+      !identical(registered_roles, value_roles)) {
+    return(registered)
+  }
+  selected <- lapply(seq_along(value_labels), function(axis) {
+    match(value_labels[[axis]], registered_labels[[axis]])
+  })
+  if (any(vapply(selected, anyNA, logical(1L)))) {
+    return(registered)
+  }
+  sliced <- do.call(`[`, c(list(registered), selected, list(drop = FALSE)))
+  array(as.vector(sliced), dim = dim(value), dimnames = value_labels)
+}
+
 wlv_contract_declared_states <- function(
     runtime,
     artifact,
@@ -588,20 +617,9 @@ wlv_contract_declared_states <- function(
   key <- wlv_contract_state_key(artifact, indicator)
   if (exists(key, envir = runtime$states, inherits = FALSE)) {
     registered <- get(key, envir = runtime$states, inherits = FALSE)
-    if (
-      length(dim(registered)) == length(dim(value)) + 1L &&
-      dim(registered)[[2L]] == 1L &&
-      identical(dim(registered)[-2L], dim(value))
-    ) {
-      registered_slice <- array(
-        registered,
-        dim = dim(registered)[-2L],
-        dimnames = dimnames(registered)[-2L]
-      )
-      if (
-        !identical(dimnames(registered)[[2L]], indicator) ||
-        !wlv_same_shape_and_labels(registered_slice, value)
-      ) {
+    if (length(dim(registered)) == length(dim(value)) + 1L &&
+        dim(registered)[[2L]] == 1L) {
+      if (!identical(dimnames(registered)[[2L]], indicator)) {
         stop(
           "Registered missingness state labels do not match the result slice.",
           call. = FALSE
@@ -609,29 +627,33 @@ wlv_contract_declared_states <- function(
       }
       registered <- array(
         registered,
-        dim = dim(value),
-        dimnames = dimnames(value)
+        dim = dim(registered)[-2L],
+        dimnames = dimnames(registered)[-2L]
       )
     }
-    if (
-      length(dim(value)) == length(dim(registered)) + 1L &&
-      dim(value)[[2L]] == 1L &&
-      identical(dim(value)[-2L], dim(registered))
-    ) {
+    expand_indicator <- length(dim(value)) == length(dim(registered)) + 1L &&
+      dim(value)[[2L]] == 1L
+    comparison_value <- value
+    if (expand_indicator) {
       value_slice <- array(
         value,
         dim = dim(value)[-2L],
         dimnames = dimnames(value)[-2L]
       )
-      if (
-        !identical(dimnames(value)[[2L]], indicator) ||
-        !wlv_same_shape_and_labels(value_slice, registered)
-      ) {
+      if (!identical(dimnames(value)[[2L]], indicator)) {
         stop(
           "Registered missingness state labels do not match the result slice.",
           call. = FALSE
         )
       }
+      comparison_value <- value_slice
+    }
+    registered <- wlv_contract_slice_registered_states(
+      registered,
+      comparison_value
+    )
+    if (expand_indicator &&
+        wlv_same_shape_and_labels(registered, comparison_value)) {
       registered <- array(
         registered,
         dim = dim(value),

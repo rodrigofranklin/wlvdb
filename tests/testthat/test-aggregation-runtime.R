@@ -254,4 +254,73 @@ test_that("world bindings can consume an earlier dependency with runtime states"
       "after_country_aggregation"
     )
   )
+
+  selective <- new.env(parent = aggregation_runtime_environment)
+  selective$wlv_aggregation_registry <- environment$wlv_aggregation_registry
+  selective$sea_variables <- environment$sea_variables[
+    environment$sea_variables$names == "metric",
+    ,
+    drop = FALSE
+  ]
+  selective$lists <- environment$lists
+  selective$sea_sectors <- environment$sea_sectors
+  selective$sea_countries <- environment$sea_countries
+  selective$sea_countries[1L, "weight", "B"] <- NA_real_
+  selective$sea_countries[, "metric", ] <- NA_real_
+  selective$wlv_contract_runtime <- aggregation_runtime_environment$
+    wlv_new_contract_runtime(
+      method = "typed_dependencies",
+      source = "typed_dependencies",
+      policy = aggregation_runtime_environment$wlv_strict_missingness_policy(
+        source = "typed_dependencies",
+        policy_id = "typed_dependencies_v1"
+      )
+    )
+  preserved_weight_states <- array(
+    "finite",
+    dim = dim(selective$sea_countries[, "weight", , drop = FALSE]),
+    dimnames = dimnames(selective$sea_countries[, "weight", , drop = FALSE])
+  )
+  preserved_weight_states[1L, 1L, "B"] <- "source_missing"
+  aggregation_runtime_environment$wlv_contract_register_states(
+    selective$wlv_contract_runtime,
+    "sea_countries",
+    "weight",
+    preserved_weight_states
+  )
+
+  expect_output(
+    sys.source(
+      file.path(
+        wlv_test_root,
+        "R",
+        "modules",
+        "variables",
+        "sea_countries.R"
+      ),
+      envir = selective
+    ),
+    "weighted_mean -> weighted_mean",
+    fixed = TRUE
+  )
+  expect_equal(
+    as.numeric(selective$sea_countries[1L, "weight", ]),
+    c(4, NA_real_, 12)
+  )
+  expect_equal(
+    as.numeric(selective$sea_countries[1L, "metric", ]),
+    c(2.5, 13, 2.5)
+  )
+  selected_weight_states <- aggregation_runtime_environment$
+    wlv_contract_declared_states(
+      selective$wlv_contract_runtime,
+      "sea_countries",
+      "weight",
+      selective$sea_countries[, "weight", c("A", "B"), drop = FALSE],
+      "after_world_aggregation"
+    )
+  expect_identical(
+    as.vector(selected_weight_states),
+    c(NA_character_, "source_missing")
+  )
 })
