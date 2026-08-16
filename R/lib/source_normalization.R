@@ -519,9 +519,12 @@ wlv_restore_normalized_source_generation <- function(backup, final) {
     copy.mode = TRUE
   )
   installed <- file.path(final, basename(entries))
-  restored <- all(copied) && identical(
-    unname(vapply(entries, wlv_source_file_sha256, character(1L))),
-    unname(vapply(installed, wlv_source_file_sha256, character(1L)))
+  restored <- tryCatch(
+    all(copied) && identical(
+      unname(vapply(entries, wlv_source_file_sha256, character(1L))),
+      unname(vapply(installed, wlv_source_file_sha256, character(1L)))
+    ),
+    error = function(error) FALSE
   )
   if (!restored) {
     unlink(final, recursive = TRUE, force = TRUE)

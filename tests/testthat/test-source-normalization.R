@@ -505,3 +505,54 @@ test_that("rollback copies and verifies the backup when rename restoration fails
     0L
   )
 })
+
+test_that("rollback never leaves a partial final generation after hash failure", {
+  fixture <- wlv_make_source_publication_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+  wlv_publish_source_fixture(fixture)
+  previous <- wlv_test_directory_snapshot(file.path(fixture$root, "normalized"))
+
+  base_file_rename <- base::file.rename
+  source_normalization_environment$file.rename <- function(from, to) {
+    is_install_or_restore <-
+      (startsWith(basename(from), ".normalized-staging-") ||
+        startsWith(basename(from), ".normalized-backup-")) &&
+      identical(basename(to), "normalized")
+    if (is_install_or_restore) {
+      return(FALSE)
+    }
+    base_file_rename(from, to)
+  }
+  base_hash <- source_normalization_environment$wlv_source_file_sha256
+  source_normalization_environment$wlv_source_file_sha256 <- function(path) {
+    if (identical(basename(dirname(path)), "normalized")) {
+      stop("simulated hash read failure", call. = FALSE)
+    }
+    base_hash(path)
+  }
+  on.exit({
+    rm(
+      list = c("file.rename", "wlv_source_file_sha256"),
+      envir = source_normalization_environment
+    )
+  }, add = TRUE)
+
+  expect_warning(
+    expect_error(
+      wlv_publish_source_fixture(fixture),
+      "backup was preserved for manual recovery",
+      fixed = TRUE
+    ),
+    "manual recovery is required",
+    fixed = TRUE
+  )
+  expect_false(dir.exists(file.path(fixture$root, "normalized")))
+  backups <- list.files(
+    fixture$root,
+    pattern = "^[.]normalized-backup-",
+    full.names = TRUE,
+    all.files = TRUE
+  )
+  expect_length(backups, 1L)
+  expect_identical(wlv_test_directory_snapshot(backups[[1L]]), previous)
+})
