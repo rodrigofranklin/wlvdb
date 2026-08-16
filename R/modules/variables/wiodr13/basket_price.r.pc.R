@@ -20,16 +20,22 @@ if (!exists("basket_zero")) {
 sea_sectors[,"go_price.r.id",,"ROW"] <- 
   sea_sectors[,"go_price.r.id",,"USA"]
 
+# This module is shared by both WIOD releases. WIOD13 stores the input price
+# index at base one, while the pre-v2 WIOD16 contract still stores base 100.
+go_price_storage_base <- if (identical(source_version, "wiodr16")) 100 else 1
+
 sea_sectors[lists$years,code,,] <- 
   ((basket_zero %>%
       rep(times = nums$years) %>%
       newDim(c(nums$input, nums$input, nums$years)) %>% 
       aperm(c(3,1,2))) *
-     (sea_sectors[lists$years,"go_price.r.id",,] %>%
+     ((sea_sectors[lists$years,"go_price.r.id",,] / go_price_storage_base) %>%
         rep(times = nums$input) %>%
         newDim(c(nums$years, nums$input, nums$input)))) %>%
   apply(1, colSums, na.rm = TRUE) %>%
   aperm(c(2,1))
+
+rm(go_price_storage_base)
 
 # xxxxx
 # Ano base = 2000

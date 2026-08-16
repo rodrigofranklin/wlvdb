@@ -18,7 +18,7 @@ normalized source generation.
 | Employee compensation skill shares | Arithmetic mean | Weighted mean by `compensation.empe.s.us` | Same weighting over country totals | A share represents compensation in the skill group divided by total compensation. |
 | Employee hours skill shares | Arithmetic mean | Weighted mean by `hours_worked.empe.s.hr` | Same weighting over country totals | A share represents skill-group hours divided by total employee hours. |
 | `exchange.r.us` | Arithmetic mean | Invariant | Not applicable | LCU/USD is broadcast within a country and currencies are incompatible across countries. |
-| Compensation in local currency | Sum | Sum | Not applicable | Local currencies can be added within one country, but not across countries without conversion to a common currency. |
+| Constant compensation (`*.s.cu`) | Sum | Sum | Sum | Despite the historical suffix, these modules deflate LCU and convert it at the 2000 exchange rate; their canonical unit is additive constant-2000 USD. |
 | Basket price, exchange and basket value indices | Arithmetic mean | Invariant | Not applicable | Each national index is broadcast to sectors and has no currency-compatible world value. |
 | `go_price.r.id` | Arithmetic mean | Weighted mean by `gross_output.s.us` | Not applicable | A national output-price index needs an economic output weight; national-currency indices are not combined globally. |
 | Complex-labour multiplier, employees | Arithmetic mean | Weighted mean by `hours_worked.empe.s.hr` | Same weighting over country totals | The multiplier transforms employee hours. |
@@ -50,11 +50,11 @@ price level directly; they no longer divide it by 100 a second time. The
 published basket price, basket value, exchange and gross-output price indices
 are all rebased to `2000 = 1`, and display metadata now states that same base.
 
-Removing the redundant internal division does not intentionally change a
-finite rebased basket series: the constant factor previously cancelled when
-the series was divided by its 2000 value. It does remove an undocumented
-intermediate scale and makes the module dimensionally consistent with the
-normalized-source contract.
+The shared basket modules now choose their input scale explicitly from the
+source version: WIOD13 consumes the canonical base-one price directly, while
+the still-base-100 WIOD16 v1 path divides by 100. This does not intentionally
+change either finite rebased basket series, but it removes the undocumented
+WIOD13 double conversion without changing WIOD16 before its own v2 migration.
 
 ## Compatibility boundary
 

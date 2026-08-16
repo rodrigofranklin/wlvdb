@@ -236,11 +236,30 @@ test_that("WIOD13 currency and national indices reject meaningless worlds", {
   go_world <- wlv_wiodr13_contract_row("go_price.r.id", "country_to_world")
   expect_identical(go_world$strategy, "not_applicable")
 
-  for (indicator in c("compensation.emp.s.cu", "compensation.empe.s.cu")) {
-    country <- wlv_wiodr13_contract_row(indicator, "sector_to_country")
-    world <- wlv_wiodr13_contract_row(indicator, "country_to_world")
-    expect_identical(country$strategy, "sum", info = indicator)
-    expect_identical(world$strategy, "not_applicable", info = indicator)
+})
+
+test_that("WIOD13 constant compensation is additive constant-2000 USD", {
+  units <- utils::read.csv2(
+    file.path(wlv_test_root, "contracts", "units", "wiodr13_v2-units.csv"),
+    stringsAsFactors = FALSE,
+    colClasses = "character",
+    check.names = FALSE,
+    na.strings = NULL
+  )
+  indicators <- c("compensation.emp.s.cu", "compensation.empe.s.cu")
+  selected <- units[match(indicators, units$indicator), , drop = FALSE]
+  expect_identical(selected$source_unit, rep("local_currency", 2L))
+  expect_identical(selected$canonical_unit, rep("usd", 2L))
+  expect_identical(selected$currency, rep("usd", 2L))
+  expect_identical(selected$price_basis, rep("constant", 2L))
+  expect_identical(selected$base_year, rep("2000", 2L))
+
+  for (indicator in indicators) {
+    expect_identical(
+      wlv_wiodr13_contract_row(indicator, "country_to_world")$strategy,
+      "sum",
+      info = indicator
+    )
   }
 })
 
@@ -290,6 +309,8 @@ test_that("WIOD13 canonical index calculations and labels use base one", {
       encoding = "UTF-8"
     )
     expect_false(any(grepl("/100", text, fixed = TRUE)), info = module)
+    expect_true(any(grepl("go_price_storage_base", text, fixed = TRUE)), info = module)
+    expect_true(any(grepl('source_version, "wiodr16"', text, fixed = TRUE)), info = module)
     expect_true(any(grepl("2000 = 1", text, fixed = TRUE)), info = module)
     expect_false(any(grepl("2000 = 100", text, fixed = TRUE)), info = module)
   }

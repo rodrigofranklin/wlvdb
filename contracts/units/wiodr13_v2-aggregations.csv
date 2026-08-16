@@ -38,9 +38,9 @@ surplus_value.empe_ms.r.pc;country_to_world;formula;wiodr13/surplus_value.empe_m
 surplus_value.empe_ls.r.pc;sector_to_country;formula;wiodr13/surplus_value.empe_ls.r.pc-country.R;;;;;
 surplus_value.empe_ls.r.pc;country_to_world;formula;wiodr13/surplus_value.empe_ls.r.pc-country.R;;;;;
 compensation.emp.s.cu;sector_to_country;sum;;;;;;
-compensation.emp.s.cu;country_to_world;not_applicable;;;;;;
+compensation.emp.s.cu;country_to_world;sum;;;;;;
 compensation.empe.s.cu;sector_to_country;sum;;;;;;
-compensation.empe.s.cu;country_to_world;not_applicable;;;;;;
+compensation.empe.s.cu;country_to_world;sum;;;;;;
 profit.s.us;sector_to_country;sum;;;;;;
 profit.s.us;country_to_world;sum;;;;;;
 basket_price.r.pc;sector_to_country;invariant;;;;;;The national consumption basket index is broadcast to every sector.
