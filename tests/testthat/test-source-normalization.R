@@ -531,8 +531,10 @@ test_that("rollback never leaves a partial final generation after hash failure",
     base_hash(path)
   }
   on.exit({
-    rm(
-      list = c("file.rename", "wlv_source_file_sha256"),
+    rm("file.rename", envir = source_normalization_environment)
+    assign(
+      "wlv_source_file_sha256",
+      base_hash,
       envir = source_normalization_environment
     )
   }, add = TRUE)

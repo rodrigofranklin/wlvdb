@@ -3,13 +3,26 @@
 lists <- NULL
 nums <- NULL
 
-#data basepaths
-srcdata_path <- paste0(getwd(),"/source_data/",source_version,"/")
+# Source labels must come from the same normalized generation as SEA and m_io.
+if (
+  is.null(wlv_data$source_sea) ||
+    !is.character(wlv_data$source_sea) ||
+    length(wlv_data$source_sea) != 1L ||
+    is.na(wlv_data$source_sea) ||
+    !file.exists(wlv_data$source_sea)
+) {
+  stop("The validated normalized source generation is unavailable.", call. = FALSE)
+}
+srcdata_path <- dirname(normalizePath(
+  wlv_data$source_sea,
+  winslash = "/",
+  mustWork = TRUE
+))
 
 # load country list
 countries <- 
   read.csv2(file = 
-              paste0(srcdata_path,"countries.csv"),
+              file.path(srcdata_path, "countries.csv"),
             row.names = NULL, check.names = F)
 
 lists$countries <-  countries$country.source
@@ -31,7 +44,7 @@ nums$countries_sectors <- nums$countries*nums$sectors
 
 # load demands list
 demands <-
-  read.csv2(paste0(srcdata_path,"demand.csv"))
+  read.csv2(file.path(srcdata_path, "demand.csv"))
 nums$demands <- dim(demands)[1]
 
 # identify columns

@@ -192,6 +192,41 @@ test_that("the synthetic fixture completes the real calculation pipeline", {
   expect_true(all(is.finite(sea_countries)))
 })
 
+test_that("calculation reads labels from the manifested normalized generation", {
+  fixture <- wlv_make_synthetic_calculation_fixture()
+  on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
+
+  raw_countries_path <- file.path(
+    fixture$root,
+    "source_data",
+    "synthetic",
+    "countries.csv"
+  )
+  raw_countries <- utils::read.csv2(
+    raw_countries_path,
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  utils::write.table(
+    raw_countries[rev(seq_len(nrow(raw_countries))), , drop = FALSE],
+    raw_countries_path,
+    row.names = FALSE,
+    quote = FALSE,
+    sep = ";",
+    fileEncoding = "UTF-8"
+  )
+
+  expect_no_error(
+    suppressMessages(wlv_run_synthetic_calculation(fixture, workers = 1L))
+  )
+  sea_countries <- wlv_read_fixture_array(
+    fixture,
+    file.path("results", fixture$method),
+    "sea_countries.fst"
+  )
+  expect_identical(dimnames(sea_countries)[[3L]], c("A", "B", "WWW"))
+})
+
 test_that("recalculation repairs a selected result and preserves the others", {
   fixture <- wlv_make_synthetic_calculation_fixture()
   on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
