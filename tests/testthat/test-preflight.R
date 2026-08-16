@@ -24,6 +24,14 @@ sys.source(
   envir = preflight_environment
 )
 sys.source(
+  file.path(wlv_test_root, "R", "lib", "unit_dimensions.R"),
+  envir = preflight_environment
+)
+sys.source(
+  file.path(wlv_test_root, "R", "lib", "aggregation_specs.R"),
+  envir = preflight_environment
+)
+sys.source(
   file.path(wlv_test_root, "R", "lib", "execution.R"),
   envir = preflight_environment
 )

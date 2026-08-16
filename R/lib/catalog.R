@@ -788,7 +788,7 @@ wlv_catalog_validate_unit_contracts <- function(contracts, root) {
   wlv_catalog_validate_unique(contracts$contract, "contract", name)
   wlv_catalog_validate_enum(
     contracts$schema_version,
-    "1",
+    c("1", "2"),
     "schema_version",
     name
   )

@@ -10,13 +10,13 @@ two relational tables:
 - `*-aggregations.csv` records the current sector-to-country and
   country-to-world operation for the same indicator.
 
-Schema version `1` is executable. Loading the catalog checks paths, schemas,
+Schema versions `1` and `2` are executable. Loading the catalog checks paths, schemas,
 enums, identifiers, foreign keys, exact two-level aggregation coverage and the
-effective indicator set of every stable method. Before any variable module is
-run, each direct declaration is translated into a validated aggregation spec
-for its level. The contract, rather than the legacy `country_solution` string,
-selects the direct algorithm; only `formula` rows remain on the dedicated module
-route.
+effective indicator set of every stable method. Request validation translates
+each direct declaration into a validated aggregation spec and checks its unit
+algebra before a result lock is acquired or any variable module is run. The
+contract, rather than the legacy `country_solution` string, selects the direct
+algorithm; only `formula` rows remain on the dedicated module route.
 
 | Contract strategy | Runtime rule | Required references |
 | --- | --- | --- |
@@ -44,6 +44,16 @@ reported in a warning. Existing schema-v1 WIOD contracts use `sum`, `mean`, and
 `formula`, so this runtime migration preserves their numerical output. Changing
 a row to one of the other strategies is a separately reviewed numerical
 migration.
+
+Canonical units are also mapped to symbolic dimensions (`USD`, country-scoped
+`LCU`, person, hour and labour value). Ratio-of-sums outputs must equal the
+dimension implied by numerator divided by denominator, and world ratios and
+weighted means reject inputs whose local currencies are not comparable. Schema
+1 keeps historical `sum`/`mean`/`formula` cross-country behavior as an explicit
+compatibility path. Schema 2 is strict: every country-to-world strategy rejects
+an LCU-bearing output or input unless the row is `not_applicable`. This permits
+a national LCU result while preventing a meaningless world total or average of
+different currencies.
 
 `source_scale` documents the multiplier between the effective source
 generation consumed by a calculation and the published canonical unit. Stable

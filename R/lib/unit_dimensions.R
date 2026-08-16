@@ -526,3 +526,302 @@ wlv_unit_assert_country_aggregation <- function(unit, countries) {
 }
 
 wlv_unit_assert_aggregable <- wlv_unit_assert_country_aggregation
+
+wlv_unit_contract_field <- function(row, name) {
+  value <- row[[name]][[1L]]
+  if (length(value) != 1L || is.na(value)) "" else as.character(value)
+}
+
+wlv_unit_contract_number <- function(row, name) {
+  value <- row[[name]][[1L]]
+  if (length(value) != 1L || is.na(value) || !nzchar(as.character(value))) {
+    return(NA_real_)
+  }
+  number <- suppressWarnings(as.numeric(value))
+  if (is.na(number) || !is.finite(number)) {
+    stop(sprintf("Unit contract `%s` must be numeric or empty.", name),
+      call. = FALSE
+    )
+  }
+  number
+}
+
+wlv_unit_dimension_from_contract <- function(row) {
+  required <- c(
+    "indicator", "quantity_kind", "canonical_unit", "currency", "price_basis",
+    "base_year", "index_base"
+  )
+  if (!is.data.frame(row) || nrow(row) != 1L ||
+      any(!required %in% names(row))) {
+    stop("A unit dimension requires exactly one complete contract row.",
+      call. = FALSE
+    )
+  }
+  indicator <- wlv_unit_contract_field(row, "indicator")
+  quantity_kind <- wlv_unit_contract_field(row, "quantity_kind")
+  canonical_unit <- wlv_unit_contract_field(row, "canonical_unit")
+  currency <- wlv_unit_contract_field(row, "currency")
+  price_basis <- wlv_unit_contract_field(row, "price_basis")
+  base_year <- wlv_unit_contract_field(row, "base_year")
+  if (!nzchar(base_year)) {
+    base_year <- NA_integer_
+  }
+  index_base <- wlv_unit_contract_number(row, "index_base")
+  expected_currency <- switch(
+    canonical_unit,
+    usd = "usd",
+    local_currency = "local_currency",
+    local_currency_per_usd = "local_currency",
+    abstract_labour_hour_per_usd = "mixed",
+    person = "none",
+    hour = "none",
+    abstract_labour_hour = "none",
+    abstract_labour_hour_per_person = "none",
+    ratio = "none",
+    multiplier = "none",
+    index = "none",
+    stop(
+      sprintf(
+        "Indicator `%s` has unsupported canonical unit `%s`.",
+        indicator,
+        canonical_unit
+      ),
+      call. = FALSE
+    )
+  )
+  expected_kind <- switch(
+    canonical_unit,
+    usd = "monetary",
+    local_currency = "monetary",
+    local_currency_per_usd = "ratio",
+    person = "count",
+    hour = "duration",
+    abstract_labour_hour = "labour_value",
+    abstract_labour_hour_per_person = "ratio",
+    abstract_labour_hour_per_usd = "ratio",
+    ratio = "ratio",
+    multiplier = "multiplier",
+    index = "index"
+  )
+  if (!identical(quantity_kind, expected_kind)) {
+    stop(
+      sprintf(
+        paste0(
+          "Indicator `%s` canonical unit `%s` requires quantity_kind `%s`, ",
+          "not `%s`."
+        ),
+        indicator,
+        canonical_unit,
+        expected_kind,
+        quantity_kind
+      ),
+      call. = FALSE
+    )
+  }
+  if (!identical(currency, expected_currency)) {
+    stop(
+      sprintf(
+        paste0(
+          "Indicator `%s` canonical unit `%s` requires currency `%s`, ",
+          "not `%s`."
+        ),
+        indicator,
+        canonical_unit,
+        expected_currency,
+        currency
+      ),
+      call. = FALSE
+    )
+  }
+
+  unit <- switch(
+    canonical_unit,
+    usd = wlv_unit_base(
+      "USD",
+      price_basis = price_basis,
+      base_year = base_year
+    ),
+    local_currency = wlv_unit_base(
+      "LCU",
+      currency_scope = "country",
+      price_basis = price_basis,
+      base_year = base_year
+    ),
+    local_currency_per_usd = wlv_unit_dimension(
+      exponents = c(LCU = 1L, USD = -1L),
+      currency_scope = "country",
+      price_basis = price_basis,
+      base_year = base_year
+    ),
+    person = wlv_unit_base("person"),
+    hour = wlv_unit_base("hour"),
+    abstract_labour_hour = wlv_unit_base("labour_value"),
+    abstract_labour_hour_per_person = wlv_unit_divide(
+      wlv_unit_base("labour_value"),
+      wlv_unit_base("person")
+    ),
+    abstract_labour_hour_per_usd = wlv_unit_divide(
+      wlv_unit_base("labour_value"),
+      wlv_unit_base(
+        "USD",
+        price_basis = price_basis,
+        base_year = base_year
+      )
+    ),
+    ratio = wlv_unit_dimensionless(),
+    multiplier = wlv_unit_dimensionless(),
+    index = wlv_unit_index(base_year = base_year, index_base = index_base)
+  )
+  if (!identical(canonical_unit, "index") && !is.na(index_base)) {
+    stop(
+      sprintf("Indicator `%s` declares an index base for a non-index unit.", indicator),
+      call. = FALSE
+    )
+  }
+  unit
+}
+
+wlv_unit_dimension_registry <- function(units) {
+  if (!is.data.frame(units) || !nrow(units) ||
+      !"indicator" %in% names(units) || anyNA(units$indicator) ||
+      any(!nzchar(units$indicator)) || anyDuplicated(units$indicator)) {
+    stop("Unit contract indicators must be non-empty and unique.",
+      call. = FALSE
+    )
+  }
+  dimensions <- lapply(seq_len(nrow(units)), function(index) {
+    wlv_unit_dimension_from_contract(units[index, , drop = FALSE])
+  })
+  names(dimensions) <- as.character(units$indicator)
+  structure(dimensions, class = c("wlv_unit_dimension_registry", "list"))
+}
+
+wlv_unit_dimension_lookup <- function(registry, indicator) {
+  if (!inherits(registry, "wlv_unit_dimension_registry") ||
+      !is.list(registry) || is.null(names(registry)) ||
+      anyDuplicated(names(registry))) {
+    stop("Expected a canonical unit dimension registry.", call. = FALSE)
+  }
+  unit <- registry[[indicator]]
+  if (is.null(unit)) {
+    stop(
+      sprintf("Aggregation dependency `%s` has no unit dimension.", indicator),
+      call. = FALSE
+    )
+  }
+  wlv_unit_assert(unit)
+  unit
+}
+
+wlv_unit_assert_world_input <- function(unit, strategy, role) {
+  tryCatch(
+    wlv_unit_assert_country_aggregation(unit, c("country_a", "country_b")),
+    error = function(error) {
+      stop(
+        sprintf(
+          "%s `%s` is not dimensionally aggregable across countries: %s",
+          strategy,
+          role,
+          conditionMessage(error)
+        ),
+        call. = FALSE
+      )
+    }
+  )
+}
+
+wlv_validate_aggregation_dimensions <- function(
+    units,
+    aggregations,
+    strict_cross_country = FALSE) {
+  required <- c(
+    "indicator", "level", "strategy", "numerator", "denominator", "weight"
+  )
+  if (!is.data.frame(aggregations) ||
+      any(!required %in% names(aggregations))) {
+    stop("Aggregation dimension validation requires complete typed rows.",
+      call. = FALSE
+    )
+  }
+  if (!is.logical(strict_cross_country) ||
+      length(strict_cross_country) != 1L || is.na(strict_cross_country)) {
+    stop("`strict_cross_country` must be one explicit flag.", call. = FALSE)
+  }
+  registry <- wlv_unit_dimension_registry(units)
+  supported <- c(
+    "sum", "mean", "ratio_of_sums", "weighted_mean", "invariant",
+    "not_applicable", "formula"
+  )
+  for (index in seq_len(nrow(aggregations))) {
+    row <- aggregations[index, , drop = FALSE]
+    indicator <- wlv_unit_contract_field(row, "indicator")
+    level <- wlv_unit_contract_field(row, "level")
+    strategy <- wlv_unit_contract_field(row, "strategy")
+    if (!strategy %in% supported) {
+      stop(
+        sprintf(
+          "Aggregation `%s/%s` has unsupported dimensional strategy `%s`.",
+          indicator,
+          level,
+          strategy
+        ),
+        call. = FALSE
+      )
+    }
+    output <- wlv_unit_dimension_lookup(registry, indicator)
+    tryCatch(
+      {
+        if (strict_cross_country && identical(level, "country_to_world") &&
+            !identical(strategy, "not_applicable")) {
+          wlv_unit_assert_world_input(output, strategy, "output")
+        }
+        if (identical(strategy, "ratio_of_sums")) {
+          numerator_name <- wlv_unit_contract_field(row, "numerator")
+          denominator_name <- wlv_unit_contract_field(row, "denominator")
+          numerator <- wlv_unit_dimension_lookup(registry, numerator_name)
+          denominator <- wlv_unit_dimension_lookup(registry, denominator_name)
+          expected <- wlv_unit_divide(numerator, denominator)
+          if (!wlv_unit_equal(output, expected)) {
+            stop(
+              sprintf(
+                "declares `%s`, but numerator/denominator imply `%s`",
+                wlv_unit_signature(output),
+                wlv_unit_signature(expected)
+              ),
+              call. = FALSE
+            )
+          }
+          if (identical(level, "country_to_world")) {
+            wlv_unit_assert_world_input(numerator, strategy, "numerator")
+            wlv_unit_assert_world_input(denominator, strategy, "denominator")
+          }
+        } else if (identical(strategy, "weighted_mean")) {
+          weight_name <- wlv_unit_contract_field(row, "weight")
+          weight <- wlv_unit_dimension_lookup(registry, weight_name)
+          if (identical(level, "country_to_world")) {
+            wlv_unit_assert_world_input(output, strategy, "value")
+            wlv_unit_assert_world_input(weight, strategy, "weight")
+          }
+        } else if (identical(strategy, "invariant") &&
+            identical(level, "country_to_world")) {
+          wlv_unit_assert_world_input(output, strategy, "value")
+        }
+        # Schema-v1 sum/mean rows are numerical-compatibility declarations in
+        # this PR. Their output units are validated, but historical cross-country
+        # LCU reductions are intentionally left for the versioned migrations.
+      },
+      error = function(error) {
+        stop(
+          sprintf(
+            "Aggregation unit contract `%s/%s` is invalid: %s",
+            indicator,
+            level,
+            conditionMessage(error)
+          ),
+          call. = FALSE
+        )
+      }
+    )
+  }
+  invisible(registry)
+}

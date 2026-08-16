@@ -249,6 +249,18 @@ test_that("repository catalog classifies every method and source explicitly", {
   )
 })
 
+test_that("catalog accepts version 2 unit contracts", {
+  root <- wlv_make_catalog_fixture()
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  wlv_catalog_test_edit(root, "unit-contracts.csv", function(value) {
+    value$schema_version <- "2"
+    value
+  })
+
+  catalog <- expect_no_error(catalog_environment$wlv_load_catalog(root))
+  expect_identical(catalog$unit_contracts$schema_version, "2")
+})
+
 test_that("catalog accessors and output formats are deterministic", {
   catalog <- catalog_environment$wlv_load_catalog(wlv_test_root)
   methods <- catalog_environment$wlv_catalog_method_table(catalog)
