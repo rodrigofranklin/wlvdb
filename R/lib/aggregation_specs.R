@@ -979,31 +979,47 @@ wlv_reconcile_aggregation_registry_sidecar <- function(
     published$indicator,
     published$level
   )
+  if (anyDuplicated(resolved_keys)) {
+    stop("Resolved aggregation rows contain duplicate keys.", call. = FALSE)
+  }
   if (anyDuplicated(published_keys) || any(!published_keys %in% resolved_keys)) {
     stop("Published aggregation rows are duplicated or absent from the registry.",
       call. = FALSE
     )
   }
+  published_match <- match(published_keys, resolved_keys)
+  resolved_published <- resolved[published_match, , drop = FALSE]
+  row.names(resolved_published) <- NULL
 
   if (stable) {
-    if (any(legacy) || !identical(published, resolved)) {
+    same_keys <- length(published_keys) == length(resolved_keys) &&
+      setequal(published_keys, resolved_keys)
+    if (any(legacy) || !same_keys) {
       stop(
         paste0(
-          "Stable aggregation registry rows must exactly equal the ordered ",
-          "_unit_contract.csv aggregation rows."
+          "Stable aggregation registry and _unit_contract.csv must contain ",
+          "the same unique aggregation keys."
+        ),
+        call. = FALSE
+      )
+    }
+    if (!identical(published, resolved_published)) {
+      stop(
+        paste0(
+          "Stable aggregation registry fields must exactly equal the ",
+          "_unit_contract.csv rows with the same keys."
         ),
         call. = FALSE
       )
     }
   } else {
     published_indicators <- unique(published$indicator)
-    expected_published <- resolved[
-      resolved$indicator %in% published_indicators,
-      ,
-      drop = FALSE
+    expected_published_keys <- resolved_keys[
+      resolved$indicator %in% published_indicators
     ]
-    row.names(expected_published) <- NULL
-    if (!identical(published, expected_published)) {
+    same_keys <- length(published_keys) == length(expected_published_keys) &&
+      setequal(published_keys, expected_published_keys)
+    if (!same_keys || !identical(published, resolved_published)) {
       stop(
         paste0(
           "Experimental _unit_contract.csv aggregation rows must exactly ",
@@ -1013,12 +1029,7 @@ wlv_reconcile_aggregation_registry_sidecar <- function(
       )
     }
     omitted <- !resolved_keys %in% published_keys
-    partially_omitted <- vapply(
-      split(!omitted, resolved$indicator),
-      function(included) any(included) && !all(included),
-      logical(1L)
-    )
-    if (any(partially_omitted) || any(omitted & !legacy)) {
+    if (any(omitted & !legacy)) {
       stop(
         paste0(
           "Experimental sidecars may omit only complete indicators routed ",
@@ -1029,10 +1040,19 @@ wlv_reconcile_aggregation_registry_sidecar <- function(
     }
   }
 
+  published_legacy <- legacy[published_match]
+  omitted <- !resolved_keys %in% published_keys
+  typed <- published[!published_legacy, , drop = FALSE]
+  legacy_rows <- rbind(
+    published[published_legacy, , drop = FALSE],
+    resolved[omitted & legacy, , drop = FALSE]
+  )
+  row.names(typed) <- NULL
+  row.names(legacy_rows) <- NULL
   list(
     published = published,
-    typed = resolved[!legacy, , drop = FALSE],
-    legacy = resolved[legacy, , drop = FALSE]
+    typed = typed,
+    legacy = legacy_rows
   )
 }
 

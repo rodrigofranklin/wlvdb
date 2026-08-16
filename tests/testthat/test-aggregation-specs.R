@@ -543,7 +543,8 @@ test_that("stable registry rows exactly match published sidecar rows", {
     method = "stable_demo",
     stable = TRUE
   )
-  sidecar <- registry$rows
+  published_order <- c(3L, 4L, 1L, 2L, 5L, 6L)
+  sidecar <- registry$rows[published_order, , drop = FALSE]
   names(sidecar)[names(sidecar) == "notes"] <- "aggregation_notes"
   persisted_path <- tempfile("wlv-stable-sidecar-", fileext = ".csv")
   reference_path <- tempfile("wlv-stable-sidecar-reference-", fileext = ".csv")
@@ -572,7 +573,7 @@ test_that("stable registry rows exactly match published sidecar rows", {
     wlv_reconcile_aggregation_registry_sidecar(registry, persisted, TRUE)
   expected <- as.data.frame(
     lapply(
-      registry$rows[
+      registry$rows[published_order, ][
         aggregation_spec_environment$wlv_aggregation_contract_columns()
       ],
       as.character
@@ -583,17 +584,45 @@ test_that("stable registry rows exactly match published sidecar rows", {
   expect_identical(routes$typed, expected)
   expect_equal(nrow(routes$legacy), 0L)
 
-  corrupted <- sidecar
-  corrupted$strategy[[1L]] <- "sum"
+  duplicated <- rbind(sidecar, sidecar[1L, , drop = FALSE])
   expect_error(
     aggregation_spec_environment$wlv_reconcile_aggregation_registry_sidecar(
       registry,
-      corrupted,
+      duplicated,
       TRUE
     ),
-    "must exactly equal",
+    "duplicated",
     fixed = TRUE
   )
+  expect_error(
+    aggregation_spec_environment$wlv_reconcile_aggregation_registry_sidecar(
+      registry,
+      sidecar[-1L, , drop = FALSE],
+      TRUE
+    ),
+    "same unique aggregation keys",
+    fixed = TRUE
+  )
+
+  scientific_fields <- setdiff(
+    aggregation_spec_environment$wlv_aggregation_contract_columns(),
+    c("indicator", "level", "notes")
+  )
+  scientific_fields <- c(scientific_fields, "aggregation_notes")
+  for (field in scientific_fields) {
+    corrupted <- sidecar
+    corrupted[[field]][[1L]] <- paste0("corrupted_", field)
+    expect_error(
+      aggregation_spec_environment$wlv_reconcile_aggregation_registry_sidecar(
+        registry,
+        corrupted,
+        TRUE
+      ),
+      "must exactly equal",
+      fixed = TRUE,
+      info = field
+    )
+  }
 })
 
 test_that("experimental sidecars omit only whole legacy indicators", {
@@ -619,7 +648,7 @@ test_that("experimental sidecars omit only whole legacy indicators", {
   expect_equal(nrow(routes$typed), 0L)
   expected <- as.data.frame(
     lapply(
-      registry$rows[
+      registry$rows[c(3L, 4L, 5L, 6L, 1L, 2L), ][
         aggregation_spec_environment$wlv_aggregation_contract_columns()
       ],
       as.character

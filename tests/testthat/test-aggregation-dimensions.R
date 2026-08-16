@@ -220,6 +220,30 @@ test_that("stable registries resolve dimensionally before a result lock", {
     }, integer(1L)),
     c(wiodr13 = 116L, wiodr16 = 100L)
   )
+  for (method in plan$method_names) {
+    solutions <- plan$configuration[[method]]$solutions
+    solutions <- solutions[order(solutions$order), , drop = FALSE]
+    solutions <- solutions[order(solutions$stage), , drop = FALSE]
+    registry <- plan$aggregation_registries[[method]]
+    method_row <- plan$methods[plan$methods$method == method, , drop = FALSE]
+    sidecar <- aggregation_dimension_environment$
+      wlv_catalog_unit_contract_sidecar(
+        plan$catalog,
+        method_row$unit_contract[[1L]],
+        indicators = as.character(solutions$names),
+        resolved_aggregations = registry$rows
+      )
+    routes <- aggregation_dimension_environment$
+      wlv_reconcile_aggregation_registry_sidecar(
+        registry,
+        sidecar,
+        stable = TRUE
+      )
+    published <- aggregation_dimension_environment$
+      wlv_aggregation_sidecar_rows(sidecar)
+    expect_identical(routes$typed, published, info = method)
+    expect_equal(nrow(routes$legacy), 0L, info = method)
+  }
 
   contract <- "wiodr13_units_v1"
   lcu_indicators <- catalog$unit_definitions[[contract]]$indicator[
