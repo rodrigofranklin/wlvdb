@@ -68,6 +68,11 @@ before canonicalization to exactly `1`, and the unitless exchange-rate index is
 normalized to `2000 = 1`. The explicitly versioned `wiodr16v09` method retains
 the former sector-level formula so historical v0.9 results remain reproducible.
 
+All four published WIOD16 indices are stored with `2000 = 1`: the consumption
+basket price, exchange-rate, consumption-basket value, and gross-output price
+indices. Their unit contract declares a presentation multiplier of `100`, so a
+base-year value is displayed as 100 without multiplying the stored array.
+
 The official SEA workbook contains 112 missing observations in every year:
 all 56 sectors for `CHN` in each of `EMPE` and `H_EMPE`. Preparation checks this
 exact profile and preserves those 1,680 missing values so the source absence
@@ -176,9 +181,9 @@ producing 150 fallback decisions. The two actions are recorded respectively as
 aborts.
 
 After the current-USD Rest-of-World stock is constructed, its constant-USD
-series is rebuilt as `current stock * exchange-rate index * 100 / gross-output
-price index`. Both indices are explicitly checked at the 2000 base (`1` and
-`100`, respectively), and the reconstructed stock must equal the current stock
+series is rebuilt as `current stock * exchange-rate index / gross-output price
+index`. Both indices are stored canonically and explicitly checked at the 2000
+base (`1` for each), and the reconstructed stock must equal the current stock
 in that year within floating-point tolerance. On the pinned 2000-2014 source,
 all 840 ROW cells are finite and non-negative: 825 are positive and the 15
 economically explicit `M73` cells remain zero. Those zero-preservation events
@@ -241,6 +246,11 @@ productive-block direct solve 7.45 times faster with 53.5% less peak resident
 memory than explicit inversion on the reference machine. The reproducible
 protocol, raw-artifact schema and interpretation limits are documented in
 [`leontief-benchmark.md`](leontief-benchmark.md).
+
+The v2 unit contract also replaces unweighted national aggregation for prices,
+indices, ratios, and labour-complexity multipliers. The exact old-to-new mapping
+and the WIOD13/WIOD16 labour-concept comparison are documented in
+[`unit-migration.md`](unit-migration.md).
 
 ## Rebuild
 
