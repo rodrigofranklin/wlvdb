@@ -895,9 +895,9 @@ wlv_aggregation_registry_binding <- function(registry, indicator, level) {
 wlv_aggregation_binding_inputs <- function(binding) {
   wlv_validate_aggregation_binding(binding)
   if (identical(binding$contract_strategy, "ratio_of_sums")) {
-    c(binding$numerator, binding$denominator)
+    unique(c(binding$numerator, binding$denominator))
   } else if (identical(binding$contract_strategy, "weighted_mean")) {
-    c(binding$indicator, binding$weight)
+    unique(c(binding$indicator, binding$weight))
   } else if (identical(binding$contract_strategy, "formula")) {
     character()
   } else {

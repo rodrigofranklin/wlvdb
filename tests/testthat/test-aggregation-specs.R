@@ -499,3 +499,73 @@ test_that("experimental legacy aggregation requires opt-in and warns", {
   expect_true(binding$legacy)
   expect_true(registry$legacy)
 })
+
+test_that("self-referenced ratios and weights share one named input", {
+  row <- data.frame(
+    indicator = "ratio",
+    level = "sector_to_country",
+    strategy = "ratio_of_sums",
+    module = "",
+    numerator = "x",
+    denominator = "x",
+    weight = "",
+    zero_denominator = "not_applicable",
+    notes = "",
+    stringsAsFactors = FALSE
+  )
+  ratio <- aggregation_spec_environment$wlv_aggregation_binding_from_row(row)
+  expect_identical(
+    aggregation_spec_environment$wlv_aggregation_binding_inputs(ratio),
+    "x"
+  )
+  partial_ratio <- aggregation_spec_environment$wlv_aggregate_binding(
+    ratio,
+    list(x = wlv_aggregation_test_array(c(2, NA_real_)))
+  )
+  expect_equal(as.numeric(partial_ratio), 1)
+  expect_identical(
+    as.vector(attr(partial_ratio, "wlv_state", exact = TRUE)),
+    "partial"
+  )
+  zero_ratio <- aggregation_spec_environment$wlv_aggregate_binding(
+    ratio,
+    list(x = wlv_aggregation_test_array(c(0, 0)))
+  )
+  expect_true(is.na(zero_ratio))
+  expect_identical(
+    as.vector(attr(zero_ratio, "wlv_state", exact = TRUE)),
+    "not_applicable"
+  )
+
+  row$indicator <- "x"
+  row$strategy <- "weighted_mean"
+  row$numerator <- ""
+  row$denominator <- ""
+  row$weight <- "x"
+  weighted <- aggregation_spec_environment$wlv_aggregation_binding_from_row(row)
+  expect_identical(
+    aggregation_spec_environment$wlv_aggregation_binding_inputs(weighted),
+    "x"
+  )
+  partial_weighted <- aggregation_spec_environment$wlv_aggregate_binding(
+    weighted,
+    list(x = wlv_aggregation_test_array(
+      c(1, NA_real_, 3),
+      sectors = c("S1", "S2", "S3")
+    ))
+  )
+  expect_equal(as.numeric(partial_weighted), 2.5)
+  expect_identical(
+    as.vector(attr(partial_weighted, "wlv_state", exact = TRUE)),
+    "partial"
+  )
+  zero_weighted <- aggregation_spec_environment$wlv_aggregate_binding(
+    weighted,
+    list(x = wlv_aggregation_test_array(c(0, 0)))
+  )
+  expect_true(is.na(zero_weighted))
+  expect_identical(
+    as.vector(attr(zero_weighted, "wlv_state", exact = TRUE)),
+    "not_applicable"
+  )
+})
