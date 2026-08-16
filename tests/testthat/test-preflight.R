@@ -20,6 +20,10 @@ sys.source(
   envir = preflight_environment
 )
 sys.source(
+  file.path(wlv_test_root, "R", "lib", "source_manifest.R"),
+  envir = preflight_environment
+)
+sys.source(
   file.path(wlv_test_root, "R", "lib", "execution.R"),
   envir = preflight_environment
 )
@@ -115,11 +119,15 @@ wlv_make_preflight_fixture <- function(
     stringsAsFactors = FALSE
   )
   artifacts_catalog <- data.frame(
-    profile = rep("fixture_core", 4L),
-    artifact = c("m_io*.fst", "sea.fst", "countries.csv", "demand.csv"),
-    kind = c("fst_array_glob", "fst_array", "csv", "csv"),
-    sidecar = c("TRUE", "TRUE", "FALSE", "FALSE"),
-    operations = rep("prepare|calculate|recalculate", 4L),
+    profile = rep("fixture_core", 5L),
+    artifact = c(
+      "normalized/m_io*.fst", "normalized/sea.fst",
+      "normalized/countries.csv", "normalized/demand.csv",
+      "normalized/_source_manifest.csv"
+    ),
+    kind = c("fst_array_glob", "fst_array", "csv", "csv", "csv"),
+    sidecar = c("TRUE", "TRUE", "FALSE", "FALSE", "FALSE"),
+    operations = rep("prepare|calculate|recalculate", 5L),
     check.names = FALSE,
     stringsAsFactors = FALSE
   )
@@ -250,16 +258,45 @@ wlv_make_preflight_fixture <- function(
     writeLines("invisible(NULL)", script)
   }
 
-  source_path <- file.path(root, "source_data", source)
+  source_path <- file.path(root, "source_data", source, "normalized")
+  dir.create(source_path, recursive = TRUE, showWarnings = FALSE)
   writeLines("country", file.path(source_path, "countries.csv"))
   writeLines("demand", file.path(source_path, "demand.csv"))
   wlv_touch_with_metadata(file.path(source_path, "sea.fst"))
   wlv_touch_with_metadata(file.path(source_path, "m_io-source.fst"))
+  source_manifest <- preflight_environment$wlv_build_source_manifest(
+    source_root = source_path,
+    artifacts = c(
+      "countries.csv", "demand.csv", "m_io-source.fst",
+      "m_io-source.fst.meta", "sea.fst", "sea.fst.meta"
+    ),
+    artifact_roles = c(
+      "label", "label", "input_output", "array_metadata",
+      "socioeconomic", "array_metadata"
+    ),
+    contract_path = file.path(
+      root,
+      "contracts",
+      "units",
+      c("fixture_v1-units.csv", "fixture_v1-aggregations.csv")
+    ),
+    contract_id = "fixture_units_v1",
+    contract_version = "1"
+  )
+  preflight_environment$wlv_write_source_manifest(
+    source_manifest,
+    file.path(source_path, "_source_manifest.csv")
+  )
 
   results_path <- file.path(root, "results", method)
   wlv_touch_with_metadata(file.path(results_path, "m_countries.fst"))
   wlv_touch_with_metadata(file.path(results_path, "sea_sectors.fst"))
   wlv_touch_with_metadata(file.path(results_path, "m_io-result.fst"))
+  preflight_environment$wlv_write_result_source_provenance(
+    results_path,
+    source = source,
+    manifest = source_manifest
+  )
 
   list(
     root = root,
@@ -283,6 +320,26 @@ wlv_fixture_request <- function(
     allow_experimental = allow_experimental,
     ...
   )
+}
+
+wlv_refresh_preflight_manifest <- function(fixture) {
+  manifest_path <- file.path(fixture$source_path, "_source_manifest.csv")
+  previous <- preflight_environment$wlv_read_source_manifest(manifest_path)
+  refreshed <- preflight_environment$wlv_build_source_manifest(
+    source_root = fixture$source_path,
+    artifacts = previous$artifact,
+    artifact_roles = previous$artifact_role,
+    contract_path = file.path(
+      fixture$root,
+      "contracts",
+      "units",
+      c("fixture_v1-units.csv", "fixture_v1-aggregations.csv")
+    ),
+    contract_id = "fixture_units_v1",
+    contract_version = "1"
+  )
+  preflight_environment$wlv_write_source_manifest(refreshed, manifest_path)
+  invisible(refreshed)
 }
 
 test_that("request validation rejects unknown methods and traversal", {
@@ -335,6 +392,24 @@ test_that("stage-1 recalculation cannot select a partial indicator set", {
     at_stage = 1L,
     sea_vars = NULL
   ))
+})
+
+test_that("recalculation rejects checkpoints that are not implemented", {
+  fixture <- wlv_make_preflight_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+
+  for (stage in c(2L, 3L)) {
+    expect_error(
+      wlv_fixture_request(
+        fixture,
+        mode = "recalculate",
+        at_stage = stage
+      ),
+      "implemented checkpoints: 1, 4, or 5",
+      fixed = TRUE,
+      info = paste("stage", stage)
+    )
+  }
 })
 
 test_that("disabled methods remain blocked with experimental opt-in", {
@@ -587,7 +662,9 @@ test_that("artifact validation covers every requested operation", {
     stringsAsFactors = FALSE,
     colClasses = "character"
   )
-  artifacts$operations[artifacts$artifact == "demand.csv"] <- "prepare"
+  artifacts$operations[
+    artifacts$artifact == "normalized/demand.csv"
+  ] <- "prepare"
   utils::write.table(
     artifacts,
     artifacts_path,
@@ -706,6 +783,40 @@ test_that("source fst files require sidecar metadata", {
   )
 })
 
+test_that("input-output globs cannot admit files outside the source manifest", {
+  fixture <- wlv_make_preflight_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+  wlv_touch_with_metadata(file.path(fixture$source_path, "m_io-extra.fst"))
+
+  plan <- wlv_fixture_request(fixture)
+  expect_error(
+    preflight_environment$wlv_validate_data(plan),
+    "absent from the generation manifest: m_io-extra.fst",
+    fixed = TRUE
+  )
+})
+
+test_that("source inputs are verified again immediately before publication", {
+  fixture <- wlv_make_preflight_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+  plan <- wlv_fixture_request(fixture)
+  plan <- preflight_environment$wlv_validate_data(plan)
+  run_data <- plan$data[[fixture$method]]
+
+  writeLines("changed-country", file.path(fixture$source_path, "countries.csv"))
+  wlv_refresh_preflight_manifest(fixture)
+
+  expect_error(
+    preflight_environment$wlv_assert_method_source_inputs_unchanged(
+      plan,
+      plan$methods[1L, , drop = FALSE],
+      run_data
+    ),
+    "Source inputs changed after preflight validation",
+    fixed = TRUE
+  )
+})
+
 test_that("WIOD13 EUKLEMS inputs fail before cluster creation", {
   fixture <- wlv_make_preflight_fixture()
   on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
@@ -715,6 +826,7 @@ test_that("WIOD13 EUKLEMS inputs fail before cluster creation", {
     list(dim = c(2L, 1L, 1L), c("1999", "2000"), "row", "column"),
     file.path(fixture$source_path, "m_io-source.fst.meta")
   )
+  wlv_refresh_preflight_manifest(fixture)
 
   plan <- wlv_fixture_request(fixture)
   plan$configuration[[fixture$method]]$matrices$computation <-
@@ -758,7 +870,10 @@ test_that("WIOD13 EUKLEMS inputs fail before cluster creation", {
   recalculate_plan$configuration[[fixture$method]]$matrices$computation <-
     "wiodr13/euklems.R"
   unlink(euklems_dir, recursive = TRUE, force = TRUE)
-  expect_no_error(preflight_environment$wlv_validate_data(recalculate_plan))
+  expect_error(
+    preflight_environment$wlv_validate_data(recalculate_plan),
+    "EUKLEMS provenance|ekk_1999\\.fst"
+  )
 })
 
 test_that("WIOD13 reduction inputs use same-year depreciation data", {
@@ -770,6 +885,7 @@ test_that("WIOD13 reduction inputs use same-year depreciation data", {
     list(dim = c(2L, 1L, 1L), c("1999", "2000"), "row", "column"),
     file.path(fixture$source_path, "m_io-source.fst.meta")
   )
+  wlv_refresh_preflight_manifest(fixture)
 
   plan <- wlv_fixture_request(fixture)
   plan$configuration[[fixture$method]]$matrices$computation <-
@@ -814,6 +930,7 @@ test_that("WIOD16 EU KLEMS preflight requires year and year-plus-one inputs", {
     list(dim = c(2L, 1L, 1L), c("2000", "2001"), "row", "column"),
     file.path(fixture$source_path, "m_io-source.fst.meta")
   )
+  wlv_refresh_preflight_manifest(fixture)
   expected_files <- c(
     "ekk_2000.fst", "ekk_2001.fst",
     "ekdeprate_2001.fst", "ekdeprate_2002.fst"
@@ -902,22 +1019,15 @@ test_that("recalculation pairs source and result matrices by metadata years", {
   )
 })
 
-test_that("stage five recalculation does not require matrix files", {
+test_that("stage five recalculation preserves result matrices but verifies source provenance", {
   fixture <- wlv_make_preflight_fixture()
   on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
 
   unlink(
-    c(
-      list.files(
-        fixture$source_path,
-        pattern = "^m_io.*\\.fst(\\.meta)?$",
-        full.names = TRUE
-      ),
-      list.files(
-        fixture$results_path,
-        pattern = "^m_io.*\\.fst(\\.meta)?$",
-        full.names = TRUE
-      )
+    list.files(
+      fixture$results_path,
+      pattern = "^m_io.*\\.fst(\\.meta)?$",
+      full.names = TRUE
     )
   )
 

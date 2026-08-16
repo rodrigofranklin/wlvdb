@@ -462,3 +462,46 @@ test_that("failed atomic installation restores the previous normalized generatio
     0L
   )
 })
+
+test_that("rollback copies and verifies the backup when rename restoration fails", {
+  fixture <- wlv_make_source_publication_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+  wlv_publish_source_fixture(fixture)
+  normalized_dir <- file.path(fixture$root, "normalized")
+  previous <- wlv_test_directory_snapshot(normalized_dir)
+
+  replacement <- fixture$normalized
+  replacement$m_io[[1L]] <- replacement$m_io[[1L]] + 456
+  base_file_rename <- base::file.rename
+  source_normalization_environment$file.rename <- function(from, to) {
+    is_install <-
+      startsWith(basename(from), ".normalized-staging-") &&
+      identical(basename(to), "normalized")
+    is_restore <-
+      startsWith(basename(from), ".normalized-backup-") &&
+      identical(basename(to), "normalized")
+    if (is_install || is_restore) {
+      return(FALSE)
+    }
+    base_file_rename(from, to)
+  }
+  on.exit(
+    rm("file.rename", envir = source_normalization_environment),
+    add = TRUE
+  )
+
+  expect_error(
+    wlv_publish_source_fixture(fixture, replacement),
+    "Could not install the normalized source generation.",
+    fixed = TRUE
+  )
+  expect_identical(wlv_test_directory_snapshot(normalized_dir), previous)
+  expect_length(
+    list.files(
+      fixture$root,
+      pattern = "^[.]normalized-(staging|backup)-",
+      all.files = TRUE
+    ),
+    0L
+  )
+})

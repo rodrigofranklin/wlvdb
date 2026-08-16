@@ -514,7 +514,47 @@ wlv_verify_source_manifest <- function(
   invisible(manifest)
 }
 
-wlv_source_provenance <- function(manifest, source) {
+wlv_source_effective_manifest_sha256 <- function(manifest, additional_paths = character()) {
+  manifest <- wlv_source_as_manifest(manifest)
+  manifest_hash <- wlv_source_manifest_sha256(manifest)
+  if (!length(additional_paths)) {
+    return(manifest_hash)
+  }
+  if (
+    !is.character(additional_paths) || anyNA(additional_paths) ||
+    any(!nzchar(additional_paths)) || anyDuplicated(additional_paths) ||
+    any(!file.exists(additional_paths)) ||
+    any(file.info(additional_paths)$isdir %in% TRUE)
+  ) {
+    stop("Additional provenance inputs must be unique existing files.", call. = FALSE)
+  }
+  normalized <- normalizePath(additional_paths, winslash = "/", mustWork = TRUE)
+  labels <- basename(normalized)
+  if (anyDuplicated(labels)) {
+    labels <- normalized
+  }
+  records <- data.frame(
+    input = c("source_manifest", labels),
+    sha256 = c(
+      manifest_hash,
+      vapply(normalized, wlv_source_file_sha256, character(1L))
+    ),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  records <- records[order(records$input, method = "radix"), , drop = FALSE]
+  rownames(records) <- NULL
+  wlv_source_sha256_raw(wlv_source_table_payload(
+    records,
+    names(records),
+    "wlv-effective-source-provenance-v1"
+  ))
+}
+
+wlv_source_provenance <- function(
+    manifest,
+    source,
+    additional_paths = character()) {
   manifest <- wlv_source_as_manifest(manifest)
   wlv_source_validate_text(source, "source")
   if (length(source) != 1L) {
@@ -527,7 +567,10 @@ wlv_source_provenance <- function(manifest, source) {
     contract_id = manifest$contract_id[[1L]],
     contract_version = manifest$contract_version[[1L]],
     contract_sha256 = manifest$contract_sha256[[1L]],
-    manifest_sha256 = wlv_source_manifest_sha256(manifest),
+    manifest_sha256 = wlv_source_effective_manifest_sha256(
+      manifest,
+      additional_paths
+    ),
     stringsAsFactors = FALSE,
     check.names = FALSE
   )
@@ -572,8 +615,25 @@ wlv_read_source_provenance <- function(path) {
 }
 
 wlv_read_result_source_provenance <- function(result_dir) {
-  wlv_read_source_provenance(
-    file.path(result_dir, wlv_source_provenance_filename)
+  path <- file.path(result_dir, wlv_source_provenance_filename)
+  tryCatch(
+    wlv_read_source_provenance(path),
+    error = function(comma_error) {
+      value <- tryCatch(
+        utils::read.csv2(
+          path,
+          stringsAsFactors = FALSE,
+          colClasses = "character",
+          check.names = FALSE,
+          na.strings = character(),
+          fileEncoding = "UTF-8"
+        ),
+        error = function(error) stop(comma_error)
+      )
+      rownames(value) <- NULL
+      wlv_validate_source_provenance(value)
+      value
+    }
   )
 }
 
@@ -595,7 +655,8 @@ wlv_write_result_source_provenance <- function(result_dir, source, manifest) {
 wlv_assert_recalculation_source_provenance <- function(
     result_dir,
     current_manifest,
-    source) {
+    source,
+    additional_paths = character()) {
   provenance_path <- file.path(result_dir, wlv_source_provenance_filename)
   if (!file.exists(provenance_path)) {
     stop(
@@ -607,7 +668,11 @@ wlv_assert_recalculation_source_provenance <- function(
     )
   }
   previous <- wlv_read_result_source_provenance(result_dir)
-  current <- wlv_source_provenance(current_manifest, source)
+  current <- wlv_source_provenance(
+    current_manifest,
+    source,
+    additional_paths = additional_paths
+  )
   if (!identical(previous$source, current$source)) {
     stop(
       "Recalculation is blocked because the result belongs to a different source.",

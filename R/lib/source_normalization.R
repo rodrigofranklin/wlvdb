@@ -447,6 +447,9 @@ wlv_source_write_semicolon_table <- function(value, path) {
     stringsAsFactors = FALSE,
     check.names = FALSE
   )
+  for (column in names(value)) {
+    value[[column]][is.na(value[[column]])] <- ""
+  }
   temporary <- tempfile(
     pattern = paste0(".", basename(path), "-"),
     tmpdir = dirname(path),
@@ -469,7 +472,7 @@ wlv_source_write_semicolon_table <- function(value, path) {
     stringsAsFactors = FALSE,
     colClasses = "character",
     check.names = FALSE,
-    na.strings = NULL,
+    na.strings = character(),
     fileEncoding = "UTF-8"
   )
   if (!identical(value, roundtrip)) {
@@ -489,6 +492,49 @@ wlv_source_generation_path_is_within <- function(path, parent) {
     comparison <- tolower(comparison)
   }
   startsWith(comparison[[1L]], paste0(sub("/+$", "", comparison[[2L]]), "/"))
+}
+
+wlv_restore_normalized_source_generation <- function(backup, final) {
+  if (!dir.exists(backup) || dir.exists(final)) {
+    return(FALSE)
+  }
+  if (file.rename(backup, final)) {
+    return(TRUE)
+  }
+
+  entries <- list.files(
+    backup,
+    full.names = TRUE,
+    all.files = TRUE,
+    no.. = TRUE
+  )
+  if (!length(entries) || any(file.info(entries)$isdir %in% TRUE) ||
+      !dir.create(final, recursive = FALSE, showWarnings = FALSE)) {
+    return(FALSE)
+  }
+  copied <- file.copy(
+    entries,
+    file.path(final, basename(entries)),
+    overwrite = FALSE,
+    copy.mode = TRUE
+  )
+  installed <- file.path(final, basename(entries))
+  restored <- all(copied) && identical(
+    unname(vapply(entries, wlv_source_file_sha256, character(1L))),
+    unname(vapply(installed, wlv_source_file_sha256, character(1L)))
+  )
+  if (!restored) {
+    unlink(final, recursive = TRUE, force = TRUE)
+    return(FALSE)
+  }
+  unlink(backup, recursive = TRUE, force = TRUE)
+  if (dir.exists(backup)) {
+    warning(
+      "The normalized source generation was restored, but its backup remains.",
+      call. = FALSE
+    )
+  }
+  TRUE
 }
 
 wlv_publish_normalized_source <- function(
@@ -565,7 +611,16 @@ wlv_publish_normalized_source <- function(
       unlink(staging, recursive = TRUE, force = TRUE)
     }
     if (backup_open && dir.exists(backup) && !dir.exists(final)) {
-      file.rename(backup, final)
+      restored <- wlv_restore_normalized_source_generation(backup, final)
+      if (!restored) {
+        warning(
+          sprintf(
+            "Could not restore normalized source backup `%s`; manual recovery is required.",
+            backup
+          ),
+          call. = FALSE
+        )
+      }
     }
   }, add = TRUE)
 
@@ -628,10 +683,19 @@ wlv_publish_normalized_source <- function(
   }
   if (!file.rename(staging, final)) {
     if (backup_open) {
-      file.rename(backup, final)
-      backup_open <- FALSE
+      backup_open <- !wlv_restore_normalized_source_generation(backup, final)
     }
-    stop("Could not install the normalized source generation.", call. = FALSE)
+    stop(
+      if (backup_open) {
+        paste0(
+          "Could not install or restore the normalized source generation; ",
+          "the backup was preserved for manual recovery."
+        )
+      } else {
+        "Could not install the normalized source generation."
+      },
+      call. = FALSE
+    )
   }
   staging_open <- FALSE
   if (backup_open) {

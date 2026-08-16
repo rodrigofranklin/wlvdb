@@ -15,7 +15,7 @@ test_that("the synthetic fixture completes the real calculation pipeline", {
     "sea_sectors.fst", "sea_sectors.fst.meta",
     "sea_countries.fst", "sea_countries.fst.meta",
     "meta_indicators.RDS", "_anomalies.csv", "_states.csv",
-    "_unit_contract.csv"
+    "_unit_contract.csv", "_source_provenance.csv"
   )
   expect_true(all(file.exists(file.path(fixture$root, result_path, expected_files))))
   anomaly_report <- utils::read.csv2(

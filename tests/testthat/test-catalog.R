@@ -288,7 +288,11 @@ test_that("catalog accessors and output formats are deterministic", {
   )
   expect_setequal(
     artifacts$artifact,
-    c("m_io*.fst", "sea.fst", "countries.csv", "sectors.csv", "demand.csv")
+    c(
+      "normalized/m_io*.fst", "normalized/sea.fst",
+      "normalized/countries.csv", "normalized/sectors.csv",
+      "normalized/demand.csv", "normalized/_source_manifest.csv"
+    )
   )
   expect_true(all(
     artifacts$operations == "prepare|calculate|recalculate"
