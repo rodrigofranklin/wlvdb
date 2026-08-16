@@ -235,18 +235,24 @@ wlv_write_fixture_array <- function(fixture, value, ...) {
   functions_environment$write_fst_array(value, file.path(fixture$root, ...))
 }
 
-wlv_run_synthetic_calculation <- function(fixture, workers = 1L) {
+wlv_run_synthetic_calculation <- function(
+    fixture,
+    workers = 1L,
+    warn_legacy = FALSE) {
   old_working_directory <- setwd(fixture$root)
   on.exit(setwd(old_working_directory), add = TRUE)
 
   runtime <- new.env(parent = globalenv())
   sys.source(file.path(fixture$root, "R", "main.R"), envir = runtime)
-  output <- capture.output(
-    result <- runtime$get_wlv(
+  calculate <- function() {
+    runtime$get_wlv(
       fixture$method,
       workers = workers,
       allow_experimental = TRUE
-    ),
+    )
+  }
+  output <- capture.output(
+    result <- if (warn_legacy) calculate() else suppressWarnings(calculate()),
     type = "output"
   )
 
@@ -258,18 +264,22 @@ wlv_recalculate_synthetic_fixture <- function(
     runtime,
     at_stage = 1L,
     sea_vars = NULL,
-    workers = 1L) {
+    workers = 1L,
+    warn_legacy = FALSE) {
   old_working_directory <- setwd(fixture$root)
   on.exit(setwd(old_working_directory), add = TRUE)
 
-  capture.output(
+  recalculate <- function() {
     runtime$recalc_wlv(
       fixture$method,
       at_stage = at_stage,
       sea_vars = sea_vars,
       workers = workers,
       allow_experimental = TRUE
-    ),
+    )
+  }
+  capture.output(
+    if (warn_legacy) recalculate() else suppressWarnings(recalculate()),
     type = "output"
   )
   invisible(fixture$method)

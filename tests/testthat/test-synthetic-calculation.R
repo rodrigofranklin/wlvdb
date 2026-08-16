@@ -482,7 +482,11 @@ test_that("stage 1 recalculation preserves source-matrix USD indicators", {
   run <- NULL
   expect_warning(
     run <- suppressMessages(
-      wlv_run_synthetic_calculation(fixture, workers = 1L)
+      wlv_run_synthetic_calculation(
+        fixture,
+        workers = 1L,
+        warn_legacy = TRUE
+      )
     ),
     "adapted legacy aggregations"
   )
@@ -504,7 +508,8 @@ test_that("stage 1 recalculation preserves source-matrix USD indicators", {
         fixture,
         runtime = run$runtime,
         at_stage = 1L,
-        workers = 1L
+        workers = 1L,
+        warn_legacy = TRUE
       )
     ),
     "adapted legacy aggregations"
@@ -575,7 +580,8 @@ test_that("recalculation refreshes solutions and indicator metadata", {
         fixture,
         runtime = run$runtime,
         at_stage = 5L,
-        workers = 1L
+        workers = 1L,
+        warn_legacy = TRUE
       )
     ),
     "adapted legacy aggregations"
@@ -886,13 +892,15 @@ test_that("post-commit lock cleanup cannot turn a successful run into failure", 
   }
   result <- NULL
   capture.output(
-    expect_message(
-      result <- runtime$get_wlv(
-        fixture$method,
-        workers = 1L,
-        allow_experimental = TRUE
+    suppressWarnings(
+      expect_message(
+        result <- runtime$get_wlv(
+          fixture$method,
+          workers = 1L,
+          allow_experimental = TRUE
+        ),
+        "result lock cleanup warning"
       ),
-      "result lock cleanup warning"
     ),
     type = "output"
   )

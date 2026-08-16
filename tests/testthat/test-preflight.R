@@ -320,14 +320,18 @@ wlv_fixture_request <- function(
     fixture,
     mode = "calculate",
     allow_experimental = TRUE,
+    warn_legacy = FALSE,
     ...) {
-  preflight_environment$wlv_validate_request(
-    methods = fixture$method,
-    mode = mode,
-    root = fixture$root,
-    allow_experimental = allow_experimental,
-    ...
-  )
+  request <- function() {
+    preflight_environment$wlv_validate_request(
+      methods = fixture$method,
+      mode = mode,
+      root = fixture$root,
+      allow_experimental = allow_experimental,
+      ...
+    )
+  }
+  if (warn_legacy) request() else suppressWarnings(request())
 }
 
 wlv_refresh_preflight_manifest <- function(fixture) {
@@ -374,10 +378,17 @@ test_that("experimental methods require an explicit opt-in", {
     "experimental",
     fixed = TRUE
   )
-  expect_s3_class(
-    wlv_fixture_request(fixture, allow_experimental = TRUE),
-    "wlv_run_plan"
+  plan <- NULL
+  expect_warning(
+    plan <- wlv_fixture_request(
+      fixture,
+      allow_experimental = TRUE,
+      warn_legacy = TRUE
+    ),
+    "adapted legacy aggregations",
+    fixed = TRUE
   )
+  expect_s3_class(plan, "wlv_run_plan")
 })
 
 test_that("stage-1 recalculation cannot select a partial indicator set", {
