@@ -750,6 +750,33 @@ test_that("constant compensation is declared in additive 2000 USD", {
   }
 })
 
+test_that("stable typed aggregation is authoritative over legacy routing", {
+  root <- wlv_make_catalog_fixture()
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  path <- file.path(
+    root,
+    "contracts",
+    "units",
+    "demo_v1-aggregations.csv"
+  )
+  aggregations <- utils::read.csv2(
+    path,
+    stringsAsFactors = FALSE,
+    colClasses = "character",
+    check.names = FALSE,
+    na.strings = NULL
+  )
+  aggregations$strategy <- "invariant"
+  wlv_catalog_test_write(path, aggregations)
+
+  catalog <- expect_no_error(catalog_environment$wlv_load_catalog(root))
+  contract <- catalog_environment$wlv_catalog_unit_contract(
+    catalog,
+    "demo_units_v1"
+  )
+  expect_true(all(contract$aggregations$strategy == "invariant"))
+})
+
 test_that("unit contract schemas and foreign keys reject drift", {
   cases <- list(
     list(

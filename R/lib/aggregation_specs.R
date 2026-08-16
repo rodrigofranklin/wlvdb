@@ -490,3 +490,455 @@ wlv_aggregate.wlv_aggregation_spec <- function(
   )
   wlv_aggregation_restore(reduced$value, reduced$state, value_layout)
 }
+
+wlv_aggregation_contract_strategies <- function() {
+  c(
+    "sum", "mean", "ratio_of_sums", "weighted_mean", "invariant",
+    "not_applicable", "formula"
+  )
+}
+
+wlv_aggregation_binding_key <- function(indicator, level) {
+  paste(indicator, level, sep = "\034")
+}
+
+wlv_aggregation_contract_field <- function(row, name) {
+  value <- as.character(row[[name]][[1L]])
+  if (is.na(value)) "" else value
+}
+
+wlv_aggregation_binding_from_row <- function(
+    row,
+    missing = "available",
+    legacy = FALSE) {
+  required <- c(
+    "indicator", "level", "strategy", "module", "numerator",
+    "denominator", "weight", "zero_denominator"
+  )
+  if (!is.data.frame(row) || nrow(row) != 1L ||
+      any(!required %in% names(row))) {
+    stop("An aggregation contract binding must be exactly one complete row.",
+      call. = FALSE
+    )
+  }
+  fields <- stats::setNames(
+    lapply(required, function(name) wlv_aggregation_contract_field(row, name)),
+    required
+  )
+  wlv_aggregation_scalar_character(
+    fields$level,
+    "level",
+    wlv_aggregation_levels()
+  )
+  wlv_aggregation_scalar_character(
+    fields$strategy,
+    "strategy",
+    wlv_aggregation_contract_strategies()
+  )
+  if (!nzchar(fields$indicator)) {
+    stop("An aggregation contract binding requires an indicator.", call. = FALSE)
+  }
+
+  formula <- identical(fields$strategy, "formula")
+  if (formula != nzchar(fields$module)) {
+    stop("Only formula aggregation bindings may declare a module.", call. = FALSE)
+  }
+  ratio <- identical(fields$strategy, "ratio_of_sums")
+  weighted <- identical(fields$strategy, "weighted_mean")
+  dependencies <- c(fields$numerator, fields$denominator, fields$weight)
+  valid_dependencies <-
+    if (ratio) {
+      nzchar(fields$numerator) && nzchar(fields$denominator) &&
+        !nzchar(fields$weight)
+    } else if (weighted) {
+      nzchar(fields$weight) &&
+        !nzchar(fields$numerator) && !nzchar(fields$denominator)
+    } else {
+      !any(nzchar(dependencies))
+    }
+  if (!valid_dependencies) {
+    stop("Aggregation binding dependencies do not match its strategy.",
+      call. = FALSE
+    )
+  }
+
+  strategy <- if (identical(fields$strategy, "mean")) {
+    "legacy_mean"
+  } else {
+    fields$strategy
+  }
+  spec <- if (formula) {
+    NULL
+  } else {
+    wlv_aggregation_spec(
+      strategy = strategy,
+      level = fields$level,
+      missing = missing,
+      zero_denominator = if (ratio || weighted) {
+        fields$zero_denominator
+      } else {
+        NULL
+      }
+    )
+  }
+  structure(
+    list(
+      indicator = fields$indicator,
+      level = fields$level,
+      contract_strategy = fields$strategy,
+      spec = spec,
+      module = fields$module,
+      numerator = fields$numerator,
+      denominator = fields$denominator,
+      weight = fields$weight,
+      legacy = isTRUE(legacy)
+    ),
+    class = "wlv_aggregation_binding"
+  )
+}
+
+wlv_validate_aggregation_binding <- function(binding) {
+  if (!inherits(binding, "wlv_aggregation_binding") || !is.list(binding)) {
+    stop("`binding` must be a `wlv_aggregation_binding` object.", call. = FALSE)
+  }
+  expected <- c(
+    "indicator", "level", "contract_strategy", "spec", "module",
+    "numerator", "denominator", "weight", "legacy"
+  )
+  if (!identical(names(binding), expected)) {
+    stop("Invalid `wlv_aggregation_binding` fields.", call. = FALSE)
+  }
+  formula <- identical(binding$contract_strategy, "formula")
+  if (formula) {
+    if (!is.null(binding$spec) || !nzchar(binding$module)) {
+      stop("Invalid formula aggregation binding.", call. = FALSE)
+    }
+  } else {
+    wlv_validate_aggregation_spec(binding$spec)
+    if (!identical(binding$spec$level, binding$level) || nzchar(binding$module)) {
+      stop("Aggregation binding and specification disagree.", call. = FALSE)
+    }
+  }
+  invisible(binding)
+}
+
+wlv_aggregation_legacy_row <- function(indicator, level, solution) {
+  formula <- grepl("[.][Rr]$", solution)
+  strategy <- if (formula) {
+    "formula"
+  } else if (solution %in% c("sum", "mean")) {
+    solution
+  } else {
+    stop(
+      sprintf("Legacy aggregation string `%s` cannot be adapted.", solution),
+      call. = FALSE
+    )
+  }
+  data.frame(
+    indicator = indicator,
+    level = level,
+    strategy = strategy,
+    module = if (formula) solution else "",
+    numerator = "",
+    denominator = "",
+    weight = "",
+    zero_denominator = "",
+    notes = "Experimental legacy aggregation adapter.",
+    stringsAsFactors = FALSE
+  )
+}
+
+wlv_aggregation_contract_row_is_compatible <- function(
+    row,
+    solution,
+    indicators) {
+  if (!nrow(row)) {
+    return(FALSE)
+  }
+  strategy <- wlv_aggregation_contract_field(row, "strategy")
+  module <- wlv_aggregation_contract_field(row, "module")
+  formula <- grepl("[.][Rr]$", solution)
+  solution_matches <- if (formula) {
+    identical(strategy, "formula") && identical(module, solution)
+  } else {
+    !identical(strategy, "formula")
+  }
+  references <- unlist(
+    row[c("numerator", "denominator", "weight")],
+    use.names = FALSE
+  )
+  references <- as.character(references)
+  references <- references[!is.na(references) & nzchar(references)]
+  solution_matches && all(references %in% indicators)
+}
+
+wlv_resolve_aggregation_registry <- function(
+    aggregations,
+    solutions,
+    method,
+    stable,
+    allow_legacy = FALSE,
+    missing = "available") {
+  required_aggregations <- c(
+    "indicator", "level", "strategy", "module", "numerator",
+    "denominator", "weight", "zero_denominator"
+  )
+  if (!is.data.frame(aggregations) ||
+      any(!required_aggregations %in% names(aggregations))) {
+    stop("`aggregations` must contain typed unit-contract rows.", call. = FALSE)
+  }
+  if (!is.data.frame(solutions) ||
+      any(!c("names", "country_solution") %in% names(solutions)) ||
+      anyNA(solutions[c("names", "country_solution")]) ||
+      any(!nzchar(solutions$names)) || anyDuplicated(solutions$names)) {
+    stop("`solutions` must contain unique aggregation metadata.", call. = FALSE)
+  }
+  if (!is.character(method) || length(method) != 1L || is.na(method) ||
+      !nzchar(method)) {
+    stop("`method` must be one non-empty string.", call. = FALSE)
+  }
+  if (!is.logical(stable) || length(stable) != 1L || is.na(stable) ||
+      !is.logical(allow_legacy) || length(allow_legacy) != 1L ||
+      is.na(allow_legacy)) {
+    stop("`stable` and `allow_legacy` must be explicit flags.", call. = FALSE)
+  }
+  wlv_aggregation_scalar_character(
+    missing,
+    "missing",
+    wlv_aggregation_missing_policies()
+  )
+
+  indicators <- as.character(solutions$names)
+  levels <- wlv_aggregation_levels()
+  rows <- vector("list", length(indicators) * length(levels))
+  legacy <- logical(length(rows))
+  position <- 0L
+  for (indicator_index in seq_along(indicators)) {
+    indicator <- indicators[[indicator_index]]
+    solution <- as.character(solutions$country_solution[[indicator_index]])
+    for (level in levels) {
+      position <- position + 1L
+      selected <- aggregations$indicator == indicator &
+        aggregations$level == level
+      row <- aggregations[selected, , drop = FALSE]
+      compatible <- nrow(row) == 1L &&
+        wlv_aggregation_contract_row_is_compatible(
+          row,
+          solution,
+          indicators
+        )
+      if (!compatible) {
+        if (stable) {
+          stop(
+            sprintf(
+              paste0(
+                "Stable method `%s` lacks a valid typed aggregation for ",
+                "`%s/%s` (legacy string: `%s`)."
+              ),
+              method,
+              indicator,
+              level,
+              solution
+            ),
+            call. = FALSE
+          )
+        }
+        if (!allow_legacy) {
+          stop(
+            sprintf(
+              paste0(
+                "Experimental method `%s` requires explicit opt-in to adapt ",
+                "legacy aggregation `%s` for `%s/%s`."
+              ),
+              method,
+              solution,
+              indicator,
+              level
+            ),
+            call. = FALSE
+          )
+        }
+        row <- wlv_aggregation_legacy_row(indicator, level, solution)
+        legacy[[position]] <- TRUE
+      }
+      rows[[position]] <- row
+    }
+  }
+  rows <- do.call(rbind, rows)
+  row.names(rows) <- NULL
+  bindings <- lapply(seq_len(nrow(rows)), function(index) {
+    wlv_aggregation_binding_from_row(
+      rows[index, , drop = FALSE],
+      missing = missing,
+      legacy = legacy[[index]]
+    )
+  })
+  names(bindings) <- vapply(
+    bindings,
+    function(binding) {
+      wlv_aggregation_binding_key(binding$indicator, binding$level)
+    },
+    character(1L)
+  )
+  if (anyDuplicated(names(bindings))) {
+    stop("Aggregation registry bindings are not unique.", call. = FALSE)
+  }
+  for (indicator in indicators) {
+    country_binding <- bindings[[wlv_aggregation_binding_key(
+      indicator,
+      "sector_to_country"
+    )]]
+    world_binding <- bindings[[wlv_aggregation_binding_key(
+      indicator,
+      "country_to_world"
+    )]]
+    country_formula <- identical(
+      country_binding$contract_strategy,
+      "formula"
+    )
+    world_formula <- identical(world_binding$contract_strategy, "formula")
+    if (country_formula != world_formula ||
+        (country_formula && !identical(
+          country_binding$module,
+          world_binding$module
+        ))) {
+      stop(
+        sprintf(
+          "Aggregation formula bindings disagree for `%s` across levels.",
+          indicator
+        ),
+        call. = FALSE
+      )
+    }
+    if (!world_formula) {
+      dependencies <- wlv_aggregation_binding_inputs(world_binding)
+      formula_dependencies <- dependencies[vapply(
+        dependencies,
+        function(dependency) {
+          dependency_binding <- bindings[[wlv_aggregation_binding_key(
+            dependency,
+            "sector_to_country"
+          )]]
+          !is.null(dependency_binding) && identical(
+            dependency_binding$contract_strategy,
+            "formula"
+          )
+        },
+        logical(1L)
+      )]
+      if (length(formula_dependencies)) {
+        stop(
+          sprintf(
+            paste0(
+              "Direct country-to-world aggregation `%s` depends on ",
+              "formula-produced country indicator(s): %s."
+            ),
+            indicator,
+            paste(formula_dependencies, collapse = ", ")
+          ),
+          call. = FALSE
+        )
+      }
+    }
+  }
+  if (any(legacy)) {
+    adapted <- paste(
+      rows$indicator[legacy],
+      rows$level[legacy],
+      sep = "/"
+    )
+    warning(
+      sprintf(
+        "Experimental method `%s` adapted legacy aggregations: %s.",
+        method,
+        paste(adapted, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  structure(
+    list(
+      method = method,
+      bindings = bindings,
+      rows = rows,
+      legacy = any(legacy)
+    ),
+    class = "wlv_aggregation_registry"
+  )
+}
+
+wlv_validate_aggregation_registry <- function(registry) {
+  if (!inherits(registry, "wlv_aggregation_registry") || !is.list(registry) ||
+      !identical(names(registry), c("method", "bindings", "rows", "legacy")) ||
+      !is.list(registry$bindings) || !length(registry$bindings) ||
+      is.null(names(registry$bindings)) || anyDuplicated(names(registry$bindings))) {
+    stop("Invalid `wlv_aggregation_registry` object.", call. = FALSE)
+  }
+  invisible(lapply(registry$bindings, wlv_validate_aggregation_binding))
+  invisible(registry)
+}
+
+wlv_aggregation_registry_binding <- function(registry, indicator, level) {
+  wlv_validate_aggregation_registry(registry)
+  wlv_aggregation_scalar_character(level, "level", wlv_aggregation_levels())
+  key <- wlv_aggregation_binding_key(indicator, level)
+  binding <- registry$bindings[[key]]
+  if (is.null(binding)) {
+    stop(
+      sprintf("No typed aggregation binding exists for `%s/%s`.", indicator, level),
+      call. = FALSE
+    )
+  }
+  binding
+}
+
+wlv_aggregation_binding_inputs <- function(binding) {
+  wlv_validate_aggregation_binding(binding)
+  if (identical(binding$contract_strategy, "ratio_of_sums")) {
+    c(binding$numerator, binding$denominator)
+  } else if (identical(binding$contract_strategy, "weighted_mean")) {
+    c(binding$indicator, binding$weight)
+  } else if (identical(binding$contract_strategy, "formula")) {
+    character()
+  } else {
+    binding$indicator
+  }
+}
+
+wlv_aggregation_binding_arguments <- function(binding, values, axis = NULL) {
+  wlv_validate_aggregation_binding(binding)
+  if (identical(binding$contract_strategy, "formula")) {
+    stop("Formula aggregation bindings are executed by their module.", call. = FALSE)
+  }
+  required <- wlv_aggregation_binding_inputs(binding)
+  if (!is.list(values) || is.null(names(values)) || anyDuplicated(names(values)) ||
+      any(!required %in% names(values))) {
+    stop("Aggregation binding inputs are incomplete or unnamed.", call. = FALSE)
+  }
+  arguments <- if (identical(binding$contract_strategy, "ratio_of_sums")) {
+    list(
+      spec = binding$spec,
+      numerator = values[[binding$numerator]],
+      denominator = values[[binding$denominator]]
+    )
+  } else if (identical(binding$contract_strategy, "weighted_mean")) {
+    list(
+      spec = binding$spec,
+      value = values[[binding$indicator]],
+      weight = values[[binding$weight]]
+    )
+  } else {
+    list(spec = binding$spec, value = values[[binding$indicator]])
+  }
+  if (!is.null(axis)) {
+    arguments$axis <- axis
+  }
+  arguments
+}
+
+wlv_aggregate_binding <- function(binding, values, axis = NULL) {
+  do.call(
+    wlv_aggregate,
+    wlv_aggregation_binding_arguments(binding, values, axis = axis)
+  )
+}

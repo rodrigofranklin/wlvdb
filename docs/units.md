@@ -10,12 +10,40 @@ two relational tables:
 - `*-aggregations.csv` records the current sector-to-country and
   country-to-world operation for the same indicator.
 
-Schema version `1` is descriptive. Loading the catalog checks paths, schemas,
+Schema version `1` is executable. Loading the catalog checks paths, schemas,
 enums, identifiers, foreign keys, exact two-level aggregation coverage and the
-effective indicator set of every stable method. It also verifies that the
-declared aggregation reproduces the operation or dedicated module selected by
-the current parameter fragments. These declarations do not yet transform a
-value or select a different aggregation algorithm.
+effective indicator set of every stable method. Before any variable module is
+run, each direct declaration is translated into a validated aggregation spec
+for its level. The contract, rather than the legacy `country_solution` string,
+selects the direct algorithm; only `formula` rows remain on the dedicated module
+route.
+
+| Contract strategy | Runtime rule | Required references |
+| --- | --- | --- |
+| `sum` | Sum the selected components. | The indicator itself. |
+| `mean` | Use the compatibility arithmetic mean (`legacy_mean`). | The indicator itself. |
+| `ratio_of_sums` | Divide the aggregate numerator by the aggregate denominator. | `numerator`, `denominator`, and a zero-denominator policy. |
+| `weighted_mean` | Divide the weighted value total by the weight total. | The indicator, `weight`, and a zero-denominator policy. |
+| `invariant` | Require the selected finite values to agree and publish that invariant. | The indicator itself. |
+| `not_applicable` | Publish semantic `NA` without reducing its values. | The indicator itself, to define the output shape. |
+| `formula` | Execute the named dedicated module after direct reductions. | `module`. |
+
+The schema-v1 adapter declares `missing = available` explicitly when it builds
+each spec. Missing inputs, partial coverage, undefined aggregates and protected
+zero denominators are then handed to the versioned missingness runtime and its
+state/anomaly sidecars. Direct sector-to-country reductions finish before
+direct country-to-world reductions, so a world-level weight may consume its
+already aggregated country value. A world-level direct row may not depend on a
+country value produced later by a `formula` module; such a contract fails the
+registry preflight instead of silently reading an uncomputed value.
+
+Stable methods require a complete, valid typed contract and never infer missing
+rows from legacy parameter strings. Experimental methods may use the legacy
+adapter only with explicit experimental opt-in, and every adapted binding is
+reported in a warning. Existing schema-v1 WIOD contracts use `sum`, `mean`, and
+`formula`, so this runtime migration preserves their numerical output. Changing
+a row to one of the other strategies is a separately reviewed numerical
+migration.
 
 `source_scale` documents the multiplier between the effective source
 generation consumed by a calculation and the published canonical unit. Stable

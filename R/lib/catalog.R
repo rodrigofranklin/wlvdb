@@ -664,7 +664,10 @@ wlv_catalog_validate_unit_aggregations <- function(value, units, contract) {
   )
   wlv_catalog_validate_enum(
     value$strategy,
-    c("formula", "mean", "not_applicable", "ratio_of_sums", "sum", "weighted_mean"),
+    c(
+      "formula", "invariant", "mean", "not_applicable", "ratio_of_sums",
+      "sum", "weighted_mean"
+    ),
     "strategy",
     name
   )
@@ -1126,12 +1129,13 @@ wlv_catalog_validate_stable_unit_coverage <- function(
       country_solution <- solutions$country_solution[[solution_index]]
       rows <- aggregations$indicator == indicator
       declared <- aggregations[rows, , drop = FALSE]
-      expected_strategy <- if (country_solution %in% c("sum", "mean")) {
-        country_solution
+      formula_solution <- grepl("[.][Rr]$", country_solution)
+      invalid_strategy <- if (formula_solution) {
+        declared$strategy != "formula"
       } else {
-        "formula"
+        declared$strategy == "formula"
       }
-      if (!all(declared$strategy == expected_strategy)) {
+      if (any(invalid_strategy)) {
         wlv_catalog_stop(
           paste0(
             "Unit contract `%s` aggregation for `%s` does not describe ",
@@ -1144,7 +1148,7 @@ wlv_catalog_validate_stable_unit_coverage <- function(
         )
       }
       if (
-        expected_strategy == "formula" &&
+        formula_solution &&
           !all(declared$module == country_solution)
       ) {
         wlv_catalog_stop(

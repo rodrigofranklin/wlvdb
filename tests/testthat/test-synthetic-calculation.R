@@ -479,7 +479,13 @@ test_that("stage 1 recalculation preserves source-matrix USD indicators", {
     useBytes = TRUE
   )
 
-  run <- suppressMessages(wlv_run_synthetic_calculation(fixture, workers = 1L))
+  run <- NULL
+  expect_warning(
+    run <- suppressMessages(
+      wlv_run_synthetic_calculation(fixture, workers = 1L)
+    ),
+    "adapted legacy aggregations"
+  )
   result_dir <- file.path("results", fixture$method)
   sectors_before <- wlv_read_fixture_array(
     fixture,
@@ -492,7 +498,7 @@ test_that("stage 1 recalculation preserves source-matrix USD indicators", {
     "sea_countries.fst"
   )
 
-  expect_no_error(
+  expect_warning(
     suppressMessages(
       wlv_recalculate_synthetic_fixture(
         fixture,
@@ -500,7 +506,8 @@ test_that("stage 1 recalculation preserves source-matrix USD indicators", {
         at_stage = 1L,
         workers = 1L
       )
-    )
+    ),
+    "adapted legacy aggregations"
   )
 
   sectors_after <- wlv_read_fixture_array(
@@ -562,7 +569,7 @@ test_that("recalculation refreshes solutions and indicator metadata", {
     useBytes = TRUE
   )
 
-  expect_no_error(
+  expect_warning(
     suppressMessages(
       wlv_recalculate_synthetic_fixture(
         fixture,
@@ -570,7 +577,8 @@ test_that("recalculation refreshes solutions and indicator metadata", {
         at_stage = 5L,
         workers = 1L
       )
-    )
+    ),
+    "adapted legacy aggregations"
   )
   result_dir <- file.path(fixture$root, "results", fixture$method)
   solutions <- utils::read.csv2(

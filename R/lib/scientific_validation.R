@@ -327,6 +327,161 @@ wlv_scientific_available_aggregate <- function(value, operation) {
   }
 }
 
+wlv_scientific_aggregation_row <- function(
+    aggregations,
+    indicator,
+    level,
+    method) {
+  row <- aggregations[
+    aggregations$indicator == indicator & aggregations$level == level,
+    ,
+    drop = FALSE
+  ]
+  if (nrow(row) != 1L) {
+    wlv_abort_scientific_validation(
+      method,
+      "aggregation_contract",
+      "_unit_contract.csv",
+      indicator,
+      level,
+      "expected exactly one typed aggregation row"
+    )
+  }
+  row
+}
+
+wlv_scientific_reference_aggregate <- function(
+    strategy,
+    value = NULL,
+    numerator = NULL,
+    denominator = NULL,
+    weight = NULL,
+    zero_denominator = "",
+    tolerance = sqrt(.Machine$double.eps)) {
+  if (identical(strategy, "not_applicable")) {
+    return(NA_real_)
+  }
+  paired <- strategy %in% c("ratio_of_sums", "weighted_mean")
+  if (paired) {
+    left <- if (identical(strategy, "ratio_of_sums")) numerator else value
+    right <- if (identical(strategy, "ratio_of_sums")) denominator else weight
+    if (!is.numeric(left) || !is.numeric(right) ||
+        length(left) != length(right)) {
+      stop("Scientific aggregation dependencies are not conformable.",
+        call. = FALSE
+      )
+    }
+    selected <- !is.na(left) & !is.na(right)
+    if (!any(selected)) {
+      return(NA_real_)
+    }
+    left <- left[selected]
+    right <- right[selected]
+    if (identical(strategy, "weighted_mean") && any(right < 0)) {
+      stop("Scientific weighted aggregation received negative weights.",
+        call. = FALSE
+      )
+    }
+    aggregate_numerator <- if (identical(strategy, "ratio_of_sums")) {
+      sum(left)
+    } else {
+      sum(left * right)
+    }
+    aggregate_denominator <- sum(right)
+    if (aggregate_denominator == 0) {
+      return(switch(
+        zero_denominator,
+        error = stop("Scientific aggregation has a zero denominator.",
+          call. = FALSE
+        ),
+        not_applicable = NA_real_,
+        zero = 0,
+        stop("Scientific aggregation has an invalid zero policy.",
+          call. = FALSE
+        )
+      ))
+    }
+    return(aggregate_numerator / aggregate_denominator)
+  }
+
+  if (!is.numeric(value)) {
+    stop("Scientific aggregation input must be numeric.", call. = FALSE)
+  }
+  value <- value[!is.na(value)]
+  if (!length(value)) {
+    return(NA_real_)
+  }
+  switch(
+    strategy,
+    sum = sum(value),
+    mean = mean(value),
+    invariant = {
+      reference <- value[[1L]]
+      scale <- pmax(1, abs(value), abs(reference))
+      if (any(abs(value - reference) > tolerance * scale)) {
+        stop("Scientific invariant aggregation differs within a group.",
+          call. = FALSE
+        )
+      }
+      reference
+    },
+    stop("Scientific aggregation strategy is unsupported.", call. = FALSE)
+  )
+}
+
+wlv_scientific_reference_arguments <- function(row, lookup) {
+  strategy <- as.character(row$strategy[[1L]])
+  indicator <- as.character(row$indicator[[1L]])
+  if (identical(strategy, "ratio_of_sums")) {
+    return(list(
+      strategy = strategy,
+      numerator = lookup(as.character(row$numerator[[1L]])),
+      denominator = lookup(as.character(row$denominator[[1L]])),
+      zero_denominator = as.character(row$zero_denominator[[1L]])
+    ))
+  }
+  if (identical(strategy, "weighted_mean")) {
+    return(list(
+      strategy = strategy,
+      value = lookup(indicator),
+      weight = lookup(as.character(row$weight[[1L]])),
+      zero_denominator = as.character(row$zero_denominator[[1L]])
+    ))
+  }
+  list(strategy = strategy, value = lookup(indicator))
+}
+
+wlv_scientific_reference_from_row <- function(row, lookup) {
+  do.call(
+    wlv_scientific_reference_aggregate,
+    wlv_scientific_reference_arguments(row, lookup)
+  )
+}
+
+wlv_scientific_reference_checked <- function(
+    row,
+    lookup,
+    method,
+    indicator,
+    level) {
+  tryCatch(
+    wlv_scientific_reference_from_row(row, lookup),
+    error = function(error) {
+      if (inherits(error, "wlv_scientific_validation_error")) {
+        stop(error)
+      }
+      wlv_abort_scientific_validation(
+        method,
+        level,
+        "sea_countries",
+        indicator,
+        as.character(row$strategy[[1L]]),
+        conditionMessage(error)
+      )
+    }
+  )
+}
+
 wlv_scientific_range_profiles <- function() {
   nonnegative <- data.frame(
     artifact = c(
@@ -570,7 +725,8 @@ wlv_scientific_validate_result_arrays <- function(
     sea_sectors,
     sea_countries,
     m_countries,
-    solutions) {
+    solutions,
+    aggregations) {
   rows <- list(
     wlv_scientific_structure_check(sea_sectors, 4L, method, "sea_sectors"),
     wlv_scientific_structure_check(sea_countries, 3L, method, "sea_countries"),
@@ -621,11 +777,99 @@ wlv_scientific_validate_result_arrays <- function(
     detail = "Solution metadata and the published indicator axis agree."
   )
 
-  direct <- solutions[solutions$country_solution %in% c("sum", "mean"), , drop = FALSE]
-  for (index in seq_len(nrow(direct))) {
-    indicator <- as.character(direct$names[[index]])
-    operation <- as.character(direct$country_solution[[index]])
-    sector_value <- sea_sectors[, indicator, , , drop = FALSE]
+  aggregation_columns <- c(
+    "indicator", "level", "strategy", "module", "numerator",
+    "denominator", "weight", "zero_denominator"
+  )
+  aggregation_keys <- if (is.data.frame(aggregations) &&
+      all(aggregation_columns %in% names(aggregations))) {
+    paste(aggregations$indicator, aggregations$level, sep = "/")
+  } else {
+    character()
+  }
+  valid_aggregations <-
+    is.data.frame(aggregations) &&
+    all(aggregation_columns %in% names(aggregations)) &&
+    !anyNA(aggregations[aggregation_columns]) &&
+    !anyDuplicated(aggregation_keys) &&
+    setequal(unique(aggregations$indicator), sector_indicators) &&
+    all(table(factor(
+      aggregations$indicator,
+      levels = sector_indicators
+    )) == 2L) &&
+    all(vapply(
+      split(aggregations$level, aggregations$indicator),
+      setequal,
+      logical(1L),
+      c("sector_to_country", "country_to_world")
+    ))
+  if (!valid_aggregations) {
+    wlv_abort_scientific_validation(
+      method,
+      "aggregation_contract",
+      "_unit_contract.csv",
+      reason = paste0(
+        "typed aggregation rows do not cover every published indicator and level"
+      )
+    )
+  }
+  references <- unlist(
+    aggregations[c("numerator", "denominator", "weight")],
+    use.names = FALSE
+  )
+  references <- as.character(references)
+  references <- references[!is.na(references) & nzchar(references)]
+  if (any(!references %in% sector_indicators)) {
+    wlv_abort_scientific_validation(
+      method,
+      "aggregation_contract",
+      "_unit_contract.csv",
+      reason = "typed aggregation rows contain an unavailable dependency"
+    )
+  }
+  rows[[length(rows) + 1L]] <- wlv_scientific_check_row(
+    method,
+    "aggregation_contract",
+    "_unit_contract.csv",
+    observations = nrow(aggregations),
+    detail = "Typed aggregation rows cover both levels of every indicator."
+  )
+
+  for (indicator in sector_indicators) {
+    country_row <- wlv_scientific_aggregation_row(
+      aggregations,
+      indicator,
+      "sector_to_country",
+      method
+    )
+    world_row <- wlv_scientific_aggregation_row(
+      aggregations,
+      indicator,
+      "country_to_world",
+      method
+    )
+    country_formula <- identical(
+      as.character(country_row$strategy[[1L]]),
+      "formula"
+    )
+    world_formula <- identical(
+      as.character(world_row$strategy[[1L]]),
+      "formula"
+    )
+    if (country_formula != world_formula) {
+      wlv_abort_scientific_validation(
+        method,
+        "aggregation_contract",
+        "_unit_contract.csv",
+        indicator,
+        reason = "formula routing must agree at both aggregation levels"
+      )
+    }
+    if (country_formula) {
+      next
+    }
+    country_strategy <- as.character(country_row$strategy[[1L]])
+    world_strategy <- as.character(world_row$strategy[[1L]])
     expected_country <- array(
       NA_real_,
       dim = c(length(sector_years), length(countries)),
@@ -634,14 +878,24 @@ wlv_scientific_validate_result_arrays <- function(
     country_error_limit <- expected_country
     for (year_index in seq_along(sector_years)) {
       for (country_index in seq_along(countries)) {
-        terms <- sector_value[year_index, 1L, , country_index]
+        lookup <- function(name) {
+          sea_sectors[year_index, name, , country_index]
+        }
         expected_country[year_index, country_index] <-
-          wlv_scientific_available_aggregate(terms, operation)
-        country_error_limit[year_index, country_index] <-
-          wlv_scientific_reduction_error_limit(
-            terms,
-            expected_country[year_index, country_index]
+          wlv_scientific_reference_checked(
+            country_row,
+            lookup,
+            method,
+            indicator,
+            "sector_to_country"
           )
+        if (country_strategy %in% c("sum", "mean")) {
+          country_error_limit[year_index, country_index] <-
+            wlv_scientific_reduction_error_limit(
+              lookup(indicator),
+              expected_country[year_index, country_index]
+            )
+        }
       }
     }
     observed_country <- sea_countries[, indicator, countries, drop = FALSE]
@@ -650,43 +904,72 @@ wlv_scientific_validate_result_arrays <- function(
       dim = dim(expected_country),
       dimnames = dimnames(expected_country)
     )
-    rows[[length(rows) + 1L]] <- wlv_scientific_compare(
+    country_comparison <- list(
       observed_country,
       expected_country,
       method = method,
       check_id = "sector_to_country",
       artifact = "sea_countries",
       indicator = indicator,
-      scope = operation,
-      error_limit = country_error_limit,
-      detail = sprintf("Direct `%s` aggregation over sectors.", operation)
+      scope = country_strategy,
+      detail = sprintf(
+        "Independent `%s` reference aggregation over sectors.",
+        country_strategy
+      )
+    )
+    if (country_strategy %in% c("sum", "mean")) {
+      country_comparison$error_limit <- country_error_limit
+    }
+    rows[[length(rows) + 1L]] <- do.call(
+      wlv_scientific_compare,
+      country_comparison
     )
 
     expected_world <- vapply(seq_along(sector_years), function(year_index) {
-      wlv_scientific_available_aggregate(
-        expected_country[year_index, ], operation
+      lookup <- function(name) {
+        sea_countries[year_index, name, countries]
+      }
+      wlv_scientific_reference_checked(
+        world_row,
+        lookup,
+        method,
+        indicator,
+        "country_to_world"
       )
     }, numeric(1L))
     names(expected_world) <- sector_years
-    world_error_limit <- vapply(seq_along(sector_years), function(year_index) {
-      wlv_scientific_reduction_error_limit(
-        expected_country[year_index, ],
-        expected_world[[year_index]]
-      )
-    }, numeric(1L))
-    names(world_error_limit) <- sector_years
     observed_world <- sea_countries[, indicator, "WWW"]
     names(observed_world) <- sector_years
-    rows[[length(rows) + 1L]] <- wlv_scientific_compare(
+    world_comparison <- list(
       observed_world,
       expected_world,
       method = method,
       check_id = "country_to_world",
       artifact = "sea_countries",
       indicator = indicator,
-      scope = operation,
-      error_limit = world_error_limit,
-      detail = sprintf("Direct `%s` aggregation over countries.", operation)
+      scope = world_strategy,
+      detail = sprintf(
+        "Independent `%s` reference aggregation over countries.",
+        world_strategy
+      )
+    )
+    if (world_strategy %in% c("sum", "mean")) {
+      world_error_limit <- vapply(
+        seq_along(sector_years),
+        function(year_index) {
+          wlv_scientific_reduction_error_limit(
+            sea_countries[year_index, indicator, countries],
+            expected_world[[year_index]]
+          )
+        },
+        numeric(1L)
+      )
+      names(world_error_limit) <- sector_years
+      world_comparison$error_limit <- world_error_limit
+    }
+    rows[[length(rows) + 1L]] <- do.call(
+      wlv_scientific_compare,
+      world_comparison
     )
   }
 
