@@ -93,6 +93,28 @@ wlv_validate_wiodr16_fixture <- function(
   )
 }
 
+wlv_normalize_wiodr16_validation_fixture <- function(fixture) {
+  fixture$gfcf_observations <- wiodr16_validation_environment$
+    wlv_wiodr_canonical_gfcf_diagnostic_observations(
+      fixture$m_io,
+      method = "wiodr16"
+    )
+  fixture$m_io <- fixture$m_io * 1000000
+  multipliers <- c(
+    EMP = 1000,
+    EMPE = 1000,
+    H_EMPE = 1000000,
+    COMP = 1000000,
+    VA_USD = 1000000,
+    GO_USD = 1000000
+  )
+  for (variable in names(multipliers)) {
+    fixture$sea[, variable, , ] <-
+      fixture$sea[, variable, , ] * multipliers[[variable]]
+  }
+  fixture
+}
+
 wlv_materialize_wiodr16_validation_fixture <- function(fixture, source_dir) {
   dir.create(source_dir, recursive = TRUE, showWarnings = FALSE)
   utils::write.table(
@@ -127,5 +149,12 @@ wlv_materialize_wiodr16_validation_fixture <- function(fixture, source_dir) {
   }
   write_array(fixture$m_io, "m_io.fst")
   write_array(fixture$sea, "sea.fst")
+  if (!is.null(fixture$gfcf_observations)) {
+    saveRDS(
+      fixture$gfcf_observations,
+      file.path(source_dir, "_gfcf_canonical.rds"),
+      version = 3L
+    )
+  }
   invisible(source_dir)
 }

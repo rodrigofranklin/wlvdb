@@ -39,6 +39,21 @@ test_that("WIOD16 source anomalies are exact and value-pinned", {
   expect_no_error(validate(sea))
   expect_no_error(validate_va(sea))
 
+  canonical_sea <- sea
+  canonical_sea[, c("K", "VA_USD"), , ] <-
+    canonical_sea[, c("K", "VA_USD"), , ] * 1000000
+  expect_no_error(validate(canonical_sea, input_unit = "usd"))
+  expect_no_error(validate_va(canonical_sea, input_unit = "usd"))
+
+  canonical_drift <- canonical_sea
+  canonical_drift["2013", "K", "C33", "PRT"] <-
+    canonical_drift["2013", "K", "C33", "PRT"] + 1000
+  expect_error(
+    validate(canonical_drift, input_unit = "usd"),
+    "values differ",
+    fixed = TRUE
+  )
+
   extra <- sea
   extra["2007", "K", "J58", "ROU"] <- -1
   expect_error(validate(extra), "unexpected", fixed = TRUE)

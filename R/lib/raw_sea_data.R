@@ -1,3 +1,12 @@
 print(paste0("loading raw data from ",source_version,"..."))
 
-sea_source <- read_fst_array(paste0("source_data/",source_version,"/sea.fst"))
+if (
+  is.null(wlv_data$source_sea) ||
+    !is.character(wlv_data$source_sea) ||
+    length(wlv_data$source_sea) != 1L ||
+    is.na(wlv_data$source_sea) ||
+    !file.exists(wlv_data$source_sea)
+) {
+  stop("The validated source SEA artifact is missing.", call. = FALSE)
+}
+sea_source <- read_fst_array(wlv_data$source_sea)

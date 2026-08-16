@@ -50,7 +50,7 @@ test_that("the synthetic fixture completes the real calculation pipeline", {
   )
   expect_equal(
     unit_contract$source_scale[unit_contract$indicator == "gross_output.s.us"],
-    rep(1000000, 2L)
+    rep(1, 2L)
   )
 
   m_io <- wlv_read_fixture_array(fixture, result_path, "m_io2000-2001.fst")

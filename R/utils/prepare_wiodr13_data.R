@@ -9,6 +9,28 @@ if (!exists("write_fst_array", mode = "function", inherits = FALSE)) {
 if (!exists("wlv_wiodr13_validate_workbook_missingness", mode = "function", inherits = FALSE)) {
   sys.source("R/lib/wiodr13_validation.R", envir = environment())
 }
+if (!exists("wlv_normalize_source", mode = "function", inherits = FALSE)) {
+  sys.source("R/lib/source_normalization.R", envir = environment())
+}
+if (!exists("wlv_build_source_manifest", mode = "function", inherits = FALSE)) {
+  sys.source("R/lib/source_manifest.R", envir = environment())
+}
+if (!exists("wlv_catalog_unit_contract", mode = "function", inherits = FALSE)) {
+  sys.source("R/lib/catalog.R", envir = environment())
+}
+
+if (
+  !exists("wlv_catalog", inherits = FALSE) ||
+    !inherits(wlv_catalog, "wlv_catalog") ||
+    !exists("wlv_source_record", inherits = FALSE) ||
+    !is.data.frame(wlv_source_record) || nrow(wlv_source_record) != 1L ||
+    !identical(wlv_source_record$source[[1L]], "wiodr13")
+) {
+  stop(
+    "WIOD13 preparation requires its validated catalog and source record.",
+    call. = FALSE
+  )
+}
 
 dir.create("source_data", recursive = TRUE, showWarnings = FALSE)
 dir.create("source_data/wiodr13", recursive = TRUE, showWarnings = FALSE)
@@ -261,15 +283,22 @@ if (!identical(dim(sea_source), c(15L, 27L, 35L, 41L))) {
   stop("Prepared WIOD13 SEA array has unexpected dimensions.", call. = FALSE)
 }
 
-wlv_write_fst_array_atomic(
-  m_io,
-  "source_data/wiodr13/m_io.fst",
-  writer = write_fst_array
+wiodr13_raw_validation <- wlv_validate_wiodr13_arrays(
+  m_io = m_io,
+  sea = sea_source,
+  countries = lists$countries,
+  sectors = lists$sectors,
+  demands = lists$demand
 )
-wlv_write_fst_array_atomic(
-  sea_source,
-  "source_data/wiodr13/sea.fst",
-  writer = write_fst_array
+message(
+  sprintf(
+    paste0(
+      "WIOD13 in-memory raw validation passed: %s known negative GFCF ",
+      "cells; maximum gross-output residual %.12g."
+    ),
+    wiodr13_raw_validation$known_negative_gfcf_count,
+    wiodr13_raw_validation$maximum_absolute_gross_output_residual
+  )
 )
 
 utils::write.table(
@@ -294,6 +323,44 @@ utils::write.table(
   sep = ";"
 )
 
+wiodr13_gfcf_observations <-
+  wlv_wiodr_canonical_gfcf_diagnostic_observations(
+    m_io,
+    method = "wiodr13"
+  )
+wiodr13_unit_contract_id <- wlv_source_record$unit_contract[[1L]]
+wiodr13_unit_contract <- wlv_catalog_unit_contract(
+  wlv_catalog,
+  wiodr13_unit_contract_id
+)
+wiodr13_unit_contract_metadata <- wiodr13_unit_contract$metadata
+wiodr13_unit_contract_paths <- file.path(
+  wlv_catalog$root,
+  unlist(
+    wiodr13_unit_contract_metadata[c("units", "aggregations")],
+    use.names = FALSE
+  )
+)
+wiodr13_unit_contract_sidecar <- wlv_catalog_unit_contract_sidecar(
+  wlv_catalog,
+  wiodr13_unit_contract_id
+)
+wiodr13_normalized <- wlv_normalize_source(
+  m_io = m_io,
+  sea = sea_source,
+  source = "wiodr13"
+)
+wiodr13_source_manifest <- wlv_publish_normalized_source(
+  normalized = wiodr13_normalized,
+  source_dir = "source_data/wiodr13",
+  unit_contract_id = wiodr13_unit_contract_id,
+  unit_contract_version = wiodr13_unit_contract_metadata$schema_version[[1L]],
+  unit_contract_paths = wiodr13_unit_contract_paths,
+  unit_contract_sidecar = wiodr13_unit_contract_sidecar,
+  gfcf_observations = wiodr13_gfcf_observations,
+  writer = write_fst_array
+)
+
 # Keep the verified source downloads, but remove the large extracted matrices.
 unlink(wiodr13_mat_paths, force = TRUE)
 
@@ -305,7 +372,11 @@ rm(
   wlv_validate_wiodr13_sea_workbook, sea_year_columns, sea_missing_values,
   sea_missing_by_year, sea_missingness, year_column,
   wlv_wiodr13_validate_workbook_missingness,
-  wlv_wiodr13_workbook_missingness_signature
+  wlv_wiodr13_workbook_missingness_signature, wiodr13_raw_validation,
+  wiodr13_gfcf_observations, wiodr13_unit_contract_id,
+  wiodr13_unit_contract, wiodr13_unit_contract_metadata,
+  wiodr13_unit_contract_paths, wiodr13_unit_contract_sidecar,
+  wiodr13_normalized, wiodr13_source_manifest
 )
 gc()
 

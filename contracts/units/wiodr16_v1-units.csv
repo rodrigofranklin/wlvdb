@@ -1,14 +1,14 @@
 indicator;quantity_kind;source_unit;source_scale;canonical_unit;currency;price_basis;base_year;index_base;labour_concept;notes
-emp.s.un;count;thousand_person;1000;person;none;not_applicable;;;persons_engaged;WIOD SEA EMP is reported in thousands of persons engaged.
-empe.s.un;count;thousand_person;1000;person;none;not_applicable;;;employees;WIOD SEA EMPE is reported in thousands of employees.
+emp.s.un;count;person;1;person;none;not_applicable;;;persons_engaged;The normalized WIOD SEA generation exposes EMP in persons engaged.
+empe.s.un;count;person;1;person;none;not_applicable;;;employees;The normalized WIOD SEA generation exposes EMPE in employees.
 hours_worked.emp.s.hr;duration;hour;1;hour;none;not_applicable;;;hours_persons_engaged;Derived hours include the versioned China supplement and explicit zero-denominator policy.
-hours_worked.empe.s.hr;duration;million_hour;1000000;hour;none;not_applicable;;;hours_employees;WIOD SEA H_EMPE is reported in millions of hours.
+hours_worked.empe.s.hr;duration;hour;1;hour;none;not_applicable;;;hours_employees;The normalized WIOD SEA generation exposes H_EMPE in hours.
 exchange.r.us;ratio;local_currency_per_usd;1;local_currency_per_usd;local_currency;current;;;not_applicable;Direction is local-currency units per current USD.
 compensation.empe.s.us;monetary;usd;1;usd;usd;current;;;employees;
 compensation.emp.s.us;monetary;usd;1;usd;usd;current;;;persons_engaged;
 capital_stock.s.us;monetary;usd;1;usd;usd;current;;;not_applicable;
-gross_output.s.us;monetary;million_usd;1000000;usd;usd;current;;;not_applicable;WIOD SEA GO_USD is reported in millions of current USD.
-gdp.s.us;monetary;million_usd;1000000;usd;usd;current;;;not_applicable;WIOD SEA VA_USD is reported in millions of current USD.
+gross_output.s.us;monetary;usd;1;usd;usd;current;;;not_applicable;The normalized WIOD SEA generation exposes GO_USD in current USD.
+gdp.s.us;monetary;usd;1;usd;usd;current;;;not_applicable;The normalized WIOD SEA generation exposes VA_USD in current USD.
 compensation.emp.s.cu;monetary;local_currency;1;usd;usd;constant;2000;;persons_engaged;LAB is deflated by the basket index and converted at the 2000 LCU/USD rate, yielding constant-2000 USD.
 compensation.empe.s.cu;monetary;local_currency;1;usd;usd;constant;2000;;employees;COMP is deflated by the basket index and converted at the 2000 LCU/USD rate, yielding constant-2000 USD.
 profit.s.us;monetary;usd;1;usd;usd;current;;;not_applicable;

@@ -9,6 +9,28 @@ if (!exists("write_fst_array", mode = "function", inherits = FALSE)) {
 if (!exists("wiodr16_download_manifest", inherits = FALSE)) {
   sys.source("R/utils/wiodr16_preparation.R", envir = environment())
 }
+if (!exists("wlv_normalize_source", mode = "function", inherits = FALSE)) {
+  sys.source("R/lib/source_normalization.R", envir = environment())
+}
+if (!exists("wlv_build_source_manifest", mode = "function", inherits = FALSE)) {
+  sys.source("R/lib/source_manifest.R", envir = environment())
+}
+if (!exists("wlv_catalog_unit_contract", mode = "function", inherits = FALSE)) {
+  sys.source("R/lib/catalog.R", envir = environment())
+}
+
+if (
+  !exists("wlv_catalog", inherits = FALSE) ||
+    !inherits(wlv_catalog, "wlv_catalog") ||
+    !exists("wlv_source_record", inherits = FALSE) ||
+    !is.data.frame(wlv_source_record) || nrow(wlv_source_record) != 1L ||
+    !identical(wlv_source_record$source[[1L]], "wiodr16")
+) {
+  stop(
+    "WIOD16 preparation requires its validated catalog and source record.",
+    call. = FALSE
+  )
+}
 
 dir.create("source_data", recursive = TRUE, showWarnings = FALSE)
 dir.create("source_data/wiodr16", recursive = TRUE, showWarnings = FALSE)
@@ -194,17 +216,6 @@ message(
   )
 )
 
-wlv_write_fst_array_atomic(
-  m_io,
-  "source_data/wiodr16/m_io.fst",
-  writer = write_fst_array
-)
-wlv_write_fst_array_atomic(
-  sea_source,
-  "source_data/wiodr16/sea.fst",
-  writer = write_fst_array
-)
-
 wlv_write_wiodr16_labels <- function(values, destination, column_name) {
   staged_path <- tempfile(
     pattern = paste0(".", basename(destination), "-write-"),
@@ -244,6 +255,44 @@ wlv_write_wiodr16_labels(
   "sector.source"
 )
 
+wiodr16_gfcf_observations <-
+  wlv_wiodr_canonical_gfcf_diagnostic_observations(
+    m_io,
+    method = "wiodr16"
+  )
+wiodr16_unit_contract_id <- wlv_source_record$unit_contract[[1L]]
+wiodr16_unit_contract <- wlv_catalog_unit_contract(
+  wlv_catalog,
+  wiodr16_unit_contract_id
+)
+wiodr16_unit_contract_metadata <- wiodr16_unit_contract$metadata
+wiodr16_unit_contract_paths <- file.path(
+  wlv_catalog$root,
+  unlist(
+    wiodr16_unit_contract_metadata[c("units", "aggregations")],
+    use.names = FALSE
+  )
+)
+wiodr16_unit_contract_sidecar <- wlv_catalog_unit_contract_sidecar(
+  wlv_catalog,
+  wiodr16_unit_contract_id
+)
+wiodr16_normalized <- wlv_normalize_source(
+  m_io = m_io,
+  sea = sea_source,
+  source = "wiodr16"
+)
+wiodr16_source_manifest <- wlv_publish_normalized_source(
+  normalized = wiodr16_normalized,
+  source_dir = "source_data/wiodr16",
+  unit_contract_id = wiodr16_unit_contract_id,
+  unit_contract_version = wiodr16_unit_contract_metadata$schema_version[[1L]],
+  unit_contract_paths = wiodr16_unit_contract_paths,
+  unit_contract_sidecar = wiodr16_unit_contract_sidecar,
+  gfcf_observations = wiodr16_gfcf_observations,
+  writer = write_fst_array
+)
+
 # Keep the verified downloads in cache and remove only the extracted RData files.
 unlink(wiodr16_rdata_paths, force = TRUE)
 if (any(file.exists(wiodr16_rdata_paths))) {
@@ -251,7 +300,13 @@ if (any(file.exists(wiodr16_rdata_paths))) {
 }
 
 # Release the large WIOD arrays before preparing the EU KLEMS annual inputs.
-rm(m_io, sea_source, sea, documented_sea_missing)
+rm(
+  m_io, sea_source, sea, documented_sea_missing,
+  wiodr16_gfcf_observations, wiodr16_unit_contract_id,
+  wiodr16_unit_contract, wiodr16_unit_contract_metadata,
+  wiodr16_unit_contract_paths, wiodr16_unit_contract_sidecar,
+  wiodr16_normalized, wiodr16_source_manifest
+)
 gc()
 
 wiodr16_preparation_environment <- environment()

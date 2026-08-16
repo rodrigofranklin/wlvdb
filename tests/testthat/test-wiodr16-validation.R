@@ -181,7 +181,8 @@ test_that("WIOD16 rejects non-finite flows and broken gross-output identities", 
 })
 
 test_that("the WIOD16 prepared-data wrapper validates serialized arrays", {
-  fixture <- wlv_make_wiodr16_validation_fixture()
+  raw_fixture <- wlv_make_wiodr16_validation_fixture()
+  fixture <- wlv_normalize_wiodr16_validation_fixture(raw_fixture)
   source_dir <- tempfile("wiodr16-prepared-")
   dir.create(source_dir)
   on.exit(unlink(source_dir, recursive = TRUE, force = TRUE), add = TRUE)
@@ -201,6 +202,13 @@ test_that("the WIOD16 prepared-data wrapper validates serialized arrays", {
 
   expect_identical(result$dimensions$m_io, c(2L, 6L, 12L))
   expect_identical(result$dimensions$sea, c(2L, 6L, 2L, 3L))
+  expect_identical(result$negative_gfcf_input_unit, "usd")
+  expect_equal(
+    as.numeric(wiodr16_validation_environment$wlv_wiodr16_read_array(
+      file.path(source_dir, "m_io.fst")
+    )),
+    as.numeric(raw_fixture$m_io * 1000000)
+  )
 })
 
 test_that("WIOD16 EU KLEMS validation requires fallback countries and complete keys", {

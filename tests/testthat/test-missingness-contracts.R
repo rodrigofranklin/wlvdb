@@ -107,9 +107,9 @@ test_that("WIOD16 employee hours distinguish zero employment from a pinned fallb
   )
   shape <- c(1L, 3L, 1L)
   labels <- list("2001", c("M72", "OTHER", "ZERO"), "MLT")
-  employee_hours <- array(c(0.009, 2, 0), dim = shape, dimnames = labels)
-  employees <- array(c(0, 1, 0), dim = shape, dimnames = labels)
-  persons <- array(c(0.01, 1, 0), dim = shape, dimnames = labels)
+  employee_hours <- array(c(9000, 2e6, 0), dim = shape, dimnames = labels)
+  employees <- array(c(0, 1000, 0), dim = shape, dimnames = labels)
+  persons <- array(c(10, 1000, 0), dim = shape, dimnames = labels)
 
   result <- missingness_environment$wlv_wiodr16_hours_worked_runtime(
     runtime,
@@ -117,7 +117,7 @@ test_that("WIOD16 employee hours distinguish zero employment from a pinned fallb
     employees,
     persons
   )
-  expect_equal(result[1L, "M72", "MLT"], 2.009 / 1 * 0.01 * 1000000)
+  expect_equal(result[1L, "M72", "MLT"], 2009 / 1 * 10)
   expect_equal(result[1L, "OTHER", "MLT"], 2e6)
   expect_identical(result[1L, "ZERO", "MLT"], 0)
   expect_setequal(

@@ -4,26 +4,26 @@ print(current_m_io)
 print(ls(1,pattern="rows"))
 m_io_source <- read_fst_array(current_m_io)
 wlv_canonical_gfcf_observations <- NULL
-if (
-  exists("source_version", inherits = TRUE) &&
-  source_version %in% c("wiodr13", "wiodr16")
-) {
-  if (!exists(
-    "wlv_wiodr_canonical_gfcf_diagnostic_observations",
-    mode = "function"
-  )) {
-    source("R/lib/gfcf_contracts.R")
+if (!is.null(wlv_data$gfcf_observations)) {
+  wlv_canonical_gfcf_observations <- if (
+    is.character(wlv_data$gfcf_observations) &&
+      length(wlv_data$gfcf_observations) == 1L &&
+      !is.na(wlv_data$gfcf_observations)
+  ) {
+    if (!file.exists(wlv_data$gfcf_observations)) {
+      stop("Canonical GFCF diagnostic observations are missing.", call. = FALSE)
+    }
+    readRDS(wlv_data$gfcf_observations)
+  } else {
+    wlv_data$gfcf_observations
   }
-  # Preserve the reviewed million-USD doubles before the accounting array is
-  # scaled to USD. Multiplying and dividing by 1e6 changes some WIOD16 values
-  # by one ULP, which must not redefine the source-level scientific pin.
-  wlv_canonical_gfcf_observations <-
-    wlv_wiodr_canonical_gfcf_diagnostic_observations(
-      m_io_source,
-      method = source_version
+  if (!is.data.frame(wlv_canonical_gfcf_observations)) {
+    stop(
+      "Canonical GFCF diagnostic observations must be a data frame.",
+      call. = FALSE
     )
+  }
 }
-m_io_source <- m_io_source * 1000000
 print("loaded source m_io")
 # Adjusts lists$years and nums$years to the years in m_io_source
 lists$years <- unlist(dimnames(m_io_source)[1])

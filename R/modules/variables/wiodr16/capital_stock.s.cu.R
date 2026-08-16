@@ -20,7 +20,7 @@ meta_indicators[code,"group"] <- "Capital"
 meta_indicators[code,"reverted"] <- FALSE
 
 sea_sectors[,code,,] <-
-  sea_source[,"K",lists$sectors,] * 1000000 / 
+  sea_source[,"K",lists$sectors,] /
   sea_sectors[,"go_price.r.id",,] * 100 /
   (sea_sectors[1,"exchange.r.us",,] %>% 
      rep(times = nums$years) %>% 

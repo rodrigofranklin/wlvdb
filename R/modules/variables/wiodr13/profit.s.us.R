@@ -11,5 +11,5 @@ meta_indicators[code,"group"] <- "Capital"
 meta_indicators[code,"reverted"] <- FALSE
 
 sea_sectors[,code,,] <-
-  sea_source[,"CAP",lists$sectors,] *1000000 / 
+  sea_source[,"CAP",lists$sectors,] /
   sea_sectors[,"exchange.r.us",,]
