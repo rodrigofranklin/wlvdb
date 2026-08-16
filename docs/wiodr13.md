@@ -38,6 +38,14 @@ observed zeros or source measurements.
 
 The recovered calculation also makes historical edge cases explicit:
 
+- The standard method estimates one current exchange rate for each country-year
+  as `sum(VA in local currency) / sum(VA in current USD)`, expressed in
+  local-currency units per USD, and broadcasts that rate unchanged to every
+  sector. Non-positive, missing, or non-finite national totals abort. The USA
+  rate is checked against one before being canonicalized to exactly `1`; the
+  derived unitless exchange-rate index has base `2000 = 1`. The explicitly
+  versioned `wiodr13v09` method retains the former sector-level calculation for
+  historical comparability.
 - WIOD country codes `GBR` and `GRC` map to the EU KLEMS conventions `UK` and
   `EL`; they must not silently fall back to the synthetic mean country.
 - A positive capital-stock column with no positive primary EU KLEMS allocation
@@ -49,8 +57,11 @@ The recovered calculation also makes historical edge cases explicit:
 - Before that distribution, the 24 negative WIOD GFCF source cells are checked
   as one exact set. The radix-sorted UTF-8 keys `year|input|output`, joined by
   newline, must have MD5 `61cfd5d08a9934a703335e14968e5b43`. Only those cells
-  are truncated to zero, with their original values and coordinates recorded as
-  `truncate_allowlisted_negative_gfcf` under `wiodr13_negative_gfcf_v1`.
+  are accepted, and their key-plus-magnitude profile in canonical million USD
+  must also have MD5 `0287db08451f74a23fe7657cc07e9165`. They are truncated to
+  zero only in the non-negative capital-allocation input, with their original
+  values and coordinates recorded as `truncate_allowlisted_negative_gfcf`
+  under `wiodr13_negative_gfcf_v1`.
 - World productive exploitation rates are calculated as ratios of global
   totals, rather than left missing or averaged across national rates.
 
@@ -78,6 +89,15 @@ structurally `NA`; all remaining `m_io` cells must be finite. Published sector
 and country arrays may contain an ordinary `NA` only when its exact coordinate
 and `source_missing` or `not_applicable` meaning is persisted in `_states.csv`
 and passes the semantic round-trip described in `docs/missingness.md`.
+
+Every successful calculation also publishes `_gfcf_negative_cells.csv`, with
+the original value, applied value, delta, exact coordinates, policy, and
+absolute rank of every truncated cell, plus `_gfcf_negative_summary.csv`, with
+totals and cuts by year, investing country, supplying country, and supplying
+sector. These sidecars are staged and byte-validated with the method metadata;
+they are derived from the current calculation rather than the append-only
+anomaly history. A later variable recalculation revalidates and preserves these
+matrix diagnostics; it cannot silently copy a missing or altered sidecar.
 
 ## Rebuild without calculating
 

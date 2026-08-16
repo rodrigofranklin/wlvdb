@@ -9,6 +9,9 @@
 if (!exists("wlv_wiodr_sanitize_negative_gfcf", mode = "function")) {
   source("R/lib/gfcf_contracts.R")
 }
+if (!exists("wlv_gfcf_diagnostic_artifacts", mode = "function")) {
+  source("R/lib/gfcf_diagnostics.R")
+}
 
 ## Distribute capital stock from EUKLEMS data
 
@@ -27,6 +30,11 @@ gfcf_by_country <- wlv_wiodr_sanitize_negative_gfcf(
   method = "wiodr13"
 )
 truncated_gfcf <- attr(gfcf_by_country, "wlv.truncated_negative_gfcf")
+wlv_scientific_diagnostics <- wlv_gfcf_diagnostic_artifacts(
+  truncated_gfcf,
+  method = "wiodr13",
+  input_unit = "usd"
+)
 if (
   nrow(truncated_gfcf) &&
   exists("wlv_contract_runtime", inherits = FALSE)

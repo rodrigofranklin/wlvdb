@@ -89,9 +89,12 @@ nonzero-over-zero coordinate aborts. Result ratios use either
 or `not_applicable` when any zero denominator makes the rate undefined
 (including the WIOD 2013 skill-specific surplus-value rates). The WIOD 2016
 capital allocation keeps its separately tested `0 / 0` aggregate exception.
-The WIOD 2013 exchange-rate calculation replaces an invalid sector rate only
-with the positive finite mean for the same country and year and records every
-replacement under `exchange_country_mean_v1`.
+The standard WIOD exchange-rate calculation uses one ratio of compatible
+national totals for every country-year and broadcasts it to all sectors. An
+invalid national numerator, denominator, or rate aborts; it is never replaced
+with zero or a sector mean. The explicitly versioned `wiodr13v09` and
+`wiodr16v09` methods retain the prior sector calculation solely for historical
+comparability.
 
 ## Checkpoints, diagnostics, and publication
 
@@ -122,6 +125,16 @@ the effective WIOD16 EU KLEMS weight truncations, both WIOD16 capital-stock
 series, and the single Romanian value-added ratio made absolute. Each row keeps
 the pre-transformation value and its exact source coordinates under a dedicated
 versioned policy ID.
+
+Negative-GFCF transformations are additionally published as two calculation-
+specific method sidecars. `_gfcf_negative_cells.csv` preserves each original
+and applied value and their delta; `_gfcf_negative_summary.csv` supplies the
+total and year/country/sector profiles. Unlike `_anomalies.csv`, these files are
+rebuilt by a full calculation and do not accumulate duplicate events across
+recalculations. Because recalculation intentionally does not rerun matrix
+allocation, it reloads both sidecars, revalidates their canonical magnitudes and
+coordinates against the pinned source profile, and republishes them unchanged;
+a missing or altered file requires a full calculation.
 
 The sparse `_states.csv` sidecar persists the semantics of every ordinary `NA`
 in `sea_sectors` and `sea_countries`: each row identifies its artifact,

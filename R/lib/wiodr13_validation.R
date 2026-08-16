@@ -1,3 +1,12 @@
+if (!exists(
+  "wlv_wiodr_analyze_m_io_negative_gfcf",
+  envir = environment(),
+  mode = "function",
+  inherits = FALSE
+)) {
+  sys.source("R/lib/gfcf_contracts.R", envir = environment())
+}
+
 wlv_wiodr13_validate_labels <- function(values, name) {
   if (!is.character(values) || !length(values)) {
     stop(sprintf("`%s` must be a non-empty character vector.", name), call. = FALSE)
@@ -312,6 +321,11 @@ wlv_validate_wiodr13_arrays <- function(
   )
 
   wlv_wiodr13_assert_finite(m_io, "m_io")
+  negative_gfcf <- wlv_wiodr_analyze_m_io_negative_gfcf(
+    m_io,
+    method = "wiodr13",
+    input_unit = "million_usd"
+  )
   sea_missingness <- wlv_wiodr13_assert_sea_missingness(
     sea,
     labels$countries,
@@ -360,6 +374,10 @@ wlv_validate_wiodr13_arrays <- function(
     outputs = labels$outputs,
     dimensions = list(m_io = dim(m_io), sea = dim(sea)),
     non_finite = list(m_io = 0L, sea_nan_or_infinite = 0L),
+    known_negative_gfcf_count = negative_gfcf$signature$count,
+    negative_gfcf_coordinate_md5 = negative_gfcf$signature$coordinate_md5,
+    negative_gfcf_value_md5 = negative_gfcf$signature$value_md5,
+    negative_gfcf_canonical_unit = negative_gfcf$canonical_unit,
     expected_row_na_count = sea_missingness$expected_row_na_count,
     observed_row_na_count = sea_missingness$observed_row_na_count,
     maximum_absolute_gross_output_residual = max(abs(residual))

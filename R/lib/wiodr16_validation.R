@@ -314,6 +314,11 @@ wlv_validate_wiodr16_arrays <- function(
   )
 
   wlv_wiodr13_assert_finite(m_io, "m_io")
+  negative_gfcf <- wlv_wiodr_analyze_m_io_negative_gfcf(
+    m_io,
+    method = "wiodr16",
+    input_unit = "million_usd"
+  )
   sea_missingness <- wlv_wiodr16_assert_sea_missingness(
     sea = sea,
     countries = labels$countries,
@@ -367,6 +372,10 @@ wlv_validate_wiodr16_arrays <- function(
       outputs = labels$outputs,
       raw_variables = raw_variables,
       dimensions = list(m_io = dim(m_io), sea = dim(sea)),
+      known_negative_gfcf_count = negative_gfcf$signature$count,
+      negative_gfcf_coordinate_md5 = negative_gfcf$signature$coordinate_md5,
+      negative_gfcf_value_md5 = negative_gfcf$signature$value_md5,
+      negative_gfcf_canonical_unit = negative_gfcf$canonical_unit,
       known_negative_source_k_count = nrow(negative_source_k),
       known_source_va_exception_count = nrow(source_va_exception),
       maximum_absolute_gross_output_residual = max(abs(residual))

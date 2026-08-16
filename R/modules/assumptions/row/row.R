@@ -80,7 +80,108 @@ for (x in lists$years) {
 # Espelha o índice de preços dos EUA para o resto do mundo
 sea_sectors[,"go_price.r.id",,"ROW"] <- sea_sectors[,"go_price.r.id",,"USA"]
 
+# Reconstrói o estoque de capital do ROW a preços constantes depois de definir
+# tanto o estoque corrente assumido quanto o índice de preços aplicável ao ROW.
+if ("capital_stock.s.cu" %in% dimnames(sea_sectors)[[2L]]) {
+  row_constant_indicators <- c(
+    "capital_stock.s.us", "capital_stock.s.cu", "exchange.r.id",
+    "go_price.r.id"
+  )
+  missing_row_constant_indicators <- setdiff(
+    row_constant_indicators,
+    dimnames(sea_sectors)[[2L]]
+  )
+  if (length(missing_row_constant_indicators)) {
+    stop(
+      sprintf(
+        "ROW constant capital requires indicator(s): %s.",
+        paste(missing_row_constant_indicators, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  if (!exists("wlv_row_constant_capital_stock", mode = "function")) {
+    source("R/lib/row_capital.R")
+  }
+
+  row_current_capital <- matrix(
+    sea_sectors[lists$years, "capital_stock.s.us", lists$sectors, "ROW"],
+    nrow = length(lists$years),
+    ncol = length(lists$sectors),
+    dimnames = list(lists$years, lists$sectors)
+  )
+  row_exchange_index <- matrix(
+    sea_sectors[lists$years, "exchange.r.id", lists$sectors, "ROW"],
+    nrow = length(lists$years),
+    ncol = length(lists$sectors),
+    dimnames = dimnames(row_current_capital)
+  )
+  row_output_price_index <- matrix(
+    sea_sectors[lists$years, "go_price.r.id", lists$sectors, "ROW"],
+    nrow = length(lists$years),
+    ncol = length(lists$sectors),
+    dimnames = dimnames(row_current_capital)
+  )
+  row_constant_capital <- wlv_row_constant_capital_stock(
+    current_stock = row_current_capital,
+    exchange_index = row_exchange_index,
+    output_price_index = row_output_price_index,
+    base_year = "2000",
+    expected_zero_sectors = if (identical(source_version, "wiodr16")) {
+      "M73"
+    } else {
+      NULL
+    }
+  )
+  row_constant_zeroes <- attr(
+    row_constant_capital,
+    "wlv.row_constant_capital_zeroes",
+    exact = TRUE
+  )
+  sea_sectors[
+    lists$years, "capital_stock.s.cu", lists$sectors, "ROW"
+  ] <- row_constant_capital
+  meta_indicators["capital_stock.s.cu", "observation"] <- paste0(
+    meta_indicators["capital_stock.s.cu", "observation"],
+    " For the Rest of the World, the constant series is rebuilt after its ",
+    "current-USD stock is constructed, using the 2000-based exchange-rate ",
+    "index and the 2000=100 gross-output price index."
+  )
+
+  if (
+    nrow(row_constant_zeroes) &&
+    exists("wlv_contract_runtime", inherits = FALSE)
+  ) {
+    if (!exists("wlv_record_observed_transformations", mode = "function")) {
+      source("R/lib/gfcf_contracts.R")
+    }
+    wlv_record_observed_transformations(
+      wlv_contract_runtime,
+      row_constant_zeroes,
+      artifact = "sea_sectors",
+      indicator = "capital_stock.s.cu",
+      checkpoint = "after_assumptions",
+      stage = 1L,
+      module = "row/row.R",
+      coordinate_columns = c(
+        year = "year", country = "country", sector = "sector"
+      )
+    )
+  }
+}
+
 # Clear all variables that will no longer be used
 rm(row_emp_data, emp_row_total, sum_emp_sector, sum_h_emp_sector, sum_va_sector,
    least_developed, x, pre_row, row_position, country_capital, country_hours,
    temp_data, row_hours, reference_capital, reference_hours)
+rm(
+  list = intersect(
+    c(
+      "row_constant_indicators", "missing_row_constant_indicators",
+      "row_current_capital", "row_exchange_index", "row_output_price_index",
+      "row_constant_capital", "row_constant_zeroes"
+    ),
+    ls(envir = environment(), all.names = TRUE)
+  ),
+  envir = environment()
+)

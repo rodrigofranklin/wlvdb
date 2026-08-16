@@ -4,6 +4,10 @@ sys.source(
   envir = preflight_environment
 )
 sys.source(
+  file.path(wlv_test_root, "R", "lib", "gfcf_contracts.R"),
+  envir = preflight_environment
+)
+sys.source(
   file.path(wlv_test_root, "R", "lib", "wiodr13_validation.R"),
   envir = preflight_environment
 )

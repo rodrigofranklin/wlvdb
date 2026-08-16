@@ -1458,7 +1458,22 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         matrices = run_environment$matrices,
         solutions = run_environment$sea_variables,
         sectors = run_environment$sectors,
-        meta_indicators = run_environment$meta_indicators
+        meta_indicators = run_environment$meta_indicators,
+        extra_csv = if (
+          exists(
+            "wlv_scientific_diagnostics",
+            envir = run_environment,
+            inherits = FALSE
+          )
+        ) {
+          get(
+            "wlv_scientific_diagnostics",
+            envir = run_environment,
+            inherits = FALSE
+          )
+        } else {
+          list()
+        }
       )
       wlv_validate_staged_results(
         staging,

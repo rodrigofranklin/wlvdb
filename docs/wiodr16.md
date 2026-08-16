@@ -59,6 +59,15 @@ Every FST array and its `.meta` file are installed together as one transaction.
 Country, sector, row, column and year order are checked before conversion, and
 all WIOT values must be finite.
 
+The standard method estimates one exchange rate for each country-year as
+`sum(VA in local currency) / sum(VA in current USD)`. Its direction is
+local-currency units per current USD (LCU/USD), and the same scalar is broadcast
+to every sector. Missing, non-positive, or non-finite national totals abort;
+there is no zero or sector-mean fallback. The USA total is checked against one
+before canonicalization to exactly `1`, and the unitless exchange-rate index is
+normalized to `2000 = 1`. The explicitly versioned `wiodr16v09` method retains
+the former sector-level formula so historical v0.9 results remain reproducible.
+
 The official SEA workbook contains 112 missing observations in every year:
 all 56 sectors for `CHN` in each of `EMPE` and `H_EMPE`. Preparation checks this
 exact profile and preserves those 1,680 missing values so the source absence
@@ -106,9 +115,27 @@ to WIOD13.
 The allocation also checks all 649 negative `c60` GFCF source cells as one
 exact set before truncating them. The radix-sorted UTF-8 keys
 `year|input|output`, joined by newline, must have MD5
-`5b638a35212f2b91cab933f19a037caa`. Every accepted cell is recorded with its
-original value and coordinates as `truncate_allowlisted_negative_gfcf` under
-`wiodr16_negative_gfcf_v1`; any added, removed, or relocated negative aborts.
+`5b638a35212f2b91cab933f19a037caa`; the corresponding key-plus-magnitude
+profile in canonical million USD must have MD5
+`a3699faded649bb4d62c2f785e930d93`. The pinned profile totals
+`-1,054,512.748621` million USD, led by `USA.E37-E39 -> USA.c60` in 2008 at
+`-76,302.904096` million USD. Every accepted cell is recorded with its original
+value and coordinates as `truncate_allowlisted_negative_gfcf` under
+`wiodr16_negative_gfcf_v1`; any added, removed, relocated, or numerically
+changed negative aborts. The raw WIOD source remains unchanged. Zero is applied
+only to the derived capital-allocation input because that allocator requires
+non-negative weights.
+
+Every successful result publishes `_gfcf_negative_cells.csv`, containing the
+original value, applied value, delta, exact coordinates, policy, and absolute
+rank for all 649 transformations, and `_gfcf_negative_summary.csv`, containing
+totals and cuts by year, investing country, supplying country, and supplying
+sector. Both are generated from the current slice, staged with the result, and
+byte-validated before publication; they are therefore suitable for offline
+preserve-versus-truncate sensitivity work without treating negative flows as
+production allocation weights. A later variable recalculation revalidates their
+canonical magnitudes and coordinates before preserving them, and aborts if
+either sidecar is missing or altered.
 
 Primary EU KLEMS-derived weights have zero total for seven positive-stock
 columns in every year from 2000 through 2014: `MEX.T`, `MEX.U`, `TUR.T`,
@@ -147,6 +174,18 @@ producing 150 fallback decisions. The two actions are recorded respectively as
 `fallback_to_reference_country_capital_intensity` under
 `wiodr16_row_capital_intensity_v1`; a different reference country or sector set
 aborts.
+
+After the current-USD Rest-of-World stock is constructed, its constant-USD
+series is rebuilt as `current stock * exchange-rate index * 100 / gross-output
+price index`. Both indices are explicitly checked at the 2000 base (`1` and
+`100`, respectively), and the reconstructed stock must equal the current stock
+in that year within floating-point tolerance. On the pinned 2000-2014 source,
+all 840 ROW cells are finite and non-negative: 825 are positive and the 15
+economically explicit `M73` cells remain zero. Those zero-preservation events
+are audited as `preserve_zero_row_constant_capital` under
+`wiodr16_row_constant_capital_v1`. This reconstruction applies to the modern
+`wiodr16` and `zerodep_2` flows; `wiodr16v09` deliberately keeps the historical
+`row.old.R` assumption and its structurally absent constant-ROW series.
 
 ## China labour-input supplement
 

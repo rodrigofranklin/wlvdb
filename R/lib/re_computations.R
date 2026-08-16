@@ -133,6 +133,22 @@ write_fst_array(sea_countries, file.path(wlv_result_dir, "sea_countries.fst"))
 # published method sidecar must always describe the complete result arrays.
 sea_variables <- all_sea_variables
 
+# Matrix modules are intentionally not rerun during a variable recalculation.
+# Load and revalidate their calculation-specific scientific diagnostics so a
+# missing, stale, or altered sidecar cannot be copied through staging silently.
+if (source_version %in% c("wiodr13", "wiodr16")) {
+  if (!exists("wlv_wiodr_assert_negative_gfcf_profile", mode = "function")) {
+    source("R/lib/gfcf_contracts.R")
+  }
+  if (!exists("wlv_load_gfcf_diagnostic_artifacts", mode = "function")) {
+    source("R/lib/gfcf_diagnostics.R")
+  }
+  wlv_scientific_diagnostics <- wlv_load_gfcf_diagnostic_artifacts(
+    wlv_existing_result_dir,
+    method = source_version
+  )
+}
+
 # Later-stage recalculations intentionally do not rerun assumptions. Preserve
 # the method description those assumptions produced in the published snapshot;
 # stage 1 recalculations rebuild it by executing the assumptions above.

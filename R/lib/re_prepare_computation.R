@@ -5,7 +5,9 @@ m_io <-
   read_fst_array(lists$m_io_results_files[current_m_io])
 
 m_io_source <- 
-  read_fst_array(lists$m_io_source_files[current_m_io])
+  # Source WIOD matrices are stored in millions of USD. Keep the recalc path
+  # in the same USD unit used by the full-calculation preparation.
+  read_fst_array(lists$m_io_source_files[current_m_io]) * 1000000
 
 print("loaded m_io files")
 

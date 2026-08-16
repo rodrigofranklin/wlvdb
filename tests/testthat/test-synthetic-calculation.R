@@ -401,6 +401,72 @@ test_that("recalculation reads every prior result from its isolated snapshot", {
 
 })
 
+test_that("stage 1 recalculation preserves source-matrix USD indicators", {
+  fixture <- wlv_make_synthetic_calculation_fixture()
+  on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
+
+  solutions_path <- file.path(
+    fixture$root,
+    "parameters", "common_ground", "_common_solutions.csv"
+  )
+  writeLines(
+    c(
+      readLines(solutions_path, warn = FALSE, encoding = "UTF-8"),
+      "exports.s.us;common/exports.s.us.R;sum;4;3",
+      "imports.s.us;common/imports.s.us.R;sum;4;4",
+      "trade_balance.s.us;common/trade_balance.s.us.R;sum;5;5"
+    ),
+    solutions_path,
+    useBytes = TRUE
+  )
+
+  run <- suppressMessages(wlv_run_synthetic_calculation(fixture, workers = 1L))
+  result_dir <- file.path("results", fixture$method)
+  sectors_before <- wlv_read_fixture_array(
+    fixture,
+    result_dir,
+    "sea_sectors.fst"
+  )
+  countries_before <- wlv_read_fixture_array(
+    fixture,
+    result_dir,
+    "sea_countries.fst"
+  )
+
+  expect_no_error(
+    suppressMessages(
+      wlv_recalculate_synthetic_fixture(
+        fixture,
+        runtime = run$runtime,
+        at_stage = 1L,
+        workers = 1L
+      )
+    )
+  )
+
+  sectors_after <- wlv_read_fixture_array(
+    fixture,
+    result_dir,
+    "sea_sectors.fst"
+  )
+  countries_after <- wlv_read_fixture_array(
+    fixture,
+    result_dir,
+    "sea_countries.fst"
+  )
+  source_matrix_indicators <- c(
+    "exports.s.us", "imports.s.us", "trade_balance.s.us"
+  )
+  expect_identical(
+    sectors_after[, source_matrix_indicators, , ],
+    sectors_before[, source_matrix_indicators, , ]
+  )
+  expect_identical(
+    countries_after[, source_matrix_indicators, ],
+    countries_before[, source_matrix_indicators, ]
+  )
+})
+
 test_that("recalculation refreshes solutions and indicator metadata", {
   fixture <- wlv_make_synthetic_calculation_fixture()
   on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
@@ -658,6 +724,14 @@ test_that("method metadata validation detects every missing or stale sidecar", {
       name = "Metric",
       stringsAsFactors = FALSE,
       row.names = "metric"
+    ),
+    extra_csv = list(
+      `_diagnostic.csv` = data.frame(
+        coordinate = "2000|S",
+        original_value = -1,
+        applied_value = 0,
+        stringsAsFactors = FALSE
+      )
     )
   )
   runtime$wlv_write_method_result_metadata(result_dir, metadata)
@@ -683,6 +757,22 @@ test_that("method metadata validation detects every missing or stale sidecar", {
       writeBin(bytes, path)
     })
   }
+  expect_no_error(runtime$wlv_validate_method_result_metadata(result_dir, metadata))
+
+  unexpected_scientific <- file.path(
+    result_dir,
+    "_gfcf_negative_unexpected.csv"
+  )
+  runtime$wlv_write_result_csv(
+    data.frame(value = 1),
+    unexpected_scientific
+  )
+  expect_error(
+    runtime$wlv_validate_method_result_metadata(result_dir, metadata),
+    "unexpected scientific sidecar",
+    fixed = TRUE
+  )
+  unlink(unexpected_scientific)
   expect_no_error(runtime$wlv_validate_method_result_metadata(result_dir, metadata))
 })
 

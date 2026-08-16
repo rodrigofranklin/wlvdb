@@ -1438,8 +1438,128 @@ wlv_row_capital_stock_runtime <- function(
 wlv_exchange_rate_by_country <- function(
     numerator,
     denominator,
+    usa_tolerance = 1e-7) {
+  wlv_assert_conformable_numeric(numerator, denominator)
+  labels <- dimnames(numerator)
+  fully_labelled <-
+    length(dim(numerator)) == 3L &&
+    length(labels) == 3L &&
+    all(vapply(labels, function(value) {
+      !is.null(value) && length(value) > 0L && !anyNA(value) &&
+        all(nzchar(value)) && !anyDuplicated(value)
+    }, logical(1L)))
+  if (!fully_labelled) {
+    stop(
+      "Exchange-rate inputs must be fully labelled year-sector-country arrays.",
+      call. = FALSE
+    )
+  }
+  if (
+    !is.numeric(usa_tolerance) || length(usa_tolerance) != 1L ||
+    is.na(usa_tolerance) || !is.finite(usa_tolerance) || usa_tolerance <= 0
+  ) {
+    stop("`usa_tolerance` must be one positive finite number.", call. = FALSE)
+  }
+  if (
+    any(is.nan(numerator)) || any(is.infinite(numerator)) ||
+    any(is.nan(denominator)) || any(is.infinite(denominator))
+  ) {
+    stop("Exchange-rate inputs contain NaN or infinite values.", call. = FALSE)
+  }
+  years <- labels[[1L]]
+  countries <- labels[[3L]]
+  if (!"USA" %in% countries) {
+    stop("Exchange-rate inputs must contain USA for unit validation.", call. = FALSE)
+  }
+  input_missing <- is.na(numerator) | is.na(denominator)
+  non_row_missing <- input_missing
+  if ("ROW" %in% countries) {
+    non_row_missing[, , countries == "ROW"] <- FALSE
+  }
+  if (any(non_row_missing)) {
+    stop("Exchange-rate inputs are unexpectedly missing outside ROW.", call. = FALSE)
+  }
+
+  value <- array(
+    NA_real_,
+    dim = dim(numerator),
+    dimnames = dimnames(numerator)
+  )
+  rates <- matrix(
+    NA_real_,
+    nrow = length(years),
+    ncol = length(countries),
+    dimnames = list(year = years, country = countries)
+  )
+  for (year_index in seq_along(years)) {
+    for (country_index in seq_along(countries)) {
+      if (countries[[country_index]] == "ROW") {
+        next
+      }
+      numerator_total <- sum(numerator[year_index, , country_index])
+      denominator_total <- sum(denominator[year_index, , country_index])
+      if (!is.finite(numerator_total) || numerator_total <= 0) {
+        stop(
+          sprintf(
+            "Exchange-rate numerator total is not positive and finite for %s in %s.",
+            countries[[country_index]],
+            years[[year_index]]
+          ),
+          call. = FALSE
+        )
+      }
+      if (!is.finite(denominator_total) || denominator_total <= 0) {
+        stop(
+          sprintf(
+            "Exchange-rate denominator total is not positive and finite for %s in %s.",
+            countries[[country_index]],
+            years[[year_index]]
+          ),
+          call. = FALSE
+        )
+      }
+      rate <- numerator_total / denominator_total
+      if (!is.finite(rate) || rate <= 0) {
+        stop(
+          sprintf(
+            "Exchange rate is not positive and finite for %s in %s.",
+            countries[[country_index]],
+            years[[year_index]]
+          ),
+          call. = FALSE
+        )
+      }
+      rates[year_index, country_index] <- rate
+      value[year_index, , country_index] <- rate
+    }
+  }
+
+  usa_rates <- rates[, "USA"]
+  invalid_usa <- abs(usa_rates - 1) > usa_tolerance
+  if (any(invalid_usa)) {
+    failed_year <- years[[which(invalid_usa)[[1L]]]]
+    stop(
+      sprintf(
+        paste0(
+          "USA aggregate exchange rate differs from 1 USD/USD in %s ",
+          "(observed %.17g; tolerance %.17g)."
+        ),
+        failed_year,
+        rates[failed_year, "USA"],
+        usa_tolerance
+      ),
+      call. = FALSE
+    )
+  }
+  value[, , "USA"] <- 1
+  value
+}
+
+wlv_exchange_rate_by_sector_legacy <- function(
+    numerator,
+    denominator,
     runtime = NULL,
-    module = "wiodr13/exchange.r.us.R") {
+    module = "wiodr13/exchange.r.us.v09.R") {
   wlv_assert_conformable_numeric(numerator, denominator)
   if (length(dim(numerator)) != 3L || is.null(dimnames(numerator))) {
     stop("Exchange-rate inputs must be year-sector-country arrays.", call. = FALSE)
@@ -1839,15 +1959,38 @@ wlv_method_result_metadata <- function(
     matrices,
     solutions,
     sectors,
-    meta_indicators) {
+    meta_indicators,
+    extra_csv = list()) {
+  if (
+    !is.list(extra_csv) ||
+    (length(extra_csv) &&
+      (is.null(names(extra_csv)) ||
+        anyNA(names(extra_csv)) ||
+        any(!nzchar(names(extra_csv))) ||
+        anyDuplicated(names(extra_csv)) ||
+        any(basename(names(extra_csv)) != names(extra_csv)) ||
+        any(!endsWith(names(extra_csv), ".csv"))))
+  ) {
+    stop(
+      "Additional method result CSVs must be a uniquely named list of CSV files.",
+      call. = FALSE
+    )
+  }
+  standard_csv <- list(
+    `_parameters.csv` = parameters,
+    `_method_assumptions.csv` = assumptions,
+    `_method_matrices.csv` = matrices,
+    `_method_solutions.csv` = solutions,
+    `_sectors.csv` = sectors
+  )
+  if (length(intersect(names(standard_csv), names(extra_csv)))) {
+    stop(
+      "Additional method result CSVs cannot replace standard metadata.",
+      call. = FALSE
+    )
+  }
   values <- list(
-    csv = list(
-      `_parameters.csv` = parameters,
-      `_method_assumptions.csv` = assumptions,
-      `_method_matrices.csv` = matrices,
-      `_method_solutions.csv` = solutions,
-      `_sectors.csv` = sectors
-    ),
+    csv = c(standard_csv, extra_csv),
     meta_indicators = meta_indicators
   )
   if (any(!vapply(values$csv, is.data.frame, logical(1L))) ||
@@ -1898,6 +2041,24 @@ wlv_validate_method_result_metadata <- function(staging, expected) {
   if (!is.list(expected) || !is.list(expected$csv) ||
       !is.data.frame(expected$meta_indicators)) {
     stop("Invalid expected method result metadata.", call. = FALSE)
+  }
+  staged_scientific_sidecars <- list.files(
+    staging,
+    pattern = "^_gfcf_negative_.*[.]csv$",
+    full.names = FALSE
+  )
+  unexpected_scientific_sidecars <- setdiff(
+    staged_scientific_sidecars,
+    names(expected$csv)
+  )
+  if (length(unexpected_scientific_sidecars)) {
+    stop(
+      sprintf(
+        "Staged method metadata contains unexpected scientific sidecar(s): %s.",
+        paste(unexpected_scientific_sidecars, collapse = ", ")
+      ),
+      call. = FALSE
+    )
   }
   for (name in names(expected$csv)) {
     path <- file.path(staging, name)

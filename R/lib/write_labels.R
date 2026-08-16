@@ -80,6 +80,13 @@ wlv_write_method_result_metadata(
     matrices = matrices,
     solutions = sea_variables,
     sectors = sectors,
-    meta_indicators = meta_indicators
+    meta_indicators = meta_indicators,
+    extra_csv = if (
+      exists("wlv_scientific_diagnostics", inherits = FALSE)
+    ) {
+      wlv_scientific_diagnostics
+    } else {
+      list()
+    }
   )
 )

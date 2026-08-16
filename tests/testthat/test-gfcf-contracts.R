@@ -47,9 +47,27 @@ test_that("WIOD negative-GFCF contracts expose the reviewed exact pins", {
   wiodr16 <- gfcf_contract_environment$wlv_wiodr_negative_gfcf_pin("wiodr16")
 
   expect_identical(wiodr13$count, 24L)
-  expect_identical(wiodr13$md5, "61cfd5d08a9934a703335e14968e5b43")
+  expect_identical(
+    wiodr13$coordinate_md5,
+    "61cfd5d08a9934a703335e14968e5b43"
+  )
+  expect_identical(
+    wiodr13$value_md5,
+    "0287db08451f74a23fe7657cc07e9165"
+  )
   expect_identical(wiodr16$count, 649L)
-  expect_identical(wiodr16$md5, "5b638a35212f2b91cab933f19a037caa")
+  expect_identical(
+    wiodr16$coordinate_md5,
+    "5b638a35212f2b91cab933f19a037caa"
+  )
+  expect_identical(
+    wiodr16$value_md5,
+    "a3699faded649bb4d62c2f785e930d93"
+  )
+  expect_identical(wiodr13$canonical_unit, "million_usd")
+  expect_identical(wiodr16$canonical_unit, "million_usd")
+  expect_identical(wiodr13$demand, "c41")
+  expect_identical(wiodr16$demand, "c60")
   expect_error(
     gfcf_contract_environment$wlv_wiodr_negative_gfcf_pin("other"),
     "Unknown WIOD GFCF contract",
@@ -57,15 +75,25 @@ test_that("WIOD negative-GFCF contracts expose the reviewed exact pins", {
   )
 })
 
-test_that("partial fixtures cannot introduce unpinned negative GFCF", {
+test_that("analysis is immutable and allocation alone applies the zero floor", {
   value <- array(
     c(1, 0),
     dim = c(1L, 2L, 1L),
     dimnames = list("2000", c("A.S1", "A.S2"), "A.c60")
   )
-  result <- gfcf_contract_environment$wlv_wiodr_sanitize_negative_gfcf(
+  original <- value
+  analysis <- gfcf_contract_environment$wlv_wiodr_analyze_negative_gfcf(
     value,
     "wiodr16"
+  )
+  expect_identical(value, original)
+  expect_false(analysis$canonical_scope)
+  expect_identical(nrow(analysis$observations), 0L)
+
+  result <- gfcf_contract_environment$wlv_wiodr_apply_negative_gfcf_policy(
+    value,
+    "wiodr16",
+    input_unit = "million_usd"
   )
   expect_identical(as.numeric(result), c(1, 0))
   expect_identical(
@@ -75,16 +103,25 @@ test_that("partial fixtures cannot introduce unpinned negative GFCF", {
 
   value[[1L]] <- -1
   expect_error(
-    gfcf_contract_environment$wlv_wiodr_sanitize_negative_gfcf(
+    gfcf_contract_environment$wlv_wiodr_analyze_negative_gfcf(
       value,
       "wiodr16"
     ),
     "outside the pinned full source scope",
     fixed = TRUE
   )
+  expect_error(
+    gfcf_contract_environment$wlv_wiodr_apply_negative_gfcf_policy(
+      value,
+      "wiodr16",
+      input_unit = "million_usd"
+    ),
+    "outside the pinned full source scope",
+    fixed = TRUE
+  )
   value[[1L]] <- Inf
   expect_error(
-    gfcf_contract_environment$wlv_wiodr_sanitize_negative_gfcf(
+    gfcf_contract_environment$wlv_wiodr_analyze_negative_gfcf(
       value,
       "wiodr16"
     ),
@@ -93,7 +130,93 @@ test_that("partial fixtures cannot introduce unpinned negative GFCF", {
   )
 })
 
-test_that("prepared WIOD sources match the exact negative-GFCF key sets", {
+test_that("canonical magnitude signatures detect drift at fixed coordinates", {
+  observed <- data.frame(
+    year = c("2000", "2001"),
+    input = c("A.S1", "B.S2"),
+    output = c("A.c60", "B.c60"),
+    value = c(-1500000, -2250000),
+    value_million_usd = c(-1.5, -2.25),
+    stringsAsFactors = FALSE
+  )
+  signature <- gfcf_contract_environment$
+    wlv_wiodr_negative_gfcf_signature(observed)
+  pin <- list(
+    count = signature$count,
+    coordinate_md5 = signature$coordinate_md5,
+    value_md5 = signature$value_md5,
+    canonical_unit = "million_usd"
+  )
+  expect_no_error(
+    gfcf_contract_environment$wlv_wiodr_assert_negative_gfcf_profile(
+      observed,
+      method = "fixture",
+      pin = pin
+    )
+  )
+
+  drifted <- observed
+  drifted$value[[1L]] <- drifted$value[[1L]] * 1.01
+  drifted$value_million_usd[[1L]] <-
+    drifted$value_million_usd[[1L]] * 1.01
+  drifted_signature <- gfcf_contract_environment$
+    wlv_wiodr_negative_gfcf_signature(drifted)
+  expect_identical(
+    drifted_signature$coordinate_md5,
+    signature$coordinate_md5
+  )
+  expect_false(identical(drifted_signature$value_md5, signature$value_md5))
+  expect_error(
+    gfcf_contract_environment$wlv_wiodr_assert_negative_gfcf_profile(
+      drifted,
+      method = "fixture",
+      pin = pin
+    ),
+    "magnitudes differ",
+    fixed = TRUE
+  )
+
+  observed_usd <- gfcf_contract_environment$wlv_wiodr_observe_negative_gfcf(
+    array(
+      observed$value,
+      dim = c(1L, 2L, 1L),
+      dimnames = list("2000", c("A.S1", "B.S2"), "A.c60")
+    ),
+    input_unit = "usd"
+  )
+  expect_equal(observed_usd$value_million_usd, c(-1.5, -2.25))
+})
+
+test_that("WIOD preflight analyzes the GFCF slice before accounting", {
+  wiodr13 <- wlv_make_wiodr13_validation_fixture()
+  wiodr13$demands[[2L]] <- "c41"
+  dimnames(wiodr13$m_io)[[3L]] <- sub(
+    "[.]INV$",
+    ".c41",
+    dimnames(wiodr13$m_io)[[3L]]
+  )
+  expect_error(
+    wlv_validate_wiodr13_fixture(wiodr13),
+    "negative GFCF cannot be accepted outside the pinned full source scope",
+    fixed = TRUE
+  )
+
+  wiodr16 <- wlv_make_wiodr16_validation_fixture()
+  wiodr16$demands[[2L]] <- "c60"
+  dimnames(wiodr16$m_io)[[3L]] <- sub(
+    "[.]c58$",
+    ".c60",
+    dimnames(wiodr16$m_io)[[3L]]
+  )
+  wiodr16$m_io["2000", "A.S1", "A.c60"] <- -1
+  expect_error(
+    wlv_validate_wiodr16_fixture(wiodr16),
+    "negative GFCF cannot be accepted outside the pinned full source scope",
+    fixed = TRUE
+  )
+})
+
+test_that("prepared WIOD sources match exact coordinate and magnitude profiles", {
   paths <- file.path(
     wlv_test_root,
     "source_data",
@@ -114,9 +237,22 @@ test_that("prepared WIOD sources match the exact negative-GFCF key sets", {
       method,
       specifications[[method]]$demand
     )
-    result <- gfcf_contract_environment$wlv_wiodr_sanitize_negative_gfcf(
+    analysis <- gfcf_contract_environment$wlv_wiodr_analyze_negative_gfcf(
       source,
-      method
+      method,
+      input_unit = "million_usd"
+    )
+    expect_true(analysis$canonical_scope)
+    expect_identical(
+      analysis$signature$value_md5,
+      gfcf_contract_environment$wlv_wiodr_negative_gfcf_pin(method)$value_md5
+    )
+    expect_identical(analysis$canonical_unit, "million_usd")
+
+    result <- gfcf_contract_environment$wlv_wiodr_apply_negative_gfcf_policy(
+      source,
+      method,
+      input_unit = "million_usd"
     )
     observed <- attr(result, "wlv.truncated_negative_gfcf")
     expect_identical(nrow(observed), specifications[[method]]$count)
@@ -135,18 +271,49 @@ test_that("prepared WIOD sources match the exact negative-GFCF key sets", {
       "truncate_allowlisted_negative_gfcf"
     )
 
-    drifted <- source
-    first <- which(drifted < 0, arr.ind = TRUE)[1L, ]
-    drifted[first[[1L]], first[[2L]], first[[3L]]] <- 0
+    magnitude_drift <- source
+    first <- which(magnitude_drift < 0, arr.ind = TRUE)[1L, ]
+    magnitude_drift[first[[1L]], first[[2L]], first[[3L]]] <-
+      magnitude_drift[first[[1L]], first[[2L]], first[[3L]]] * 1.01
     expect_error(
-      gfcf_contract_environment$wlv_wiodr_sanitize_negative_gfcf(
-        drifted,
-        method
+      gfcf_contract_environment$wlv_wiodr_analyze_negative_gfcf(
+        magnitude_drift,
+        method,
+        input_unit = "million_usd"
       ),
-      "differs from the pinned set",
+      "magnitudes differ",
       fixed = TRUE
     )
-    rm(source, result, drifted)
+
+    coordinate_drift <- source
+    coordinate_drift[first[[1L]], first[[2L]], first[[3L]]] <- 0
+    expect_error(
+      gfcf_contract_environment$wlv_wiodr_analyze_negative_gfcf(
+        coordinate_drift,
+        method,
+        input_unit = "million_usd"
+      ),
+      "coordinates differ",
+      fixed = TRUE
+    )
+
+    runtime <- source * 1000000
+    runtime_result <- gfcf_contract_environment$
+      wlv_wiodr_apply_negative_gfcf_policy(runtime, method)
+    expect_equal(as.numeric(runtime_result), pmax(as.numeric(runtime), 0))
+    expect_true(all(
+      attr(runtime_result, "wlv.truncated_negative_gfcf")$value < 0
+    ))
+
+    rm(
+      source,
+      analysis,
+      result,
+      magnitude_drift,
+      coordinate_drift,
+      runtime,
+      runtime_result
+    )
     gc()
   }
 })
