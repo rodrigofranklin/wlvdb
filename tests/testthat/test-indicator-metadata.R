@@ -153,6 +153,13 @@ test_that("contracts distinguish constant compensation and percent display", {
       "surplus_value.emp.r.pc", "surplus_value.emp_p.r.pc",
       "surplus_value.empe_p.r.pc"
     ),
+    wiodr13_v2 = c(
+      "surplus_value.empe_hs.r.pc", "surplus_value.empe_ms.r.pc",
+      "surplus_value.empe_ls.r.pc", "surplus_value.empe.r.pc",
+      "appropriated_profit.r.pc", "trade_transfers.p.m.pc",
+      "surplus_value.emp.r.pc", "surplus_value.emp_p.r.pc",
+      "surplus_value.empe_p.r.pc"
+    ),
     wiodr16_v1 = c(
       "surplus_value.empe.r.pc", "appropriated_profit.r.pc",
       "trade_transfers.p.m.pc", "surplus_value.emp.r.pc",

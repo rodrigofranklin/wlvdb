@@ -65,4 +65,3 @@ sea_sectors[,code,,] <-
      rep(times = nums$years) %>%
      newDim(c(nums$sectors, nums$countries, nums$years)) %>%
      aperm(c(3,1,2)))
-
