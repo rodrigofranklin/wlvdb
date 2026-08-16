@@ -235,6 +235,13 @@ test_that("WIOD13 currency and national indices reject meaningless worlds", {
 
   go_world <- wlv_wiodr13_contract_row("go_price.r.id", "country_to_world")
   expect_identical(go_world$strategy, "not_applicable")
+
+  for (indicator in c("compensation.emp.s.cu", "compensation.empe.s.cu")) {
+    country <- wlv_wiodr13_contract_row(indicator, "sector_to_country")
+    world <- wlv_wiodr13_contract_row(indicator, "country_to_world")
+    expect_identical(country$strategy, "sum", info = indicator)
+    expect_identical(world$strategy, "not_applicable", info = indicator)
+  }
 })
 
 test_that("WIOD13 weighted zero totals have an explicit state", {

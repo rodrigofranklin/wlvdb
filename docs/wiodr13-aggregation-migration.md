@@ -18,6 +18,7 @@ normalized source generation.
 | Employee compensation skill shares | Arithmetic mean | Weighted mean by `compensation.empe.s.us` | Same weighting over country totals | A share represents compensation in the skill group divided by total compensation. |
 | Employee hours skill shares | Arithmetic mean | Weighted mean by `hours_worked.empe.s.hr` | Same weighting over country totals | A share represents skill-group hours divided by total employee hours. |
 | `exchange.r.us` | Arithmetic mean | Invariant | Not applicable | LCU/USD is broadcast within a country and currencies are incompatible across countries. |
+| Compensation in local currency | Sum | Sum | Not applicable | Local currencies can be added within one country, but not across countries without conversion to a common currency. |
 | Basket price, exchange and basket value indices | Arithmetic mean | Invariant | Not applicable | Each national index is broadcast to sectors and has no currency-compatible world value. |
 | `go_price.r.id` | Arithmetic mean | Weighted mean by `gross_output.s.us` | Not applicable | A national output-price index needs an economic output weight; national-currency indices are not combined globally. |
 | Complex-labour multiplier, employees | Arithmetic mean | Weighted mean by `hours_worked.empe.s.hr` | Same weighting over country totals | The multiplier transforms employee hours. |
