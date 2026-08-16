@@ -742,6 +742,14 @@ wlv_method_aggregation_registry <- function(plan, method) {
   registry
 }
 
+wlv_method_unit_definitions <- function(plan, method) {
+  contract_id <- method$unit_contract[[1L]]
+  if (!nzchar(contract_id)) {
+    return(NULL)
+  }
+  wlv_catalog_unit_contract(plan$catalog, contract_id)$units
+}
+
 wlv_validate_method_source_manifest <- function(plan, method, artifacts) {
   contract <- wlv_method_unit_contract_paths(plan, method)
   normalized_root <- dirname(artifacts$manifest)
@@ -1630,6 +1638,7 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
   missingness_policy <- wlv_load_run_missingness_policy(plan, method_record)
   aggregation_registry <- plan$aggregation_registries[[method]]
   wlv_validate_aggregation_registry(aggregation_registry)
+  unit_definitions <- wlv_method_unit_definitions(plan, method_record)
   contract_runtime <- wlv_new_contract_runtime(
     method = method,
     source = method_record$source[[1L]],
@@ -1669,7 +1678,8 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
     wlv_missingness_policy = missingness_policy,
     wlv_contract_runtime = contract_runtime,
     wlv_aggregation_registry = aggregation_registry,
-    wlv_aggregation_contract = aggregation_registry$rows
+    wlv_aggregation_contract = aggregation_registry$rows,
+    wlv_unit_definitions = unit_definitions
   )
   script <- file.path(plan$root, "R", "lib", "computations.R")
   if (plan$mode == "recalculate") {
@@ -1689,7 +1699,7 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
           "lib",
           c(
             "functions.R", "missingness.R", "unit_dimensions.R",
-            "aggregation_specs.R",
+            "aggregation_specs.R", "indicator_metadata.R",
             "leontief_diagnostics.R",
             "scientific_validation.R", "result_contracts.R"
           )

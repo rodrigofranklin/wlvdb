@@ -39,12 +39,38 @@ if (file.exists("results/indicators_en.csv")) {
   indicators_en <- rbind(temp_indicators, indicators_en)
 }
 
-# Create meta_indicators file with group, type and reverted attribute
-meta_indicators_panel <- meta_indicators[,c("code", "group", "type", "reverted")]
-names(meta_indicators_panel) <- c("value",	"groups",	"type",	"reverted")
+# Create panel metadata with canonical storage and presentation semantics.
+meta_indicators <- wlv_complete_indicator_metadata(
+  meta_indicators,
+  units = if (exists("wlv_unit_definitions", inherits = FALSE)) {
+    wlv_unit_definitions
+  } else {
+    NULL
+  },
+  warn_legacy = !exists("wlv_unit_definitions", inherits = FALSE)
+)
+meta_indicators_panel <- meta_indicators[, c(
+  "code", "group", "type", "reverted",
+  wlv_indicator_metadata_columns()
+)]
+names(meta_indicators_panel)[1:4] <- c(
+  "value", "groups", "type", "reverted"
+)
 
 if (file.exists("results/meta_indicators.csv")) {
   temp_meta <- read.csv2("results/meta_indicators.csv")
+  if (!all(c("value", "groups", "type", "reverted") %in% names(temp_meta))) {
+    stop(
+      "Legacy panel metadata lacks its required identity columns.",
+      call. = FALSE
+    )
+  }
+  names(temp_meta)[names(temp_meta) == "value"] <- "code"
+  temp_meta <- wlv_complete_indicator_metadata(
+    temp_meta,
+    warn_legacy = TRUE
+  )
+  names(temp_meta)[names(temp_meta) == "code"] <- "value"
   
   # preserve old metadata for which we currently do not have information 
   meta_indicators_panel[meta_indicators_panel$groups |> is.na(), "groups"] <- 
@@ -63,9 +89,11 @@ if (file.exists("results/meta_indicators.csv")) {
             temp_meta$value)]
   
   # merge labels
-  temp_meta <- 
-    temp_meta[
-      temp_meta$value %in% meta_indicators_panel$value |> not(),]
+  temp_meta <- temp_meta[
+    temp_meta$value %in% meta_indicators_panel$value |> not(),
+    names(meta_indicators_panel),
+    drop = FALSE
+  ]
   
   meta_indicators_panel <- rbind(temp_meta, meta_indicators_panel)
 }

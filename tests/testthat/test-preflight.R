@@ -193,6 +193,8 @@ wlv_make_preflight_fixture <- function(
     source_unit = "usd",
     source_scale = "1",
     canonical_unit = "usd",
+    display_unit = "usd",
+    display_multiplier = "1",
     currency = "usd",
     price_basis = "current",
     base_year = "",

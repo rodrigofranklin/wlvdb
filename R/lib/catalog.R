@@ -17,8 +17,8 @@ wlv_catalog_schemas <- list(
   ),
   unit_definitions = c(
     "indicator", "quantity_kind", "source_unit", "source_scale",
-    "canonical_unit", "currency", "price_basis", "base_year", "index_base",
-    "labour_concept", "notes"
+    "canonical_unit", "display_unit", "display_multiplier", "currency",
+    "price_basis", "base_year", "index_base", "labour_concept", "notes"
   ),
   unit_aggregations = c(
     "indicator", "level", "strategy", "module", "numerator",
@@ -573,7 +573,8 @@ wlv_catalog_validate_unit_definitions <- function(value, contract) {
     value,
     c(
       "indicator", "quantity_kind", "source_unit", "source_scale",
-      "canonical_unit", "currency", "price_basis", "labour_concept"
+      "canonical_unit", "display_unit", "display_multiplier", "currency",
+      "price_basis", "labour_concept"
     ),
     name
   )
@@ -585,12 +586,17 @@ wlv_catalog_validate_unit_definitions <- function(value, contract) {
     "quantity_kind",
     name
   )
-  for (column in c("source_unit", "canonical_unit")) {
+  for (column in c("source_unit", "canonical_unit", "display_unit")) {
     wlv_catalog_validate_ids(value[[column]], column, name)
   }
   value$source_scale <- wlv_catalog_parse_positive_numbers(
     value$source_scale,
     "source_scale",
+    name
+  )
+  value$display_multiplier <- wlv_catalog_parse_positive_numbers(
+    value$display_multiplier,
+    "display_multiplier",
     name
   )
   wlv_catalog_validate_enum(
@@ -1533,10 +1539,22 @@ wlv_catalog_unit_contract_sidecar <- function(
     source_unit = units$source_unit,
     source_scale = units$source_scale,
     canonical_unit = units$canonical_unit,
+    display_unit = units$display_unit,
+    display_multiplier = units$display_multiplier,
     currency = units$currency,
     price_basis = units$price_basis,
     base_year = units$base_year,
     index_base = units$index_base,
+    index_base_year = ifelse(
+      units$quantity_kind == "index",
+      units$base_year,
+      NA_character_
+    ),
+    index_storage_base = ifelse(
+      units$quantity_kind == "index",
+      units$index_base,
+      NA_real_
+    ),
     labour_concept = units$labour_concept,
     level = aggregations$level,
     strategy = aggregations$strategy,

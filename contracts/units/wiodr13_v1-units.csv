@@ -1,59 +1,59 @@
-indicator;quantity_kind;source_unit;source_scale;canonical_unit;currency;price_basis;base_year;index_base;labour_concept;notes
-emp.s.un;count;person;1;person;none;not_applicable;;;persons_engaged;The normalized WIOD SEA generation exposes EMP in persons engaged.
-empe.s.un;count;person;1;person;none;not_applicable;;;employees;The normalized WIOD SEA generation exposes EMPE in employees.
-hours_worked.emp.s.hr;duration;hour;1;hour;none;not_applicable;;;hours_persons_engaged;The normalized WIOD SEA generation exposes H_EMP in hours.
-hours_worked.empe.s.hr;duration;hour;1;hour;none;not_applicable;;;hours_employees;The normalized WIOD SEA generation exposes H_EMPE in hours.
-compensation.empe_hs.r.pc;ratio;ratio;1;ratio;none;not_applicable;;;employees;High-skill employee compensation share.
-compensation.empe_ms.r.pc;ratio;ratio;1;ratio;none;not_applicable;;;employees;Medium-skill employee compensation share.
-compensation.empe_ls.r.pc;ratio;ratio;1;ratio;none;not_applicable;;;employees;Low-skill employee compensation share.
-hours_worked.empe_hs.r.pc;ratio;ratio;1;ratio;none;not_applicable;;;hours_employees;High-skill employee hours share.
-hours_worked.empe_ms.r.pc;ratio;ratio;1;ratio;none;not_applicable;;;hours_employees;Medium-skill employee hours share.
-hours_worked.empe_ls.r.pc;ratio;ratio;1;ratio;none;not_applicable;;;hours_employees;Low-skill employee hours share.
-exchange.r.us;ratio;local_currency_per_usd;1;local_currency_per_usd;local_currency;current;;;not_applicable;Direction is local-currency units per current USD.
-compensation.empe.s.us;monetary;usd;1;usd;usd;current;;;employees;
-compensation.emp.s.us;monetary;usd;1;usd;usd;current;;;persons_engaged;
-capital_stock.s.us;monetary;usd;1;usd;usd;current;;;not_applicable;
-gross_output.s.us;monetary;usd;1;usd;usd;current;;;not_applicable;The normalized WIOD SEA generation exposes GO_USD in current USD.
-gdp.s.us;monetary;usd;1;usd;usd;current;;;not_applicable;The normalized WIOD SEA generation exposes VA_USD in current USD.
-surplus_value.empe_hs.r.pc;ratio;ratio;1;ratio;none;not_applicable;;;employees;
-surplus_value.empe_ms.r.pc;ratio;ratio;1;ratio;none;not_applicable;;;employees;
-surplus_value.empe_ls.r.pc;ratio;ratio;1;ratio;none;not_applicable;;;employees;
-compensation.emp.s.cu;monetary;local_currency;1;usd;usd;constant;2000;;persons_engaged;LAB is deflated by the basket index and converted at the 2000 LCU/USD rate, yielding constant-2000 USD.
-compensation.empe.s.cu;monetary;local_currency;1;usd;usd;constant;2000;;employees;COMP is deflated by the basket index and converted at the 2000 LCU/USD rate, yielding constant-2000 USD.
-profit.s.us;monetary;usd;1;usd;usd;current;;;not_applicable;
-basket_price.r.pc;index;price_index;1;index;none;not_applicable;2000;1;not_applicable;Published calculation is normalized to base one despite its legacy display label.
-exchange.r.id;index;exchange_index;1;index;none;not_applicable;2000;1;not_applicable;
-basket_value.r.pc;index;labour_value_index;1;index;none;not_applicable;2000;1;not_applicable;Published calculation is normalized to base one despite its legacy display label.
-go_price.r.id;index;price_index;1;index;none;not_applicable;2000;1;not_applicable;The normalized source price level is rebased to one in 2000.
-abstract_labour.empe.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;none;not_applicable;;;hours_employees;
-abstract_labour.emp.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;none;not_applicable;;;hours_persons_engaged;
-complex_labour_multiplier.empe.r.un;multiplier;multiplier;1;multiplier;none;not_applicable;;;employees;
-complex_labour_multiplier.emp.r.un;multiplier;multiplier;1;multiplier;none;not_applicable;;;persons_engaged;
-gdp.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;none;not_applicable;;;employment;
-gross_output.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;none;not_applicable;;;employment;
-labour_force_value.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;none;not_applicable;;;employees;
-value.m.mv;ratio;abstract_labour_hour_per_usd;1;abstract_labour_hour_per_usd;mixed;current;;;employment;
-gdp.s.du;monetary;usd;1;usd;usd;current;;;employment;
-gross_output.s.du;monetary;usd;1;usd;usd;current;;;employment;
-surplus_value.empe.r.pc;ratio;ratio;1;ratio;none;not_applicable;;;employees;
-capital_depreciation.s.us;monetary;usd;1;usd;usd;current;;;not_applicable;
-labour_force_value.m.mv;ratio;abstract_labour_hour_per_person;1;abstract_labour_hour_per_person;none;not_applicable;;;employees;
-trade_transfers.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;none;not_applicable;;;employment;
-trade_transfers.p.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;none;not_applicable;;;employment;
-trade_transfers.u.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;none;not_applicable;;;employment;
-abstract_labour.empe.m.mv;ratio;abstract_labour_hour_per_person;1;abstract_labour_hour_per_person;none;not_applicable;;;employees;
-abstract_labour.emp.m.mv;ratio;abstract_labour_hour_per_person;1;abstract_labour_hour_per_person;none;not_applicable;;;persons_engaged;
-exports.s.us;monetary;usd;1;usd;usd;current;;;not_applicable;
-exports.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;none;not_applicable;;;employment;
-imports.s.us;monetary;usd;1;usd;usd;current;;;not_applicable;
-imports.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;none;not_applicable;;;employment;
-trade_balance.s.us;monetary;usd;1;usd;usd;current;;;not_applicable;
-trade_balance.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;none;not_applicable;;;employment;
-gdp.p.s.us;monetary;usd;1;usd;usd;current;;;employment;
-appropriated_profit.r.pc;ratio;ratio;1;ratio;none;not_applicable;;;employment;
-trade_transfers.p.m.pc;ratio;ratio;1;ratio;none;not_applicable;;;employment;
-labour_force_value.emp.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;none;not_applicable;;;persons_engaged;
-labour_force_value.emp.m.mv;ratio;abstract_labour_hour_per_person;1;abstract_labour_hour_per_person;none;not_applicable;;;persons_engaged;
-surplus_value.emp.r.pc;ratio;ratio;1;ratio;none;not_applicable;;;persons_engaged;
-surplus_value.emp_p.r.pc;ratio;ratio;1;ratio;none;not_applicable;;;persons_engaged;
-surplus_value.empe_p.r.pc;ratio;ratio;1;ratio;none;not_applicable;;;employees;
+indicator;quantity_kind;source_unit;source_scale;canonical_unit;display_unit;display_multiplier;currency;price_basis;base_year;index_base;labour_concept;notes
+emp.s.un;count;person;1;person;person;1;none;not_applicable;;;persons_engaged;The normalized WIOD SEA generation exposes EMP in persons engaged.
+empe.s.un;count;person;1;person;person;1;none;not_applicable;;;employees;The normalized WIOD SEA generation exposes EMPE in employees.
+hours_worked.emp.s.hr;duration;hour;1;hour;hour;1;none;not_applicable;;;hours_persons_engaged;The normalized WIOD SEA generation exposes H_EMP in hours.
+hours_worked.empe.s.hr;duration;hour;1;hour;hour;1;none;not_applicable;;;hours_employees;The normalized WIOD SEA generation exposes H_EMPE in hours.
+compensation.empe_hs.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employees;High-skill employee compensation share.
+compensation.empe_ms.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employees;Medium-skill employee compensation share.
+compensation.empe_ls.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employees;Low-skill employee compensation share.
+hours_worked.empe_hs.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;hours_employees;High-skill employee hours share.
+hours_worked.empe_ms.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;hours_employees;Medium-skill employee hours share.
+hours_worked.empe_ls.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;hours_employees;Low-skill employee hours share.
+exchange.r.us;ratio;local_currency_per_usd;1;local_currency_per_usd;local_currency_per_usd;1;local_currency;current;;;not_applicable;Direction is local-currency units per current USD.
+compensation.empe.s.us;monetary;usd;1;usd;usd;1;usd;current;;;employees;
+compensation.emp.s.us;monetary;usd;1;usd;usd;1;usd;current;;;persons_engaged;
+capital_stock.s.us;monetary;usd;1;usd;usd;1;usd;current;;;not_applicable;
+gross_output.s.us;monetary;usd;1;usd;usd;1;usd;current;;;not_applicable;The normalized WIOD SEA generation exposes GO_USD in current USD.
+gdp.s.us;monetary;usd;1;usd;usd;1;usd;current;;;not_applicable;The normalized WIOD SEA generation exposes VA_USD in current USD.
+surplus_value.empe_hs.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employees;
+surplus_value.empe_ms.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employees;
+surplus_value.empe_ls.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employees;
+compensation.emp.s.cu;monetary;local_currency;1;local_currency;local_currency;1;local_currency;current;;;persons_engaged;
+compensation.empe.s.cu;monetary;local_currency;1;local_currency;local_currency;1;local_currency;current;;;employees;
+profit.s.us;monetary;usd;1;usd;usd;1;usd;current;;;not_applicable;
+basket_price.r.pc;index;price_index;1;index;index;1;none;not_applicable;2000;1;not_applicable;Published calculation is normalized to base one despite its legacy display label.
+exchange.r.id;index;exchange_index;1;index;index;1;none;not_applicable;2000;1;not_applicable;
+basket_value.r.pc;index;labour_value_index;1;index;index;1;none;not_applicable;2000;1;not_applicable;Published calculation is normalized to base one despite its legacy display label.
+go_price.r.id;index;price_index;1;index;index;1;none;not_applicable;2000;1;not_applicable;The normalized source price level is rebased to one in 2000.
+abstract_labour.empe.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_labour_hour;1;none;not_applicable;;;hours_employees;
+abstract_labour.emp.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_labour_hour;1;none;not_applicable;;;hours_persons_engaged;
+complex_labour_multiplier.empe.r.un;multiplier;multiplier;1;multiplier;multiplier;1;none;not_applicable;;;employees;
+complex_labour_multiplier.emp.r.un;multiplier;multiplier;1;multiplier;multiplier;1;none;not_applicable;;;persons_engaged;
+gdp.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_labour_hour;1;none;not_applicable;;;employment;
+gross_output.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_labour_hour;1;none;not_applicable;;;employment;
+labour_force_value.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_labour_hour;1;none;not_applicable;;;employees;
+value.m.mv;ratio;abstract_labour_hour_per_usd;1;abstract_labour_hour_per_usd;abstract_labour_hour_per_usd;1;mixed;current;;;employment;
+gdp.s.du;monetary;usd;1;usd;usd;1;usd;current;;;employment;
+gross_output.s.du;monetary;usd;1;usd;usd;1;usd;current;;;employment;
+surplus_value.empe.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employees;
+capital_depreciation.s.us;monetary;usd;1;usd;usd;1;usd;current;;;not_applicable;
+labour_force_value.m.mv;ratio;abstract_labour_hour_per_person;1;abstract_labour_hour_per_person;abstract_labour_hour_per_person;1;none;not_applicable;;;employees;
+trade_transfers.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_labour_hour;1;none;not_applicable;;;employment;
+trade_transfers.p.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_labour_hour;1;none;not_applicable;;;employment;
+trade_transfers.u.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_labour_hour;1;none;not_applicable;;;employment;
+abstract_labour.empe.m.mv;ratio;abstract_labour_hour_per_person;1;abstract_labour_hour_per_person;abstract_labour_hour_per_person;1;none;not_applicable;;;employees;
+abstract_labour.emp.m.mv;ratio;abstract_labour_hour_per_person;1;abstract_labour_hour_per_person;abstract_labour_hour_per_person;1;none;not_applicable;;;persons_engaged;
+exports.s.us;monetary;usd;1;usd;usd;1;usd;current;;;not_applicable;
+exports.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_labour_hour;1;none;not_applicable;;;employment;
+imports.s.us;monetary;usd;1;usd;usd;1;usd;current;;;not_applicable;
+imports.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_labour_hour;1;none;not_applicable;;;employment;
+trade_balance.s.us;monetary;usd;1;usd;usd;1;usd;current;;;not_applicable;
+trade_balance.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_labour_hour;1;none;not_applicable;;;employment;
+gdp.p.s.us;monetary;usd;1;usd;usd;1;usd;current;;;employment;
+appropriated_profit.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employment;
+trade_transfers.p.m.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employment;
+labour_force_value.emp.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_labour_hour;1;none;not_applicable;;;persons_engaged;
+labour_force_value.emp.m.mv;ratio;abstract_labour_hour_per_person;1;abstract_labour_hour_per_person;abstract_labour_hour_per_person;1;none;not_applicable;;;persons_engaged;
+surplus_value.emp.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;persons_engaged;
+surplus_value.emp_p.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;persons_engaged;
+surplus_value.empe_p.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employees;
