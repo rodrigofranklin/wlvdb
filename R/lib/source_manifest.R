@@ -65,6 +65,37 @@ wlv_source_file_sha256 <- function(path) {
   )
 }
 
+wlv_source_contract_sha256 <- function(paths) {
+  if (
+    !is.character(paths) || !length(paths) || anyNA(paths) ||
+    any(!nzchar(paths)) || anyDuplicated(paths) ||
+    any(!file.exists(paths)) || any(file.info(paths)$isdir %in% TRUE)
+  ) {
+    stop("`contract_path` must identify unique existing contract files.", call. = FALSE)
+  }
+  normalized <- normalizePath(paths, winslash = "/", mustWork = TRUE)
+  if (length(normalized) == 1L) {
+    return(wlv_source_file_sha256(normalized))
+  }
+  labels <- basename(normalized)
+  if (anyDuplicated(labels)) {
+    labels <- normalized
+  }
+  hashes <- vapply(normalized, wlv_source_file_sha256, character(1))
+  order_index <- order(labels, method = "radix")
+  table <- data.frame(
+    file = labels[order_index],
+    sha256 = hashes[order_index],
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  wlv_source_sha256_raw(wlv_source_table_payload(
+    table,
+    names(table),
+    "wlv-source-contract-v1"
+  ))
+}
+
 wlv_source_validate_text <- function(value, label, allow_empty = FALSE) {
   if (
     !is.character(value) ||
@@ -295,15 +326,7 @@ wlv_build_source_manifest <- function(
   if (length(contract_id) != 1L || length(contract_version) != 1L) {
     stop("Contract ID and version must each be one value.", call. = FALSE)
   }
-  if (
-    !is.character(contract_path) ||
-    length(contract_path) != 1L ||
-    is.na(contract_path) ||
-    !file.exists(contract_path) ||
-    isTRUE(file.info(contract_path)$isdir)
-  ) {
-    stop("`contract_path` must identify an existing contract file.", call. = FALSE)
-  }
+  contract_sha256 <- wlv_source_contract_sha256(contract_path)
 
   paths <- wlv_source_resolve_artifacts(source_root, artifacts)
   records <- lapply(paths, wlv_source_file_record)
@@ -313,7 +336,7 @@ wlv_build_source_manifest <- function(
     source_generation_id = rep("", length(artifacts)),
     contract_id = rep(contract_id, length(artifacts)),
     contract_version = rep(contract_version, length(artifacts)),
-    contract_sha256 = rep(wlv_source_file_sha256(contract_path), length(artifacts)),
+    contract_sha256 = rep(contract_sha256, length(artifacts)),
     artifact = artifacts,
     artifact_role = artifact_roles,
     size_bytes = vapply(records, `[[`, character(1), "size_bytes"),
@@ -467,16 +490,7 @@ wlv_verify_source_manifest <- function(
       stop("Source manifest contract version differs from the configured contract.", call. = FALSE)
     }
   }
-  if (
-    !is.character(contract_path) ||
-    length(contract_path) != 1L ||
-    is.na(contract_path) ||
-    !file.exists(contract_path) ||
-    isTRUE(file.info(contract_path)$isdir)
-  ) {
-    stop("Configured source contract file is missing.", call. = FALSE)
-  }
-  actual_contract_hash <- wlv_source_file_sha256(contract_path)
+  actual_contract_hash <- wlv_source_contract_sha256(contract_path)
   if (!identical(manifest$contract_sha256[[1L]], actual_contract_hash)) {
     stop("Contract SHA-256 mismatch for the source generation.", call. = FALSE)
   }

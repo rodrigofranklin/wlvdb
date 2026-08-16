@@ -401,3 +401,245 @@ wlv_normalize_source <- function(
     contract = contract
   )
 }
+
+wlv_source_normalization_table <- function(contract) {
+  wlv_validate_source_normalization_contract(contract)
+  rbind(
+    data.frame(
+      artifact = "m_io",
+      variable = "*",
+      source_unit = contract$m_io$source_unit,
+      canonical_unit = contract$m_io$canonical_unit,
+      multiplier = format(
+        contract$m_io$multiplier,
+        scientific = FALSE,
+        trim = TRUE,
+        digits = 17L
+      ),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    ),
+    data.frame(
+      artifact = rep("sea", nrow(contract$sea)),
+      variable = contract$sea$variable,
+      source_unit = contract$sea$source_unit,
+      canonical_unit = contract$sea$canonical_unit,
+      multiplier = vapply(
+        contract$sea$multiplier,
+        format,
+        character(1L),
+        scientific = FALSE,
+        trim = TRUE,
+        digits = 17L
+      ),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+  )
+}
+
+wlv_source_write_semicolon_table <- function(value, path) {
+  if (!is.data.frame(value) || !nrow(value) || !dir.exists(dirname(path))) {
+    stop("Cannot write an empty source contract table.", call. = FALSE)
+  }
+  value <- as.data.frame(
+    lapply(value, as.character),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  temporary <- tempfile(
+    pattern = paste0(".", basename(path), "-"),
+    tmpdir = dirname(path),
+    fileext = ".csv"
+  )
+  on.exit(unlink(temporary, force = TRUE), add = TRUE)
+  utils::write.table(
+    value,
+    temporary,
+    sep = ";",
+    row.names = FALSE,
+    col.names = TRUE,
+    quote = TRUE,
+    qmethod = "double",
+    eol = "\n",
+    fileEncoding = "UTF-8"
+  )
+  roundtrip <- utils::read.csv2(
+    temporary,
+    stringsAsFactors = FALSE,
+    colClasses = "character",
+    check.names = FALSE,
+    na.strings = NULL,
+    fileEncoding = "UTF-8"
+  )
+  if (!identical(value, roundtrip)) {
+    stop("Source contract table failed exact UTF-8 round-trip verification.", call. = FALSE)
+  }
+  if (!file.rename(temporary, path)) {
+    stop(sprintf("Could not install source contract table `%s`.", path), call. = FALSE)
+  }
+  invisible(path)
+}
+
+wlv_source_generation_path_is_within <- function(path, parent) {
+  path <- normalizePath(path, winslash = "/", mustWork = FALSE)
+  parent <- normalizePath(parent, winslash = "/", mustWork = TRUE)
+  comparison <- c(path, parent)
+  if (.Platform$OS.type == "windows") {
+    comparison <- tolower(comparison)
+  }
+  startsWith(comparison[[1L]], paste0(sub("/+$", "", comparison[[2L]]), "/"))
+}
+
+wlv_publish_normalized_source <- function(
+    normalized,
+    source_dir,
+    unit_contract_id,
+    unit_contract_version,
+    unit_contract_paths,
+    unit_contract_sidecar,
+    label_files = c("countries.csv", "sectors.csv", "demand.csv"),
+    gfcf_observations = NULL,
+    writer = write_fst_array) {
+  if (
+    !is.list(normalized) ||
+    !all(c("m_io", "sea", "contract") %in% names(normalized)) ||
+    !is.function(writer) ||
+    !dir.exists(source_dir)
+  ) {
+    stop("Invalid normalized source publication request.", call. = FALSE)
+  }
+  contract <- normalized$contract
+  wlv_validate_source_normalization_contract(contract)
+  for (artifact in c("m_io", "sea")) {
+    marker <- wlv_source_normalization_marker(normalized[[artifact]])
+    if (
+      !is.list(marker) || !isTRUE(marker$canonical) ||
+      !identical(marker$contract_id, contract$contract_id) ||
+      !identical(marker$artifact, artifact)
+    ) {
+      stop(sprintf("Normalized `%s` lacks its canonical marker.", artifact), call. = FALSE)
+    }
+  }
+  if (
+    !is.character(unit_contract_id) || length(unit_contract_id) != 1L ||
+    is.na(unit_contract_id) || !nzchar(unit_contract_id) ||
+    !is.character(unit_contract_version) || length(unit_contract_version) != 1L ||
+    is.na(unit_contract_version) || !nzchar(unit_contract_version) ||
+    !is.data.frame(unit_contract_sidecar) || !nrow(unit_contract_sidecar)
+  ) {
+    stop("Invalid unit contract publication metadata.", call. = FALSE)
+  }
+  missing_labels <- label_files[!file.exists(file.path(source_dir, label_files))]
+  if (length(missing_labels)) {
+    stop(
+      sprintf("Normalized source labels are missing: %s.", paste(missing_labels, collapse = ", ")),
+      call. = FALSE
+    )
+  }
+  if (!is.null(gfcf_observations) && !is.data.frame(gfcf_observations)) {
+    stop("`gfcf_observations` must be NULL or a data frame.", call. = FALSE)
+  }
+
+  source_dir <- normalizePath(source_dir, winslash = "/", mustWork = TRUE)
+  staging <- tempfile(".normalized-staging-", tmpdir = source_dir)
+  backup <- tempfile(".normalized-backup-", tmpdir = source_dir)
+  final <- file.path(source_dir, "normalized")
+  safe_paths <- vapply(
+    c(staging, backup, final),
+    wlv_source_generation_path_is_within,
+    logical(1L),
+    parent = source_dir
+  )
+  if (!all(safe_paths) || !startsWith(basename(staging), ".normalized-staging-") ||
+      !startsWith(basename(backup), ".normalized-backup-")) {
+    stop("Refusing to publish normalized data through an unsafe path.", call. = FALSE)
+  }
+  if (!dir.create(staging, recursive = FALSE, showWarnings = FALSE)) {
+    stop("Could not create normalized source staging.", call. = FALSE)
+  }
+  staging_open <- TRUE
+  backup_open <- FALSE
+  on.exit({
+    if (staging_open && dir.exists(staging)) {
+      unlink(staging, recursive = TRUE, force = TRUE)
+    }
+    if (backup_open && dir.exists(backup) && !dir.exists(final)) {
+      file.rename(backup, final)
+    }
+  }, add = TRUE)
+
+  writer(normalized$m_io, file.path(staging, "m_io.fst"))
+  writer(normalized$sea, file.path(staging, "sea.fst"))
+  copied <- file.copy(
+    file.path(source_dir, label_files),
+    file.path(staging, label_files),
+    overwrite = FALSE,
+    copy.mode = TRUE
+  )
+  if (!all(copied)) {
+    stop("Could not stage normalized source labels.", call. = FALSE)
+  }
+  wlv_source_write_semicolon_table(
+    wlv_source_normalization_table(contract),
+    file.path(staging, "_normalization_contract.csv")
+  )
+  wlv_source_write_semicolon_table(
+    unit_contract_sidecar,
+    file.path(staging, "_unit_contract.csv")
+  )
+  if (!is.null(gfcf_observations)) {
+    saveRDS(
+      gfcf_observations,
+      file.path(staging, "_gfcf_canonical.rds"),
+      version = 3L
+    )
+  }
+
+  artifacts <- c(
+    "_normalization_contract.csv", "_unit_contract.csv",
+    label_files,
+    "m_io.fst", "m_io.fst.meta", "sea.fst", "sea.fst.meta"
+  )
+  roles <- c(
+    "normalization_contract", "unit_contract",
+    rep("label", length(label_files)),
+    "input_output", "array_metadata", "socioeconomic", "array_metadata"
+  )
+  if (!is.null(gfcf_observations)) {
+    artifacts <- c(artifacts, "_gfcf_canonical.rds")
+    roles <- c(roles, "raw_gfcf_diagnostic")
+  }
+  manifest <- wlv_build_source_manifest(
+    source_root = staging,
+    artifacts = artifacts,
+    artifact_roles = roles,
+    contract_path = unit_contract_paths,
+    contract_id = unit_contract_id,
+    contract_version = unit_contract_version
+  )
+  wlv_write_source_manifest(manifest, file.path(staging, "_source_manifest.csv"))
+
+  if (dir.exists(final)) {
+    if (!file.rename(final, backup)) {
+      stop("Could not preserve the previous normalized source generation.", call. = FALSE)
+    }
+    backup_open <- TRUE
+  }
+  if (!file.rename(staging, final)) {
+    if (backup_open) {
+      file.rename(backup, final)
+      backup_open <- FALSE
+    }
+    stop("Could not install the normalized source generation.", call. = FALSE)
+  }
+  staging_open <- FALSE
+  if (backup_open) {
+    unlink(backup, recursive = TRUE, force = TRUE)
+    if (dir.exists(backup)) {
+      warning("Normalized source published, but its previous backup remains.", call. = FALSE)
+    }
+    backup_open <- FALSE
+  }
+  invisible(manifest)
+}
