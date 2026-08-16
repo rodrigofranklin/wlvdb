@@ -24,6 +24,11 @@ scale of `1`. `index_base` records the value actually published in the base
 year; this intentionally exposes the current WIOD13 base-one and WIOD16
 gross-output-price base-100 conventions.
 
+The historical `.cu` suffix on `compensation.emp.s.cu` and
+`compensation.empe.s.cu` does not mean local-currency storage. Their modules
+deflate the local-currency numerator and convert it with the 2000 exchange
+rate, so the canonical result is additive constant-2000 USD.
+
 Every successful calculation or recalculation writes `_unit_contract.csv` in
 the method result directory. The sidecar is an ordered, effective expansion of
 the selected contract: contract and schema identifiers, unit semantics and one

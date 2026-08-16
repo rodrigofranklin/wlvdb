@@ -9,8 +9,8 @@ compensation.emp.s.us;monetary;usd;1;usd;usd;current;;;persons_engaged;
 capital_stock.s.us;monetary;usd;1;usd;usd;current;;;not_applicable;
 gross_output.s.us;monetary;million_usd;1000000;usd;usd;current;;;not_applicable;WIOD SEA GO_USD is reported in millions of current USD.
 gdp.s.us;monetary;million_usd;1000000;usd;usd;current;;;not_applicable;WIOD SEA VA_USD is reported in millions of current USD.
-compensation.emp.s.cu;monetary;local_currency;1;local_currency;local_currency;current;;;persons_engaged;
-compensation.empe.s.cu;monetary;local_currency;1;local_currency;local_currency;current;;;employees;
+compensation.emp.s.cu;monetary;local_currency;1;usd;usd;constant;2000;;persons_engaged;LAB is deflated by the basket index and converted at the 2000 LCU/USD rate, yielding constant-2000 USD.
+compensation.empe.s.cu;monetary;local_currency;1;usd;usd;constant;2000;;employees;COMP is deflated by the basket index and converted at the 2000 LCU/USD rate, yielding constant-2000 USD.
 profit.s.us;monetary;usd;1;usd;usd;current;;;not_applicable;
 capital_stock.s.cu;monetary;usd;1;usd;usd;constant;2000;;not_applicable;Constant USD at 2000 prices.
 basket_price.r.pc;index;price_index;1;index;none;not_applicable;2000;1;not_applicable;Published calculation is normalized to base one despite its legacy display label.

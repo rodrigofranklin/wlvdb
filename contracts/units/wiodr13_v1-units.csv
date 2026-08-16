@@ -18,8 +18,8 @@ gdp.s.us;monetary;million_usd;1000000;usd;usd;current;;;not_applicable;WIOD SEA 
 surplus_value.empe_hs.r.pc;ratio;ratio;1;ratio;none;not_applicable;;;employees;
 surplus_value.empe_ms.r.pc;ratio;ratio;1;ratio;none;not_applicable;;;employees;
 surplus_value.empe_ls.r.pc;ratio;ratio;1;ratio;none;not_applicable;;;employees;
-compensation.emp.s.cu;monetary;local_currency;1;local_currency;local_currency;current;;;persons_engaged;
-compensation.empe.s.cu;monetary;local_currency;1;local_currency;local_currency;current;;;employees;
+compensation.emp.s.cu;monetary;local_currency;1;usd;usd;constant;2000;;persons_engaged;LAB is deflated by the basket index and converted at the 2000 LCU/USD rate, yielding constant-2000 USD.
+compensation.empe.s.cu;monetary;local_currency;1;usd;usd;constant;2000;;employees;COMP is deflated by the basket index and converted at the 2000 LCU/USD rate, yielding constant-2000 USD.
 profit.s.us;monetary;usd;1;usd;usd;current;;;not_applicable;
 basket_price.r.pc;index;price_index;1;index;none;not_applicable;2000;1;not_applicable;Published calculation is normalized to base one despite its legacy display label.
 exchange.r.id;index;exchange_index;1;index;none;not_applicable;2000;1;not_applicable;
