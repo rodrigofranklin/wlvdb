@@ -85,6 +85,22 @@ m_countries <-
 # sea_sectors -> vectors of results per sector
 sea_sectors_temp <- 
   read_fst_array(file.path(wlv_existing_result_dir, "sea_sectors.fst"))
+removed_indicators <- setdiff(
+  dimnames(sea_sectors_temp)[[2L]],
+  lists$sea_variables
+)
+if (length(removed_indicators)) {
+  stop(
+    sprintf(
+      paste0(
+        "Cannot recalculate after removing published indicator(s): %s. ",
+        "Run a full calculation to migrate the result schema."
+      ),
+      paste(removed_indicators, collapse = ", ")
+    ),
+    call. = FALSE
+  )
+}
 sea_sectors[,names(sea_sectors_temp[1,,1,1]),,] <- sea_sectors_temp
 
 # sea_countries -> vectors of results per country
@@ -140,7 +156,7 @@ if (exists("sea_countries_temp", inherits = FALSE)) {
 rm(list = intersect(
   c(
     "meta_indicators_path", "missing_indicators", "additions",
-    "persisted_sea_countries"
+    "persisted_sea_countries", "removed_indicators"
   ),
   ls(envir = environment(), all.names = TRUE)
 ), envir = environment())

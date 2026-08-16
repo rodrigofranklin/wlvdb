@@ -143,3 +143,69 @@ test_that("invariant and not-applicable rules preserve their semantics", {
     fixed = TRUE
   )
 })
+
+test_that("selective recalculation normalizes only selected price indices", {
+  normalize <- function(sea_vars = NULL, expose_selection = TRUE) {
+    environment <- new.env(parent = globalenv())
+    sys.source(
+      file.path(wlv_test_root, "R", "lib", "functions.R"),
+      envir = environment
+    )
+    environment$`%>%` <- magrittr::`%>%`
+    environment$nums <- list(years = 2L, sectors = 1L, countries = 1L)
+    environment$sea_sectors <- array(
+      NA_real_,
+      dim = c(2L, 2L, 1L, 1L),
+      dimnames = list(
+        year = c("2000", "2001"),
+        indicator = c("basket_price.r.pc", "go_price.r.id"),
+        sector = "S1",
+        country = "A"
+      )
+    )
+    environment$sea_sectors[, "basket_price.r.pc", , ] <- c(2, 4)
+    environment$sea_sectors[, "go_price.r.id", , ] <- c(5, 10)
+    if (expose_selection) {
+      environment$sea_vars <- sea_vars
+    }
+    sys.source(
+      file.path(
+        wlv_test_root,
+        "R", "modules", "variables", "wiodr13",
+        "normalize_price_indices.R"
+      ),
+      envir = environment
+    )
+    environment$sea_sectors
+  }
+
+  untouched <- normalize("unrelated.metric")
+  expect_identical(
+    as.numeric(untouched[, "basket_price.r.pc", , ]),
+    c(2, 4)
+  )
+  expect_identical(
+    as.numeric(untouched[, "go_price.r.id", , ]),
+    c(5, 10)
+  )
+
+  basket_only <- normalize("basket_price.r.pc")
+  expect_identical(
+    as.numeric(basket_only[, "basket_price.r.pc", , ]),
+    c(1, 2)
+  )
+  expect_identical(
+    as.numeric(basket_only[, "go_price.r.id", , ]),
+    c(5, 10)
+  )
+
+  all_indices <- normalize(expose_selection = FALSE)
+  expect_identical(
+    as.numeric(all_indices[, "basket_price.r.pc", , ]),
+    c(1, 2)
+  )
+  expect_identical(
+    as.numeric(all_indices[, "go_price.r.id", , ]),
+    c(1, 2)
+  )
+})

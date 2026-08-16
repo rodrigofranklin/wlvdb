@@ -276,6 +276,67 @@ wlv_validate_method_references <- function(root, method, source, mode) {
   groups
 }
 
+wlv_validate_recalculation_selection <- function(
+    configuration,
+    at_stage,
+    sea_vars) {
+  if (is.null(sea_vars)) {
+    return(invisible(NULL))
+  }
+
+  for (method in names(configuration)) {
+    solutions <- configuration[[method]]$solutions
+    unknown <- setdiff(sea_vars, solutions$names)
+    if (length(unknown)) {
+      stop(
+        sprintf(
+          "Unknown `sea_vars` for method `%s`: %s.",
+          method,
+          paste(unknown, collapse = ", ")
+        ),
+        call. = FALSE
+      )
+    }
+
+    selected <- match(sea_vars, solutions$names)
+    stages <- suppressWarnings(as.integer(as.character(
+      solutions$stage[selected]
+    )))
+    if (anyNA(stages)) {
+      stop(
+        sprintf(
+          "Method `%s` has invalid stages for selected `sea_vars`.",
+          method
+        ),
+        call. = FALSE
+      )
+    }
+    unavailable <- stages < at_stage
+    if (any(unavailable)) {
+      details <- paste0(
+        sea_vars[unavailable],
+        " (stage ",
+        stages[unavailable],
+        ")"
+      )
+      stop(
+        sprintf(
+          paste0(
+            "Selected `sea_vars` cannot be recalculated from checkpoint ",
+            "stage %d for method `%s`: %s."
+          ),
+          at_stage,
+          method,
+          paste(details, collapse = ", ")
+        ),
+        call. = FALSE
+      )
+    }
+  }
+
+  invisible(sea_vars)
+}
+
 wlv_validate_request <- function(
     methods,
     repeat_pp = FALSE,
@@ -324,8 +385,16 @@ wlv_validate_request <- function(
         call. = FALSE
       )
     }
-    if (!is.null(sea_vars) && (!is.character(sea_vars) || anyNA(sea_vars))) {
-      stop("`sea_vars` must be NULL or a character vector without NA.", call. = FALSE)
+    if (!is.null(sea_vars) &&
+        (!is.character(sea_vars) || !length(sea_vars) || anyNA(sea_vars) ||
+          any(!nzchar(sea_vars)))) {
+      stop(
+        paste0(
+          "`sea_vars` must be NULL or a non-empty character vector ",
+          "without NA or empty values."
+        ),
+        call. = FALSE
+      )
     }
     if (at_stage == 1L && !is.null(sea_vars)) {
       stop(
@@ -336,6 +405,7 @@ wlv_validate_request <- function(
         call. = FALSE
       )
     }
+    sea_vars <- unique(sea_vars)
   }
 
   root <- normalizePath(root, mustWork = TRUE)
@@ -449,6 +519,13 @@ wlv_validate_request <- function(
     )
   })
   names(configuration) <- method_plan$method
+  if (mode == "recalculate") {
+    wlv_validate_recalculation_selection(
+      configuration,
+      at_stage = at_stage,
+      sea_vars = sea_vars
+    )
+  }
 
   paper_script <- file.path(root, "R", "utils", "papers", sprintf("paper_%s_selection.R", papern))
   if (prepaper && !file.exists(paper_script)) {

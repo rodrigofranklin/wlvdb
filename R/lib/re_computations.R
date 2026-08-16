@@ -21,7 +21,38 @@ source("R/lib/filters_io.R")
 
 all_sea_variables <- sea_variables
 if (!is.null(sea_vars)) {
+  unknown_sea_vars <- setdiff(sea_vars, sea_variables$names)
+  if (length(unknown_sea_vars)) {
+    stop(
+      sprintf(
+        "Selective recalculation matched no configured indicator(s): %s.",
+        paste(unknown_sea_vars, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  selected_stages <- sea_variables$stage[match(sea_vars, sea_variables$names)]
+  unavailable_sea_vars <- sea_vars[selected_stages < at_stage]
+  if (length(unavailable_sea_vars)) {
+    stop(
+      sprintf(
+        paste0(
+          "Selective recalculation cannot execute indicator(s) before ",
+          "checkpoint stage %d: %s."
+        ),
+        at_stage,
+        paste(unavailable_sea_vars, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
   sea_variables <- sea_variables[sea_variables$names %in% sea_vars,]
+  if (!nrow(sea_variables)) {
+    stop(
+      "Selective recalculation resolved to an empty indicator set.",
+      call. = FALSE
+    )
+  }
 }
 
 # preliminary variables computations

@@ -415,6 +415,67 @@ test_that("stage-1 recalculation cannot select a partial indicator set", {
   ))
 })
 
+test_that("selective recalculation rejects unknown and unavailable indicators", {
+  fixture <- wlv_make_preflight_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+
+  expect_error(
+    wlv_fixture_request(
+      fixture,
+      mode = "recalculate",
+      at_stage = 4L,
+      sea_vars = "fixture_typo"
+    ),
+    "Unknown `sea_vars` for method `demo`: fixture_typo",
+    fixed = TRUE
+  )
+  expect_error(
+    wlv_fixture_request(
+      fixture,
+      mode = "recalculate",
+      at_stage = 4L,
+      sea_vars = "fixture_value"
+    ),
+    "fixture_value (stage 1)",
+    fixed = TRUE
+  )
+
+  solutions_path <- file.path(
+    fixture$root,
+    "parameters",
+    fixture$source,
+    "_source_solutions.csv"
+  )
+  solutions <- utils::read.csv2(solutions_path, stringsAsFactors = FALSE)
+  solutions$stage <- 4L
+  utils::write.table(
+    solutions,
+    solutions_path,
+    sep = ";",
+    row.names = FALSE,
+    col.names = TRUE,
+    quote = FALSE
+  )
+
+  plan <- wlv_fixture_request(
+    fixture,
+    mode = "recalculate",
+    at_stage = 4L,
+    sea_vars = c("fixture_value", "fixture_value")
+  )
+  expect_identical(plan$sea_vars, "fixture_value")
+  expect_error(
+    wlv_fixture_request(
+      fixture,
+      mode = "recalculate",
+      at_stage = 5L,
+      sea_vars = "fixture_value"
+    ),
+    "fixture_value (stage 4)",
+    fixed = TRUE
+  )
+})
+
 test_that("recalculation rejects checkpoints that are not implemented", {
   fixture <- wlv_make_preflight_fixture()
   on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)

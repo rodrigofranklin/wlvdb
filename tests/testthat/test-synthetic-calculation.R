@@ -365,6 +365,106 @@ test_that("recalculation repairs a selected result and preserves the others", {
   )
 })
 
+test_that("selective recalculation rejects no-op indicator requests", {
+  fixture <- wlv_make_synthetic_calculation_fixture()
+  on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
+  run <- suppressMessages(wlv_run_synthetic_calculation(fixture, workers = 1L))
+
+  expect_error(
+    suppressMessages(
+      wlv_recalculate_synthetic_fixture(
+        fixture,
+        runtime = run$runtime,
+        at_stage = 5L,
+        sea_vars = "typo.metric",
+        workers = 1L
+      )
+    ),
+    "Unknown `sea_vars` for method `synthetic`: typo.metric",
+    fixed = TRUE
+  )
+  expect_error(
+    suppressMessages(
+      wlv_recalculate_synthetic_fixture(
+        fixture,
+        runtime = run$runtime,
+        at_stage = 5L,
+        sea_vars = "price.marker",
+        workers = 1L
+      )
+    ),
+    "price.marker (stage 0)",
+    fixed = TRUE
+  )
+})
+
+test_that("recalculation rejects result-schema contraction explicitly", {
+  fixture <- wlv_make_synthetic_calculation_fixture()
+  on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
+  run <- suppressMessages(wlv_run_synthetic_calculation(fixture, workers = 1L))
+
+  result_file <- file.path(
+    fixture$root,
+    "results",
+    fixture$method,
+    "sea_sectors.fst"
+  )
+  result_before <- readBin(
+    result_file,
+    what = "raw",
+    n = file.info(result_file)$size
+  )
+  solutions_path <- file.path(
+    fixture$root,
+    "parameters",
+    "common_ground",
+    "_common_solutions.csv"
+  )
+  solutions <- utils::read.csv2(
+    solutions_path,
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  solutions <- solutions[
+    solutions$names != "gross_output.s.mv",
+    ,
+    drop = FALSE
+  ]
+  utils::write.table(
+    solutions,
+    solutions_path,
+    sep = ";",
+    row.names = FALSE,
+    col.names = TRUE,
+    quote = FALSE,
+    fileEncoding = "UTF-8"
+  )
+
+  expect_error(
+    suppressMessages(
+      wlv_recalculate_synthetic_fixture(
+        fixture,
+        runtime = run$runtime,
+        at_stage = 5L,
+        workers = 1L
+      )
+    ),
+    paste0(
+      "Cannot recalculate after removing published indicator(s): ",
+      "gross_output.s.mv"
+    ),
+    fixed = TRUE
+  )
+  expect_identical(
+    readBin(
+      result_file,
+      what = "raw",
+      n = file.info(result_file)$size
+    ),
+    result_before
+  )
+})
+
 test_that("the fixture inputs and outputs stay outside the checkout", {
   fixture <- wlv_make_synthetic_calculation_fixture()
   on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
