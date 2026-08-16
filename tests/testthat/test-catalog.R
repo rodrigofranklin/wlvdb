@@ -102,6 +102,8 @@ wlv_make_catalog_fixture <- function() {
     source_unit = "usd",
     source_scale = "1",
     canonical_unit = "usd",
+    display_unit = "usd",
+    display_multiplier = "1",
     currency = "usd",
     price_basis = "current",
     base_year = "",
@@ -242,10 +244,10 @@ test_that("repository catalog classifies every method and source explicitly", {
     catalog$sources$missingness_policy[catalog$sources$status == "stable"],
     c("wiodr13_v1", "wiodr16_v1")
   )
-  expect_equal(nrow(catalog$unit_contracts), 3L)
+  expect_equal(nrow(catalog$unit_contracts), 4L)
   expect_setequal(
     catalog$sources$unit_contract[catalog$sources$status == "stable"],
-    c("wiodr13_units_v2", "wiodr16_units_v1")
+    c("wiodr13_units_v2", "wiodr16_units_v2")
   )
 })
 
@@ -718,7 +720,8 @@ test_that("stable unit contracts have deterministic exact coverage", {
   expected <- c(
     wiodr13_units_v1 = 58L,
     wiodr13_units_v2 = 58L,
-    wiodr16_units_v1 = 50L
+    wiodr16_units_v1 = 50L,
+    wiodr16_units_v2 = 50L
   )
 
   for (contract in names(expected)) {

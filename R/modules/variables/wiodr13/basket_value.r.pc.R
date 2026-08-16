@@ -28,10 +28,6 @@ if (!exists("basket_value_zero")) {
     colSums(na.rm = TRUE)
 }
 
-# This module is shared by both WIOD releases. WIOD13 stores the input price
-# index at base one, while the pre-v2 WIOD16 contract still stores base 100.
-go_price_storage_base <- if (identical(source_version, "wiodr16")) 100 else 1
-
 sea_sectors[lists$years,code,,] <- 
   # Replica a distribuição da cesta do período Zero para todos os anos
   ((basket_zero %>%
@@ -40,7 +36,7 @@ sea_sectors[lists$years,code,,] <-
       aperm(c(3,1,2))) *
      
      # Aplica a inflação em moeda nacional
-     (((sea_sectors[lists$years,"go_price.r.id",,] / go_price_storage_base) /
+     ((sea_sectors[lists$years,"go_price.r.id",,] /
          # Dividido pelo índice de variação cambial
          sea_sectors[lists$years,"exchange.r.id",,]) %>%
         rep(times = nums$input) %>%
@@ -60,7 +56,6 @@ sea_sectors[lists$years,code,,] <-
      rep(times = nums$years) %>%
      newDim(c(nums$sectors, nums$countries, nums$years)) %>%
      aperm(c(3,1,2)))
-
 # Ano base = 2000
 sea_sectors[,code,,] <-
   sea_sectors[,code,,] /
@@ -69,4 +64,3 @@ sea_sectors[,code,,] <-
      newDim(c(nums$sectors, nums$countries, nums$years)) %>%
      aperm(c(3,1,2)))
 
-rm(go_price_storage_base)
