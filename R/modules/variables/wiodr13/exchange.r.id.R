@@ -1,14 +1,15 @@
 # Exchange rate index from Value Added in local currency and USD
 code <- "exchange.r.id"
 
-meta_indicators[code,"name"] <- "Exchange rate index (2000 = 1)"
+meta_indicators[code,"name"] <- "Exchange rate index"
 meta_indicators[code,"description"] <-
   paste0("Unitless index of the local-currency-per-current-USD exchange rate, ",
          "normalized to 1 in 2000.")
 meta_indicators[code,"observation"] <-
   paste0("Calculated as the current country-year exchange rate (LCU/USD) ",
          "divided by that country's 2000 exchange rate. The ROW index mirrors ",
-         "the USA index.")
+         "the USA index. The presentation scale is defined by method-specific ",
+         "unit metadata.")
 meta_indicators[code,"type"] <- "index"
 meta_indicators[code,"group"] <- "Others"
 meta_indicators[code,"reverted"] <- FALSE

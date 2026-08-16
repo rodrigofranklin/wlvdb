@@ -14,6 +14,7 @@ provenance pin that selection.
 | Average value (`value.m.mv`) | Summed even though it is a ratio | `sum(gross_output.s.mv) / sum(gross_output.s.us)` at each level | No display scaling |
 | Employee complexity multiplier | Sector and country arithmetic means | Weighted by employee hours | No display scaling |
 | Persons-engaged complexity multiplier | Sector and country arithmetic means | Weighted by persons-engaged hours | No display scaling |
+| Percentage rates | Stored as unitless ratios | Stored as unitless ratios | Multiply by 100 and label as percent |
 
 The asymmetric golden fixture makes these choices observable. For sector values
 `1, 3` with output weights `10, 30`, the national price is `2.5`, not the simple
@@ -30,11 +31,22 @@ This is numerically equivalent to the old formula that multiplied by 100 and
 divided by a base-100 price index. The scale factor has moved out of scientific
 storage and into presentation metadata, so it cannot be applied twice.
 
+The `.cu` suffix on the two compensation indicators denotes the historical
+constant-price series, not an output in current local currency. Their modules
+deflate current local-currency compensation by the basket index and divide by
+the base-year LCU/USD exchange rate. The WIOD13 and WIOD16 contracts therefore
+declare the result as constant 2000 USD, which remains additive across
+countries. This is a metadata correction across affected v1 and v2
+declarations; it does not rescale the stored series.
+
 ## Compatibility
 
 New results persist `canonical_unit`, `display_unit`, `display_multiplier`,
 `index_base_year`, and `index_storage_base` in indicator metadata, and repeat
-the same semantics in `_unit_contract.csv`.
+the same semantics in `_unit_contract.csv`. These fields are method-specific;
+the shared `results/meta_indicators.csv` intentionally retains its legacy
+four-column schema so running one source cannot overwrite another source's
+display scale for the same indicator code.
 
 An archived `meta_indicators.RDS` that predates these fields remains readable.
 The compatibility reader emits a warning and supplies

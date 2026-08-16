@@ -18,6 +18,24 @@ test_that("the synthetic fixture completes the real calculation pipeline", {
     "_unit_contract.csv", "_source_provenance.csv"
   )
   expect_true(all(file.exists(file.path(fixture$root, result_path, expected_files))))
+  method_metadata <- readRDS(
+    file.path(fixture$root, result_path, "meta_indicators.RDS")
+  )
+  expect_true(all(
+    c(
+      "canonical_unit", "display_unit", "display_multiplier",
+      "index_base_year", "index_storage_base"
+    ) %in% names(method_metadata)
+  ))
+  panel_metadata <- utils::read.csv2(
+    file.path(fixture$root, "results", "meta_indicators.csv"),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  expect_identical(
+    names(panel_metadata),
+    c("value", "groups", "type", "reverted")
+  )
   anomaly_report <- utils::read.csv2(
     file.path(fixture$root, result_path, "_anomalies.csv"),
     stringsAsFactors = FALSE

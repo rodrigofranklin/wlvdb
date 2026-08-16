@@ -1,13 +1,15 @@
 # labour_compensation in constant dollars of 2000
 code <- "basket_price.r.pc"
 
-meta_indicators[code,"name"] <- "Consumption basket price index (2000 = 1)"
+meta_indicators[code,"name"] <- "Consumption basket price index"
 meta_indicators[code,"description"] <- 
   paste0("Consumption basket price index reflects changes in the prices for ",
          "average worker of acquiring a fixed basket of goods and services. ",
          "The Laspeyres formula is used.")
-meta_indicators[code,"observation"] <-
-  "Calculated and published on the canonical base-one scale."
+meta_indicators[code,"observation"] <- paste0(
+  "Stored canonically with 2000 = 1; the presentation scale is defined by ",
+  "the method-specific unit metadata."
+)
 meta_indicators[code,"type"] <- "index"
 meta_indicators[code,"group"] <- "Others"
 meta_indicators[code,"reverted"] <- FALSE

@@ -1,14 +1,15 @@
 # Legacy sector-level exchange-rate index retained for v0.9 methods
 code <- "exchange.r.id"
 
-meta_indicators[code, "name"] <- "Exchange rate index (2000 = 1)"
+meta_indicators[code, "name"] <- "Exchange rate index"
 meta_indicators[code, "description"] <-
   paste0("Unitless index of the legacy sector-level local-currency-per-current-",
          "USD exchange rate, normalized to 1 in 2000.")
 meta_indicators[code, "observation"] <-
   paste0("Calculated for each sector as its current implicit VA exchange rate ",
          "divided by its 2000 implicit VA exchange rate. The ROW index mirrors ",
-         "the USA index.")
+         "the USA index. The presentation scale is defined by method-specific ",
+         "unit metadata.")
 meta_indicators[code, "type"] <- "index"
 meta_indicators[code, "group"] <- "Others"
 meta_indicators[code, "reverted"] <- FALSE

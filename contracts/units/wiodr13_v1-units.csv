@@ -15,11 +15,11 @@ compensation.emp.s.us;monetary;usd;1;usd;usd;1;usd;current;;;persons_engaged;
 capital_stock.s.us;monetary;usd;1;usd;usd;1;usd;current;;;not_applicable;
 gross_output.s.us;monetary;usd;1;usd;usd;1;usd;current;;;not_applicable;The normalized WIOD SEA generation exposes GO_USD in current USD.
 gdp.s.us;monetary;usd;1;usd;usd;1;usd;current;;;not_applicable;The normalized WIOD SEA generation exposes VA_USD in current USD.
-surplus_value.empe_hs.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employees;
-surplus_value.empe_ms.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employees;
-surplus_value.empe_ls.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employees;
-compensation.emp.s.cu;monetary;local_currency;1;local_currency;local_currency;1;local_currency;current;;;persons_engaged;
-compensation.empe.s.cu;monetary;local_currency;1;local_currency;local_currency;1;local_currency;current;;;employees;
+surplus_value.empe_hs.r.pc;ratio;ratio;1;ratio;percent;100;none;not_applicable;;;employees;
+surplus_value.empe_ms.r.pc;ratio;ratio;1;ratio;percent;100;none;not_applicable;;;employees;
+surplus_value.empe_ls.r.pc;ratio;ratio;1;ratio;percent;100;none;not_applicable;;;employees;
+compensation.emp.s.cu;monetary;usd;1;usd;usd;1;usd;constant;2000;;persons_engaged;Calculated from current local-currency labour compensation by deflating with the basket index and converting at the 2000 LCU/USD rate.
+compensation.empe.s.cu;monetary;usd;1;usd;usd;1;usd;constant;2000;;employees;Calculated from current local-currency employee compensation by deflating with the basket index and converting at the 2000 LCU/USD rate.
 profit.s.us;monetary;usd;1;usd;usd;1;usd;current;;;not_applicable;
 basket_price.r.pc;index;price_index;1;index;index;1;none;not_applicable;2000;1;not_applicable;Published calculation is normalized to base one despite its legacy display label.
 exchange.r.id;index;exchange_index;1;index;index;1;none;not_applicable;2000;1;not_applicable;
@@ -35,7 +35,7 @@ labour_force_value.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour
 value.m.mv;ratio;abstract_labour_hour_per_usd;1;abstract_labour_hour_per_usd;abstract_labour_hour_per_usd;1;mixed;current;;;employment;
 gdp.s.du;monetary;usd;1;usd;usd;1;usd;current;;;employment;
 gross_output.s.du;monetary;usd;1;usd;usd;1;usd;current;;;employment;
-surplus_value.empe.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employees;
+surplus_value.empe.r.pc;ratio;ratio;1;ratio;percent;100;none;not_applicable;;;employees;
 capital_depreciation.s.us;monetary;usd;1;usd;usd;1;usd;current;;;not_applicable;
 labour_force_value.m.mv;ratio;abstract_labour_hour_per_person;1;abstract_labour_hour_per_person;abstract_labour_hour_per_person;1;none;not_applicable;;;employees;
 trade_transfers.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_labour_hour;1;none;not_applicable;;;employment;
@@ -50,10 +50,10 @@ imports.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_l
 trade_balance.s.us;monetary;usd;1;usd;usd;1;usd;current;;;not_applicable;
 trade_balance.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_labour_hour;1;none;not_applicable;;;employment;
 gdp.p.s.us;monetary;usd;1;usd;usd;1;usd;current;;;employment;
-appropriated_profit.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employment;
-trade_transfers.p.m.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employment;
+appropriated_profit.r.pc;ratio;ratio;1;ratio;percent;100;none;not_applicable;;;employment;
+trade_transfers.p.m.pc;ratio;ratio;1;ratio;percent;100;none;not_applicable;;;employment;
 labour_force_value.emp.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_labour_hour;1;none;not_applicable;;;persons_engaged;
 labour_force_value.emp.m.mv;ratio;abstract_labour_hour_per_person;1;abstract_labour_hour_per_person;abstract_labour_hour_per_person;1;none;not_applicable;;;persons_engaged;
-surplus_value.emp.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;persons_engaged;
-surplus_value.emp_p.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;persons_engaged;
-surplus_value.empe_p.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employees;
+surplus_value.emp.r.pc;ratio;ratio;1;ratio;percent;100;none;not_applicable;;;persons_engaged;
+surplus_value.emp_p.r.pc;ratio;ratio;1;ratio;percent;100;none;not_applicable;;;persons_engaged;
+surplus_value.empe_p.r.pc;ratio;ratio;1;ratio;percent;100;none;not_applicable;;;employees;

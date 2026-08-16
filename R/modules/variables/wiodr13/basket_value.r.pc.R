@@ -1,14 +1,16 @@
 # Índice de valores da cesta de consumo
 code <- "basket_value.r.pc"
 
-meta_indicators[code,"name"] <- "Consumption basket value index (2000 = 1)"
+meta_indicators[code,"name"] <- "Consumption basket value index"
 meta_indicators[code,"description"] <- 
   paste0("Consumption basket value index reflects changes in the socially ",
          "necessary labour-time to produce a fixed consumption basket ",
          "necessary for reproduction of an avarage worker. The Laspeyres ",
          "formula is used.")
-meta_indicators[code,"observation"] <-
-  "Calculated and published on the canonical base-one scale."
+meta_indicators[code,"observation"] <- paste0(
+  "Stored canonically with 2000 = 1; the presentation scale is defined by ",
+  "the method-specific unit metadata."
+)
 meta_indicators[code,"type"] <- "index"
 meta_indicators[code,"group"] <- "Others"
 meta_indicators[code,"reverted"] <- FALSE

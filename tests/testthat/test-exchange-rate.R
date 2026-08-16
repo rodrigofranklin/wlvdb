@@ -264,9 +264,14 @@ test_that("exchange modules publish direction, units and a base-one index", {
   )
   expect_identical(
     metadata["exchange.r.id", "name"],
-    "Exchange rate index (2000 = 1)"
+    "Exchange rate index"
   )
   expect_match(metadata["exchange.r.id", "description"], "Unitless", fixed = TRUE)
+  expect_match(
+    metadata["exchange.r.id", "observation"],
+    "The presentation scale is defined by method-specific unit metadata",
+    fixed = TRUE
+  )
   expect_identical(
     as.numeric(module_environment$sea_sectors["2000", "exchange.r.id", , ]),
     rep(1, 9L)
