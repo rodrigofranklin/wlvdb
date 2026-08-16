@@ -500,6 +500,147 @@ test_that("experimental legacy aggregation requires opt-in and warns", {
   expect_true(registry$legacy)
 })
 
+test_that("experimental registries ignore available typed aggregations", {
+  solutions <- data.frame(
+    names = c("target", "numerator", "denominator"),
+    country_solution = c("mean", "sum", "sum"),
+    stringsAsFactors = FALSE
+  )
+  registry <- NULL
+  expect_warning(
+    registry <- aggregation_spec_environment$wlv_resolve_aggregation_registry(
+      wlv_aggregation_contract_test_rows(),
+      solutions,
+      method = "experimental_demo",
+      stable = FALSE,
+      allow_legacy = TRUE
+    ),
+    "adapted legacy aggregations",
+    fixed = TRUE
+  )
+  target <- aggregation_spec_environment$wlv_aggregation_registry_binding(
+    registry,
+    "target",
+    "sector_to_country"
+  )
+  expect_identical(target$contract_strategy, "mean")
+  expect_identical(target$spec$strategy, "legacy_mean")
+  expect_identical(target$numerator, "")
+  expect_identical(target$denominator, "")
+  expect_true(all(aggregation_spec_environment$
+    wlv_aggregation_registry_legacy_flags(registry)))
+})
+
+test_that("stable registry rows exactly match published sidecar rows", {
+  solutions <- data.frame(
+    names = c("target", "numerator", "denominator"),
+    country_solution = c("mean", "sum", "sum"),
+    stringsAsFactors = FALSE
+  )
+  registry <- aggregation_spec_environment$wlv_resolve_aggregation_registry(
+    wlv_aggregation_contract_test_rows(),
+    solutions,
+    method = "stable_demo",
+    stable = TRUE
+  )
+  sidecar <- registry$rows
+  names(sidecar)[names(sidecar) == "notes"] <- "aggregation_notes"
+  persisted_path <- tempfile("wlv-stable-sidecar-", fileext = ".csv")
+  reference_path <- tempfile("wlv-stable-sidecar-reference-", fileext = ".csv")
+  on.exit(unlink(c(persisted_path, reference_path)), add = TRUE)
+  for (path in c(persisted_path, reference_path)) {
+    utils::write.csv2(
+      sidecar,
+      path,
+      row.names = FALSE,
+      na = "",
+      fileEncoding = "UTF-8"
+    )
+  }
+  read_raw <- function(path) {
+    readBin(path, what = "raw", n = file.info(path)$size)
+  }
+  expect_identical(read_raw(persisted_path), read_raw(reference_path))
+  persisted <- utils::read.csv2(
+    persisted_path,
+    stringsAsFactors = FALSE,
+    colClasses = "character",
+    check.names = FALSE,
+    na.strings = NULL
+  )
+  routes <- aggregation_spec_environment$
+    wlv_reconcile_aggregation_registry_sidecar(registry, persisted, TRUE)
+  expected <- as.data.frame(
+    lapply(
+      registry$rows[
+        aggregation_spec_environment$wlv_aggregation_contract_columns()
+      ],
+      as.character
+    ),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  expect_identical(routes$typed, expected)
+  expect_equal(nrow(routes$legacy), 0L)
+
+  corrupted <- sidecar
+  corrupted$strategy[[1L]] <- "sum"
+  expect_error(
+    aggregation_spec_environment$wlv_reconcile_aggregation_registry_sidecar(
+      registry,
+      corrupted,
+      TRUE
+    ),
+    "must exactly equal",
+    fixed = TRUE
+  )
+})
+
+test_that("experimental sidecars omit only whole legacy indicators", {
+  solutions <- data.frame(
+    names = c("target", "numerator", "denominator"),
+    country_solution = c("mean", "sum", "sum"),
+    stringsAsFactors = FALSE
+  )
+  registry <- suppressWarnings(
+    aggregation_spec_environment$wlv_resolve_aggregation_registry(
+      wlv_aggregation_contract_test_rows(),
+      solutions,
+      method = "experimental_demo",
+      stable = FALSE,
+      allow_legacy = TRUE
+    )
+  )
+  sidecar <- registry$rows[registry$rows$indicator != "target", ]
+  names(sidecar)[names(sidecar) == "notes"] <- "aggregation_notes"
+  routes <- aggregation_spec_environment$
+    wlv_reconcile_aggregation_registry_sidecar(registry, sidecar, FALSE)
+  expect_equal(nrow(routes$published), 4L)
+  expect_equal(nrow(routes$typed), 0L)
+  expected <- as.data.frame(
+    lapply(
+      registry$rows[
+        aggregation_spec_environment$wlv_aggregation_contract_columns()
+      ],
+      as.character
+    ),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  expect_identical(routes$legacy, expected)
+
+  partial <- sidecar[-1L, , drop = FALSE]
+  expect_error(
+    aggregation_spec_environment$wlv_reconcile_aggregation_registry_sidecar(
+      registry,
+      partial,
+      FALSE
+    ),
+    "exactly equal",
+    fixed = TRUE
+  )
+})
+
 test_that("self-referenced ratios and weights share one named input", {
   row <- data.frame(
     indicator = "ratio",

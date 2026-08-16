@@ -726,7 +726,8 @@ wlv_scientific_validate_result_arrays <- function(
     sea_countries,
     m_countries,
     solutions,
-    aggregations) {
+    aggregations,
+    legacy_aggregations = NULL) {
   rows <- list(
     wlv_scientific_structure_check(sea_sectors, 4L, method, "sea_sectors"),
     wlv_scientific_structure_check(sea_countries, 3L, method, "sea_countries"),
@@ -781,40 +782,93 @@ wlv_scientific_validate_result_arrays <- function(
     "indicator", "level", "strategy", "module", "numerator",
     "denominator", "weight", "zero_denominator"
   )
-  aggregation_keys <- if (is.data.frame(aggregations) &&
-      all(aggregation_columns %in% names(aggregations))) {
-    paste(aggregations$indicator, aggregations$level, sep = "/")
-  } else {
-    character()
+  if (is.null(legacy_aggregations)) {
+    legacy_aggregations <- data.frame(
+      indicator = character(),
+      level = character(),
+      strategy = character(),
+      module = character(),
+      numerator = character(),
+      denominator = character(),
+      weight = character(),
+      zero_denominator = character(),
+      stringsAsFactors = FALSE
+    )
   }
-  valid_aggregations <-
-    is.data.frame(aggregations) &&
-    all(aggregation_columns %in% names(aggregations)) &&
-    !anyNA(aggregations[aggregation_columns]) &&
-    !anyDuplicated(aggregation_keys) &&
-    setequal(unique(aggregations$indicator), sector_indicators) &&
+  valid_row_set <- function(value) {
+    is.data.frame(value) &&
+      all(aggregation_columns %in% names(value)) &&
+      !anyNA(value[aggregation_columns])
+  }
+  if (!valid_row_set(aggregations) || !valid_row_set(legacy_aggregations)) {
+    wlv_abort_scientific_validation(
+      method,
+      "aggregation_contract",
+      "published_metadata",
+      reason = paste0(
+        "aggregation routes do not contain complete operational columns"
+      )
+    )
+  }
+  aggregations <- aggregations[aggregation_columns]
+  legacy_aggregations <- legacy_aggregations[aggregation_columns]
+  aggregation_keys <- paste(
+    aggregations$indicator,
+    aggregations$level,
+    sep = "/"
+  )
+  legacy_keys <- paste(
+    legacy_aggregations$indicator,
+    legacy_aggregations$level,
+    sep = "/"
+  )
+  combined_aggregations <- rbind(aggregations, legacy_aggregations)
+  combined_keys <- c(aggregation_keys, legacy_keys)
+  valid_coverage <-
+    !anyDuplicated(combined_keys) &&
+    setequal(unique(combined_aggregations$indicator), sector_indicators) &&
     all(table(factor(
-      aggregations$indicator,
+      combined_aggregations$indicator,
       levels = sector_indicators
     )) == 2L) &&
     all(vapply(
-      split(aggregations$level, aggregations$indicator),
+      split(
+        combined_aggregations$level,
+        combined_aggregations$indicator
+      ),
       setequal,
       logical(1L),
       c("sector_to_country", "country_to_world")
     ))
-  if (!valid_aggregations) {
+  routes <- c(
+    rep("typed", nrow(aggregations)),
+    rep("legacy", nrow(legacy_aggregations))
+  )
+  consistent_routes <- all(vapply(
+    split(routes, combined_aggregations$indicator),
+    function(route) length(unique(route)) == 1L,
+    logical(1L)
+  ))
+  supported <- c(
+    "sum", "mean", "ratio_of_sums", "weighted_mean", "invariant",
+    "not_applicable", "formula"
+  )
+  valid_strategies <-
+    all(aggregations$strategy %in% supported) &&
+    all(legacy_aggregations$strategy %in% c("sum", "mean", "formula"))
+  if (!valid_coverage || !consistent_routes || !valid_strategies) {
     wlv_abort_scientific_validation(
       method,
       "aggregation_contract",
-      "_unit_contract.csv",
+      "published_metadata",
       reason = paste0(
-        "typed aggregation rows do not cover every published indicator and level"
+        "typed and legacy routes must be disjoint, supported and cover both ",
+        "levels of every published indicator"
       )
     )
   }
   references <- unlist(
-    aggregations[c("numerator", "denominator", "weight")],
+    combined_aggregations[c("numerator", "denominator", "weight")],
     use.names = FALSE
   )
   references <- as.character(references)
@@ -832,22 +886,39 @@ wlv_scientific_validate_result_arrays <- function(
     "aggregation_contract",
     "_unit_contract.csv",
     observations = nrow(aggregations),
-    detail = "Typed aggregation rows cover both levels of every indicator."
+    detail = paste0(
+      "Persisted typed aggregation rows are distinct from any legacy adapter ",
+      "route."
+    )
   )
+  if (nrow(legacy_aggregations)) {
+    rows[[length(rows) + 1L]] <- wlv_scientific_check_row(
+      method,
+      "aggregation_legacy_adapter",
+      "_method_solutions.csv",
+      observations = nrow(legacy_aggregations),
+      detail = paste0(
+        "Experimental legacy rows are independently recomputed without being ",
+        "classified as typed unit-contract aggregations."
+      )
+    )
+  }
 
   for (indicator in sector_indicators) {
     country_row <- wlv_scientific_aggregation_row(
-      aggregations,
+      combined_aggregations,
       indicator,
       "sector_to_country",
       method
     )
     world_row <- wlv_scientific_aggregation_row(
-      aggregations,
+      combined_aggregations,
       indicator,
       "country_to_world",
       method
     )
+    legacy_route <- paste(indicator, "sector_to_country", sep = "/") %in%
+      legacy_keys
     country_formula <- identical(
       as.character(country_row$strategy[[1L]]),
       "formula"
@@ -911,10 +982,15 @@ wlv_scientific_validate_result_arrays <- function(
       check_id = "sector_to_country",
       artifact = "sea_countries",
       indicator = indicator,
-      scope = country_strategy,
-      detail = sprintf(
-        "Independent `%s` reference aggregation over sectors.",
+      scope = if (legacy_route) {
+        paste("legacy_adapter", country_strategy, sep = ":")
+      } else {
         country_strategy
+      },
+      detail = sprintf(
+        "Independent `%s` reference aggregation over sectors (%s route).",
+        country_strategy,
+        if (legacy_route) "legacy adapter" else "typed contract"
       )
     )
     if (country_strategy %in% c("sum", "mean")) {
@@ -947,10 +1023,15 @@ wlv_scientific_validate_result_arrays <- function(
       check_id = "country_to_world",
       artifact = "sea_countries",
       indicator = indicator,
-      scope = world_strategy,
-      detail = sprintf(
-        "Independent `%s` reference aggregation over countries.",
+      scope = if (legacy_route) {
+        paste("legacy_adapter", world_strategy, sep = ":")
+      } else {
         world_strategy
+      },
+      detail = sprintf(
+        "Independent `%s` reference aggregation over countries (%s route).",
+        world_strategy,
+        if (legacy_route) "legacy adapter" else "typed contract"
       )
     )
     if (world_strategy %in% c("sum", "mean")) {

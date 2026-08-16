@@ -1730,7 +1730,8 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
           require_exact = identical(
             method_record$status[[1L]],
             "stable"
-          )
+          ),
+          resolved_aggregations = aggregation_registry$rows
         )
         wlv_write_result_csv(
           effective_unit_contract,
@@ -1770,7 +1771,11 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         mode = plan$mode,
         runtime = contract_runtime,
         expected_metadata = expected_metadata,
-        aggregations = aggregation_registry$rows,
+        aggregation_registry = aggregation_registry,
+        stable_aggregations = identical(
+          method_record$status[[1L]],
+          "stable"
+        ),
         at_stage = if (plan$mode == "recalculate") plan$at_stage else NULL,
         reader = run_environment$read_fst_array
       )

@@ -2763,7 +2763,8 @@ wlv_validate_staged_results <- function(
     mode,
     runtime,
     expected_metadata,
-    aggregations,
+    aggregation_registry,
+    stable_aggregations,
     at_stage = NULL,
     reader = read_fst_array) {
   if (!is.function(reader)) {
@@ -2798,13 +2799,42 @@ wlv_validate_staged_results <- function(
   wlv_validate_sea_countries_contract(runtime, sea_countries, "post_roundtrip")
   m_countries <- reader(file.path(staging, "m_countries.fst"))
   wlv_validate_m_countries_contract(runtime, m_countries, "post_roundtrip")
+  unit_contract_path <- file.path(staging, "_unit_contract.csv")
+  persisted_unit_contract <- if (file.exists(unit_contract_path)) {
+    tryCatch(
+      utils::read.csv2(
+        unit_contract_path,
+        stringsAsFactors = FALSE,
+        colClasses = "character",
+        check.names = FALSE,
+        na.strings = NULL
+      ),
+      error = function(error) {
+        stop(
+          sprintf(
+            "Cannot read staged `_unit_contract.csv`: %s",
+            conditionMessage(error)
+          ),
+          call. = FALSE
+        )
+      }
+    )
+  } else {
+    NULL
+  }
+  aggregation_routes <- wlv_reconcile_aggregation_registry_sidecar(
+    aggregation_registry,
+    persisted_unit_contract,
+    stable = stable_aggregations
+  )
   scientific_check_parts <- list(wlv_scientific_validate_result_arrays(
     method = method,
     sea_sectors = sea_sectors,
     sea_countries = sea_countries,
     m_countries = m_countries,
     solutions = solutions,
-    aggregations = aggregations
+    aggregations = aggregation_routes$typed,
+    legacy_aggregations = aggregation_routes$legacy
   ))
   scientific_io_years <- character()
 

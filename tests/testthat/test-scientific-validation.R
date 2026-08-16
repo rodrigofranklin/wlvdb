@@ -270,6 +270,45 @@ test_that("typed scientific aggregation is an independent reference", {
   )
 })
 
+test_that("legacy scientific routes stay distinct from typed sidecar rows", {
+  values <- wlv_scientific_test_arrays()
+  checks <- scientific_validation_environment$
+    wlv_scientific_validate_result_arrays(
+      values$method,
+      values$sea_sectors,
+      values$sea_countries,
+      values$m_countries,
+      values$solutions,
+      values$aggregations[FALSE, , drop = FALSE],
+      legacy_aggregations = values$aggregations
+    )
+  contract_check <- checks$check_id == "aggregation_contract"
+  legacy_check <- checks$check_id == "aggregation_legacy_adapter"
+  expect_identical(checks$observations[contract_check], 0L)
+  expect_identical(
+    checks$observations[legacy_check],
+    as.integer(nrow(values$aggregations))
+  )
+  routed <- checks$check_id %in% c("sector_to_country", "country_to_world")
+  expect_true(all(startsWith(checks$scope[routed], "legacy_adapter:")))
+
+  unsupported <- values$aggregations
+  unsupported$strategy[[1L]] <- "ratio_of_sums"
+  expect_error(
+    scientific_validation_environment$wlv_scientific_validate_result_arrays(
+      values$method,
+      values$sea_sectors,
+      values$sea_countries,
+      values$m_countries,
+      values$solutions,
+      values$aggregations[FALSE, , drop = FALSE],
+      legacy_aggregations = unsupported
+    ),
+    "typed and legacy routes",
+    fixed = TRUE
+  )
+})
+
 test_that("ranges are method-specific and zero depreciation is exact", {
   expect_equal(
     nrow(scientific_validation_environment$wlv_scientific_range_rules("demo")),

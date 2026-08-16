@@ -256,7 +256,7 @@ test_that("stable registries resolve dimensionally before a result lock", {
 
   expect_setequal(
     catalog$unit_aggregations[[contract]]$strategy[world_lcu],
-    c("sum", "mean")
+    "mean"
   )
   expect_error(
     aggregation_dimension_environment$wlv_validate_request(

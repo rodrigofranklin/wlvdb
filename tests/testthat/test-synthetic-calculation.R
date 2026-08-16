@@ -586,6 +586,16 @@ test_that("recalculation refreshes solutions and indicator metadata", {
     stringsAsFactors = FALSE
   )
   metadata <- readRDS(file.path(result_dir, "meta_indicators.RDS"))
+  unit_contract <- utils::read.csv2(
+    file.path(result_dir, "_unit_contract.csv"),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  scientific_checks <- utils::read.csv2(
+    file.path(result_dir, "_scientific_checks.csv"),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
   sea_sectors <- wlv_read_fixture_array(
     fixture,
     "results", fixture$method, "sea_sectors.fst"
@@ -593,6 +603,20 @@ test_that("recalculation refreshes solutions and indicator metadata", {
   expect_true("new.metric" %in% solutions$names)
   expect_true("new.metric" %in% metadata$code)
   expect_true(all(sea_sectors[, "new.metric", , ] == 1))
+  expect_false("new.metric" %in% unit_contract$indicator)
+  new_metric_checks <- scientific_checks[
+    scientific_checks$indicator == "new.metric" &
+      scientific_checks$check_id %in% c(
+        "sector_to_country", "country_to_world"
+      ),
+    ,
+    drop = FALSE
+  ]
+  expect_setequal(
+    new_metric_checks$check_id,
+    c("sector_to_country", "country_to_world")
+  )
+  expect_true(all(new_metric_checks$scope == "legacy_adapter:sum"))
 })
 
 test_that("result locks reject concurrent runs and are safely reusable", {

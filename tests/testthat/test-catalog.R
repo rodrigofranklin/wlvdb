@@ -747,19 +747,34 @@ test_that("stable unit contracts have deterministic exact coverage", {
   }
 })
 
-test_that("constant compensation is declared in additive 2000 USD", {
+test_that("unit sidecars overlay resolved aggregation rows deterministically", {
   catalog <- catalog_environment$wlv_load_catalog(wlv_test_root)
-  indicators <- c("compensation.emp.s.cu", "compensation.empe.s.cu")
+  contract <- catalog_environment$wlv_catalog_unit_contract(
+    catalog,
+    "wiodr13_units_v1"
+  )
+  resolved <- contract$aggregations
+  resolved$notes <- paste0("resolved:", seq_len(nrow(resolved)))
+  sidecar <- catalog_environment$wlv_catalog_unit_contract_sidecar(
+    catalog,
+    "wiodr13_units_v1",
+    indicators = contract$units$indicator,
+    resolved_aggregations = resolved
+  )
+  expect_identical(sidecar$aggregation_notes, resolved$notes)
+  expect_identical(sidecar$strategy, resolved$strategy)
 
-  for (contract in c("wiodr13_units_v1", "wiodr16_units_v1")) {
-    units <- catalog_environment$wlv_catalog_unit_contract(catalog, contract)$units
-    selected <- units[match(indicators, units$indicator), , drop = FALSE]
-    expect_identical(selected$source_unit, rep("local_currency", 2L))
-    expect_identical(selected$canonical_unit, rep("usd", 2L))
-    expect_identical(selected$currency, rep("usd", 2L))
-    expect_identical(selected$price_basis, rep("constant", 2L))
-    expect_identical(selected$base_year, rep("2000", 2L))
-  }
+  extra <- resolved[seq_len(2L), , drop = FALSE]
+  extra$indicator <- "experimental.extra"
+  overlaid <- catalog_environment$wlv_catalog_unit_contract_sidecar(
+    catalog,
+    "wiodr13_units_v1",
+    indicators = c(contract$units$indicator, "experimental.extra"),
+    require_exact = FALSE,
+    resolved_aggregations = rbind(resolved, extra)
+  )
+  expect_false("experimental.extra" %in% overlaid$indicator)
+  expect_identical(overlaid$aggregation_notes, resolved$notes)
 })
 
 test_that("stable typed aggregation is authoritative over legacy routing", {

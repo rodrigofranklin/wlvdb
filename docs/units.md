@@ -38,11 +38,12 @@ country value produced later by a `formula` module; such a contract fails the
 registry preflight instead of silently reading an uncomputed value.
 
 Stable methods require a complete, valid typed contract and never infer missing
-rows from legacy parameter strings. Experimental methods may use the legacy
-adapter only with explicit experimental opt-in, and every adapted binding is
-reported in a warning. Existing schema-v1 WIOD contracts use `sum`, `mean`, and
+rows from legacy parameter strings. Experimental methods always use their
+historical `country_solution` route, even when their source has typed rows;
+this requires explicit experimental opt-in and reports every adapted binding
+in a warning. Existing schema-v1 stable WIOD contracts use `sum`, `mean`, and
 `formula`, so this runtime migration preserves their numerical output. Changing
-a row to one of the other strategies is a separately reviewed numerical
+a stable row to one of the other strategies is a separately reviewed numerical
 migration.
 
 Canonical units are also mapped to symbolic dimensions (`USD`, country-scoped
@@ -73,9 +74,13 @@ rate, so the canonical result is additive constant-2000 USD.
 Every successful calculation or recalculation writes `_unit_contract.csv` in
 the method result directory. The sidecar is an ordered, effective expansion of
 the selected contract: contract and schema identifiers, unit semantics and one
-row for each aggregation level. It is staged and byte-compared with the rest
-of the result metadata, so stale or missing contract metadata prevents
-publication.
+row for each aggregation level. Its aggregation fields are overlaid from the
+registry actually executed. Stable registry rows must equal those published
+rows exactly. Experimental indicators without unit definitions remain on the
+warned legacy route and are omitted from this sidecar; the independent
+scientific checks still recompute them from `_method_solutions.csv`. The
+sidecar is staged and byte-compared with the rest of the result metadata, so
+stale or missing contract metadata prevents publication.
 
 Changing a unit, scale, index base, labour concept or aggregation declaration
 is a contract change. Such changes require a new contract identifier unless
