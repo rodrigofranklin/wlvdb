@@ -664,7 +664,10 @@ wlv_catalog_validate_unit_aggregations <- function(value, units, contract) {
   )
   wlv_catalog_validate_enum(
     value$strategy,
-    c("formula", "mean", "not_applicable", "ratio_of_sums", "sum", "weighted_mean"),
+    c(
+      "formula", "invariant", "mean", "not_applicable", "ratio_of_sums",
+      "sum", "weighted_mean"
+    ),
     "strategy",
     name
   )
@@ -785,7 +788,7 @@ wlv_catalog_validate_unit_contracts <- function(contracts, root) {
   wlv_catalog_validate_unique(contracts$contract, "contract", name)
   wlv_catalog_validate_enum(
     contracts$schema_version,
-    "1",
+    c("1", "2"),
     "schema_version",
     name
   )
@@ -1126,12 +1129,13 @@ wlv_catalog_validate_stable_unit_coverage <- function(
       country_solution <- solutions$country_solution[[solution_index]]
       rows <- aggregations$indicator == indicator
       declared <- aggregations[rows, , drop = FALSE]
-      expected_strategy <- if (country_solution %in% c("sum", "mean")) {
-        country_solution
+      formula_solution <- grepl("[.][Rr]$", country_solution)
+      invalid_strategy <- if (formula_solution) {
+        declared$strategy != "formula"
       } else {
-        "formula"
+        declared$strategy == "formula"
       }
-      if (!all(declared$strategy == expected_strategy)) {
+      if (any(invalid_strategy)) {
         wlv_catalog_stop(
           paste0(
             "Unit contract `%s` aggregation for `%s` does not describe ",
@@ -1144,7 +1148,7 @@ wlv_catalog_validate_stable_unit_coverage <- function(
         )
       }
       if (
-        expected_strategy == "formula" &&
+        formula_solution &&
           !all(declared$module == country_solution)
       ) {
         wlv_catalog_stop(
@@ -1421,10 +1425,27 @@ wlv_catalog_unit_contract_sidecar <- function(
     catalog,
     contract,
     indicators = NULL,
-    require_exact = TRUE) {
+    require_exact = TRUE,
+    resolved_aggregations = NULL) {
   value <- wlv_catalog_unit_contract(catalog, contract)
   units <- value$units
-  aggregations <- value$aggregations
+  aggregation_columns <- c(
+    "indicator", "level", "strategy", "module", "numerator",
+    "denominator", "weight", "zero_denominator", "notes"
+  )
+  if (!is.null(resolved_aggregations) &&
+      (!is.data.frame(resolved_aggregations) ||
+        any(!aggregation_columns %in% names(resolved_aggregations)) ||
+        anyNA(resolved_aggregations[aggregation_columns]))) {
+    wlv_catalog_stop(
+      "`resolved_aggregations` must contain complete aggregation rows."
+    )
+  }
+  aggregations <- if (is.null(resolved_aggregations)) {
+    value$aggregations
+  } else {
+    resolved_aggregations[aggregation_columns]
+  }
   if (is.null(indicators)) {
     indicators <- units$indicator
   }
@@ -1462,11 +1483,29 @@ wlv_catalog_unit_contract_sidecar <- function(
       )
     }
     units <- units[units$indicator %in% indicators, , drop = FALSE]
-    aggregations <- aggregations[
-      aggregations$indicator %in% indicators,
-      ,
-      drop = FALSE
-    ]
+  }
+  aggregations <- aggregations[
+    aggregations$indicator %in% indicators,
+    ,
+    drop = FALSE
+  ]
+
+  expected_keys <- unlist(lapply(indicators, function(indicator) {
+    paste(indicator, c("sector_to_country", "country_to_world"), sep = "\034")
+  }), use.names = FALSE)
+  aggregation_keys <- paste(
+    aggregations$indicator,
+    aggregations$level,
+    sep = "\034"
+  )
+  if (anyDuplicated(aggregation_keys) || !setequal(aggregation_keys, expected_keys)) {
+    wlv_catalog_stop(
+      paste0(
+        "Unit contract `%s` sidecar aggregation rows must cover both levels ",
+        "of every effective indicator exactly once."
+      ),
+      contract
+    )
   }
 
   aggregation_order <- match(aggregations$indicator, indicators)

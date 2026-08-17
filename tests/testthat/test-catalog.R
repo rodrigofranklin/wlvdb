@@ -249,6 +249,18 @@ test_that("repository catalog classifies every method and source explicitly", {
   )
 })
 
+test_that("catalog accepts version 2 unit contracts", {
+  root <- wlv_make_catalog_fixture()
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  wlv_catalog_test_edit(root, "unit-contracts.csv", function(value) {
+    value$schema_version <- "2"
+    value
+  })
+
+  catalog <- expect_no_error(catalog_environment$wlv_load_catalog(root))
+  expect_identical(catalog$unit_contracts$schema_version, "2")
+})
+
 test_that("catalog accessors and output formats are deterministic", {
   catalog <- catalog_environment$wlv_load_catalog(wlv_test_root)
   methods <- catalog_environment$wlv_catalog_method_table(catalog)
@@ -733,6 +745,63 @@ test_that("stable unit contracts have deterministic exact coverage", {
       rep("sector_to_country", expected[[contract]])
     )
   }
+})
+
+test_that("unit sidecars overlay resolved aggregation rows deterministically", {
+  catalog <- catalog_environment$wlv_load_catalog(wlv_test_root)
+  contract <- catalog_environment$wlv_catalog_unit_contract(
+    catalog,
+    "wiodr13_units_v1"
+  )
+  resolved <- contract$aggregations
+  resolved$notes <- paste0("resolved:", seq_len(nrow(resolved)))
+  sidecar <- catalog_environment$wlv_catalog_unit_contract_sidecar(
+    catalog,
+    "wiodr13_units_v1",
+    indicators = contract$units$indicator,
+    resolved_aggregations = resolved
+  )
+  expect_identical(sidecar$aggregation_notes, resolved$notes)
+  expect_identical(sidecar$strategy, resolved$strategy)
+
+  extra <- resolved[seq_len(2L), , drop = FALSE]
+  extra$indicator <- "experimental.extra"
+  overlaid <- catalog_environment$wlv_catalog_unit_contract_sidecar(
+    catalog,
+    "wiodr13_units_v1",
+    indicators = c(contract$units$indicator, "experimental.extra"),
+    require_exact = FALSE,
+    resolved_aggregations = rbind(resolved, extra)
+  )
+  expect_false("experimental.extra" %in% overlaid$indicator)
+  expect_identical(overlaid$aggregation_notes, resolved$notes)
+})
+
+test_that("stable typed aggregation is authoritative over legacy routing", {
+  root <- wlv_make_catalog_fixture()
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  path <- file.path(
+    root,
+    "contracts",
+    "units",
+    "demo_v1-aggregations.csv"
+  )
+  aggregations <- utils::read.csv2(
+    path,
+    stringsAsFactors = FALSE,
+    colClasses = "character",
+    check.names = FALSE,
+    na.strings = NULL
+  )
+  aggregations$strategy <- "invariant"
+  wlv_catalog_test_write(path, aggregations)
+
+  catalog <- expect_no_error(catalog_environment$wlv_load_catalog(root))
+  contract <- catalog_environment$wlv_catalog_unit_contract(
+    catalog,
+    "demo_units_v1"
+  )
+  expect_true(all(contract$aggregations$strategy == "invariant"))
 })
 
 test_that("constant compensation is declared in additive 2000 USD", {

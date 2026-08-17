@@ -28,7 +28,7 @@ numérica inválidos, ou incompatível com o método e os anos impede a publica�
 | Estrutura | Todo arranjo é numérico, tem o posto declarado e rótulos completos, únicos e ordenados em cada eixo. |
 | Alinhamento | Anos, indicadores, setores, países, matrizes bilaterais e agregado `WWW` usam os mesmos rótulos ordenados. |
 | Metadados | `_method_solutions.csv` descreve exatamente o eixo de indicadores publicado. |
-| Setor → país → mundo | Indicadores com solução direta `sum` ou `mean` reproduzem as agregações declaradas, preservando ausência semântica. |
+| Setor → país → mundo | Cada nível reproduz sua própria declaração tipada (`sum`, `mean`, `ratio_of_sums`, `weighted_mean`, `invariant` ou `not_applicable`), incluindo dependências, ausência semântica e política de denominador zero. |
 | Produto bruto | `rowSums(m_io[,"values",,]) = sea_sectors[,"gross_output.s.mv",,]`. |
 | Estoque de capital | `colSums(k_composition) = capital_stock.s.us`. |
 | Depreciação | `colSums(k_depreciation) = capital_depreciation.s.us`. |
@@ -36,6 +36,18 @@ numérica inválidos, ou incompatível com o método e os anos impede a publica�
 | Transferência produtiva | A soma mundial anual de `transfers_productive_values` é zero dentro do limite de redução. A matriz de transferências totais não está sujeita a essa regra e, nos resultados reais, não soma zero. |
 | Faixas do método | Estoque, depreciação, produtos e matrizes de capital são não negativos nos métodos WIOD, salvo a exceção assinada fechada de WIOD13. Em `zerodep_2`, depreciação setorial e `k_depreciation` são exatamente zero. |
 | Ausência | `NA` só é aceito nas coordenadas e estados semânticos publicados em `_states.csv`; consulte [`missingness.md`](missingness.md). |
+
+A recomputação de setor para país e de país para mundo usa uma implementação de
+referência independente do dispatcher executado durante o cálculo. Nos métodos
+estáveis, ela lê as linhas tipadas do `_unit_contract.csv`, que devem coincidir
+exatamente com o registro executado. Nos métodos experimentais, ela mantém uma
+rota separada para o adaptador legado de `_method_solutions.csv`; indicadores
+sem definição de unidade podem ficar ausentes do sidecar tipado sem escapar da
+recomputação. Em ambos os casos, aplica separadamente a regra de cada nível e
+compara valores, rótulos e `NA` esperados. A implementação de referência não
+chama `wlv_aggregate()` nem `wlv_aggregate_binding()`, evitando que o validador
+repita o mesmo erro do caminho de produção. Linhas `formula` continuam cobertas
+pelas validações dedicadas dos seus resultados.
 
 Zeros estruturais e igualdade de rótulos são comparações exatas. Para uma soma
 de `k` termos, usa-se o limite orientado pelo erro de arredondamento

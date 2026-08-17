@@ -455,7 +455,7 @@ wlv_validate_request <- function(
     stop(sprintf("Paper script does not exist: %s", paper_script), call. = FALSE)
   }
 
-  structure(
+  plan <- structure(
     list(
       root = root,
       mode = mode,
@@ -475,6 +475,15 @@ wlv_validate_request <- function(
     ),
     class = c("wlv_run_plan", "list")
   )
+  aggregation_registries <- lapply(seq_len(nrow(method_plan)), function(index) {
+    wlv_method_aggregation_registry(
+      plan,
+      method_plan[index, , drop = FALSE]
+    )
+  })
+  names(aggregation_registries) <- method_plan$method
+  plan$aggregation_registries <- aggregation_registries
+  plan
 }
 
 wlv_require_files <- function(paths, context) {
@@ -675,6 +684,62 @@ wlv_method_unit_contract_paths <- function(plan, method) {
       c(metadata$units[[1L]], metadata$aggregations[[1L]])
     )
   )
+}
+
+wlv_method_aggregation_registry <- function(plan, method) {
+  contract_id <- method$unit_contract[[1L]]
+  contract <- if (nzchar(contract_id)) {
+    wlv_catalog_unit_contract(plan$catalog, contract_id)
+  } else {
+    NULL
+  }
+  aggregations <- if (is.null(contract)) {
+    data.frame(
+      indicator = character(),
+      level = character(),
+      strategy = character(),
+      module = character(),
+      numerator = character(),
+      denominator = character(),
+      weight = character(),
+      zero_denominator = character(),
+      notes = character(),
+      stringsAsFactors = FALSE
+    )
+  } else {
+    contract$aggregations
+  }
+  method_name <- method$method[[1L]]
+  stable <- identical(method$status[[1L]], "stable")
+  registry <- wlv_resolve_aggregation_registry(
+    aggregations = aggregations,
+    solutions = plan$configuration[[method_name]]$solutions,
+    method = method_name,
+    stable = stable,
+    allow_legacy = !stable && isTRUE(plan$allow_experimental),
+    missing = "available"
+  )
+  if (!is.null(contract)) {
+    legacy <- vapply(
+      registry$bindings,
+      function(binding) isTRUE(binding$legacy),
+      logical(1L)
+    )
+    dimension_rows <- registry$rows[
+      !legacy & registry$rows$indicator %in% contract$units$indicator,
+      ,
+      drop = FALSE
+    ]
+    wlv_validate_aggregation_dimensions(
+      contract$units,
+      dimension_rows,
+      strict_cross_country = !identical(
+        as.character(contract$metadata$schema_version[[1L]]),
+        "1"
+      )
+    )
+  }
+  registry
 }
 
 wlv_validate_method_source_manifest <- function(plan, method, artifacts) {
@@ -1563,6 +1628,8 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
   }, add = TRUE)
 
   missingness_policy <- wlv_load_run_missingness_policy(plan, method_record)
+  aggregation_registry <- plan$aggregation_registries[[method]]
+  wlv_validate_aggregation_registry(aggregation_registry)
   contract_runtime <- wlv_new_contract_runtime(
     method = method,
     source = method_record$source[[1L]],
@@ -1600,7 +1667,9 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
       existing_result_dir
     },
     wlv_missingness_policy = missingness_policy,
-    wlv_contract_runtime = contract_runtime
+    wlv_contract_runtime = contract_runtime,
+    wlv_aggregation_registry = aggregation_registry,
+    wlv_aggregation_contract = aggregation_registry$rows
   )
   script <- file.path(plan$root, "R", "lib", "computations.R")
   if (plan$mode == "recalculate") {
@@ -1619,7 +1688,9 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
           "R",
           "lib",
           c(
-            "functions.R", "missingness.R", "leontief_diagnostics.R",
+            "functions.R", "missingness.R", "unit_dimensions.R",
+            "aggregation_specs.R",
+            "leontief_diagnostics.R",
             "scientific_validation.R", "result_contracts.R"
           )
         ),
@@ -1659,7 +1730,8 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
           require_exact = identical(
             method_record$status[[1L]],
             "stable"
-          )
+          ),
+          resolved_aggregations = aggregation_registry$rows
         )
         wlv_write_result_csv(
           effective_unit_contract,
@@ -1699,6 +1771,11 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         mode = plan$mode,
         runtime = contract_runtime,
         expected_metadata = expected_metadata,
+        aggregation_registry = aggregation_registry,
+        stable_aggregations = identical(
+          method_record$status[[1L]],
+          "stable"
+        ),
         at_stage = if (plan$mode == "recalculate") plan$at_stage else NULL,
         reader = run_environment$read_fst_array
       )

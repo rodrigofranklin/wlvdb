@@ -479,7 +479,17 @@ test_that("stage 1 recalculation preserves source-matrix USD indicators", {
     useBytes = TRUE
   )
 
-  run <- suppressMessages(wlv_run_synthetic_calculation(fixture, workers = 1L))
+  run <- NULL
+  expect_warning(
+    run <- suppressMessages(
+      wlv_run_synthetic_calculation(
+        fixture,
+        workers = 1L,
+        warn_legacy = TRUE
+      )
+    ),
+    "adapted legacy aggregations"
+  )
   result_dir <- file.path("results", fixture$method)
   sectors_before <- wlv_read_fixture_array(
     fixture,
@@ -492,15 +502,17 @@ test_that("stage 1 recalculation preserves source-matrix USD indicators", {
     "sea_countries.fst"
   )
 
-  expect_no_error(
+  expect_warning(
     suppressMessages(
       wlv_recalculate_synthetic_fixture(
         fixture,
         runtime = run$runtime,
         at_stage = 1L,
-        workers = 1L
+        workers = 1L,
+        warn_legacy = TRUE
       )
-    )
+    ),
+    "adapted legacy aggregations"
   )
 
   sectors_after <- wlv_read_fixture_array(
@@ -562,15 +574,17 @@ test_that("recalculation refreshes solutions and indicator metadata", {
     useBytes = TRUE
   )
 
-  expect_no_error(
+  expect_warning(
     suppressMessages(
       wlv_recalculate_synthetic_fixture(
         fixture,
         runtime = run$runtime,
         at_stage = 5L,
-        workers = 1L
+        workers = 1L,
+        warn_legacy = TRUE
       )
-    )
+    ),
+    "adapted legacy aggregations"
   )
   result_dir <- file.path(fixture$root, "results", fixture$method)
   solutions <- utils::read.csv2(
@@ -578,6 +592,16 @@ test_that("recalculation refreshes solutions and indicator metadata", {
     stringsAsFactors = FALSE
   )
   metadata <- readRDS(file.path(result_dir, "meta_indicators.RDS"))
+  unit_contract <- utils::read.csv2(
+    file.path(result_dir, "_unit_contract.csv"),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  scientific_checks <- utils::read.csv2(
+    file.path(result_dir, "_scientific_checks.csv"),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
   sea_sectors <- wlv_read_fixture_array(
     fixture,
     "results", fixture$method, "sea_sectors.fst"
@@ -585,6 +609,20 @@ test_that("recalculation refreshes solutions and indicator metadata", {
   expect_true("new.metric" %in% solutions$names)
   expect_true("new.metric" %in% metadata$code)
   expect_true(all(sea_sectors[, "new.metric", , ] == 1))
+  expect_false("new.metric" %in% unit_contract$indicator)
+  new_metric_checks <- scientific_checks[
+    scientific_checks$indicator == "new.metric" &
+      scientific_checks$check_id %in% c(
+        "sector_to_country", "country_to_world"
+      ),
+    ,
+    drop = FALSE
+  ]
+  expect_setequal(
+    new_metric_checks$check_id,
+    c("sector_to_country", "country_to_world")
+  )
+  expect_true(all(new_metric_checks$scope == "legacy_adapter:sum"))
 })
 
 test_that("result locks reject concurrent runs and are safely reusable", {
@@ -854,13 +892,15 @@ test_that("post-commit lock cleanup cannot turn a successful run into failure", 
   }
   result <- NULL
   capture.output(
-    expect_message(
-      result <- runtime$get_wlv(
-        fixture$method,
-        workers = 1L,
-        allow_experimental = TRUE
+    suppressWarnings(
+      expect_message(
+        result <- runtime$get_wlv(
+          fixture$method,
+          workers = 1L,
+          allow_experimental = TRUE
+        ),
+        "result lock cleanup warning"
       ),
-      "result lock cleanup warning"
     ),
     type = "output"
   )

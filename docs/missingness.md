@@ -66,6 +66,13 @@ scientifically distinct. Country and world results use paired coverage for
 ratios of aggregates so numerator and denominator are built from the same
 available sector coordinates.
 
+The typed dispatcher keeps its more detailed reduction state (`finite`,
+`partial`, `missing`, `zero_denominator`, or `not_applicable`) on the result and
+maps it to the persisted runtime vocabulary. Incomplete coverage and protected
+zero-denominator decisions are also registered in `_anomalies.csv`; semantic
+missing results are registered in `_states.csv`. Thus adding a new aggregation
+strategy does not create a second, disconnected missingness channel.
+
 ## Division by zero
 
 Every protected division selects one of these policies:

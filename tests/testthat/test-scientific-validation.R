@@ -44,6 +44,20 @@ wlv_scientific_test_arrays <- function(method = "demo") {
     country_solution = operations,
     stringsAsFactors = FALSE
   )
+  aggregations <- do.call(rbind, lapply(seq_along(indicators), function(index) {
+    data.frame(
+      indicator = indicators[[index]],
+      level = c("sector_to_country", "country_to_world"),
+      strategy = operations[[index]],
+      module = "",
+      numerator = "",
+      denominator = "",
+      weight = "",
+      zero_denominator = "",
+      notes = "",
+      stringsAsFactors = FALSE
+    )
+  }))
   sea_countries <- array(
     0,
     dim = c(1L, length(indicators), 3L),
@@ -103,7 +117,8 @@ wlv_scientific_test_arrays <- function(method = "demo") {
     sea_countries = sea_countries,
     m_countries = m_countries,
     m_io = m_io,
-    solutions = solutions
+    solutions = solutions,
+    aggregations = aggregations
   )
 }
 
@@ -115,7 +130,8 @@ test_that("critical scientific identities pass and detect targeted corruption", 
       values$sea_sectors,
       values$sea_countries,
       values$m_countries,
-      values$solutions
+      values$solutions,
+      values$aggregations
     ))
   expect_no_error(scientific_validation_environment$
     wlv_scientific_validate_io_array(
@@ -152,7 +168,8 @@ test_that("critical scientific identities pass and detect targeted corruption", 
       values$sea_sectors,
       broken_aggregation,
       values$m_countries,
-      values$solutions
+      values$solutions,
+      values$aggregations
     ),
     "sector_to_country",
     fixed = TRUE
@@ -166,9 +183,128 @@ test_that("critical scientific identities pass and detect targeted corruption", 
       values$sea_sectors,
       values$sea_countries,
       broken_transfer,
-      values$solutions
+      values$solutions,
+      values$aggregations
     ),
     "productive_transfer_conservation",
+    fixed = TRUE
+  )
+})
+
+test_that("typed scientific aggregation is an independent reference", {
+  reference <- scientific_validation_environment$
+    wlv_scientific_reference_aggregate
+  expect_equal(
+    reference(
+      "ratio_of_sums",
+      numerator = c(1, 90),
+      denominator = c(1, 10),
+      zero_denominator = "error"
+    ),
+    91 / 11
+  )
+  expect_equal(
+    reference(
+      "weighted_mean",
+      value = c(1, 9),
+      weight = c(1, 3),
+      zero_denominator = "error"
+    ),
+    7
+  )
+  expect_equal(reference("invariant", value = c(4, 4)), 4)
+  expect_true(is.na(reference("not_applicable", value = c(1, 2))))
+  expect_identical(
+    reference(
+      "weighted_mean",
+      value = c(1, 2),
+      weight = c(0, 0),
+      zero_denominator = "zero"
+    ),
+    0
+  )
+  expect_false(any(grepl(
+    "wlv_aggregate",
+    deparse(body(reference)),
+    fixed = TRUE
+  )))
+
+  values <- wlv_scientific_test_arrays()
+  target <- values$aggregations$indicator == "value.m.mv"
+  country <- target &
+    values$aggregations$level == "sector_to_country"
+  world <- target &
+    values$aggregations$level == "country_to_world"
+  values$aggregations$strategy[country] <- "ratio_of_sums"
+  values$aggregations$numerator[country] <- "gross_output.s.mv"
+  values$aggregations$denominator[country] <- "gross_output.s.us"
+  values$aggregations$zero_denominator[country] <- "error"
+  values$aggregations$strategy[world] <- "weighted_mean"
+  values$aggregations$weight[world] <- "gross_output.s.us"
+  values$aggregations$zero_denominator[world] <- "error"
+  values$sea_countries[1L, "value.m.mv", "A"] <- 10 / 300
+  values$sea_countries[1L, "value.m.mv", "B"] <- 18 / 700
+  values$sea_countries[1L, "value.m.mv", "WWW"] <- 28 / 1000
+
+  expect_no_error(scientific_validation_environment$
+    wlv_scientific_validate_result_arrays(
+      values$method,
+      values$sea_sectors,
+      values$sea_countries,
+      values$m_countries,
+      values$solutions,
+      values$aggregations
+    ))
+  values$sea_countries[1L, "value.m.mv", "WWW"] <- 0.5
+  expect_error(
+    scientific_validation_environment$wlv_scientific_validate_result_arrays(
+      values$method,
+      values$sea_sectors,
+      values$sea_countries,
+      values$m_countries,
+      values$solutions,
+      values$aggregations
+    ),
+    "country_to_world",
+    fixed = TRUE
+  )
+})
+
+test_that("legacy scientific routes stay distinct from typed sidecar rows", {
+  values <- wlv_scientific_test_arrays()
+  checks <- scientific_validation_environment$
+    wlv_scientific_validate_result_arrays(
+      values$method,
+      values$sea_sectors,
+      values$sea_countries,
+      values$m_countries,
+      values$solutions,
+      values$aggregations[FALSE, , drop = FALSE],
+      legacy_aggregations = values$aggregations
+    )
+  contract_check <- checks$check_id == "aggregation_contract"
+  legacy_check <- checks$check_id == "aggregation_legacy_adapter"
+  expect_identical(checks$observations[contract_check], 0L)
+  expect_identical(
+    checks$observations[legacy_check],
+    as.integer(nrow(values$aggregations))
+  )
+  routed <- checks$check_id %in% c("sector_to_country", "country_to_world")
+  expect_true(all(startsWith(checks$scope[routed], "legacy_adapter:")))
+
+  unsupported <- values$aggregations
+  unsupported$strategy[[1L]] <- "ratio_of_sums"
+  expect_error(
+    scientific_validation_environment$wlv_scientific_validate_result_arrays(
+      values$method,
+      values$sea_sectors,
+      values$sea_countries,
+      values$m_countries,
+      values$solutions,
+      values$aggregations[FALSE, , drop = FALSE],
+      legacy_aggregations = unsupported
+    ),
+    "typed and legacy routes",
     fixed = TRUE
   )
 })
@@ -271,7 +407,8 @@ test_that("scientific checks and sidecar inventory are deterministic", {
       values$sea_sectors,
       values$sea_countries,
       values$m_countries,
-      values$solutions
+      values$solutions,
+      values$aggregations
     )
   io_checks <- scientific_validation_environment$wlv_scientific_validate_io_array(
     values$method,

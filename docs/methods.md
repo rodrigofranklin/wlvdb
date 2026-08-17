@@ -66,7 +66,7 @@ Sources reference versioned policy factories; catalog loading validates declarat
 
 ## Unit contracts
 
-Stable sources select versioned unit and aggregation declarations; catalog loading validates exact indicator coverage without changing numerical behavior.
+Stable sources select versioned unit and executable aggregation declarations; the current sum/mean/formula contracts preserve existing numerical behavior while the typed runtime validates exact indicator coverage.
 
 | Contract | Schema | Source | Unit definitions | Aggregations | Documentation |
 | --- | --- | --- | --- | --- | --- |

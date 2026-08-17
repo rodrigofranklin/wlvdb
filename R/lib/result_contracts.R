@@ -522,6 +522,35 @@ wlv_source_missing_indicators <- function(policy) {
   policy$result_source_missing$row_indicators
 }
 
+wlv_contract_slice_registered_states <- function(registered, value) {
+  if (length(dim(registered)) != length(dim(value))) {
+    return(registered)
+  }
+  registered_labels <- dimnames(registered)
+  value_labels <- dimnames(value)
+  if (is.null(registered_labels) || is.null(value_labels) ||
+      any(vapply(registered_labels, is.null, logical(1L))) ||
+      any(vapply(value_labels, is.null, logical(1L))) ||
+      any(vapply(registered_labels, anyDuplicated, integer(1L))) ||
+      any(vapply(value_labels, anyDuplicated, integer(1L)))) {
+    return(registered)
+  }
+  registered_roles <- names(registered_labels)
+  value_roles <- names(value_labels)
+  if (!is.null(registered_roles) && !is.null(value_roles) &&
+      !identical(registered_roles, value_roles)) {
+    return(registered)
+  }
+  selected <- lapply(seq_along(value_labels), function(axis) {
+    match(value_labels[[axis]], registered_labels[[axis]])
+  })
+  if (any(vapply(selected, anyNA, logical(1L)))) {
+    return(registered)
+  }
+  sliced <- do.call(`[`, c(list(registered), selected, list(drop = FALSE)))
+  array(as.vector(sliced), dim = dim(value), dimnames = value_labels)
+}
+
 wlv_contract_declared_states <- function(
     runtime,
     artifact,
@@ -588,20 +617,9 @@ wlv_contract_declared_states <- function(
   key <- wlv_contract_state_key(artifact, indicator)
   if (exists(key, envir = runtime$states, inherits = FALSE)) {
     registered <- get(key, envir = runtime$states, inherits = FALSE)
-    if (
-      length(dim(registered)) == length(dim(value)) + 1L &&
-      dim(registered)[[2L]] == 1L &&
-      identical(dim(registered)[-2L], dim(value))
-    ) {
-      registered_slice <- array(
-        registered,
-        dim = dim(registered)[-2L],
-        dimnames = dimnames(registered)[-2L]
-      )
-      if (
-        !identical(dimnames(registered)[[2L]], indicator) ||
-        !wlv_same_shape_and_labels(registered_slice, value)
-      ) {
+    if (length(dim(registered)) == length(dim(value)) + 1L &&
+        dim(registered)[[2L]] == 1L) {
+      if (!identical(dimnames(registered)[[2L]], indicator)) {
         stop(
           "Registered missingness state labels do not match the result slice.",
           call. = FALSE
@@ -609,29 +627,33 @@ wlv_contract_declared_states <- function(
       }
       registered <- array(
         registered,
-        dim = dim(value),
-        dimnames = dimnames(value)
+        dim = dim(registered)[-2L],
+        dimnames = dimnames(registered)[-2L]
       )
     }
-    if (
-      length(dim(value)) == length(dim(registered)) + 1L &&
-      dim(value)[[2L]] == 1L &&
-      identical(dim(value)[-2L], dim(registered))
-    ) {
+    expand_indicator <- length(dim(value)) == length(dim(registered)) + 1L &&
+      dim(value)[[2L]] == 1L
+    comparison_value <- value
+    if (expand_indicator) {
       value_slice <- array(
         value,
         dim = dim(value)[-2L],
         dimnames = dimnames(value)[-2L]
       )
-      if (
-        !identical(dimnames(value)[[2L]], indicator) ||
-        !wlv_same_shape_and_labels(value_slice, registered)
-      ) {
+      if (!identical(dimnames(value)[[2L]], indicator)) {
         stop(
           "Registered missingness state labels do not match the result slice.",
           call. = FALSE
         )
       }
+      comparison_value <- value_slice
+    }
+    registered <- wlv_contract_slice_registered_states(
+      registered,
+      comparison_value
+    )
+    if (expand_indicator &&
+        wlv_same_shape_and_labels(registered, comparison_value)) {
       registered <- array(
         registered,
         dim = dim(value),
@@ -909,6 +931,257 @@ wlv_contract_aggregate_runtime <- function(
       context = context
     )
   )
+  wlv_contract_register_result(runtime, artifact, indicator, result)
+  result
+}
+
+wlv_aggregation_allowed_input <- function(allowed_missing, name, value) {
+  if (is.null(allowed_missing)) {
+    return(NULL)
+  }
+  if (is.character(allowed_missing)) {
+    return(allowed_missing)
+  }
+  if (!is.list(allowed_missing) || is.null(names(allowed_missing)) ||
+      anyDuplicated(names(allowed_missing))) {
+    stop("Typed aggregation missingness inputs must be a uniquely named list.",
+      call. = FALSE
+    )
+  }
+  state <- allowed_missing[[name]]
+  if (is.null(state)) {
+    return(NULL)
+  }
+  if (!wlv_same_shape_and_labels(state, value)) {
+    stop("Typed aggregation missingness states do not match their input.",
+      call. = FALSE
+    )
+  }
+  state
+}
+
+wlv_aggregation_runtime_shape <- function(value, template) {
+  if (is.null(dim(template))) {
+    result <- as.vector(value)
+    names(result) <- names(template)
+    return(result)
+  }
+  array(as.vector(value), dim = dim(template), dimnames = dimnames(template))
+}
+
+wlv_contract_aggregation_audit <- function(
+    runtime,
+    binding,
+    values,
+    margin,
+    allowed_missing,
+    context) {
+  inputs <- wlv_aggregation_binding_inputs(binding)
+  strategy <- binding$spec$strategy
+  if (identical(strategy, "not_applicable")) {
+    return(NULL)
+  }
+  if (strategy %in% c("sum", "legacy_mean", "invariant")) {
+    input <- values[[inputs[[1L]]]]
+    return(wlv_contract_capture(
+      runtime,
+      wlv_contract_aggregate(
+        input,
+        margin = margin,
+        operation = if (identical(strategy, "sum")) "sum" else "mean",
+        missing = binding$spec$missing,
+        allowed_missing = wlv_aggregation_allowed_input(
+          allowed_missing,
+          inputs[[1L]],
+          input
+        ),
+        context = context
+      )
+    ))
+  }
+
+  classifications <- lapply(inputs, function(name) {
+    input <- values[[name]]
+    wlv_contract_capture(
+      runtime,
+      wlv_classify_missingness(
+        input,
+        allowed_missing = wlv_aggregation_allowed_input(
+          allowed_missing,
+          name,
+          input
+        ),
+        context = context
+      )
+    )
+  })
+  reference <- values[[inputs[[1L]]]]
+  if (any(!vapply(values[inputs], wlv_same_shape_and_labels, logical(1L),
+    right = reference))) {
+    stop("Typed aggregation inputs must have identical shape and labels.",
+      call. = FALSE
+    )
+  }
+  missing <- Reduce(`|`, lapply(values[inputs], is.na))
+  audit <- wlv_character_like(reference, 0)
+  audit[missing] <- NA_real_
+  states <- wlv_character_like(reference, "finite")
+  for (position in which(missing)) {
+    states[[position]] <- wlv_group_missing_state(vapply(
+      classifications,
+      `[[`,
+      character(1L),
+      position
+    ))
+  }
+  wlv_contract_capture(
+    runtime,
+    wlv_contract_aggregate(
+      audit,
+      margin = margin,
+      operation = "sum",
+      missing = binding$spec$missing,
+      allowed_missing = states,
+      context = context
+    )
+  )
+}
+
+wlv_contract_aggregate_spec_runtime <- function(
+    runtime,
+    binding,
+    values,
+    margin,
+    artifact,
+    indicator,
+    checkpoint,
+    stage,
+    module,
+    axes,
+    allowed_missing = NULL) {
+  wlv_validate_aggregation_binding(binding)
+  if (identical(binding$contract_strategy, "formula")) {
+    stop("Formula aggregation bindings cannot use the typed dispatcher.",
+      call. = FALSE
+    )
+  }
+  inputs <- wlv_aggregation_binding_inputs(binding)
+  if (!is.list(values) || any(!inputs %in% names(values))) {
+    stop("Typed aggregation inputs are incomplete.", call. = FALSE)
+  }
+  reference <- values[[inputs[[1L]]]]
+  dimensions <- dim(reference)
+  if (is.null(dimensions)) {
+    dimensions <- length(reference)
+  }
+  collapsed <- setdiff(seq_along(dimensions), margin)
+  if (length(collapsed) != 1L) {
+    stop("Typed aggregation must collapse exactly one input dimension.",
+      call. = FALSE
+    )
+  }
+  context <- wlv_contract_context_for(
+    runtime,
+    artifact,
+    indicator,
+    checkpoint,
+    stage,
+    module,
+    axes
+  )
+  audit <- wlv_contract_aggregation_audit(
+    runtime,
+    binding,
+    values,
+    margin,
+    allowed_missing,
+    context
+  )
+
+  dispatch_binding <- binding
+  zero_policy <- binding$spec$zero_denominator
+  if (identical(zero_policy, "error")) {
+    dispatch_binding$spec$zero_denominator <- "zero"
+  }
+  result <- wlv_aggregate_binding(
+    dispatch_binding,
+    values,
+    axis = collapsed
+  )
+  aggregation_states <- attr(result, "wlv_state", exact = TRUE)
+  runtime_states <- if (is.null(audit)) {
+    wlv_character_like(result, "not_applicable")
+  } else {
+    wlv_aggregation_runtime_shape(
+      attr(audit, "wlv_state", exact = TRUE),
+      result
+    )
+  }
+  actions <- if (is.null(audit)) {
+    wlv_empty_contract_table()
+  } else {
+    attr(audit, "wlv_actions", exact = TRUE)
+  }
+  if (is.null(actions)) {
+    actions <- wlv_empty_contract_table()
+  }
+
+  if (binding$spec$strategy %in% c("sum", "legacy_mean") &&
+      !identical(as.numeric(result), as.numeric(audit))) {
+    stop("Typed aggregation differs from the legacy-compatible reduction.",
+      call. = FALSE
+    )
+  }
+  output_context <- wlv_margin_context(context, margin)
+  zero_denominator <- aggregation_states == "zero_denominator"
+  if (any(zero_denominator)) {
+    if (identical(zero_policy, "error")) {
+      errors <- wlv_contract_table(
+        result,
+        zero_denominator,
+        output_context,
+        "abort_zero_denominator"
+      )
+      wlv_contract_capture(
+        runtime,
+        wlv_abort_contract(
+          output_context,
+          errors,
+          sprintf(
+            "typed aggregation rejected %s zero denominator(s)",
+            sum(zero_denominator)
+          )
+        )
+      )
+    }
+    runtime_states[zero_denominator] <- "finite"
+    actions <- wlv_bind_contract_tables(
+      actions,
+      wlv_contract_table(
+        result,
+        zero_denominator,
+        output_context,
+        "replace_zero_denominator_with_zero"
+      )
+    )
+  }
+  zero_not_applicable <- aggregation_states == "not_applicable" &
+    binding$spec$strategy %in% c("ratio_of_sums", "weighted_mean")
+  if (any(zero_not_applicable)) {
+    runtime_states[zero_not_applicable] <- "not_applicable"
+    actions <- wlv_bind_contract_tables(
+      actions,
+      wlv_contract_table(
+        result,
+        zero_not_applicable,
+        output_context,
+        "mark_zero_denominator_not_applicable"
+      )
+    )
+  }
+  attr(result, "wlv_aggregation_state") <- aggregation_states
+  attr(result, "wlv_state") <- runtime_states
+  attr(result, "wlv_actions") <- actions
   wlv_contract_register_result(runtime, artifact, indicator, result)
   result
 }
@@ -2490,6 +2763,8 @@ wlv_validate_staged_results <- function(
     mode,
     runtime,
     expected_metadata,
+    aggregation_registry,
+    stable_aggregations,
     at_stage = NULL,
     reader = read_fst_array) {
   if (!is.function(reader)) {
@@ -2524,12 +2799,42 @@ wlv_validate_staged_results <- function(
   wlv_validate_sea_countries_contract(runtime, sea_countries, "post_roundtrip")
   m_countries <- reader(file.path(staging, "m_countries.fst"))
   wlv_validate_m_countries_contract(runtime, m_countries, "post_roundtrip")
+  unit_contract_path <- file.path(staging, "_unit_contract.csv")
+  persisted_unit_contract <- if (file.exists(unit_contract_path)) {
+    tryCatch(
+      utils::read.csv2(
+        unit_contract_path,
+        stringsAsFactors = FALSE,
+        colClasses = "character",
+        check.names = FALSE,
+        na.strings = NULL
+      ),
+      error = function(error) {
+        stop(
+          sprintf(
+            "Cannot read staged `_unit_contract.csv`: %s",
+            conditionMessage(error)
+          ),
+          call. = FALSE
+        )
+      }
+    )
+  } else {
+    NULL
+  }
+  aggregation_routes <- wlv_reconcile_aggregation_registry_sidecar(
+    aggregation_registry,
+    persisted_unit_contract,
+    stable = stable_aggregations
+  )
   scientific_check_parts <- list(wlv_scientific_validate_result_arrays(
     method = method,
     sea_sectors = sea_sectors,
     sea_countries = sea_countries,
     m_countries = m_countries,
-    solutions = solutions
+    solutions = solutions,
+    aggregations = aggregation_routes$typed,
+    legacy_aggregations = aggregation_routes$legacy
   ))
   scientific_io_years <- character()
 
