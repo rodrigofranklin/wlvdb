@@ -127,7 +127,7 @@ wlv_complete_indicator_metadata <- function(
     defaults <- list(
       canonical_unit = NA_character_,
       display_unit = NA_character_,
-      display_multiplier = 1,
+      display_multiplier = NA_real_,
       index_base_year = NA_character_,
       index_storage_base = NA_real_
     )

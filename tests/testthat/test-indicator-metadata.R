@@ -65,6 +65,74 @@ test_that("legacy result metadata remains readable without implicit rescaling", 
   expect_identical(displayed, c(100, 250))
 })
 
+test_that("unit contracts fill display metadata before checking overrides", {
+  units <- wlv_read_wiodr16_v2_units()
+  metadata <- data.frame(
+    code = c("go_price.r.id", "gross_output.s.us", "experimental.metric"),
+    name = c("Price", "Output", "Experimental"),
+    stringsAsFactors = FALSE
+  )
+
+  completed <- indicator_metadata_environment$wlv_complete_indicator_metadata(
+    metadata,
+    units = units,
+    warn_legacy = FALSE
+  )
+
+  expect_identical(completed$display_multiplier, c(100, 1, 1))
+  expect_identical(completed$canonical_unit, c("index", "usd", NA_character_))
+  expect_identical(completed$index_base_year, c("2000", NA_character_, NA_character_))
+
+  metadata$display_multiplier <- c(1, NA_real_, NA_real_)
+  expect_error(
+    indicator_metadata_environment$wlv_complete_indicator_metadata(
+      metadata,
+      units = units,
+      warn_legacy = FALSE
+    ),
+    "display_multiplier",
+    fixed = TRUE
+  )
+})
+
+test_that("stable unit contracts fully project into fresh result metadata", {
+  for (contract in c("wiodr13_v2", "wiodr16_v2")) {
+    units <- utils::read.csv2(
+      file.path(
+        wlv_test_root,
+        "contracts", "units", paste0(contract, "-units.csv")
+      ),
+      stringsAsFactors = FALSE,
+      colClasses = "character",
+      check.names = FALSE,
+      na.strings = ""
+    )
+    expected <- indicator_metadata_environment$wlv_contract_indicator_metadata(
+      units
+    )
+    metadata <- data.frame(
+      code = units$indicator,
+      name = NA_character_,
+      stringsAsFactors = FALSE
+    )
+    completed <- indicator_metadata_environment$wlv_complete_indicator_metadata(
+      metadata,
+      units = units,
+      warn_legacy = FALSE
+    )
+
+    expect_identical(completed[, names(expected)], expected)
+    expect_identical(
+      indicator_metadata_environment$wlv_complete_indicator_metadata(
+        completed,
+        units = units,
+        warn_legacy = FALSE
+      )[, names(expected)],
+      expected
+    )
+  }
+})
+
 test_that("WIOD16 gross-output prices are stored at base one and displayed once", {
   environment <- new.env(parent = globalenv())
   sys.source(
