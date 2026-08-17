@@ -17,7 +17,7 @@ exchange_base <- sea_sectors["2000", "exchange.r.us", , ] %>%
   aperm(c(3, 1, 2))
 dimnames(exchange_base) <- dimnames(basket_current)
 compensation_numerator <-
-  sea_source[, "COMP", lists$sectors, ] * 1000000
+  sea_source[, "COMP", lists$sectors, ]
 if (exists("wlv_contract_runtime", inherits = FALSE)) {
   sea_sectors[, code, , ] <- wlv_sequential_ratio_runtime(
     wlv_contract_runtime,

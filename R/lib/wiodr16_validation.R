@@ -218,6 +218,8 @@ wlv_validate_wiodr16_arrays <- function(
     ),
     expected_raw_variable_count = length(expected_raw_variables),
     china_missing_variables = c("EMPE", "H_EMPE"),
+    input_unit = "million_usd",
+    gfcf_observations = NULL,
     relative_tolerance = 1e-8,
     absolute_tolerance = 1e-6) {
   expected_years <- wlv_wiodr13_validate_labels(
@@ -314,11 +316,26 @@ wlv_validate_wiodr16_arrays <- function(
   )
 
   wlv_wiodr13_assert_finite(m_io, "m_io")
-  negative_gfcf <- wlv_wiodr_analyze_m_io_negative_gfcf(
-    m_io,
-    method = "wiodr16",
-    input_unit = "million_usd"
-  )
+  wlv_wiodr_gfcf_unit_divisor(input_unit)
+  negative_gfcf <- if (is.null(gfcf_observations)) {
+    wlv_wiodr_analyze_m_io_negative_gfcf(
+      m_io,
+      method = "wiodr16",
+      input_unit = input_unit
+    )
+  } else {
+    if (!identical(input_unit, "usd")) {
+      stop(
+        "Raw GFCF observations can only accompany canonical USD arrays.",
+        call. = FALSE
+      )
+    }
+    wlv_wiodr_analyze_prepared_m_io_negative_gfcf(
+      m_io,
+      method = "wiodr16",
+      observations = gfcf_observations
+    )
+  }
   sea_missingness <- wlv_wiodr16_assert_sea_missingness(
     sea = sea,
     countries = labels$countries,
@@ -326,8 +343,14 @@ wlv_validate_wiodr16_arrays <- function(
     china_missing_variables = china_missing_variables,
     required_variables = required_variables
   )
-  negative_source_k <- wlv_wiodr16_validate_source_negative_k(sea)
-  source_va_exception <- wlv_wiodr16_validate_source_va_exception(sea)
+  negative_source_k <- wlv_wiodr16_validate_source_negative_k(
+    sea,
+    input_unit = input_unit
+  )
+  source_va_exception <- wlv_wiodr16_validate_source_va_exception(
+    sea,
+    input_unit = input_unit
+  )
 
   supplied_output <- apply(m_io, c(1L, 2L), sum)
   gross_output <- matrix(
@@ -376,6 +399,7 @@ wlv_validate_wiodr16_arrays <- function(
       negative_gfcf_coordinate_md5 = negative_gfcf$signature$coordinate_md5,
       negative_gfcf_value_md5 = negative_gfcf$signature$value_md5,
       negative_gfcf_canonical_unit = negative_gfcf$canonical_unit,
+      negative_gfcf_input_unit = negative_gfcf$input_unit,
       known_negative_source_k_count = nrow(negative_source_k),
       known_source_va_exception_count = nrow(source_va_exception),
       maximum_absolute_gross_output_residual = max(abs(residual))
@@ -389,7 +413,7 @@ wlv_wiodr16_read_array <- function(path) {
 }
 
 wlv_validate_wiodr16_prepared <- function(
-    source_dir = file.path("source_data", "wiodr16"),
+    source_dir = file.path("source_data", "wiodr16", "normalized"),
     expected_years = as.character(2000:2014),
     read_array = wlv_wiodr16_read_array,
     relative_tolerance = 1e-8,
@@ -415,6 +439,10 @@ wlv_validate_wiodr16_prepared <- function(
   countries <- read_label(csv_paths[[1L]], "country.source")
   sectors <- read_label(csv_paths[[2L]], "sector.source")
   demands <- read_label(csv_paths[[3L]], "demand")
+  gfcf_observations <- wlv_wiodr_read_prepared_gfcf_observations(
+    source_dir,
+    "wiodr16"
+  )
 
   wlv_validate_wiodr16_arrays(
     m_io = read_array(file.path(source_dir, "m_io.fst")),
@@ -423,6 +451,8 @@ wlv_validate_wiodr16_prepared <- function(
     sectors = sectors,
     demands = demands,
     expected_years = expected_years,
+    input_unit = "usd",
+    gfcf_observations = gfcf_observations,
     relative_tolerance = relative_tolerance,
     absolute_tolerance = absolute_tolerance,
     ...

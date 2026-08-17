@@ -1445,11 +1445,11 @@ wlv_wiodr16_hours_worked_runtime <- function(
   regular <- present & employees != 0
   result[regular] <-
     employee_hours[regular] / employees[regular] *
-    persons_engaged[regular] * 1000000
+    persons_engaged[regular]
   persons_zero <- present & employees == 0 & persons_engaged == 0
   result[persons_zero] <- 0
   fallback <- present & employees == 0 & persons_engaged != 0
-  raw_result <- employee_hours / employees * persons_engaged * 1000000
+  raw_result <- employee_hours / employees * persons_engaged
   actions <- wlv_empty_contract_table()
   if (any(persons_zero)) {
     actions <- wlv_bind_contract_tables(
@@ -1482,7 +1482,7 @@ wlv_wiodr16_hours_worked_runtime <- function(
         employees[[positions]],
         persons_engaged[[positions]]
       ),
-      c(0.009, 0, 0.01)
+      c(9000, 0, 10)
     )
     if (!identical(keys, "2001|M72|MLT") || !source_values_match) {
       errors <- wlv_contract_table(
@@ -1509,7 +1509,7 @@ wlv_wiodr16_hours_worked_runtime <- function(
     }
     result[[positions]] <-
       sum(country_hours) / sum(country_employees) *
-      persons_engaged[[positions]] * 1000000
+      persons_engaged[[positions]]
     actions <- wlv_bind_contract_tables(
       actions,
       wlv_contract_table(

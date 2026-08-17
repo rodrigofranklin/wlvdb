@@ -17,12 +17,15 @@ declared aggregation reproduces the operation or dedicated module selected by
 the current parameter fragments. These declarations do not yet transform a
 value or select a different aggregation algorithm.
 
-`source_scale` documents the multiplier between the source observation and the
-published canonical unit. A value of `1000000`, for example, records the
-existing conversion from millions of USD to USD. Derived indicators use a
-scale of `1`. `index_base` records the value actually published in the base
-year; this intentionally exposes the current WIOD13 base-one and WIOD16
-gross-output-price base-100 conventions.
+`source_scale` documents the multiplier between the effective source
+generation consumed by a calculation and the published canonical unit. Stable
+WIOD source generations are normalized before publication, so direct stable
+indicators now declare canonical source units and a scale of `1`. The separate
+`_normalization_contract.csv` source sidecar records conversions from the raw
+provider units. Derived indicators also use a scale of `1`. `index_base`
+records the value actually published in the base year; this intentionally
+exposes the current WIOD13 base-one and WIOD16 gross-output-price base-100
+conventions.
 
 The historical `.cu` suffix on `compensation.emp.s.cu` and
 `compensation.empe.s.cu` does not mean local-currency storage. Their modules

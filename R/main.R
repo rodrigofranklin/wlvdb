@@ -12,6 +12,8 @@ source("R/lib/gfcf_diagnostics.R", local = TRUE)
 source("R/lib/leontief_diagnostics.R", local = TRUE)
 source("R/lib/scientific_validation.R", local = TRUE)
 source("R/lib/result_contracts.R", local = TRUE)
+source("R/lib/source_manifest.R", local = TRUE)
+source("R/lib/source_normalization.R", local = TRUE)
 source("R/lib/execution.R", local = TRUE)
 
 method_catalog <- wlv_load_catalog(".")

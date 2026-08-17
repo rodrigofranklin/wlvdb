@@ -131,6 +131,67 @@ wlv_make_synthetic_calculation_fixture <- function() {
   functions_environment$write_fst_array(sea, file.path(source_path, "sea.fst"))
   functions_environment$write_fst_array(m_io, file.path(source_path, "m_io.fst"))
 
+  source_environment <- new.env(parent = globalenv())
+  for (script in c(
+    "catalog.R", "source_manifest.R", "source_normalization.R"
+  )) {
+    sys.source(
+      file.path(root, "R", "lib", script),
+      envir = source_environment
+    )
+  }
+  source_environment$write_fst_array <- functions_environment$write_fst_array
+  normalization_contract <- source_environment$wlv_new_source_normalization_contract(
+    source = "synthetic",
+    contract_id = "synthetic_source_normalization_v1",
+    m_io_multiplier = 1e6,
+    sea_multipliers = c(LAB = 1, GO = 1e6, PRICE = 1),
+    m_io_source_unit = "million_current_usd",
+    m_io_canonical_unit = "current_usd",
+    sea_source_units = c(
+      LAB = "abstract_labour_hour",
+      GO = "million_current_usd",
+      PRICE = "index"
+    ),
+    sea_canonical_units = c(
+      LAB = "abstract_labour_hour",
+      GO = "current_usd",
+      PRICE = "index"
+    )
+  )
+  normalized <- source_environment$wlv_normalize_source(
+    m_io,
+    sea,
+    source = "synthetic",
+    contract = normalization_contract
+  )
+  catalog <- source_environment$wlv_load_catalog(root)
+  unit_contract <- source_environment$wlv_catalog_unit_contract(
+    catalog,
+    "synthetic_units_v1"
+  )
+  source_environment$wlv_publish_normalized_source(
+    normalized = normalized,
+    source_dir = source_path,
+    unit_contract_id = "synthetic_units_v1",
+    unit_contract_version = as.character(
+      unit_contract$metadata$schema_version[[1L]]
+    ),
+    unit_contract_paths = file.path(
+      root,
+      c(
+        unit_contract$metadata$units[[1L]],
+        unit_contract$metadata$aggregations[[1L]]
+      )
+    ),
+    unit_contract_sidecar = source_environment$wlv_catalog_unit_contract_sidecar(
+      catalog,
+      "synthetic_units_v1"
+    ),
+    label_files = c("countries.csv", "demand.csv"),
+    writer = functions_environment$write_fst_array
+  )
+
   list(
     root = normalizePath(root, winslash = "/", mustWork = TRUE),
     method = "synthetic",

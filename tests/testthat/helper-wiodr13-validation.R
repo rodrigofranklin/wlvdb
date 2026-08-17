@@ -71,6 +71,17 @@ wlv_validate_wiodr13_fixture <- function(fixture, ...) {
   )
 }
 
+wlv_normalize_wiodr13_validation_fixture <- function(fixture) {
+  fixture$gfcf_observations <- wiodr13_validation_environment$
+    wlv_wiodr_canonical_gfcf_diagnostic_observations(
+      fixture$m_io,
+      method = "wiodr13"
+    )
+  fixture$m_io <- fixture$m_io * 1000000
+  fixture$sea <- fixture$sea * 1000000
+  fixture
+}
+
 wlv_materialize_wiodr13_validation_fixture <- function(fixture, source_dir) {
   dir.create(source_dir, recursive = TRUE, showWarnings = FALSE)
   utils::write.table(
@@ -105,5 +116,12 @@ wlv_materialize_wiodr13_validation_fixture <- function(fixture, source_dir) {
   }
   write_array(fixture$m_io, "m_io.fst")
   write_array(fixture$sea, "sea.fst")
+  if (!is.null(fixture$gfcf_observations)) {
+    saveRDS(
+      fixture$gfcf_observations,
+      file.path(source_dir, "_gfcf_canonical.rds"),
+      version = 3L
+    )
+  }
   invisible(source_dir)
 }

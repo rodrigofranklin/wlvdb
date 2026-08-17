@@ -79,8 +79,9 @@ Artifact profiles describe the files required for the operations declared by eac
 
 | Profile | Operations | Artifact | Kind | Required sidecar |
 | --- | --- | --- | --- | --- |
-| `wiod_core` | `prepare\|calculate\|recalculate` | `countries.csv` | `csv` | `FALSE` |
-| `wiod_core` | `prepare\|calculate\|recalculate` | `demand.csv` | `csv` | `FALSE` |
-| `wiod_core` | `prepare\|calculate\|recalculate` | `m_io*.fst` | `fst_array_glob` | `TRUE` |
-| `wiod_core` | `prepare\|calculate\|recalculate` | `sea.fst` | `fst_array` | `TRUE` |
-| `wiod_core` | `prepare\|calculate\|recalculate` | `sectors.csv` | `csv` | `FALSE` |
+| `wiod_core` | `prepare\|calculate\|recalculate` | `normalized/_source_manifest.csv` | `csv` | `FALSE` |
+| `wiod_core` | `prepare\|calculate\|recalculate` | `normalized/countries.csv` | `csv` | `FALSE` |
+| `wiod_core` | `prepare\|calculate\|recalculate` | `normalized/demand.csv` | `csv` | `FALSE` |
+| `wiod_core` | `prepare\|calculate\|recalculate` | `normalized/m_io*.fst` | `fst_array_glob` | `TRUE` |
+| `wiod_core` | `prepare\|calculate\|recalculate` | `normalized/sea.fst` | `fst_array` | `TRUE` |
+| `wiod_core` | `prepare\|calculate\|recalculate` | `normalized/sectors.csv` | `csv` | `FALSE` |

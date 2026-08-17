@@ -10,10 +10,28 @@
 # 5 - variables obtained by computation over SEA results
 
 if (stage == 1) { # Stage 0 is computed only before computing stage 1 variables
-  # Stage 0 variables, adjusting scale as specified in parameters
+  # Stage 0 variables are copied from the canonical source generation.
   
   # Copy variables from sea_source to sea_sectors (indicated in parameters)
   raw_solutions <- !grepl("\\.[Rr]$", sea_variables$sector_solution)
+  legacy_scaled_solutions <- raw_solutions & grepl(
+    "*",
+    sea_variables$sector_solution,
+    fixed = TRUE
+  )
+  if (any(legacy_scaled_solutions)) {
+    stop(
+      paste0(
+        "Legacy scaled SEA source expressions are not supported for ",
+        "normalized source data: ",
+        paste(
+          unique(sea_variables$sector_solution[legacy_scaled_solutions]),
+          collapse = ", "
+        )
+      ),
+      call. = FALSE
+    )
+  }
   for (loop in which(raw_solutions)) {
     if (exists("wlv_contract_runtime", inherits = FALSE)) {
       wlv_contract_clear_states(
@@ -22,22 +40,23 @@ if (stage == 1) { # Stage 0 is computed only before computing stage 1 variables
         sea_variables$names[[loop]]
       )
     }
-    temp <- unlist(strsplit(sea_variables$sector_solution[loop], "[*]"))
+    source_variable <- sea_variables$sector_solution[[loop]]
+    if (!source_variable %in% dimnames(sea_source)[[2L]]) {
+      stop(
+        paste0("SEA source variable is unavailable: ", source_variable),
+        call. = FALSE
+      )
+    }
     sea_sectors[, sea_variables$names[loop], lists$sectors, lists$countries] <- 
-      sea_source[, temp[1], lists$sectors, lists$countries]
+      sea_source[, source_variable, lists$sectors, lists$countries]
     meta_indicators[sea_variables$names[loop],"observation"] <- paste("Source:", source_version)
   }
-  
-  # Changes scale of variables when indicated in parameters
-  for (loop in grep("[*]", sea_variables$sector_solution)) {
-    temp <- unlist(strsplit(sea_variables$sector_solution[loop], "[*]"))
-    sea_sectors[,sea_variables$names[loop],lists$sectors,lists$countries] <- 
-      sea_sectors[,sea_variables$names[loop],lists$sectors,lists$countries] *
-      as.numeric(temp[2])
-  }
-  
-  rm(list = intersect("temp", ls(envir = environment(), all.names = TRUE)))
-  rm(raw_solutions)
+
+  rm(raw_solutions, legacy_scaled_solutions)
+  rm(list = intersect(
+    "source_variable",
+    ls(envir = environment(), all.names = TRUE)
+  ))
 }
 
 # Computing stages 1 to 5, as define by "stage" variable

@@ -5,9 +5,29 @@ m_io <-
   read_fst_array(lists$m_io_results_files[current_m_io])
 
 m_io_source <- 
-  # Source WIOD matrices are stored in millions of USD. Keep the recalc path
-  # in the same USD unit used by the full-calculation preparation.
-  read_fst_array(lists$m_io_source_files[current_m_io]) * 1000000
+  read_fst_array(lists$m_io_source_files[current_m_io])
+
+wlv_canonical_gfcf_observations <- NULL
+if (!is.null(wlv_data$gfcf_observations)) {
+  wlv_canonical_gfcf_observations <- if (
+    is.character(wlv_data$gfcf_observations) &&
+      length(wlv_data$gfcf_observations) == 1L &&
+      !is.na(wlv_data$gfcf_observations)
+  ) {
+    if (!file.exists(wlv_data$gfcf_observations)) {
+      stop("Canonical GFCF diagnostic observations are missing.", call. = FALSE)
+    }
+    readRDS(wlv_data$gfcf_observations)
+  } else {
+    wlv_data$gfcf_observations
+  }
+  if (!is.data.frame(wlv_canonical_gfcf_observations)) {
+    stop(
+      "Canonical GFCF diagnostic observations must be a data frame.",
+      call. = FALSE
+    )
+  }
+}
 
 print("loaded m_io files")
 

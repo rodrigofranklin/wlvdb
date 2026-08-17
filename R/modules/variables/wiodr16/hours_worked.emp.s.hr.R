@@ -23,7 +23,7 @@ if (exists("wlv_contract_runtime", inherits = FALSE)) {
   )
 } else {
   sea_sectors[, code, , ] <-
-    employee_hours / employees * persons_engaged * 1000000
+    employee_hours / employees * persons_engaged
 }
 rm(employee_hours, employees, persons_engaged)
 

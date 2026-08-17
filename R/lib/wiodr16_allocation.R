@@ -1,3 +1,17 @@
+wlv_wiodr16_source_unit_multiplier <- function(input_unit) {
+  input_unit <- as.character(input_unit)
+  if (
+    length(input_unit) != 1L || is.na(input_unit) ||
+      !input_unit %in% c("million_usd", "usd")
+  ) {
+    stop(
+      "`input_unit` must be either `million_usd` or `usd`.",
+      call. = FALSE
+    )
+  }
+  if (identical(input_unit, "usd")) 1000000 else 1
+}
+
 wlv_wiodr16_expected_negative_source_k <- function() {
   data.frame(
     year = c("2012", "2013", "2014"),
@@ -209,7 +223,10 @@ wlv_wiodr16_validate_year <- function(year) {
   year
 }
 
-wlv_wiodr16_validate_source_negative_k <- function(sea, tolerance = 1e-10) {
+wlv_wiodr16_validate_source_negative_k <- function(
+    sea,
+    tolerance = 1e-10,
+    input_unit = "million_usd") {
   if (!is.array(sea) || length(dim(sea)) != 4L || is.null(dimnames(sea))) {
     stop("`sea` must be a four-dimensional named array.", call. = FALSE)
   }
@@ -233,6 +250,8 @@ wlv_wiodr16_validate_source_negative_k <- function(sea, tolerance = 1e-10) {
     ,
     drop = FALSE
   ]
+  unit_multiplier <- wlv_wiodr16_source_unit_multiplier(input_unit)
+  expected$value <- expected$value * unit_multiplier
   wlv_wiodr16_assert_exact_anomalies(
     observed,
     expected,
@@ -242,7 +261,10 @@ wlv_wiodr16_validate_source_negative_k <- function(sea, tolerance = 1e-10) {
   )
 }
 
-wlv_wiodr16_validate_source_va_exception <- function(sea, tolerance = 1e-10) {
+wlv_wiodr16_validate_source_va_exception <- function(
+    sea,
+    tolerance = 1e-10,
+    input_unit = "million_usd") {
   if (!is.array(sea) || length(dim(sea)) != 4L || is.null(dimnames(sea))) {
     stop("`sea` must be a four-dimensional named array.", call. = FALSE)
   }
@@ -269,6 +291,8 @@ wlv_wiodr16_validate_source_va_exception <- function(sea, tolerance = 1e-10) {
     ,
     drop = FALSE
   ]
+  unit_multiplier <- wlv_wiodr16_source_unit_multiplier(input_unit)
+  expected$value <- expected$value * unit_multiplier
   wlv_wiodr16_assert_exact_anomalies(
     observed,
     expected,

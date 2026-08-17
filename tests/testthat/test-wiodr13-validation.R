@@ -116,7 +116,8 @@ test_that("duplicate labels and invalid tolerances fail explicitly", {
 })
 
 test_that("the post-preparation wrapper validates the serialized source directory", {
-  fixture <- wlv_make_wiodr13_validation_fixture()
+  raw_fixture <- wlv_make_wiodr13_validation_fixture()
+  fixture <- wlv_normalize_wiodr13_validation_fixture(raw_fixture)
   source_dir <- tempfile("wiodr13-prepared-")
   dir.create(source_dir)
   on.exit(unlink(source_dir, recursive = TRUE, force = TRUE), add = TRUE)
@@ -129,6 +130,82 @@ test_that("the post-preparation wrapper validates the serialized source director
 
   expect_identical(result$dimensions$m_io, c(2L, 6L, 12L))
   expect_identical(result$dimensions$sea, c(2L, 3L, 2L, 3L))
+  expect_identical(result$negative_gfcf_input_unit, "usd")
+  expect_equal(
+    as.numeric(wiodr13_validation_environment$wlv_wiodr13_read_array(
+      file.path(source_dir, "m_io.fst")
+    )),
+    as.numeric(raw_fixture$m_io * 1000000)
+  )
+
+  unlink(file.path(source_dir, "_gfcf_canonical.rds"))
+  expect_error(
+    wiodr13_validation_environment$wlv_validate_wiodr13_prepared(
+      source_dir = source_dir,
+      expected_years = fixture$years
+    ),
+    "raw-GFCF observation sidecar is missing",
+    fixed = TRUE
+  )
+})
+
+test_that("prepared USD GFCF values are tied to their exact raw sidecar", {
+  environment <- wiodr13_validation_environment
+  original_pin <- environment$wlv_wiodr_negative_gfcf_pin
+  on.exit(
+    assign("wlv_wiodr_negative_gfcf_pin", original_pin, envir = environment),
+    add = TRUE
+  )
+  observations <- data.frame(
+    year = "2000",
+    input = "A.S1",
+    output = "A.c99",
+    value = -1.25,
+    value_million_usd = -1.25,
+    policy_id = "fixture_negative_gfcf_v1",
+    action = "truncate_allowlisted_negative_gfcf",
+    stringsAsFactors = FALSE
+  )
+  signature <- environment$wlv_wiodr_negative_gfcf_signature(observations)
+  fixture_pin <- list(
+    years = "2000",
+    demand = "c99",
+    input_count = 1L,
+    output_count = 1L,
+    count = 1L,
+    coordinate_md5 = signature$coordinate_md5,
+    value_md5 = signature$value_md5,
+    canonical_unit = "million_usd"
+  )
+  assign(
+    "wlv_wiodr_negative_gfcf_pin",
+    function(method) fixture_pin,
+    envir = environment
+  )
+  canonical <- array(
+    -1.25e6,
+    dim = c(1L, 1L, 1L),
+    dimnames = list("2000", "A.S1", "A.c99")
+  )
+
+  result <- environment$wlv_wiodr_analyze_prepared_m_io_negative_gfcf(
+    canonical,
+    method = "fixture",
+    observations = observations
+  )
+  expect_identical(result$signature$value_md5, signature$value_md5)
+  expect_identical(result$input_unit, "usd")
+
+  canonical[[1L]] <- canonical[[1L]] - 1
+  expect_error(
+    environment$wlv_wiodr_analyze_prepared_m_io_negative_gfcf(
+      canonical,
+      method = "fixture",
+      observations = observations
+    ),
+    "differ from their raw observation sidecar",
+    fixed = TRUE
+  )
 })
 
 test_that("WIOD country codes follow the EU KLEMS conventions", {

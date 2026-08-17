@@ -264,6 +264,8 @@ wlv_validate_wiodr13_arrays <- function(
     sectors,
     demands,
     expected_years = as.character(1995:2009),
+    input_unit = "million_usd",
+    gfcf_observations = NULL,
     relative_tolerance = 1e-8,
     absolute_tolerance = 1e-6) {
   expected_years <- wlv_wiodr13_validate_labels(
@@ -321,11 +323,26 @@ wlv_validate_wiodr13_arrays <- function(
   )
 
   wlv_wiodr13_assert_finite(m_io, "m_io")
-  negative_gfcf <- wlv_wiodr_analyze_m_io_negative_gfcf(
-    m_io,
-    method = "wiodr13",
-    input_unit = "million_usd"
-  )
+  wlv_wiodr_gfcf_unit_divisor(input_unit)
+  negative_gfcf <- if (is.null(gfcf_observations)) {
+    wlv_wiodr_analyze_m_io_negative_gfcf(
+      m_io,
+      method = "wiodr13",
+      input_unit = input_unit
+    )
+  } else {
+    if (!identical(input_unit, "usd")) {
+      stop(
+        "Raw GFCF observations can only accompany canonical USD arrays.",
+        call. = FALSE
+      )
+    }
+    wlv_wiodr_analyze_prepared_m_io_negative_gfcf(
+      m_io,
+      method = "wiodr13",
+      observations = gfcf_observations
+    )
+  }
   sea_missingness <- wlv_wiodr13_assert_sea_missingness(
     sea,
     labels$countries,
@@ -378,6 +395,7 @@ wlv_validate_wiodr13_arrays <- function(
     negative_gfcf_coordinate_md5 = negative_gfcf$signature$coordinate_md5,
     negative_gfcf_value_md5 = negative_gfcf$signature$value_md5,
     negative_gfcf_canonical_unit = negative_gfcf$canonical_unit,
+    negative_gfcf_input_unit = negative_gfcf$input_unit,
     expected_row_na_count = sea_missingness$expected_row_na_count,
     observed_row_na_count = sea_missingness$observed_row_na_count,
     maximum_absolute_gross_output_residual = max(abs(residual))
@@ -406,8 +424,148 @@ wlv_wiodr13_read_array <- function(path) {
   value
 }
 
+wlv_wiodr_analyze_prepared_m_io_negative_gfcf <- function(
+    value,
+    method,
+    observations) {
+  required <- c(
+    "year", "input", "output", "value", "value_million_usd",
+    "policy_id", "action"
+  )
+  if (
+    !is.data.frame(observations) ||
+      length(setdiff(required, names(observations))) ||
+      anyNA(observations[required]) ||
+      !is.numeric(observations$value) ||
+      !is.numeric(observations$value_million_usd) ||
+      any(!is.finite(observations$value)) ||
+      any(!is.finite(observations$value_million_usd)) ||
+      any(observations$value >= 0) ||
+      any(observations$value_million_usd >= 0) ||
+      !identical(observations$value, observations$value_million_usd) ||
+      any(observations$policy_id != paste0(method, "_negative_gfcf_v1")) ||
+      any(observations$action != "truncate_allowlisted_negative_gfcf")
+  ) {
+    stop("Invalid prepared raw-GFCF observation sidecar.", call. = FALSE)
+  }
+
+  wlv_wiodr_assert_gfcf_array(value)
+  pin <- wlv_wiodr_negative_gfcf_pin(method)
+  suffix <- paste0(".", pin$demand)
+  output_positions <- which(endsWith(dimnames(value)[[3L]], suffix))
+  canonical_source_scope <-
+    identical(dimnames(value)[[1L]], pin$years) &&
+    identical(dim(value)[[2L]], pin$input_count)
+  if (
+    canonical_source_scope &&
+      !identical(length(output_positions), pin$output_count)
+  ) {
+    stop(
+      sprintf(
+        "WIOD %s requires exactly %s `%s` GFCF output columns; found %s.",
+        sub("^wiodr", "", method),
+        pin$output_count,
+        pin$demand,
+        length(output_positions)
+      ),
+      call. = FALSE
+    )
+  }
+
+  gfcf <- value[, , output_positions, drop = FALSE]
+  array_observations <- wlv_wiodr_observe_negative_gfcf(
+    gfcf,
+    input_unit = "usd"
+  )
+  canonical_scope <- wlv_wiodr_is_canonical_gfcf_scope(gfcf, pin)
+  if (!canonical_scope && (nrow(array_observations) || nrow(observations))) {
+    stop(
+      sprintf(
+        "WIOD %s negative GFCF cannot be accepted outside the pinned full source scope.",
+        sub("^wiodr", "", method)
+      ),
+      call. = FALSE
+    )
+  }
+
+  signature <- if (canonical_scope) {
+    wlv_wiodr_assert_negative_gfcf_coordinates(
+      array_observations,
+      method,
+      pin
+    )
+    wlv_wiodr_assert_negative_gfcf_profile(observations, method, pin)
+  } else {
+    wlv_wiodr_negative_gfcf_signature(observations)
+  }
+
+  array_keys <- paste(
+    array_observations$year,
+    array_observations$input,
+    array_observations$output,
+    sep = "|"
+  )
+  sidecar_keys <- paste(
+    observations$year,
+    observations$input,
+    observations$output,
+    sep = "|"
+  )
+  array_order <- order(array_keys, method = "radix")
+  sidecar_order <- order(sidecar_keys, method = "radix")
+  values_match <- identical(
+    as.numeric(array_observations$value[array_order]),
+    as.numeric(observations$value[sidecar_order] * 1000000)
+  )
+  if (
+    !identical(array_keys[array_order], sidecar_keys[sidecar_order]) ||
+      !values_match
+  ) {
+    stop(
+      "Prepared canonical GFCF values differ from their raw observation sidecar.",
+      call. = FALSE
+    )
+  }
+
+  structure(
+    list(
+      observations = array_observations,
+      raw_observations = observations,
+      signature = signature,
+      canonical_scope = canonical_scope,
+      input_unit = "usd",
+      canonical_unit = pin$canonical_unit
+    ),
+    class = c("wlv_negative_gfcf_analysis", "list")
+  )
+}
+
+wlv_wiodr_read_prepared_gfcf_observations <- function(source_dir, method) {
+  path <- file.path(source_dir, "_gfcf_canonical.rds")
+  if (!file.exists(path)) {
+    stop(
+      sprintf("Prepared %s raw-GFCF observation sidecar is missing: %s", method, path),
+      call. = FALSE
+    )
+  }
+  tryCatch(
+    readRDS(path),
+    error = function(error) {
+      stop(
+        sprintf(
+          "Cannot read prepared %s raw-GFCF observation sidecar `%s`: %s",
+          method,
+          path,
+          conditionMessage(error)
+        ),
+        call. = FALSE
+      )
+    }
+  )
+}
+
 wlv_validate_wiodr13_prepared <- function(
-    source_dir = file.path("source_data", "wiodr13"),
+    source_dir = file.path("source_data", "wiodr13", "normalized"),
     expected_years = as.character(1995:2009),
     read_array = wlv_wiodr13_read_array,
     relative_tolerance = 1e-8,
@@ -425,6 +583,10 @@ wlv_validate_wiodr13_prepared <- function(
   countries <- utils::read.csv2(csv_paths[[1L]], stringsAsFactors = FALSE)$country.source
   sectors <- utils::read.csv2(csv_paths[[2L]], stringsAsFactors = FALSE)$sector.source
   demands <- utils::read.csv2(csv_paths[[3L]], stringsAsFactors = FALSE)$demand
+  gfcf_observations <- wlv_wiodr_read_prepared_gfcf_observations(
+    source_dir,
+    "wiodr13"
+  )
 
   wlv_validate_wiodr13_arrays(
     m_io = read_array(file.path(source_dir, "m_io.fst")),
@@ -433,6 +595,8 @@ wlv_validate_wiodr13_prepared <- function(
     sectors = sectors,
     demands = demands,
     expected_years = expected_years,
+    input_unit = "usd",
+    gfcf_observations = gfcf_observations,
     relative_tolerance = relative_tolerance,
     absolute_tolerance = absolute_tolerance
   )

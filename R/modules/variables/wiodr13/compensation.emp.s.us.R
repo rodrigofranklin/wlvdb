@@ -14,5 +14,5 @@ meta_indicators[code,"group"] <- "Wages and value of labour force"
 meta_indicators[code,"reverted"] <- FALSE
 
 sea_sectors[,code,,] <-
-  sea_source[,"LAB",lists$sectors,] *1000000 / 
+  sea_source[,"LAB",lists$sectors,] /
   sea_sectors[,"exchange.r.us",,]

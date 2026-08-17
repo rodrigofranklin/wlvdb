@@ -318,6 +318,12 @@ wlv_validate_request <- function(
 
   if (mode == "recalculate") {
     at_stage <- wlv_validate_integer(at_stage, "at_stage", minimum = 1L, maximum = 5L)
+    if (!at_stage %in% c(1L, 4L, 5L)) {
+      stop(
+        "`at_stage` must be one of the implemented checkpoints: 1, 4, or 5.",
+        call. = FALSE
+      )
+    }
     if (!is.null(sea_vars) && (!is.character(sea_vars) || anyNA(sea_vars))) {
       stop("`sea_vars` must be NULL or a character vector without NA.", call. = FALSE)
     }
@@ -588,12 +594,12 @@ wlv_resolve_source_artifacts <- function(plan, method, needs_io) {
 
   required <- character()
   input_output <- character()
+  socioeconomic <- character()
+  manifest <- character()
   for (index in seq_len(nrow(specifications))) {
     specification <- specifications[index, , drop = FALSE]
-    is_input_output <- startsWith(specification$artifact[[1L]], "m_io")
-    if (is_input_output && !needs_io) {
-      next
-    }
+    artifact_name <- basename(specification$artifact[[1L]])
+    is_input_output <- startsWith(artifact_name, "m_io")
 
     artifact_path <- file.path(
       method$source_dir[[1L]],
@@ -622,16 +628,135 @@ wlv_resolve_source_artifacts <- function(plan, method, needs_io) {
     if (is_input_output) {
       input_output <- c(input_output, paths)
     }
+    if (identical(artifact_name, "sea.fst")) {
+      socioeconomic <- c(socioeconomic, paths)
+    }
+    if (identical(artifact_name, "_source_manifest.csv")) {
+      manifest <- c(manifest, paths)
+    }
   }
 
   wlv_require_files(
     unique(required),
     sprintf("catalog-declared source data for method `%s`", method$method[[1L]])
   )
+  if (length(socioeconomic) != 1L || length(manifest) != 1L) {
+    stop(
+      sprintf(
+        "Artifact profile `%s` must resolve one SEA array and one source manifest.",
+        profile
+      ),
+      call. = FALSE
+    )
+  }
   list(
     required = unique(required),
-    input_output = sort(unique(input_output))
+    input_output = sort(unique(input_output)),
+    socioeconomic = socioeconomic[[1L]],
+    manifest = manifest[[1L]]
   )
+}
+
+wlv_method_unit_contract_paths <- function(plan, method) {
+  contract_id <- method$unit_contract[[1L]]
+  if (!nzchar(contract_id)) {
+    stop(
+      sprintf("Source `%s` does not declare a unit contract.", method$source[[1L]]),
+      call. = FALSE
+    )
+  }
+  contract <- wlv_catalog_unit_contract(plan$catalog, contract_id)
+  metadata <- contract$metadata
+  list(
+    id = contract_id,
+    version = as.character(metadata$schema_version[[1L]]),
+    paths = file.path(
+      plan$root,
+      c(metadata$units[[1L]], metadata$aggregations[[1L]])
+    )
+  )
+}
+
+wlv_validate_method_source_manifest <- function(plan, method, artifacts) {
+  contract <- wlv_method_unit_contract_paths(plan, method)
+  normalized_root <- dirname(artifacts$manifest)
+  manifest <- wlv_read_source_manifest(artifacts$manifest)
+  wlv_verify_source_manifest(
+    manifest,
+    source_root = normalized_root,
+    contract_path = contract$paths,
+    expected_contract_id = contract$id,
+    expected_contract_version = contract$version
+  )
+  normalized_root_path <- normalizePath(
+    normalized_root,
+    winslash = "/",
+    mustWork = TRUE
+  )
+  required_paths <- setdiff(artifacts$required, artifacts$manifest)
+  resolved_paths <- normalizePath(
+    required_paths,
+    winslash = "/",
+    mustWork = TRUE
+  )
+  comparison_root <- normalized_root_path
+  comparison_paths <- resolved_paths
+  if (.Platform$OS.type == "windows") {
+    comparison_root <- tolower(comparison_root)
+    comparison_paths <- tolower(comparison_paths)
+  }
+  prefix <- paste0(sub("/+$", "", comparison_root), "/")
+  inside <- startsWith(comparison_paths, prefix)
+  if (any(!inside)) {
+    stop(
+      "Catalog-declared normalized source artifacts must stay inside their generation.",
+      call. = FALSE
+    )
+  }
+  relative_paths <- substring(
+    resolved_paths,
+    nchar(normalized_root_path) + 2L
+  )
+  undeclared <- setdiff(relative_paths, manifest$artifact)
+  if (length(undeclared)) {
+    stop(
+      sprintf(
+        "Normalized source artifact(s) are absent from the generation manifest: %s.",
+        paste(undeclared, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  list(
+    manifest = manifest,
+    provenance = wlv_source_provenance(manifest, method$source[[1L]]),
+    normalized_root = normalized_root,
+    gfcf_observations = file.path(normalized_root, "_gfcf_canonical.rds")
+  )
+}
+
+wlv_assert_method_source_inputs_unchanged <- function(plan, method, run_data) {
+  if (!is.list(run_data) || is.null(run_data$source_provenance)) {
+    stop("The validated run data lack source provenance.", call. = FALSE)
+  }
+  artifacts <- wlv_resolve_source_artifacts(plan, method, needs_io = TRUE)
+  current <- wlv_validate_method_source_manifest(plan, method, artifacts)
+  current_provenance <- wlv_source_provenance(
+    current$manifest,
+    method$source[[1L]],
+    additional_paths = run_data$source_provenance_inputs
+  )
+  wlv_validate_source_provenance(run_data$source_provenance)
+  if (!identical(current_provenance, run_data$source_provenance)) {
+    stop(
+      paste0(
+        "Source inputs changed after preflight validation; the result was not ",
+        "published. Run the calculation again from the new source generation."
+      ),
+      call. = FALSE
+    )
+  }
+  invisible(current_provenance)
 }
 
 wlv_io_years <- function(path) {
@@ -729,7 +854,21 @@ wlv_validate_data <- function(
       method,
       needs_io = needs_io
     )
-    method_data <- list()
+    source_manifest <- wlv_validate_method_source_manifest(
+      plan,
+      method,
+      source_artifacts
+    )
+    method_data <- list(
+      source_manifest = source_manifest$manifest,
+      source_provenance = source_manifest$provenance,
+      source_sea = source_artifacts$socioeconomic,
+      gfcf_observations = if (file.exists(source_manifest$gfcf_observations)) {
+        source_manifest$gfcf_observations
+      } else {
+        NULL
+      }
+    )
     if (needs_io) {
       source_io <- source_artifacts$input_output
       if (!length(source_io)) {
@@ -760,7 +899,9 @@ wlv_validate_data <- function(
           }
           scientific_validator <- validator_bundle$validate
           validator_environments[[source_name]] <- validator_bundle$environment
-          scientific_validations[[source_name]] <- scientific_validator(method$source_dir)
+          scientific_validations[[source_name]] <- scientific_validator(
+            source_manifest$normalized_root
+          )
         }
 
         method_sectors <- utils::read.csv2(
@@ -849,8 +990,33 @@ wlv_validate_data <- function(
       method_data$source_io <- source_io
     }
 
+    matrices <- plan$configuration[[method$method]]$matrices$computation
+    effective_euklems_files <- wlv_euklems_files(
+      plan$root,
+      source_artifacts$input_output,
+      matrices
+    )
+    if (length(effective_euklems_files)) {
+      wlv_require_files(
+        effective_euklems_files,
+        sprintf("WIOD EUKLEMS provenance inputs for method `%s`", method$method)
+      )
+    }
+    method_data$source_provenance <- wlv_source_provenance(
+      source_manifest$manifest,
+      method$source[[1L]],
+      additional_paths = effective_euklems_files
+    )
+    method_data$source_provenance_inputs <- effective_euklems_files
+
     if (plan$mode == "recalculate") {
       result_dir <- file.path(plan$root, "results", method$method)
+      wlv_assert_recalculation_source_provenance(
+        result_dir,
+        current_manifest = source_manifest$manifest,
+        source = method$source[[1L]],
+        additional_paths = effective_euklems_files
+      )
       result_required <- file.path(
         result_dir,
         c(
@@ -1012,13 +1178,25 @@ wlv_run_script <- function(
 }
 
 wlv_prepare_sources <- function(plan) {
-  unique_sources <- !duplicated(plan$methods$source)
-  preparers <- plan$methods$preparer[unique_sources]
-  functions_script <- file.path(plan$root, "R", "lib", "functions.R")
-  invisible(lapply(preparers, function(preparer) {
+  source_indexes <- which(!duplicated(plan$methods$source))
+  preamble <- file.path(
+    plan$root,
+    "R",
+    "lib",
+    c(
+      "catalog.R", "functions.R", "gfcf_contracts.R",
+      "source_manifest.R", "source_normalization.R"
+    )
+  )
+  invisible(lapply(source_indexes, function(index) {
+    source_record <- plan$methods[index, , drop = FALSE]
     wlv_run_script(
-      preparer,
-      preamble = functions_script,
+      source_record$preparer[[1L]],
+      values = list(
+        wlv_catalog = plan$catalog,
+        wlv_source_record = source_record
+      ),
+      preamble = preamble,
       root = plan$root
     )
   }))
@@ -1456,6 +1634,21 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         contract_runtime,
         file.path(staging, "_anomalies.csv")
       )
+      wlv_assert_method_source_inputs_unchanged(
+        plan,
+        method_record,
+        run_data
+      )
+      source_provenance <- run_data$source_provenance
+      wlv_validate_source_provenance(source_provenance)
+      wlv_write_result_csv(
+        source_provenance,
+        file.path(staging, wlv_source_provenance_filename)
+      )
+      source_provenance_csv <- stats::setNames(
+        list(source_provenance),
+        wlv_source_provenance_filename
+      )
       unit_contract_csv <- list()
       unit_contract_id <- method_record$unit_contract[[1L]]
       if (nzchar(unit_contract_id)) {
@@ -1498,7 +1691,7 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         solutions = run_environment$sea_variables,
         sectors = run_environment$sectors,
         meta_indicators = run_environment$meta_indicators,
-        extra_csv = c(scientific_csv, unit_contract_csv)
+        extra_csv = c(scientific_csv, unit_contract_csv, source_provenance_csv)
       )
       scientific_checks <- wlv_validate_staged_results(
         staging,

@@ -15,7 +15,7 @@ test_that("the synthetic fixture completes the real calculation pipeline", {
     "sea_sectors.fst", "sea_sectors.fst.meta",
     "sea_countries.fst", "sea_countries.fst.meta",
     "meta_indicators.RDS", "_anomalies.csv", "_states.csv",
-    "_unit_contract.csv"
+    "_unit_contract.csv", "_source_provenance.csv"
   )
   expect_true(all(file.exists(file.path(fixture$root, result_path, expected_files))))
   anomaly_report <- utils::read.csv2(
@@ -50,7 +50,7 @@ test_that("the synthetic fixture completes the real calculation pipeline", {
   )
   expect_equal(
     unit_contract$source_scale[unit_contract$indicator == "gross_output.s.us"],
-    rep(1000000, 2L)
+    rep(1, 2L)
   )
 
   m_io <- wlv_read_fixture_array(fixture, result_path, "m_io2000-2001.fst")
@@ -190,6 +190,41 @@ test_that("the synthetic fixture completes the real calculation pipeline", {
   expect_true(all(is.finite(m_countries)))
   expect_true(all(is.finite(sea_sectors)))
   expect_true(all(is.finite(sea_countries)))
+})
+
+test_that("calculation reads labels from the manifested normalized generation", {
+  fixture <- wlv_make_synthetic_calculation_fixture()
+  on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
+
+  raw_countries_path <- file.path(
+    fixture$root,
+    "source_data",
+    "synthetic",
+    "countries.csv"
+  )
+  raw_countries <- utils::read.csv2(
+    raw_countries_path,
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  utils::write.table(
+    raw_countries[rev(seq_len(nrow(raw_countries))), , drop = FALSE],
+    raw_countries_path,
+    row.names = FALSE,
+    quote = FALSE,
+    sep = ";",
+    fileEncoding = "UTF-8"
+  )
+
+  expect_no_error(
+    suppressMessages(wlv_run_synthetic_calculation(fixture, workers = 1L))
+  )
+  sea_countries <- wlv_read_fixture_array(
+    fixture,
+    file.path("results", fixture$method),
+    "sea_countries.fst"
+  )
+  expect_identical(dimnames(sea_countries)[[3L]], c("A", "B", "WWW"))
 })
 
 test_that("recalculation repairs a selected result and preserves the others", {
