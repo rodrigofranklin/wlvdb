@@ -1,13 +1,14 @@
 # Índice de valores da cesta de consumo
 code <- "basket_value.r.pc"
 
-meta_indicators[code,"name"] <- "Consumption basket value index (2000 = 100)"
+meta_indicators[code,"name"] <- "Consumption basket value index (2000 = 1)"
 meta_indicators[code,"description"] <- 
   paste0("Consumption basket value index reflects changes in the socially ",
          "necessary labour-time to produce a fixed consumption basket ",
          "necessary for reproduction of an avarage worker. The Laspeyres ",
          "formula is used.")
-meta_indicators[code,"observation"] <- NA
+meta_indicators[code,"observation"] <-
+  "Calculated and published on the canonical base-one scale."
 meta_indicators[code,"type"] <- "index"
 meta_indicators[code,"group"] <- "Others"
 meta_indicators[code,"reverted"] <- FALSE
@@ -27,6 +28,10 @@ if (!exists("basket_value_zero")) {
     colSums(na.rm = TRUE)
 }
 
+# This module is shared by both WIOD releases. WIOD13 stores the input price
+# index at base one, while the pre-v2 WIOD16 contract still stores base 100.
+go_price_storage_base <- if (identical(source_version, "wiodr16")) 100 else 1
+
 sea_sectors[lists$years,code,,] <- 
   # Replica a distribuição da cesta do período Zero para todos os anos
   ((basket_zero %>%
@@ -35,7 +40,7 @@ sea_sectors[lists$years,code,,] <-
       aperm(c(3,1,2))) *
      
      # Aplica a inflação em moeda nacional
-     (((sea_sectors[lists$years,"go_price.r.id",,]/100) / 
+     (((sea_sectors[lists$years,"go_price.r.id",,] / go_price_storage_base) /
          # Dividido pelo índice de variação cambial
          sea_sectors[lists$years,"exchange.r.id",,]) %>%
         rep(times = nums$input) %>%
@@ -63,3 +68,5 @@ sea_sectors[,code,,] <-
      rep(times = nums$years) %>%
      newDim(c(nums$sectors, nums$countries, nums$years)) %>%
      aperm(c(3,1,2)))
+
+rm(go_price_storage_base)

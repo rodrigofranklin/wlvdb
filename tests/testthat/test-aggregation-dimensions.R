@@ -245,16 +245,21 @@ test_that("stable registries resolve dimensionally before a result lock", {
     expect_equal(nrow(routes$legacy), 0L, info = method)
   }
 
-  contract <- "wiodr13_units_v1"
+  contract <- catalog$sources$unit_contract[
+    catalog$sources$source == "wiodr13"
+  ][[1L]]
   lcu_indicators <- catalog$unit_definitions[[contract]]$indicator[
     catalog$unit_definitions[[contract]]$currency == "local_currency"
   ]
   world_lcu <- catalog$unit_aggregations[[contract]]$indicator %in%
     lcu_indicators &
     catalog$unit_aggregations[[contract]]$level == "country_to_world"
-  catalog$unit_contracts$schema_version[
-    catalog$unit_contracts$contract == contract
-  ] <- "2"
+  expect_identical(
+    catalog$unit_contracts$schema_version[
+      catalog$unit_contracts$contract == contract
+    ],
+    "2"
+  )
   locked <- FALSE
   aggregation_dimension_environment$wlv_acquire_result_lock <- function(...) {
     locked <<- TRUE
@@ -278,10 +283,7 @@ test_that("stable registries resolve dimensionally before a result lock", {
   )
   expect_false(locked)
 
-  expect_setequal(
-    catalog$unit_aggregations[[contract]]$strategy[world_lcu],
-    "mean"
-  )
+  catalog$unit_aggregations[[contract]]$strategy[world_lcu] <- "sum"
   expect_error(
     aggregation_dimension_environment$wlv_validate_request(
       methods = "wiodr13",

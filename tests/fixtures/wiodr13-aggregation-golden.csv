@@ -1,0 +1,6 @@
+case;legacy;typed
+compensation_share;0.5;0.18
+hours_share;0.5;0.35
+go_price;1;1.16
+complex_employees;2;1.2
+value_per_usd;7;3.0625

@@ -242,10 +242,10 @@ test_that("repository catalog classifies every method and source explicitly", {
     catalog$sources$missingness_policy[catalog$sources$status == "stable"],
     c("wiodr13_v1", "wiodr16_v1")
   )
-  expect_equal(nrow(catalog$unit_contracts), 2L)
+  expect_equal(nrow(catalog$unit_contracts), 3L)
   expect_setequal(
     catalog$sources$unit_contract[catalog$sources$status == "stable"],
-    c("wiodr13_units_v1", "wiodr16_units_v1")
+    c("wiodr13_units_v2", "wiodr16_units_v1")
   )
 })
 
@@ -288,7 +288,7 @@ test_that("catalog accessors and output formats are deterministic", {
   expect_identical(policy$factory, "wlv_wiodr13_missingness_policy")
   unit_contract <- catalog_environment$wlv_catalog_unit_contract(
     catalog,
-    "wiodr13_units_v1"
+    "wiodr13_units_v2"
   )
   expect_identical(unit_contract$metadata$source, "wiodr13")
   expect_equal(nrow(unit_contract$units), 58L)
@@ -715,7 +715,11 @@ test_that("disabled and non-stable entries expose their limitations", {
 
 test_that("stable unit contracts have deterministic exact coverage", {
   catalog <- catalog_environment$wlv_load_catalog(wlv_test_root)
-  expected <- c(wiodr13_units_v1 = 58L, wiodr16_units_v1 = 50L)
+  expected <- c(
+    wiodr13_units_v1 = 58L,
+    wiodr13_units_v2 = 58L,
+    wiodr16_units_v1 = 50L
+  )
 
   for (contract in names(expected)) {
     value <- catalog_environment$wlv_catalog_unit_contract(catalog, contract)

@@ -85,4 +85,6 @@ stale or missing contract metadata prevents publication.
 Changing a unit, scale, index base, labour concept or aggregation declaration
 is a contract change. Such changes require a new contract identifier unless
 they only correct prose in `notes`; numerical migrations belong in separately
-reviewed changes with before/after validation.
+reviewed changes with before/after validation. Contracts that are no longer
+selected by a stable source remain registered for historical result auditing,
+but their semantics are never silently replaced by a newer contract.
