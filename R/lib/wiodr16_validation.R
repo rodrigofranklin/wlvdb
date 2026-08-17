@@ -316,7 +316,7 @@ wlv_validate_wiodr16_arrays <- function(
   )
 
   wlv_wiodr13_assert_finite(m_io, "m_io")
-  wlv_wiodr_gfcf_unit_divisor(input_unit)
+  units_per_million_usd <- wlv_wiodr_gfcf_unit_divisor(input_unit)
   negative_gfcf <- if (is.null(gfcf_observations)) {
     wlv_wiodr_analyze_m_io_negative_gfcf(
       m_io,
@@ -367,8 +367,15 @@ wlv_validate_wiodr16_arrays <- function(
   )
 
   residual <- supplied_output - gross_output
-  scale <- pmax(abs(supplied_output), abs(gross_output), 1)
-  failed <- abs(residual) > absolute_tolerance + relative_tolerance * scale
+  scale <- pmax(
+    abs(supplied_output),
+    abs(gross_output),
+    units_per_million_usd
+  )
+  effective_absolute_tolerance <-
+    absolute_tolerance * units_per_million_usd
+  failed <- abs(residual) >
+    effective_absolute_tolerance + relative_tolerance * scale
   if (any(failed)) {
     examples <- wlv_wiodr13_format_positions(residual, failed)
     stop(

@@ -92,6 +92,48 @@ test_that("gross output must equal the complete row of intermediate and final us
   )
 })
 
+test_that("WIOD13 accounting tolerances are invariant to canonical USD scaling", {
+  make_fixture <- function(residual) {
+    fixture <- wlv_make_wiodr13_validation_fixture()
+    fixture$m_io["2000", "A.S1", ] <- 0
+    fixture$m_io["2000", "A.S1", "A.S1"] <- 1
+    fixture$m_io["2000", "A.S1", "A.S2"] <- -1 + residual
+    fixture$sea["2000", "GO_USD", "S1", "A"] <- 0
+    fixture
+  }
+
+  raw <- make_fixture(5e-7)
+  raw_result <- wlv_validate_wiodr13_fixture(raw)
+  canonical <- wlv_normalize_wiodr13_validation_fixture(raw)
+  canonical_result <- wlv_validate_wiodr13_fixture(
+    canonical,
+    input_unit = "usd",
+    gfcf_observations = canonical$gfcf_observations
+  )
+
+  expect_equal(
+    canonical_result$maximum_absolute_gross_output_residual,
+    raw_result$maximum_absolute_gross_output_residual * 1000000
+  )
+
+  broken_raw <- make_fixture(2e-6)
+  expect_error(
+    wlv_validate_wiodr13_fixture(broken_raw),
+    "gross-output identity failed",
+    fixed = TRUE
+  )
+  broken_canonical <- wlv_normalize_wiodr13_validation_fixture(broken_raw)
+  expect_error(
+    wlv_validate_wiodr13_fixture(
+      broken_canonical,
+      input_unit = "usd",
+      gfcf_observations = broken_canonical$gfcf_observations
+    ),
+    "gross-output identity failed",
+    fixed = TRUE
+  )
+})
+
 test_that("value added is required but no invalid reduced column identity is imposed", {
   fixture <- wlv_make_wiodr13_validation_fixture()
   fixture$sea[, "VA_USD", , ] <- 0
