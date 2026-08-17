@@ -22,6 +22,13 @@ meta_indicators$type <- NA
 meta_indicators$reverted <- NA
 meta_indicators <- meta_indicators |> as.data.frame()
 row.names(meta_indicators) <- meta_indicators$code
+if (exists("wlv_unit_definitions", inherits = FALSE)) {
+  meta_indicators <- wlv_complete_indicator_metadata(
+    meta_indicators,
+    units = wlv_unit_definitions,
+    warn_legacy = FALSE
+  )
+}
 
 # m_countries -> country x country matrix
 m_countries <- array(NA,

@@ -145,7 +145,7 @@ if ("capital_stock.s.cu" %in% dimnames(sea_sectors)[[2L]]) {
     meta_indicators["capital_stock.s.cu", "observation"],
     " For the Rest of the World, the constant series is rebuilt after its ",
     "current-USD stock is constructed, using the 2000-based exchange-rate ",
-    "index and the 2000=100 gross-output price index."
+    "index and the canonical 2000=1 gross-output price index."
   )
 
   if (

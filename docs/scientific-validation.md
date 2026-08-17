@@ -219,6 +219,12 @@ arquivo FST.
 | Sidecar ausente ou inválido | fixture descartável sem o sidecar, com esquema inválido, método/ano incompatível ou limite numérico violado | A operação aborta antes da promoção e a geração anterior permanece byte a byte igual. |
 | Matriz ausente ou incompatível | fixture descartável corrompida | Estágios que dependem da matriz abortam; nenhuma geração parcial é publicada. |
 
+Uma seleção `sea_vars` precisa existir em todos os métodos solicitados e só pode
+conter indicadores cujo estágio declarado seja igual ou posterior ao checkpoint.
+Nomes desconhecidos e combinações de estágio que produziriam um recálculo vazio
+falham antes da execução. Remover um indicador já publicado altera o schema do
+resultado e exige um cálculo completo; o recálculo não contrai arrays ou sidecars.
+
 Para valores recalculados por soma, “equivale” significa erro menor ou igual ao
 limite de redução declarado; rótulos, ausência, zeros estruturais e células não
 selecionadas continuam exatos. A comparação deve incluir `sea_sectors`,

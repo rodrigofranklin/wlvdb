@@ -135,7 +135,7 @@ gc()
 lists$years <- names(sea_source[,1,1,1])
 nums$years <- length(lists$years)
 
-if (identical(source_version, "wiodr13")) {
+if (source_version %in% c("wiodr13", "wiodr16")) {
   source("R/modules/variables/wiodr13/normalize_price_indices.R")
 }
 

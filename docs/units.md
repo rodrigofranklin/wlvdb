@@ -6,7 +6,8 @@ machine-readable. Each source selects one versioned contract in
 two relational tables:
 
 - `*-units.csv` describes the quantity, input scale, canonical result unit,
-  currency, price basis, index base and labour concept of every indicator;
+  display unit and multiplier, currency, price basis, index base and labour
+  concept of every indicator;
 - `*-aggregations.csv` records the current sector-to-country and
   country-to-world operation for the same indicator.
 
@@ -62,9 +63,25 @@ WIOD source generations are normalized before publication, so direct stable
 indicators now declare canonical source units and a scale of `1`. The separate
 `_normalization_contract.csv` source sidecar records conversions from the raw
 provider units. Derived indicators also use a scale of `1`. `index_base`
-records the value actually published in the base year; this intentionally
-exposes the current WIOD13 base-one and WIOD16 gross-output-price base-100
-conventions.
+records the value stored in the base year; display scaling is declared
+separately.
+
+`display_multiplier` is deliberately separate: it is applied by a consumer
+only when presenting a value and never mutates a stored calculation. WIOD16 v2
+stores every index with `index_base = 1` and presents index points with
+`display_multiplier = 100`. Rates whose indicator metadata classifies them as
+percentages are likewise stored as ratios and declare `display_unit = percent`
+and `display_multiplier = 100`. Consumers must use this contract field once;
+they must not apply a second scale rule inferred from the legacy `type` field.
+
+The effective `_unit_contract.csv` result sidecar retains the canonical
+`base_year` and `index_base` columns and also projects them under the explicit
+presentation-facing names `index_base_year` and `index_storage_base` for index
+rows. The method-specific `meta_indicators.RDS` exposes `canonical_unit`,
+`display_unit`, `display_multiplier`, `index_base_year`, and
+`index_storage_base` as well. The shared `results/meta_indicators.csv` retains
+its legacy `value`, `groups`, `type`, and `reverted` schema because two methods
+can publish the same indicator code with different presentation rules.
 
 The historical `.cu` suffix on `compensation.emp.s.cu` and
 `compensation.empe.s.cu` does not mean local-currency storage. Their modules
@@ -82,9 +99,17 @@ scientific checks still recompute them from `_method_solutions.csv`. The
 sidecar is staged and byte-compared with the rest of the result metadata, so
 stale or missing contract metadata prevents publication.
 
-Changing a unit, scale, index base, labour concept or aggregation declaration
-is a contract change. Such changes require a new contract identifier unless
-they only correct prose in `notes`; numerical migrations belong in separately
-reviewed changes with before/after validation. Contracts that are no longer
-selected by a stable source remain registered for historical result auditing,
-but their semantics are never silently replaced by a newer contract.
+Changing stored semantics, scale, index base, labour concept or aggregation is
+a contract change and requires a new contract identifier. A metadata-only
+repair may update every affected version when it makes the registry describe
+unchanged generated values accurately; the constant-USD compensation repair is
+one such case. Numerical migrations belong in separately reviewed changes with
+before/after validation.
+Contracts that are no longer selected by a stable source remain registered for
+historical result auditing, but their semantics are never silently replaced by
+a newer contract.
+
+WIOD16 therefore keeps `wiodr16_units_v1` as the historical declaration and
+selects `wiodr16_units_v2` for new stable results. See
+[`unit-migration.md`](unit-migration.md) for the numerical and compatibility
+mapping.

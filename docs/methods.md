@@ -53,7 +53,7 @@ Preparation is a source capability and is repeated here for convenience.
 | `exiobase382` | `experimental` | — | `exiobase` | `source_data/exiobase382` | no | — | — | — | — | — | — | Shares a legacy parameter set and has no version-pinned preparation contract, and temporal coverage has not been revalidated. |
 | `exiobase395` | `experimental` | 1995–2022 | `exiobase` | `source_data/exiobase395` | no | — | — | — | — | — | — | Recovery is pending before EXIOBASE 3.9.5 can be enabled. |
 | `wiodr13` | `stable` | 1995–2009 | `wiodr13` | `source_data/wiodr13` | yes | [R/utils/prepare_wiodr13_data.R](../R/utils/prepare_wiodr13_data.R) | [R/lib/wiodr13_validation.R](../R/lib/wiodr13_validation.R) (`wlv_validate_wiodr13_prepared`) | `wiod_core` | `wiodr13_v1` | `wiodr13_units_v2` | [docs/wiodr13.md](wiodr13.md) | — |
-| `wiodr16` | `stable` | 2000–2014 | `wiodr16` | `source_data/wiodr16` | yes | [R/utils/prepare_wiodr16_data.R](../R/utils/prepare_wiodr16_data.R) | [R/lib/wiodr16_validation.R](../R/lib/wiodr16_validation.R) (`wlv_validate_wiodr16_prepared`) | `wiod_core` | `wiodr16_v1` | `wiodr16_units_v1` | [docs/wiodr16.md](wiodr16.md) | — |
+| `wiodr16` | `stable` | 2000–2014 | `wiodr16` | `source_data/wiodr16` | yes | [R/utils/prepare_wiodr16_data.R](../R/utils/prepare_wiodr16_data.R) | [R/lib/wiodr16_validation.R](../R/lib/wiodr16_validation.R) (`wlv_validate_wiodr16_prepared`) | `wiod_core` | `wiodr16_v1` | `wiodr16_units_v2` | [docs/wiodr16.md](wiodr16.md) | — |
 
 ## Missingness policies
 
@@ -73,6 +73,7 @@ Stable sources select versioned unit and aggregation declarations; catalog loadi
 | `wiodr13_units_v1` | `1` | `wiodr13` | [contracts/units/wiodr13_v1-units.csv](../contracts/units/wiodr13_v1-units.csv) | [contracts/units/wiodr13_v1-aggregations.csv](../contracts/units/wiodr13_v1-aggregations.csv) | [docs/units.md](units.md) |
 | `wiodr13_units_v2` | `2` | `wiodr13` | [contracts/units/wiodr13_v2-units.csv](../contracts/units/wiodr13_v2-units.csv) | [contracts/units/wiodr13_v2-aggregations.csv](../contracts/units/wiodr13_v2-aggregations.csv) | [docs/wiodr13-aggregation-migration.md](wiodr13-aggregation-migration.md) |
 | `wiodr16_units_v1` | `1` | `wiodr16` | [contracts/units/wiodr16_v1-units.csv](../contracts/units/wiodr16_v1-units.csv) | [contracts/units/wiodr16_v1-aggregations.csv](../contracts/units/wiodr16_v1-aggregations.csv) | [docs/units.md](units.md) |
+| `wiodr16_units_v2` | `2` | `wiodr16` | [contracts/units/wiodr16_v2-units.csv](../contracts/units/wiodr16_v2-units.csv) | [contracts/units/wiodr16_v2-aggregations.csv](../contracts/units/wiodr16_v2-aggregations.csv) | [docs/units.md](units.md) |
 
 ## Expected artifact profiles
 

@@ -1,30 +1,22 @@
 indicator;quantity_kind;source_unit;source_scale;canonical_unit;display_unit;display_multiplier;currency;price_basis;base_year;index_base;labour_concept;notes
 emp.s.un;count;person;1;person;person;1;none;not_applicable;;;persons_engaged;The normalized WIOD SEA generation exposes EMP in persons engaged.
 empe.s.un;count;person;1;person;person;1;none;not_applicable;;;employees;The normalized WIOD SEA generation exposes EMPE in employees.
-hours_worked.emp.s.hr;duration;hour;1;hour;hour;1;none;not_applicable;;;hours_persons_engaged;The normalized WIOD SEA generation exposes H_EMP in hours.
+hours_worked.emp.s.hr;duration;hour;1;hour;hour;1;none;not_applicable;;;hours_persons_engaged;Derived hours include the versioned China supplement and explicit zero-denominator policy.
 hours_worked.empe.s.hr;duration;hour;1;hour;hour;1;none;not_applicable;;;hours_employees;The normalized WIOD SEA generation exposes H_EMPE in hours.
-compensation.empe_hs.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employees;High-skill employee compensation share.
-compensation.empe_ms.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employees;Medium-skill employee compensation share.
-compensation.empe_ls.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;employees;Low-skill employee compensation share.
-hours_worked.empe_hs.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;hours_employees;High-skill employee hours share.
-hours_worked.empe_ms.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;hours_employees;Medium-skill employee hours share.
-hours_worked.empe_ls.r.pc;ratio;ratio;1;ratio;ratio;1;none;not_applicable;;;hours_employees;Low-skill employee hours share.
 exchange.r.us;ratio;local_currency_per_usd;1;local_currency_per_usd;local_currency_per_usd;1;local_currency;current;;;not_applicable;Direction is local-currency units per current USD.
 compensation.empe.s.us;monetary;usd;1;usd;usd;1;usd;current;;;employees;
 compensation.emp.s.us;monetary;usd;1;usd;usd;1;usd;current;;;persons_engaged;
 capital_stock.s.us;monetary;usd;1;usd;usd;1;usd;current;;;not_applicable;
 gross_output.s.us;monetary;usd;1;usd;usd;1;usd;current;;;not_applicable;The normalized WIOD SEA generation exposes GO_USD in current USD.
 gdp.s.us;monetary;usd;1;usd;usd;1;usd;current;;;not_applicable;The normalized WIOD SEA generation exposes VA_USD in current USD.
-surplus_value.empe_hs.r.pc;ratio;ratio;1;ratio;percent;100;none;not_applicable;;;employees;
-surplus_value.empe_ms.r.pc;ratio;ratio;1;ratio;percent;100;none;not_applicable;;;employees;
-surplus_value.empe_ls.r.pc;ratio;ratio;1;ratio;percent;100;none;not_applicable;;;employees;
 compensation.emp.s.cu;monetary;usd;1;usd;usd;1;usd;constant;2000;;persons_engaged;Calculated from current local-currency labour compensation by deflating with the basket index and converting at the 2000 LCU/USD rate.
 compensation.empe.s.cu;monetary;usd;1;usd;usd;1;usd;constant;2000;;employees;Calculated from current local-currency employee compensation by deflating with the basket index and converting at the 2000 LCU/USD rate.
 profit.s.us;monetary;usd;1;usd;usd;1;usd;current;;;not_applicable;
-basket_price.r.pc;index;price_index;1;index;index;1;none;not_applicable;2000;1;not_applicable;Published calculation is normalized to base one despite its legacy display label.
-exchange.r.id;index;exchange_index;1;index;index;1;none;not_applicable;2000;1;not_applicable;
-basket_value.r.pc;index;labour_value_index;1;index;index;1;none;not_applicable;2000;1;not_applicable;Published calculation is normalized to base one despite its legacy display label.
-go_price.r.id;index;price_index;1;index;index;1;none;not_applicable;2000;1;not_applicable;The normalized source price level is rebased to one in 2000.
+capital_stock.s.cu;monetary;usd;1;usd;usd;1;usd;constant;2000;;not_applicable;Constant USD at 2000 prices.
+basket_price.r.pc;index;price_index;1;index;index_point;100;none;not_applicable;2000;1;not_applicable;Stored at 2000 equals one and multiplied by 100 only for presentation.
+exchange.r.id;index;exchange_index;1;index;index_point;100;none;not_applicable;2000;1;not_applicable;Stored at 2000 equals one and multiplied by 100 only for presentation.
+basket_value.r.pc;index;labour_value_index;1;index;index_point;100;none;not_applicable;2000;1;not_applicable;Stored at 2000 equals one and multiplied by 100 only for presentation.
+go_price.r.id;index;price_index;1;index;index_point;100;none;not_applicable;2000;1;not_applicable;Stored at 2000 equals one and multiplied by 100 only for presentation.
 abstract_labour.empe.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_labour_hour;1;none;not_applicable;;;hours_employees;
 abstract_labour.emp.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_labour_hour;1;none;not_applicable;;;hours_persons_engaged;
 complex_labour_multiplier.empe.r.un;multiplier;multiplier;1;multiplier;multiplier;1;none;not_applicable;;;employees;

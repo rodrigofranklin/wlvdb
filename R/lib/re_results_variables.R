@@ -33,22 +33,26 @@ if (file.exists(meta_indicators_path)) {
     row.names = lists$sea_variables
   )
 }
-
 missing_indicators <- setdiff(lists$sea_variables, meta_indicators$code)
 if (length(missing_indicators)) {
-  additions <- data.frame(
-    code = missing_indicators,
-    name = NA_character_,
-    description = NA_character_,
-    observation = NA_character_,
-    group = NA_character_,
-    type = NA_character_,
-    reverted = NA,
-    stringsAsFactors = FALSE,
-    row.names = missing_indicators
-  )
+  additions <- meta_indicators[
+    rep(NA_integer_, length(missing_indicators)),
+    ,
+    drop = FALSE
+  ]
+  additions$code <- missing_indicators
+  row.names(additions) <- missing_indicators
   meta_indicators <- rbind(meta_indicators, additions)
 }
+meta_indicators <- wlv_complete_indicator_metadata(
+  meta_indicators,
+  units = if (exists("wlv_unit_definitions", inherits = FALSE)) {
+    wlv_unit_definitions
+  } else {
+    NULL
+  },
+  warn_legacy = !exists("wlv_unit_definitions", inherits = FALSE)
+)
 row.names(meta_indicators) <- meta_indicators$code
 
 # Recriates results variables in case of new variables
@@ -81,6 +85,22 @@ m_countries <-
 # sea_sectors -> vectors of results per sector
 sea_sectors_temp <- 
   read_fst_array(file.path(wlv_existing_result_dir, "sea_sectors.fst"))
+removed_indicators <- setdiff(
+  dimnames(sea_sectors_temp)[[2L]],
+  lists$sea_variables
+)
+if (length(removed_indicators)) {
+  stop(
+    sprintf(
+      paste0(
+        "Cannot recalculate after removing published indicator(s): %s. ",
+        "Run a full calculation to migrate the result schema."
+      ),
+      paste(removed_indicators, collapse = ", ")
+    ),
+    call. = FALSE
+  )
+}
 sea_sectors[,names(sea_sectors_temp[1,,1,1]),,] <- sea_sectors_temp
 
 # sea_countries -> vectors of results per country
@@ -136,7 +156,7 @@ if (exists("sea_countries_temp", inherits = FALSE)) {
 rm(list = intersect(
   c(
     "meta_indicators_path", "missing_indicators", "additions",
-    "persisted_sea_countries"
+    "persisted_sea_countries", "removed_indicators"
   ),
   ls(envir = environment(), all.names = TRUE)
 ), envir = environment())

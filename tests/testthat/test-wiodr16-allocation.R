@@ -306,7 +306,7 @@ test_that("WIOD16 stock modules preserve structural missing values before assump
     dimnames = list("2012", variables, "C33", c("PRT", "ROW"))
   )
   environment$sea_sectors[, "exchange.r.us", , ] <- c(1, 0)
-  environment$sea_sectors[, "go_price.r.id", , ] <- c(100, 0)
+  environment$sea_sectors[, "go_price.r.id", , ] <- c(1, 0)
   environment$meta_indicators <- data.frame(
     name = rep("", 2L),
     description = rep("", 2L),

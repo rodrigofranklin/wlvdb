@@ -1,6 +1,6 @@
-indicator;quantity_kind;source_unit;source_scale;canonical_unit;currency;price_basis;base_year;index_base;labour_concept;notes
-abstract_labour.emp.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;none;not_applicable;;;persons_engaged;
-gross_output.s.us;monetary;usd;1;usd;usd;current;;;not_applicable;
-price.marker;index;index;1;index;none;not_applicable;2000;1;not_applicable;
-value.m.mv;ratio;abstract_labour_hour_per_usd;1;abstract_labour_hour_per_usd;mixed;current;;;employment;
-gross_output.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;none;not_applicable;;;employment;
+indicator;quantity_kind;source_unit;source_scale;canonical_unit;display_unit;display_multiplier;currency;price_basis;base_year;index_base;labour_concept;notes
+abstract_labour.emp.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_labour_hour;1;none;not_applicable;;;persons_engaged;
+gross_output.s.us;monetary;usd;1;usd;usd;1;usd;current;;;not_applicable;
+price.marker;index;index;1;index;index;1;none;not_applicable;2000;1;not_applicable;
+value.m.mv;ratio;abstract_labour_hour_per_usd;1;abstract_labour_hour_per_usd;abstract_labour_hour_per_usd;1;mixed;current;;;employment;
+gross_output.s.mv;labour_value;abstract_labour_hour;1;abstract_labour_hour;abstract_labour_hour;1;none;not_applicable;;;employment;

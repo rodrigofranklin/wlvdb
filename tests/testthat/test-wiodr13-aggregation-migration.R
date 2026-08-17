@@ -248,7 +248,7 @@ test_that("WIOD13 constant compensation is additive constant-2000 USD", {
   )
   indicators <- c("compensation.emp.s.cu", "compensation.empe.s.cu")
   selected <- units[match(indicators, units$indicator), , drop = FALSE]
-  expect_identical(selected$source_unit, rep("local_currency", 2L))
+  expect_identical(selected$source_unit, rep("usd", 2L))
   expect_identical(selected$canonical_unit, rep("usd", 2L))
   expect_identical(selected$currency, rep("usd", 2L))
   expect_identical(selected$price_basis, rep("constant", 2L))
@@ -309,8 +309,8 @@ test_that("WIOD13 canonical index calculations and labels use base one", {
       encoding = "UTF-8"
     )
     expect_false(any(grepl("/100", text, fixed = TRUE)), info = module)
-    expect_true(any(grepl("go_price_storage_base", text, fixed = TRUE)), info = module)
-    expect_true(any(grepl('source_version, "wiodr16"', text, fixed = TRUE)), info = module)
+    expect_false(any(grepl("go_price_storage_base", text, fixed = TRUE)), info = module)
+    expect_false(any(grepl('source_version, "wiodr16"', text, fixed = TRUE)), info = module)
     expect_true(any(grepl("2000 = 1", text, fixed = TRUE)), info = module)
     expect_false(any(grepl("2000 = 100", text, fixed = TRUE)), info = module)
   }

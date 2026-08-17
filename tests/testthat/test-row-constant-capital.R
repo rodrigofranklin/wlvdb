@@ -52,7 +52,7 @@ test_that("ROW constant capital is finite, non-negative and base-year identical"
     dimnames = dimnames(current)
   )
   price <- matrix(
-    c(100, 100, 150, 150),
+    c(1, 1, 1.5, 1.5),
     nrow = 2L,
     byrow = TRUE,
     dimnames = dimnames(current)
@@ -96,7 +96,7 @@ test_that("ROW constant capital rejects invalid indices, shapes and base identit
     dimnames = list(c("2000", "2001"), c("A", "M73"))
   )
   exchange <- matrix(1, 2L, 2L, dimnames = dimnames(current))
-  price <- matrix(100, 2L, 2L, dimnames = dimnames(current))
+  price <- matrix(1, 2L, 2L, dimnames = dimnames(current))
 
   zero_price <- price
   zero_price["2001", "A"] <- 0
@@ -117,7 +117,7 @@ test_that("ROW constant capital rejects invalid indices, shapes and base identit
   offsetting_exchange <- exchange
   offsetting_exchange["2000", ] <- 2
   offsetting_price <- price
-  offsetting_price["2000", ] <- 200
+  offsetting_price["2000", ] <- 2
   expect_error(
     rebuild(
       current,
@@ -130,10 +130,10 @@ test_that("ROW constant capital rejects invalid indices, shapes and base identit
   )
 
   drifted_price <- price
-  drifted_price["2000", "M73"] <- 101
+  drifted_price["2000", "M73"] <- 1.01
   expect_error(
     rebuild(current, exchange, drifted_price, expected_zero_sectors = "M73"),
-    "output-price index must equal 100 in base year 2000",
+    "output-price index must equal 1 in base year 2000",
     fixed = TRUE
   )
 
@@ -238,8 +238,8 @@ test_that("modern ROW assumptions rebuild and register two years of constant cap
   set_country_indicator("exchange.r.id", "USA", c(1, 1, 1.2, 1.2))
   set_country_indicator("exchange.r.id", "IND", c(1, 1, 1.2, 1.2))
   set_country_indicator("exchange.r.id", "ROW", c(1, 1, 1.2, 1.2))
-  set_country_indicator("go_price.r.id", "USA", c(100, 100, 125, 125))
-  set_country_indicator("go_price.r.id", "IND", c(100, 100, 125, 125))
+  set_country_indicator("go_price.r.id", "USA", c(1, 1, 1.25, 1.25))
+  set_country_indicator("go_price.r.id", "IND", c(1, 1, 1.25, 1.25))
 
   environment$wlv_contract_runtime <- environment$wlv_new_contract_runtime(
     method = "synthetic",

@@ -102,10 +102,10 @@ wlv_row_constant_capital_stock <- function(
     )
   }
   base_output_price <- output_price_index[base_year, , drop = TRUE]
-  if (any(abs(base_output_price - 100) > tolerance * 100)) {
+  if (any(abs(base_output_price - 1) > tolerance)) {
     stop(
       sprintf(
-        "ROW output-price index must equal 100 in base year %s.",
+        "ROW output-price index must equal 1 in base year %s.",
         base_year
       ),
       call. = FALSE
@@ -139,7 +139,7 @@ wlv_row_constant_capital_stock <- function(
     }
   }
 
-  result <- current_stock * exchange_index * 100 / output_price_index
+  result <- current_stock * exchange_index / output_price_index
   if (anyNA(result) || any(!is.finite(result))) {
     stop("ROW constant capital stock is non-finite.", call. = FALSE)
   }
