@@ -9,6 +9,9 @@ millions of currency units. The production code converts them to units before
 performing the calculation. Labour observations are already expressed in the
 final labour unit.
 
+The fixture also selects `synthetic_units_v1`, a five-indicator unit contract
+used to verify the deterministic `_unit_contract.csv` result sidecar.
+
 The expected results in `expected/` were derived analytically from
 
 ```

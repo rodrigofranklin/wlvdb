@@ -94,6 +94,7 @@ wlv_make_preflight_fixture <- function(
     validator_function = "",
     artifact_profile = "fixture_core",
     missingness_policy = "fixture_v1",
+    unit_contract = "fixture_units_v1",
     documentation = "",
     limitations = "Synthetic source used only by preflight tests.",
     check.names = FALSE,
@@ -130,11 +131,22 @@ wlv_make_preflight_fixture <- function(
     check.names = FALSE,
     stringsAsFactors = FALSE
   )
+  unit_contracts_catalog <- data.frame(
+    contract = "fixture_units_v1",
+    schema_version = "1",
+    source = source,
+    units = "contracts/units/fixture_v1-units.csv",
+    aggregations = "contracts/units/fixture_v1-aggregations.csv",
+    documentation = "docs/fixture-units.md",
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
   catalogs <- list(
     sources = sources_catalog,
     methods = methods_catalog,
     `artifact-profiles` = artifacts_catalog,
-    `missingness-policies` = missingness_policies_catalog
+    `missingness-policies` = missingness_policies_catalog,
+    `unit-contracts` = unit_contracts_catalog
   )
   for (name in names(catalogs)) {
     utils::write.table(
@@ -154,6 +166,55 @@ wlv_make_preflight_fixture <- function(
   writeLines(
     "# Fixture missingness policy",
     file.path(root, "docs", "fixture-missingness.md")
+  )
+  writeLines(
+    "# Fixture unit contract",
+    file.path(root, "docs", "fixture-units.md")
+  )
+  unit_definitions <- data.frame(
+    indicator = "fixture_value",
+    quantity_kind = "monetary",
+    source_unit = "usd",
+    source_scale = "1",
+    canonical_unit = "usd",
+    currency = "usd",
+    price_basis = "current",
+    base_year = "",
+    index_base = "",
+    labour_concept = "not_applicable",
+    notes = "",
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+  unit_aggregations <- data.frame(
+    indicator = rep("fixture_value", 2L),
+    level = c("sector_to_country", "country_to_world"),
+    strategy = rep("formula", 2L),
+    module = rep("fixture/country.R", 2L),
+    numerator = "",
+    denominator = "",
+    weight = "",
+    zero_denominator = "",
+    notes = "",
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+  dir.create(file.path(root, "contracts", "units"), recursive = TRUE)
+  utils::write.table(
+    unit_definitions,
+    file.path(root, "contracts", "units", "fixture_v1-units.csv"),
+    sep = ";",
+    row.names = FALSE,
+    col.names = TRUE,
+    quote = FALSE
+  )
+  utils::write.table(
+    unit_aggregations,
+    file.path(root, "contracts", "units", "fixture_v1-aggregations.csv"),
+    sep = ";",
+    row.names = FALSE,
+    col.names = TRUE,
+    quote = FALSE
   )
 
   writeLines(
