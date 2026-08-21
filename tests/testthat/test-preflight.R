@@ -1099,9 +1099,13 @@ test_that("recalculation result files require sidecar metadata", {
   unlink(file.path(fixture$results_path, "sea_sectors.fst.meta"))
 
   plan <- wlv_fixture_request(fixture, mode = "recalculate")
-  expect_error(
-    preflight_environment$wlv_validate_data(plan),
-    "[Mm]eta|sea_sectors\\.fst\\.meta"
+  expect_warning(
+    expect_error(
+      preflight_environment$wlv_validate_data(plan),
+      "[Mm]eta|sea_sectors\\.fst\\.meta"
+    ),
+    "unmanifested legacy result",
+    fixed = TRUE
   )
 })
 
@@ -1115,9 +1119,13 @@ test_that("recalculation pairs source and result matrices by metadata years", {
   )
 
   plan <- wlv_fixture_request(fixture, mode = "recalculate")
-  expect_error(
-    preflight_environment$wlv_validate_data(plan),
-    "[Pp]eriod|[Yy]ear|[Cc]orrespond|2000|2001"
+  expect_warning(
+    expect_error(
+      preflight_environment$wlv_validate_data(plan),
+      "[Pp]eriod|[Yy]ear|[Cc]orrespond|2000|2001"
+    ),
+    "unmanifested legacy result",
+    fixed = TRUE
   )
 })
 
@@ -1134,7 +1142,11 @@ test_that("stage five recalculation preserves result matrices but verifies sourc
   )
 
   plan <- wlv_fixture_request(fixture, mode = "recalculate", at_stage = 5L)
-  expect_no_error(preflight_environment$wlv_validate_data(plan))
+  expect_warning(
+    expect_no_error(preflight_environment$wlv_validate_data(plan)),
+    "unmanifested legacy result",
+    fixed = TRUE
+  )
 })
 
 test_that("complete calculate and recalculate fixtures pass preflight", {
@@ -1145,5 +1157,9 @@ test_that("complete calculate and recalculate fixtures pass preflight", {
   recalculate_plan <- wlv_fixture_request(fixture, mode = "recalculate")
 
   expect_no_error(preflight_environment$wlv_validate_data(calculate_plan))
-  expect_no_error(preflight_environment$wlv_validate_data(recalculate_plan))
+  expect_warning(
+    expect_no_error(preflight_environment$wlv_validate_data(recalculate_plan)),
+    "unmanifested legacy result",
+    fixed = TRUE
+  )
 })
