@@ -44,6 +44,12 @@ productive-block solution is reproducible with
 [`scripts/benchmark_leontief.R`](scripts/benchmark_leontief.R); protocol and
 reference measurements are in
 [`docs/leontief-benchmark.md`](docs/leontief-benchmark.md).
+Validated outputs are published as immutable runs and coherent releases; the
+manifest/checksum chain, channels, crash behavior, recalculation lineage, and
+WLVPanel contract are documented in
+[`docs/result-publication.md`](docs/result-publication.md). Storage retention is
+explicit and dry-run-first as described in
+[`docs/publication-storage.md`](docs/publication-storage.md).
 
 ## Safe startup and main function
 
@@ -90,6 +96,7 @@ The function accepts the following arguments:
 * papern - number of the paper to eventually trigger further tables and/or graphs that compare different methods, cross-sectional and longitudinal indicators, any custom analysis to be included in the paper referred to by the same number.
 * prepaper - wether to actually trigger the preparation of such custom analysis (calls corresponding script from papers/ folder)
 * workers - positive integer controlling PSOCK workers. The default is `1`, which runs sequentially without creating a cluster
+* channel - lowercase publication channel, optionally hierarchical, such as `stable` or `research/input-v3`. Defaults to `stable`
 * allow_experimental - boolean explicit opt-in for methods marked `experimental`. Defaults to `FALSE`; methods marked `disabled` remain blocked
 
 
@@ -138,7 +145,10 @@ The subfolders in methods refer to a specific method. Their structure is similar
  
  4) results - to be downloaded separatedly if one wants to check results already arrived by our team - [ink here](https://coletiva.imperialismoedependencia.org/s/NMMDyMxL8fWxfjq)
  
- The results of calculations get saved as files in subfolders named by the method that generated them.
+ Results are stored as immutable method runs under
+ `results/runs/<method>/<run_id>/`. A release under `results/releases/` fixes
+ the coherent set consumed by the panel, and an append-only marker under
+ `results/channels/<channel>/` selects the current release.
  
  The variables are either saved in:
  

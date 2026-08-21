@@ -1,5 +1,10 @@
-if(!(exists("sea_sectors"))) {
-a <-   read_fst_array(paste("results",method_version,"sea_sectors.fst",sep = "/"))
+if (!exists("sea_sectors")) {
+  if (!exists("wlv_existing_result_dir", inherits = FALSE)) {
+    stop("A staged result snapshot is required to load `sea_sectors`.", call. = FALSE)
+  }
+  sea_sectors <- read_fst_array(
+    file.path(wlv_existing_result_dir, "sea_sectors.fst")
+  )
 }
 varname <- "appropriated_monetary_rate_of_profit.r.pc"
 datanm <- c("gdp.s.us","capital_depreciation.s.us","compensation.emp.s.us","capital_stock.s.us")

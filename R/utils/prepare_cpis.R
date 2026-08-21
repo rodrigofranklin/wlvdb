@@ -1,7 +1,5 @@
 source("R/lib/wb_wdi_function.R")
 library(readODS)
-countries <- read_fst_array("results/exiobase/m_countries.fst")
-countries <- dimnames(countries)[[3]]
 
 cpis <- "FP.CPI.TOTL.ZG"
 

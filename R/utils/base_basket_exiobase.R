@@ -23,7 +23,10 @@ basebasket <- array(as.matrix(expbbskt),
                                              c(shc,"ROW","WWW"),
                                              base_year))
 if (!exists("wlv_result_dir", inherits = FALSE)) {
-  wlv_result_dir <- file.path("results", method_version)
+  stop(
+    "`base_basket_exiobase.R` must run inside a staged WLV calculation.",
+    call. = FALSE
+  )
 }
 write_fst_array(basebasket, file.path(wlv_result_dir, "base_basket.fst"))
 

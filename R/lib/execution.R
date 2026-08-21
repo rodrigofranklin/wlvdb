@@ -337,12 +337,45 @@ wlv_validate_recalculation_selection <- function(
   invisible(sea_vars)
 }
 
+wlv_validate_release_channel <- function(value) {
+  if (exists(
+    "wlv_publication_validate_channel",
+    mode = "function",
+    inherits = TRUE
+  )) {
+    return(wlv_publication_validate_channel(value))
+  }
+  valid_scalar <- is.character(value) && length(value) == 1L &&
+    !is.na(value) && nzchar(value)
+  segments <- if (valid_scalar) {
+    strsplit(value, "/", fixed = TRUE)[[1L]]
+  } else {
+    character()
+  }
+  if (
+    !valid_scalar ||
+    nchar(value, type = "chars") > 128L ||
+    any(!grepl(
+      "^[a-z0-9](?:[a-z0-9._-]*[a-z0-9_-])?$",
+      segments,
+      perl = TRUE
+    ))
+  ) {
+    stop(
+      "`channel` must be a normalized lowercase release-channel identifier.",
+      call. = FALSE
+    )
+  }
+  value
+}
+
 wlv_validate_request <- function(
     methods,
     repeat_pp = FALSE,
     papern = 0L,
     prepaper = FALSE,
     workers = 1L,
+    channel = "stable",
     mode = c("calculate", "recalculate"),
     at_stage = 1L,
     sea_vars = NULL,
@@ -358,6 +391,7 @@ wlv_validate_request <- function(
     "allow_experimental"
   )
   workers <- wlv_validate_workers(workers)
+  channel <- wlv_validate_release_channel(channel)
   papern <- wlv_validate_integer(papern, "papern", minimum = 0L)
   requested_operations <- wlv_validate_requested_operations(
     requested_operations,
@@ -547,6 +581,7 @@ wlv_validate_request <- function(
       prepaper = prepaper,
       paper_script = paper_script,
       workers = workers,
+      channel = channel,
       at_stage = at_stage,
       sea_vars = sea_vars
     ),
@@ -1160,7 +1195,23 @@ wlv_validate_data <- function(
     method_data$source_provenance_inputs <- effective_euklems_files
 
     if (plan$mode == "recalculate") {
-      result_dir <- file.path(plan$root, "results", method$method)
+      parent_run <- wlv_resolve_current_method_run(
+        plan$root,
+        method$method[[1L]],
+        channel = plan$channel,
+        allow_legacy = TRUE
+      )
+      result_dir <- parent_run$path
+      method_data$parent_result_dir <- result_dir
+      method_data$parent_run_id <- parent_run$run_id
+      method_data$parent_result_id <- parent_run$result_id
+      method_data$parent_release_id <- parent_run$release_id
+      method_data$parent_legacy <- parent_run$legacy
+      method_data$parent_provenance_complete <- if (isTRUE(parent_run$legacy)) {
+        FALSE
+      } else {
+        isTRUE(parent_run$manifest$result$provenance$complete)
+      }
       wlv_assert_recalculation_source_provenance(
         result_dir,
         current_manifest = source_manifest$manifest,
@@ -1401,9 +1452,15 @@ wlv_create_result_staging <- function(root, method, existing = NULL) {
   results_root <- file.path(root, "results")
   dir.create(results_root, recursive = TRUE, showWarnings = FALSE)
   results_root <- normalizePath(results_root, winslash = "/", mustWork = TRUE)
+  staging_root <- file.path(results_root, ".staging")
+  if (!dir.exists(staging_root) &&
+      !dir.create(staging_root, recursive = FALSE, showWarnings = FALSE)) {
+    stop("Could not create the private result staging namespace.", call. = FALSE)
+  }
+  staging_root <- normalizePath(staging_root, winslash = "/", mustWork = TRUE)
   staging <- tempfile(
     pattern = sprintf(".staging-%s-", method),
-    tmpdir = results_root
+    tmpdir = staging_root
   )
   if (!wlv_result_path_is_within(staging, results_root)) {
     stop("Refusing to create result staging outside the results directory.", call. = FALSE)
@@ -1686,25 +1743,30 @@ wlv_load_run_missingness_policy <- function(plan, method) {
 
 wlv_run_method <- function(plan, method, cluster = NULL) {
   method_record <- plan$methods[match(method, plan$methods$method), , drop = FALSE]
-  final_result_dir <- file.path(plan$root, "results", method)
   results_root <- file.path(plan$root, "results")
-  result_lock <- wlv_acquire_result_lock(results_root, method)
-  lock_open <- TRUE
-  on.exit({
-    if (lock_open) {
-      try(wlv_release_result_lock(result_lock, results_root), silent = TRUE)
-    }
-  }, add = TRUE)
-  existing_result_dir <- if (dir.exists(final_result_dir)) {
-    normalizePath(final_result_dir, winslash = "/", mustWork = TRUE)
+  run_data <- plan$data[[method]]
+  existing_result_dir <- if (plan$mode == "recalculate") {
+    run_data$parent_result_dir
   } else {
-    normalizePath(final_result_dir, winslash = "/", mustWork = FALSE)
+    NULL
   }
+  run_id <- wlv_new_publication_id("run")
+  run_started_at <- Sys.time()
+  run_warnings <- character()
   staging <- wlv_create_result_staging(
     plan$root,
     method,
     existing = if (plan$mode == "recalculate") existing_result_dir else NULL
   )
+  if (plan$mode == "recalculate") {
+    inherited_manifest <- file.path(staging, wlv_run_manifest_filename)
+    if (file.exists(inherited_manifest)) {
+      unlink(inherited_manifest, force = TRUE)
+      if (file.exists(inherited_manifest)) {
+        stop("Could not remove the inherited run manifest from staging.", call. = FALSE)
+      }
+    }
+  }
   staging_open <- TRUE
   on.exit({
     if (staging_open && dir.exists(staging)) {
@@ -1721,7 +1783,6 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
     source = method_record$source[[1L]],
     policy = missingness_policy
   )
-  run_data <- plan$data[[method]]
   if (plan$mode == "recalculate") {
     wlv_load_contract_report(
       contract_runtime,
@@ -1750,7 +1811,7 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
     wlv_existing_result_dir = if (plan$mode == "recalculate") {
       staging
     } else {
-      existing_result_dir
+      staging
     },
     wlv_missingness_policy = missingness_policy,
     wlv_contract_runtime = contract_runtime,
@@ -1765,7 +1826,7 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
     script <- file.path(plan$root, "R", "lib", "re_computations.R")
   }
   run_environment <- tryCatch(
-    {
+    withCallingHandlers({
       run_environment <- wlv_run_script(
         script,
         values = values,
@@ -1843,6 +1904,12 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
       } else {
         list()
       }
+      panel_csv <- get0(
+        "wlv_panel_result_metadata",
+        envir = run_environment,
+        inherits = FALSE,
+        ifnotfound = list()
+      )
       expected_metadata <- wlv_method_result_metadata(
         parameters = run_environment$parameters,
         assumptions = run_environment$assumptions,
@@ -1850,7 +1917,12 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         solutions = run_environment$sea_variables,
         sectors = run_environment$sectors,
         meta_indicators = run_environment$meta_indicators,
-        extra_csv = c(scientific_csv, unit_contract_csv, source_provenance_csv)
+        extra_csv = c(
+          scientific_csv,
+          unit_contract_csv,
+          source_provenance_csv,
+          panel_csv
+        )
       )
       scientific_checks <- wlv_validate_staged_results(
         staging,
@@ -1879,7 +1951,9 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         envir = run_environment
       )
       run_environment
-    },
+    }, warning = function(warning) {
+      run_warnings <<- c(run_warnings, conditionMessage(warning))
+    }),
     error = function(error) {
       wlv_write_failed_contract_report(
         contract_runtime,
@@ -1889,121 +1963,51 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
       stop(error)
     }
   )
-  metadata_transaction <- NULL
-  result_transaction <- NULL
-  publication_committed <- FALSE
-  on.exit({
-    if (!publication_committed) {
-      result_rolled_back <- tryCatch(
-        {
-          wlv_rollback_result_staging(result_transaction)
-          TRUE
-        },
-        error = function(error) {
-          message("Result rollback warning: ", conditionMessage(error))
-          FALSE
-        }
-      )
-      if (result_rolled_back) {
-        metadata_rolled_back <- tryCatch(
-          {
-            wlv_rollback_global_metadata(metadata_transaction)
-            TRUE
-          },
-          error = function(error) {
-            message("Global metadata rollback warning: ", conditionMessage(error))
-            FALSE
-          }
-        )
-        if (!metadata_rolled_back && !is.null(result_transaction)) {
-          reinstated <- tryCatch(
-            {
-              wlv_reinstate_new_result_staging(result_transaction)
-              staging_open <- FALSE
-              wlv_finalize_result_staging(result_transaction)
-              TRUE
-            },
-            error = function(error) {
-              message("Result recovery warning: ", conditionMessage(error))
-              FALSE
-            }
-          )
-          if (reinstated) {
-            message(
-              paste0(
-                "The new result generation was retained because global ",
-                "metadata rollback did not complete."
-              )
-            )
-          } else {
-            message("Manual result/metadata recovery is required before another run.")
-          }
-        }
-      } else {
-        message(
-          paste0(
-            "Global metadata was left on the new generation because result ",
-            "rollback did not complete."
-          )
-        )
-      }
-    }
-  }, add = TRUE)
-  cleanup_warnings <- character()
-  suspendInterrupts({
-    metadata_transaction <- wlv_begin_global_metadata_transaction(
-      run_environment,
-      results_root
-    )
-    result_transaction <- wlv_publish_result_staging(
-      staging,
-      final_result_dir,
-      results_root
-    )
-    staging_open <- FALSE
-    publication_committed <- TRUE
-    withCallingHandlers(
-      {
-        wlv_finalize_result_staging(result_transaction)
-        wlv_finalize_global_metadata(metadata_transaction)
-      },
-      warning = function(warning) {
-        cleanup_warnings <<- c(cleanup_warnings, conditionMessage(warning))
-        invokeRestart("muffleWarning")
-      }
-    )
-  })
-  if (length(cleanup_warnings)) {
-    message(
-      "Published successfully; cleanup warning(s): ",
-      paste(unique(cleanup_warnings), collapse = " ")
-    )
-  }
-  lock_released <- tryCatch(
-    {
-      wlv_release_result_lock(result_lock, results_root)
-      TRUE
-    },
-    error = function(error) {
-      message(
-        paste0(
-          "Published successfully; result lock cleanup warning: ",
-          conditionMessage(error),
-          " Verify and remove the stale lock before the next run."
-        )
-      )
-      FALSE
-    }
+  run_environment <- wlv_promote_method_run(
+    plan = plan,
+    method = method,
+    staging = staging,
+    run_environment = run_environment,
+    run_data = run_data,
+    run_id = run_id,
+    parent_run_id = if (plan$mode == "recalculate") run_data$parent_run_id else NULL,
+    started_at = run_started_at,
+    warnings = unique(run_warnings)
   )
-  if (lock_released) {
-    lock_open <- FALSE
-  }
+  staging_open <- FALSE
   run_environment
 }
 
-wlv_run_paper <- function(plan, run_environment) {
+wlv_run_paper <- function(plan, run_environment, release) {
   old_working_directory <- setwd(plan$root)
   on.exit(setwd(old_working_directory), add = TRUE)
+  if (
+    !is.list(release) || is.null(release$manifest) ||
+    is.null(release$root)
+  ) {
+    stop("`release` must be the committed release for this execution.", call. = FALSE)
+  }
+  release_runs <- release$manifest$runs
+  release_methods <- vapply(release_runs, `[[`, character(1L), "method")
+  release_result_dirs <- vapply(release_runs, function(record) {
+    normalizePath(
+      dirname(file.path(plan$root, "results", record$manifest_path)),
+      winslash = "/",
+      mustWork = TRUE
+    )
+  }, character(1L))
+  names(release_result_dirs) <- release_methods
+  run_environment$wlv_current_result_dir <- local({
+    result_dirs <- release_result_dirs
+    function(method) {
+      if (!is.character(method) || length(method) != 1L ||
+          is.na(method) || !method %in% names(result_dirs)) {
+        stop(sprintf("Committed release has no method `%s`.", method), call. = FALSE)
+      }
+      unname(result_dirs[[method]])
+    }
+  })
+  run_environment$wlv_current_release_dir <- release$root
   tryCatch(
     sys.source(plan$paper_script, envir = run_environment),
     error = function(error) {

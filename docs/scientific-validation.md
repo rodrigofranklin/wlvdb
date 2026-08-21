@@ -203,15 +203,15 @@ científica.
 
 ## Matriz full × recálculo
 
-Uma comparação deve preservar uma cópia imutável da geração completa antes de
-executar `recalc_wlv()`, pois um recálculo bem-sucedido promove atomicamente a
-nova geração para o mesmo diretório. A unidade de comparação é a célula com
-seus rótulos e estado semântico, não apenas o tamanho ou o MD5 comprimido do
-arquivo FST.
+Cada cálculo completo já é preservado como um run imutável antes de
+`recalc_wlv()`. O recálculo verifica o manifesto e os checksums do run corrente,
+cria um novo run e registra `parent_run_id`; não modifica o pai. A unidade de
+comparação é a célula com seus rótulos e estado semântico, não apenas o tamanho
+ou o MD5 comprimido do arquivo FST.
 
 | Cenário | Chamada | Comparações obrigatórias |
 | --- | --- | --- |
-| Completo de referência | `get_wlv(method, workers = 1)` | Todos os contratos passam; arquivar arrays, metadados e sidecars. |
+| Completo de referência | `get_wlv(method, workers = 1)` | Todos os contratos passam; preservar o `run_id`, o `result_id` e o manifesto publicados. |
 | Recálculo desde estágio 1 | `recalc_wlv(method, at_stage = 1, workers = 1)` | Todos os indicadores publicados equivalem ao completo; ausências e estados são idênticos; matrizes e diagnósticos de matriz permanecem inalterados. `sea_vars` seletivo é proibido. |
 | Recálculo desde estágio 4 | `recalc_wlv(method, at_stage = 4, workers = 1)` | Indicadores de estágio 4 e seus dependentes equivalem ao completo; indicadores anteriores, matrizes, metadados e sidecars preservados são idênticos. |
 | Recálculo desde estágio 5 | `recalc_wlv(method, at_stage = 5, workers = 1)` | Indicadores setoriais de estágio 5 e agregados nacionais equivalem ao completo; estágios anteriores e matrizes são idênticos. |
@@ -236,10 +236,11 @@ O `lambda_fingerprint` é persistido e recalculado a partir de
 `sea_sectors/value.m.mv`, com os rótulos canônicos de país-setor, antes de cada
 publicação ou recálculo. Isso vincula cada linha anual do diagnóstico ao vetor
 de valores efetivamente publicado e rejeita um sidecar obsoleto que descreva
-outro `lambda`. O sidecar ainda não contém um fingerprint conjunto do bloco
-`C` e do vetor de trabalho direto. Até existir esse manifesto mais amplo, a
-comparação com a cópia completa arquivada continua obrigatória para provar a
-identidade de todos os insumos entre gerações.
+outro `lambda`. O `run_manifest.json` complementa esse sidecar com a
+proveniência do código, ambiente, fonte normalizada, parâmetros e módulos,
+além do inventário SHA-256 exato de todos os artefatos. A comparação full ×
+recálculo deve resolver os dois runs por seus manifests e conservar seus IDs
+no registro da auditoria.
 
 A matriz é imediatamente executável para `wiodr13` e `wiodr16` quando suas
 gerações completas publicadas estão disponíveis. `wiodr16v09` e `zerodep_2`

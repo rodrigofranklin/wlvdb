@@ -56,10 +56,12 @@ salarios_europa_usd <-
 
 
 
-varsc <- read_fst_array(paste0("results/wiodr16","/m_countries.fst"))
-varsea <- read_fst_array("results/wiodr13/sea_sectors.fst")
-varsea16 <- read_fst_array("results/wiodr16/sea_sectors.fst")
-varsscea <- read_fst_array("results/wiodr16/sea_countries.fst")
+wiodr16_result_dir <- wlv_current_result_dir("wiodr16")
+wiodr13_result_dir <- wlv_current_result_dir("wiodr13")
+varsc <- read_fst_array(file.path(wiodr16_result_dir, "m_countries.fst"))
+varsea <- read_fst_array(file.path(wiodr13_result_dir, "sea_sectors.fst"))
+varsea16 <- read_fst_array(file.path(wiodr16_result_dir, "sea_sectors.fst"))
+varsscea <- read_fst_array(file.path(wiodr16_result_dir, "sea_countries.fst"))
 year <- "2007"
 nums <- data.frame(methods=2)
 lists <- list(years=1995:2014)
@@ -117,7 +119,7 @@ pc_cols <- (nums$methods+2):(nums$methods*2+1)
 pc_res <- c(1,rbind(1:nums$methods+1,(nums$methods+2):(nums$methods*2+1)))
 # load all results
 for (mth_v in method_list) {
-  method_path <- paste0("results/",mth_v)
+  method_path <- wlv_current_result_dir(mth_v)
   mpais <- read_fst_array(paste0(method_path,"/m_countries.fst"))
   
   m_countries[mth_v,

@@ -5,6 +5,8 @@
 .Ruserdata
 temp
 results
+!/contracts/results/
+!/contracts/results/**
 resultsx
 results_nuvem
 source_data

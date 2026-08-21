@@ -24,6 +24,14 @@ sys.source(
   envir = preflight_environment
 )
 sys.source(
+  file.path(wlv_test_root, "R", "lib", "publication_manifest.R"),
+  envir = preflight_environment
+)
+sys.source(
+  file.path(wlv_test_root, "R", "lib", "publication.R"),
+  envir = preflight_environment
+)
+sys.source(
   file.path(wlv_test_root, "R", "lib", "unit_dimensions.R"),
   envir = preflight_environment
 )
@@ -367,6 +375,18 @@ test_that("request validation rejects unknown methods and traversal", {
         root = fixture$root
       ),
       "[Mm]ethod"
+    )
+  }
+})
+
+test_that("request validation rejects non-canonical release channels", {
+  fixture <- wlv_make_preflight_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+
+  for (channel in c("stable.", "research/v2.", "Stable", "a//b")) {
+    expect_error(
+      wlv_fixture_request(fixture, channel = channel),
+      "channel"
     )
   }
 })

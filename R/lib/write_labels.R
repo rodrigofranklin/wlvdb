@@ -22,23 +22,6 @@ names(indicators_names) = names(descriptions) = names(observations) =
 
 indicators_en <- rbind(indicators_names, descriptions, observations, groups)
 
-if (file.exists("results/indicators_en.csv")) {
-  temp_indicators <- read.csv2("results/indicators_en.csv")
-  
-  # preserve old labels for which we currently do not have information 
-  indicators_en[indicators_en$label |> is.na(), "label"] <- 
-    temp_indicators$label[
-      match(indicators_en$cod_label[indicators_en$label |> is.na()],
-            temp_indicators$cod_label)]
-  
-  # merge labels
-  temp_indicators <- 
-    temp_indicators[
-      temp_indicators$cod_label %in% indicators_en$cod_label |> not(),]
-  
-  indicators_en <- rbind(temp_indicators, indicators_en)
-}
-
 # Keep canonical storage and presentation semantics in the method-specific
 # metadata. The global panel table is shared by methods whose display rules can
 # differ for the same indicator code, so it retains its legacy four-column
@@ -59,46 +42,12 @@ names(meta_indicators_panel) <- c(
   "value", "groups", "type", "reverted"
 )
 
-if (file.exists("results/meta_indicators.csv")) {
-  temp_meta <- read.csv2("results/meta_indicators.csv")
-  if (!all(c("value", "groups", "type", "reverted") %in% names(temp_meta))) {
-    stop(
-      "Legacy panel metadata lacks its required identity columns.",
-      call. = FALSE
-    )
-  }
-  temp_meta <- temp_meta[, c(
-    "value", "groups", "type", "reverted"
-  ), drop = FALSE]
-  
-  # preserve old metadata for which we currently do not have information 
-  meta_indicators_panel[meta_indicators_panel$groups |> is.na(), "groups"] <- 
-    temp_meta$groups[
-      match(meta_indicators_panel$value[meta_indicators_panel$groups |> is.na()],
-            temp_meta$value)]
-
-  meta_indicators_panel[meta_indicators_panel$type |> is.na(), "type"] <- 
-    temp_meta$type[
-      match(meta_indicators_panel$value[meta_indicators_panel$type |> is.na()],
-            temp_meta$value)]
-
-  meta_indicators_panel[meta_indicators_panel$reverted |> is.na(), "reverted"] <- 
-    temp_meta$reverted[
-      match(meta_indicators_panel$value[meta_indicators_panel$reverted |> is.na()],
-            temp_meta$value)]
-  
-  # merge labels
-  temp_meta <- temp_meta[
-    temp_meta$value %in% meta_indicators_panel$value |> not(),
-    names(meta_indicators_panel),
-    drop = FALSE
-  ]
-  
-  meta_indicators_panel <- rbind(temp_meta, meta_indicators_panel)
-}
-
 wlv_pending_indicators_en <- indicators_en
 wlv_pending_meta_indicators <- meta_indicators_panel
+wlv_panel_result_metadata <- list(
+  `_panel_indicators.csv` = indicators_en,
+  `_panel_meta_indicators.csv` = meta_indicators_panel
+)
 wlv_write_method_result_metadata(
   wlv_result_dir,
   wlv_method_result_metadata(
@@ -108,12 +57,13 @@ wlv_write_method_result_metadata(
     solutions = sea_variables,
     sectors = sectors,
     meta_indicators = meta_indicators,
-    extra_csv = if (
-      exists("wlv_scientific_diagnostics", inherits = FALSE)
-    ) {
-      wlv_scientific_diagnostics
-    } else {
-      list()
-    }
+    extra_csv = c(
+      if (exists("wlv_scientific_diagnostics", inherits = FALSE)) {
+        wlv_scientific_diagnostics
+      } else {
+        list()
+      },
+      wlv_panel_result_metadata
+    )
   )
 )

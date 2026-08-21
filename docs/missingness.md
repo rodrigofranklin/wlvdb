@@ -156,11 +156,11 @@ again. This keeps a legitimate prior `NA` distinct from an omitted module.
 
 Calculation and recalculation write into a run-specific staging directory. The
 complete artifact set, audit history, and semantic sidecar are serialized, read
-back, and validated before publication. Promotion first moves any prior result
-to a temporary backup and then atomically renames the staging directory; the
-backup is restored if promotion fails. Global indicator metadata participates
-in the same transaction and is rolled back on failure. A failed run removes its
-staging directory and leaves the previous published result unchanged. A global
-results lock serializes method runs because their indicator metadata is shared;
-recalculation reads arrays, state, and audit history only from its isolated
-snapshot, never from the live result directory while it is being updated.
+back, and validated before publication. A manifest inventories and hashes the
+validated staging tree, which is then renamed to a new immutable run ID. After
+all requested methods succeed, a release fixes their run IDs and derives global
+indicator metadata from exactly those runs. An append-only channel marker is
+installed last. A failed run or release therefore leaves the prior marker and
+everything it references unchanged. A global results lock serializes the full
+protocol; recalculation reads arrays, state, and audit history only from its
+verified isolated snapshot.

@@ -79,9 +79,11 @@ The effective `_unit_contract.csv` result sidecar retains the canonical
 presentation-facing names `index_base_year` and `index_storage_base` for index
 rows. The method-specific `meta_indicators.RDS` exposes `canonical_unit`,
 `display_unit`, `display_multiplier`, `index_base_year`, and
-`index_storage_base` as well. The shared `results/meta_indicators.csv` retains
-its legacy `value`, `groups`, `type`, and `reverted` schema because two methods
-can publish the same indicator code with different presentation rules.
+`index_storage_base` as well. Each release carries a verified
+`meta_indicators.csv` with the legacy `value`, `groups`, `type`, and `reverted`
+schema because two methods can publish the same indicator code with different
+presentation rules. It is derived only from the runs referenced by that
+release.
 
 The historical `.cu` suffix on `compensation.emp.s.cu` and
 `compensation.empe.s.cu` does not mean local-currency storage. Their modules
