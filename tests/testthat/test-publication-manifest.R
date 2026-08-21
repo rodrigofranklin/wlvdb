@@ -114,7 +114,7 @@ test_that("publication file resolution rejects internal links", {
       ),
       "canonical link-free paths"
     )
-    unlink(alias_file, recursive = FALSE, force = TRUE)
+    expect_true(file.remove(alias_file))
     expect_true(file.exists(target_file))
   }
 })
@@ -164,7 +164,7 @@ test_that("channel marker validation rejects a marker file symlink", {
       ),
       "symbolic link|does not match channel"
     )
-    unlink(marker_path, recursive = FALSE, force = TRUE)
+    expect_true(file.remove(marker_path))
     expect_true(file.exists(backup_path))
   }
 })
