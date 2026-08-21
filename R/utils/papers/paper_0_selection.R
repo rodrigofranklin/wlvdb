@@ -42,7 +42,7 @@ pc_cols <- (nums$methods+2):(nums$methods*2+1)
 pc_res <- c(1,rbind(1:nums$methods+1,(nums$methods+2):(nums$methods*2+1)))
 # load all results
 for (mth_v in methods) {
-  method_path <- paste0("results/", mth_v)
+  method_path <- wlv_current_result_dir(mth_v)
   
   m_countries[mth_v,,,,] <-
     read_fst_array(paste0(method_path,"/m_countries.fst"))

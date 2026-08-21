@@ -62,6 +62,14 @@ wlv_make_synthetic_calculation_fixture <- function() {
   dir.create(root, recursive = TRUE)
 
   wlv_copy_fixture_tree(file.path(wlv_test_root, "R"), file.path(root, "R"))
+  wlv_copy_fixture_tree(
+    file.path(wlv_test_root, "complementar"),
+    file.path(root, "complementar")
+  )
+  wlv_copy_fixture_tree(
+    file.path(wlv_test_root, "contracts", "results"),
+    file.path(root, "contracts", "results")
+  )
   wlv_copy_fixture_tree(template, root)
 
   input_path <- file.path(template, "input")
@@ -223,7 +231,11 @@ wlv_read_fixture_array <- function(fixture, ...) {
     file.path(fixture$root, "R", "lib", "functions.R"),
     envir = functions_environment
   )
-  functions_environment$read_fst_array(file.path(fixture$root, ...))
+  path <- file.path(...)
+  if (!grepl("^([A-Za-z]:[/\\\\]|/)", path)) {
+    path <- file.path(fixture$root, path)
+  }
+  functions_environment$read_fst_array(path)
 }
 
 wlv_write_fixture_array <- function(fixture, value, ...) {
@@ -232,7 +244,34 @@ wlv_write_fixture_array <- function(fixture, value, ...) {
     file.path(fixture$root, "R", "lib", "functions.R"),
     envir = functions_environment
   )
-  functions_environment$write_fst_array(value, file.path(fixture$root, ...))
+  path <- file.path(...)
+  if (!grepl("^([A-Za-z]:[/\\\\]|/)", path)) {
+    path <- file.path(fixture$root, path)
+  }
+  functions_environment$write_fst_array(value, path)
+}
+
+wlv_fixture_current_run <- function(
+    fixture,
+    runtime,
+    channel = "stable") {
+  runtime$wlv_resolve_current_method_run(
+    root = fixture$root,
+    method = fixture$method,
+    channel = channel,
+    allow_legacy = FALSE
+  )
+}
+
+wlv_fixture_current_release <- function(
+    fixture,
+    runtime,
+    channel = "stable") {
+  runtime$wlv_read_current_release(
+    root = fixture$root,
+    channel = channel,
+    required = TRUE
+  )
 }
 
 wlv_run_synthetic_calculation <- function(

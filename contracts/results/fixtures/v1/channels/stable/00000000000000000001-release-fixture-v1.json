@@ -1,0 +1,10 @@
+{
+  "schema": "wlv-channel-marker",
+  "schema_version": "1",
+  "channel": "stable",
+  "sequence": "00000000000000000001",
+  "release_id": "release-fixture-v1",
+  "release_manifest_path": "releases/release-fixture-v1/release_manifest.json",
+  "release_manifest_sha256": "64ac9d7b163ba7babf136c16b9321c1ed9f4821237ec8a172512b805c10e7d0d",
+  "published_at_utc": "2026-08-20T12:00:03Z"
+}

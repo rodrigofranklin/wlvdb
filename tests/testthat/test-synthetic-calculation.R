@@ -8,7 +8,9 @@ test_that("the synthetic fixture completes the real calculation pipeline", {
   )
   expect_identical(run$result, fixture$method)
 
-  result_path <- file.path("results", fixture$method)
+  current_run <- wlv_fixture_current_run(fixture, run$runtime)
+  current_release <- wlv_fixture_current_release(fixture, run$runtime)
+  result_path <- current_run$path
   expected_files <- c(
     "m_io2000-2001.fst", "m_io2000-2001.fst.meta",
     "m_countries.fst", "m_countries.fst.meta",
@@ -17,9 +19,12 @@ test_that("the synthetic fixture completes the real calculation pipeline", {
     "meta_indicators.RDS", "_anomalies.csv", "_states.csv",
     "_unit_contract.csv", "_source_provenance.csv"
   )
-  expect_true(all(file.exists(file.path(fixture$root, result_path, expected_files))))
+  expect_true(all(file.exists(file.path(result_path, expected_files))))
+  expect_true(file.exists(file.path(result_path, "run_manifest.json")))
+  expect_identical(current_run$manifest$output_contract$id, "wlvpanel-output")
+  expect_identical(current_run$manifest$output_contract$version, "1.0.0")
   method_metadata <- readRDS(
-    file.path(fixture$root, result_path, "meta_indicators.RDS")
+    file.path(result_path, "meta_indicators.RDS")
   )
   expect_true(all(
     c(
@@ -28,7 +33,7 @@ test_that("the synthetic fixture completes the real calculation pipeline", {
     ) %in% names(method_metadata)
   ))
   panel_metadata <- utils::read.csv2(
-    file.path(fixture$root, "results", "meta_indicators.csv"),
+    file.path(current_release$root, "meta_indicators.csv"),
     stringsAsFactors = FALSE,
     check.names = FALSE
   )
@@ -37,7 +42,7 @@ test_that("the synthetic fixture completes the real calculation pipeline", {
     c("value", "groups", "type", "reverted")
   )
   anomaly_report <- utils::read.csv2(
-    file.path(fixture$root, result_path, "_anomalies.csv"),
+    file.path(result_path, "_anomalies.csv"),
     stringsAsFactors = FALSE
   )
   expect_identical(
@@ -48,7 +53,7 @@ test_that("the synthetic fixture completes the real calculation pipeline", {
     )
   )
   unit_contract <- utils::read.csv2(
-    file.path(fixture$root, result_path, "_unit_contract.csv"),
+    file.path(result_path, "_unit_contract.csv"),
     stringsAsFactors = FALSE,
     check.names = FALSE
   )
@@ -234,40 +239,27 @@ test_that("calculation reads labels from the manifested normalized generation", 
     fileEncoding = "UTF-8"
   )
 
+  run <- NULL
   expect_no_error(
-    suppressMessages(wlv_run_synthetic_calculation(fixture, workers = 1L))
+    suppressMessages(
+      run <- wlv_run_synthetic_calculation(fixture, workers = 1L)
+    )
   )
-  sea_countries <- wlv_read_fixture_array(
-    fixture,
-    file.path("results", fixture$method),
-    "sea_countries.fst"
-  )
+  result_path <- wlv_fixture_current_run(fixture, run$runtime)$path
+  sea_countries <- wlv_read_fixture_array(fixture, result_path, "sea_countries.fst")
   expect_identical(dimnames(sea_countries)[[3L]], c("A", "B", "WWW"))
 })
 
-test_that("recalculation repairs a selected result and preserves the others", {
+test_that("recalculation creates a child run and preserves its immutable parent", {
   fixture <- wlv_make_synthetic_calculation_fixture()
   on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
   run <- suppressMessages(wlv_run_synthetic_calculation(fixture, workers = 1L))
 
-  result_path <- file.path("results", fixture$method)
+  first_run <- wlv_fixture_current_run(fixture, run$runtime)
+  result_path <- first_run$path
   result_file <- file.path(result_path, "sea_sectors.fst")
-  solutions_file <- file.path(
-    fixture$root, result_path, "_method_solutions.csv"
-  )
-  parameters_file <- file.path(
-    fixture$root, result_path, "_parameters.csv"
-  )
-  published_parameters <- utils::read.csv2(
-    parameters_file,
-    stringsAsFactors = FALSE,
-    check.names = FALSE
-  )
-  published_parameters$description <- paste0(
-    "Assumption-derived metadata. ",
-    published_parameters$description
-  )
-  run$runtime$wlv_write_result_csv(published_parameters, parameters_file)
+  solutions_file <- file.path(result_path, "_method_solutions.csv")
+  parameters_file <- file.path(result_path, "_parameters.csv")
   parameters_before <- readBin(
     parameters_file,
     what = "raw",
@@ -279,9 +271,6 @@ test_that("recalculation repairs a selected result and preserves the others", {
     n = file.info(solutions_file)$size
   )
   original <- wlv_read_fixture_array(fixture, result_file)
-  corrupted <- original
-  corrupted[, "gross_output.s.mv", , ] <- -999
-  wlv_write_fixture_array(fixture, corrupted, result_file)
 
   expect_no_error(
     suppressMessages(
@@ -294,7 +283,15 @@ test_that("recalculation repairs a selected result and preserves the others", {
       )
     )
   )
-  repaired <- wlv_read_fixture_array(fixture, result_file)
+  second_run <- wlv_fixture_current_run(fixture, run$runtime)
+  expect_false(identical(second_run$run_id, first_run$run_id))
+  expect_identical(second_run$manifest$parent_run_id, first_run$run_id)
+  expect_true(dir.exists(first_run$path))
+  expect_true(dir.exists(second_run$path))
+  repaired <- wlv_read_fixture_array(
+    fixture,
+    file.path(second_run$path, "sea_sectors.fst")
+  )
   expect_equal(
     repaired[, "gross_output.s.mv", , ],
     original[, "gross_output.s.mv", , ],
@@ -303,13 +300,13 @@ test_that("recalculation repairs a selected result and preserves the others", {
   preserved <- setdiff(dimnames(original)[[2]], "gross_output.s.mv")
   expect_identical(repaired[, preserved, , ], original[, preserved, , ])
   solutions_after <- readBin(
-    solutions_file,
+    file.path(second_run$path, "_method_solutions.csv"),
     what = "raw",
     n = file.info(solutions_file)$size
   )
   expect_identical(solutions_after, solutions_before)
   parameters_after <- readBin(
-    parameters_file,
+    file.path(second_run$path, "_parameters.csv"),
     what = "raw",
     n = file.info(parameters_file)$size
   )
@@ -325,6 +322,8 @@ test_that("recalculation repairs a selected result and preserves the others", {
       )
     )
   )
+  third_run <- wlv_fixture_current_run(fixture, run$runtime)
+  expect_identical(third_run$manifest$parent_run_id, second_run$run_id)
 
   configured_parameters_file <- file.path(
     fixture$root, "methods", fixture$method, "_parameters.csv"
@@ -339,11 +338,7 @@ test_that("recalculation repairs a selected result and preserves the others", {
     configured_parameters,
     configured_parameters_file
   )
-  result_parameters_before_failure <- readBin(
-    parameters_file,
-    what = "raw",
-    n = file.info(parameters_file)$size
-  )
+  release_before_failure <- wlv_fixture_current_release(fixture, run$runtime)
   expect_error(
     suppressMessages(
       wlv_recalculate_synthetic_fixture(
@@ -355,13 +350,14 @@ test_that("recalculation repairs a selected result and preserves the others", {
     ),
     "Current method parameters differ"
   )
+  release_after_failure <- wlv_fixture_current_release(fixture, run$runtime)
   expect_identical(
-    readBin(
-      parameters_file,
-      what = "raw",
-      n = file.info(parameters_file)$size
-    ),
-    result_parameters_before_failure
+    release_after_failure$manifest$release_id,
+    release_before_failure$manifest$release_id
+  )
+  expect_identical(
+    wlv_fixture_current_run(fixture, run$runtime)$run_id,
+    third_run$run_id
   )
 })
 
@@ -404,9 +400,7 @@ test_that("recalculation rejects result-schema contraction explicitly", {
   run <- suppressMessages(wlv_run_synthetic_calculation(fixture, workers = 1L))
 
   result_file <- file.path(
-    fixture$root,
-    "results",
-    fixture$method,
+    wlv_fixture_current_run(fixture, run$runtime)$path,
     "sea_sectors.fst"
   )
   result_before <- readBin(
@@ -487,7 +481,12 @@ test_that("the fixture inputs and outputs stay outside the checkout", {
   )
 
   expect_identical(after, before)
-  expect_true(dir.exists(file.path(fixture$root, "results", fixture$method)))
+  expect_true(dir.exists(file.path(
+    fixture$root,
+    "results",
+    "runs",
+    fixture$method
+  )))
 })
 
 test_that("stage contracts reject omitted and non-finite modules transactionally", {
@@ -608,7 +607,8 @@ test_that("stage 1 recalculation preserves source-matrix USD indicators", {
     ),
     "adapted legacy aggregations"
   )
-  result_dir <- file.path("results", fixture$method)
+  first_run <- wlv_fixture_current_run(fixture, run$runtime)
+  result_dir <- first_run$path
   sectors_before <- wlv_read_fixture_array(
     fixture,
     result_dir,
@@ -633,14 +633,16 @@ test_that("stage 1 recalculation preserves source-matrix USD indicators", {
     "adapted legacy aggregations"
   )
 
+  second_run <- wlv_fixture_current_run(fixture, run$runtime)
+  expect_identical(second_run$manifest$parent_run_id, first_run$run_id)
   sectors_after <- wlv_read_fixture_array(
     fixture,
-    result_dir,
+    second_run$path,
     "sea_sectors.fst"
   )
   countries_after <- wlv_read_fixture_array(
     fixture,
-    result_dir,
+    second_run$path,
     "sea_countries.fst"
   )
   source_matrix_indicators <- c(
@@ -704,7 +706,7 @@ test_that("recalculation refreshes solutions and indicator metadata", {
     ),
     "adapted legacy aggregations"
   )
-  result_dir <- file.path(fixture$root, "results", fixture$method)
+  result_dir <- wlv_fixture_current_run(fixture, run$runtime)$path
   solutions <- utils::read.csv2(
     file.path(result_dir, "_method_solutions.csv"),
     stringsAsFactors = FALSE
@@ -722,7 +724,7 @@ test_that("recalculation refreshes solutions and indicator metadata", {
   )
   sea_sectors <- wlv_read_fixture_array(
     fixture,
-    "results", fixture$method, "sea_sectors.fst"
+    result_dir, "sea_sectors.fst"
   )
   expect_true("new.metric" %in% solutions$names)
   expect_true("new.metric" %in% metadata$code)

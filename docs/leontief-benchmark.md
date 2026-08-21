@@ -13,6 +13,7 @@ O comando de referência é:
 ```sh
 Rscript --vanilla scripts/benchmark_leontief.R \
   --method wiodr16 \
+  --channel stable \
   --year 2013 \
   --repetitions 5 \
   --poll-ms 25 \

@@ -11,6 +11,7 @@ usage <- function() {
       "  --paper NUMBER      Select the paper script number (default: 0).",
       "  --prepaper          Run the selected paper script after calculation.",
       "  --workers NUMBER    Number of workers; 1 is sequential (default: WLV_WORKERS or 1).",
+      "  --channel NAME      Release channel to publish (default: WLV_CHANNEL or stable).",
       "  --allow-experimental  Explicitly allow methods marked as experimental.",
       "  --check             Validate the environment and arguments, then exit.",
       "  --list-methods[=FORMAT]  List methods and exit; FORMAT is table, names, or csv.",
@@ -30,6 +31,7 @@ parse_cli <- function(args) {
     papern = 0L,
     prepaper = FALSE,
     workers = suppressWarnings(as.numeric(Sys.getenv("WLV_WORKERS", unset = "1"))),
+    channel = Sys.getenv("WLV_CHANNEL", unset = "stable"),
     allow_experimental = FALSE,
     check = FALSE,
     list_methods = NULL,
@@ -64,6 +66,14 @@ parse_cli <- function(args) {
         stop("--workers requires a number.", call. = FALSE)
       }
       result$workers <- suppressWarnings(as.numeric(args[[i]]))
+    } else if (grepl("^--channel=", argument)) {
+      result$channel <- sub("^--channel=", "", argument)
+    } else if (argument == "--channel") {
+      i <- i + 1L
+      if (i > length(args)) {
+        stop("--channel requires a value.", call. = FALSE)
+      }
+      result$channel <- args[[i]]
     } else if (grepl("^--method=", argument)) {
       result$methods <- c(result$methods, sub("^--method=", "", argument))
     } else if (argument == "--method") {
@@ -164,6 +174,7 @@ request <- wlv_validate_request(
   papern = args$papern,
   prepaper = args$prepaper,
   workers = args$workers,
+  channel = args$channel,
   mode = "calculate",
   requested_operations = requested_operations,
   allow_experimental = args$allow_experimental,
@@ -196,5 +207,6 @@ get_wlv(
   papern = args$papern,
   prepaper = args$prepaper,
   workers = args$workers,
+  channel = args$channel,
   allow_experimental = args$allow_experimental
 )

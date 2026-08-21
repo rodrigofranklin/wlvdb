@@ -1,0 +1,37 @@
+{
+  "schema": "wlv-release-manifest",
+  "schema_version": "1",
+  "release_id": "release-fixture-v1",
+  "channel": "stable",
+  "sequence": "00000000000000000001",
+  "created_at_utc": "2026-08-20T12:00:02Z",
+  "metadata": {
+    "fixture": {
+      "language": "pt-BR",
+      "shared": true
+    }
+  },
+  "runs": [
+    {
+      "method": "example",
+      "run_id": "run-fixture-v1",
+      "result_id": "9d6ec48029f2fd3ad977e954501e79baeb265007c37d0ca26567c55a6d9da12d",
+      "manifest_path": "runs/example/run-fixture-v1/run_manifest.json",
+      "manifest_sha256": "a48906d0bb00f1f02fa4fa5e11ba35ab14119d08b46aa31aa30c69088f31c1a6"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "indicators_en.csv",
+      "role": "panel-metadata",
+      "size_bytes": 42,
+      "sha256": "83b50852b40736e9f8bbbeb86f90499f3e11d5339d751dab6863b2f4cd5afec8"
+    },
+    {
+      "path": "meta_indicators.csv",
+      "role": "panel-metadata",
+      "size_bytes": 54,
+      "sha256": "3fa4e8ad56832da01173a0257b4426293576883e47148dbd4b682c15d88ed287"
+    }
+  ]
+}

@@ -10,6 +10,7 @@
 parse_arguments <- function(arguments) {
   values <- list(
     method = "wiodr16",
+    channel = Sys.getenv("WLV_RELEASE_CHANNEL", "stable"),
     year = "2013",
     repetitions = 5L,
     poll_ms = 25,
@@ -118,6 +119,16 @@ project_root <- normalizePath(
 )
 setwd(project_root)
 
+publication_environment <- new.env(parent = globalenv())
+for (script in c(
+  "source_manifest.R", "publication_manifest.R", "publication.R"
+)) {
+  sys.source(
+    file.path(project_root, "R", "lib", script),
+    envir = publication_environment
+  )
+}
+
 if (!requireNamespace("fst", quietly = TRUE)) {
   stop("Package `fst` is required for the benchmark fixture.", call. = FALSE)
 }
@@ -140,10 +151,16 @@ source_method <- if (method %in% c("wiodr16", "wiodr16v09", "zerodep_2")) {
 }
 
 source_path <- file.path("source_data", source_method, "m_io.fst")
-sector_path <- file.path("results", method, "sea_sectors.fst")
-sector_contract_path <- file.path("results", method, "_sectors.csv")
+result_dir <- publication_environment$wlv_current_result_dir(
+  method = method,
+  root = project_root,
+  channel = arguments$channel,
+  allow_legacy = TRUE
+)
+sector_path <- file.path(result_dir, "sea_sectors.fst")
+sector_contract_path <- file.path(result_dir, "_sectors.csv")
 result_candidates <- list.files(
-  file.path("results", method),
+  result_dir,
   pattern = "^m_io.*[.]fst$",
   full.names = TRUE
 )
@@ -378,7 +395,7 @@ numerator[, !productive] <- 0
 zero_output <- gross_output == 0
 invalid_ratio <- rep(zero_output, each = dimension_full) & numerator != 0
 if (any(invalid_ratio)) {
-  anomaly_path <- file.path("results", method, "_anomalies.csv")
+  anomaly_path <- file.path(result_dir, "_anomalies.csv")
   if (!identical(method, "wiodr13") || !file.exists(anomaly_path)) {
     stop(
       paste0(

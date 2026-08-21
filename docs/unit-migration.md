@@ -44,9 +44,10 @@ declarations; it does not rescale the stored series.
 New results persist `canonical_unit`, `display_unit`, `display_multiplier`,
 `index_base_year`, and `index_storage_base` in indicator metadata, and repeat
 the same semantics in `_unit_contract.csv`. These fields are method-specific;
-the shared `results/meta_indicators.csv` intentionally retains its legacy
-four-column schema so running one source cannot overwrite another source's
-display scale for the same indicator code.
+the release-level `meta_indicators.csv` intentionally retains its legacy
+four-column schema. It is generated from the immutable runs fixed by the
+release, so running one source cannot silently reuse or overwrite another
+generation's display scale for the same indicator code.
 
 An archived `meta_indicators.RDS` that predates these fields remains readable.
 The compatibility reader emits a warning and supplies

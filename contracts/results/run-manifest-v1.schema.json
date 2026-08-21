@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wlvdb.org/contracts/results/run-manifest-v1.schema.json",
+  "title": "WLVDB immutable run manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "run_id",
+    "result_id",
+    "created_at_utc",
+    "parent_run_id",
+    "method",
+    "output_contract",
+    "result",
+    "execution",
+    "artifacts"
+  ],
+  "properties": {
+    "schema": { "const": "wlv-run-manifest" },
+    "schema_version": { "const": "1" },
+    "run_id": { "$ref": "#/$defs/portable_id" },
+    "result_id": { "$ref": "#/$defs/sha256" },
+    "created_at_utc": { "$ref": "#/$defs/utc_timestamp" },
+    "parent_run_id": {
+      "oneOf": [
+        { "$ref": "#/$defs/portable_id" },
+        { "type": "null" }
+      ]
+    },
+    "method": { "$ref": "#/$defs/portable_id" },
+    "output_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "const": "wlvpanel-output" },
+        "version": { "const": "1.0.0" }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provenance": { "type": "object" },
+        "request": { "type": "object" },
+        "schema": { "type": "object" },
+        "audit_summary": { "type": "object" }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "started_at_utc": { "$ref": "#/$defs/utc_timestamp" },
+        "finished_at_utc": { "$ref": "#/$defs/utc_timestamp" },
+        "duration_seconds": { "type": "number", "minimum": 0 },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "host": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "r_version": { "type": "string", "minLength": 1 },
+            "platform": { "type": "string", "minLength": 1 },
+            "os": { "type": "string", "minLength": 1 },
+            "arch": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/artifact" }
+    }
+  },
+  "$defs": {
+    "portable_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "portable_role": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!\\.{1,2}(?:/|$))(?!.*/\\.{1,2}(?:/|$))(?!.*[<>:\"|?*])(?!.*[. ](?:/|$))[^/\\r\\n\\t]+(?:/[^/\\r\\n\\t]+)*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "utc_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "role", "size_bytes", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relative_path" },
+        "role": { "$ref": "#/$defs/portable_role" },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

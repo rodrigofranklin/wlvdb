@@ -91,9 +91,12 @@ for (year in lists$years) {
   # Load data ----
   # ek_k -> distribution ratio of each type of capital across all sectors
   # ek_dep_rate -> depreciation ratio of each type of capital in each sector
-  ek_k <- read_fst_array(paste0("source_data/euklems/ekk_",year,".fst"))
-  ek_dep_rate <- read_fst_array(paste0("source_data/euklems/ekdeprate_",
-                              as.character(as.numeric(year)+1),".fst"))
+  ek_k <- fst::read_fst(paste0("source_data/euklems/ekk_", year, ".fst"))
+  ek_dep_rate <- fst::read_fst(paste0(
+    "source_data/euklems/ekdeprate_",
+    as.character(as.numeric(year) + 1),
+    ".fst"
+  ))
   ek_k <- wlv_wiodr16_sanitize_euklems_weights(ek_k, year)
   truncated_euklems_weights <-
     attr(ek_k, "wlv.truncated_negative_weights")

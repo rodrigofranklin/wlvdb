@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wlvdb.org/contracts/results/release-manifest-v1.schema.json",
+  "title": "WLVDB immutable release manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "release_id",
+    "channel",
+    "sequence",
+    "created_at_utc",
+    "metadata",
+    "runs",
+    "artifacts"
+  ],
+  "properties": {
+    "schema": { "const": "wlv-release-manifest" },
+    "schema_version": { "const": "1" },
+    "release_id": { "$ref": "#/$defs/portable_id" },
+    "channel": { "$ref": "#/$defs/channel" },
+    "sequence": { "$ref": "#/$defs/sequence" },
+    "created_at_utc": { "$ref": "#/$defs/utc_timestamp" },
+    "metadata": { "type": "object" },
+    "runs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/run_reference" }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/artifact" }
+    }
+  },
+  "$defs": {
+    "portable_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "portable_role": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "channel": {
+      "type": "string",
+      "pattern": "^(?=.{1,128}$)[a-z0-9](?:[a-z0-9._-]*[a-z0-9_-])?(?:/[a-z0-9](?:[a-z0-9._-]*[a-z0-9_-])?)*$"
+    },
+    "sequence": {
+      "type": "string",
+      "pattern": "^[0-9]{20}$"
+    },
+    "relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!\\.{1,2}(?:/|$))(?!.*/\\.{1,2}(?:/|$))(?!.*[<>:\"|?*])(?!.*[. ](?:/|$))[^/\\r\\n\\t]+(?:/[^/\\r\\n\\t]+)*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "utc_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "role", "size_bytes", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relative_path" },
+        "role": { "$ref": "#/$defs/portable_role" },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "run_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "run_id",
+        "result_id",
+        "manifest_path",
+        "manifest_sha256"
+      ],
+      "properties": {
+        "method": { "$ref": "#/$defs/portable_id" },
+        "run_id": { "$ref": "#/$defs/portable_id" },
+        "result_id": { "$ref": "#/$defs/sha256" },
+        "manifest_path": {
+          "type": "string",
+          "pattern": "^runs/[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}/run_manifest\\.json$"
+        },
+        "manifest_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

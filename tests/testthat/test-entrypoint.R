@@ -6,7 +6,7 @@ run_wlv_rscript <- function() {
 }
 
 run_wlv_cli <- function(...) {
-  suppressWarnings(system2(
+  output <- suppressWarnings(system2(
     run_wlv_rscript(),
     c(
       "--vanilla",
@@ -16,6 +16,14 @@ run_wlv_cli <- function(...) {
     stdout = TRUE,
     stderr = TRUE
   ))
+  status <- attr(output, "status", exact = TRUE)
+  locale_warning <- grepl(
+    "^(During startup - Warning messages:|[1-9][0-9]*: Setting LC_[A-Z_]+=.*failed ?)$",
+    output
+  )
+  output <- output[!locale_warning]
+  if (!is.null(status)) attr(output, "status") <- status
+  output
 }
 
 wlv_runtime_artifact_inventory <- function() {
@@ -128,14 +136,14 @@ test_that("public APIs enforce catalog maturity before side effects", {
     names(formals(environment$get_wlv)),
     c(
       "methods", "repeat_pp", "papern", "prepaper", "workers",
-      "allow_experimental"
+      "channel", "allow_experimental"
     )
   )
   expect_identical(
     names(formals(environment$recalc_wlv)),
     c(
       "methods", "at_stage", "sea_vars", "papern", "prepaper", "workers",
-      "allow_experimental"
+      "channel", "allow_experimental"
     )
   )
   expect_identical(
@@ -158,6 +166,7 @@ test_that("command line entrypoint provides help without project data", {
   expect_null(attr(output, "status"))
   expect_true(any(grepl("--method", output, fixed = TRUE)))
   expect_true(any(grepl("--prepare-only", output, fixed = TRUE)))
+  expect_true(any(grepl("--channel", output, fixed = TRUE)))
   expect_true(any(grepl("--allow-experimental", output, fixed = TRUE)))
   expect_true(any(grepl("--list-methods", output, fixed = TRUE)))
 })
