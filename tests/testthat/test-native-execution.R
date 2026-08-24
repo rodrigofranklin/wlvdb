@@ -264,7 +264,8 @@ test_that("profiled non-finite coordinates close against normalized source label
   )
   targets <- runtime$wlv_native_reset_recalculated_anomalies(
     contract_runtime,
-    selective_plan
+    selective_plan,
+    5L
   )
   expect_true(any(
     targets$artifact == "sea_countries" &
@@ -480,7 +481,8 @@ test_that("stage-one anomaly owners match their native module generations", {
     )[runtime$wlv_contract_anomaly_columns]
     runtime$wlv_native_reset_recalculated_anomalies(
       contract_runtime,
-      module_plan
+      module_plan,
+      1L
     )
     expect_identical(nrow(contract_runtime$anomalies), 0L, info = method)
   }
@@ -578,6 +580,104 @@ test_that("stage-four recalculation preserves inherited go-price states", {
     envir = contract_runtime$states,
     inherits = FALSE
   ))
+})
+
+test_that("stage-four anomaly reset preserves inherited go-price normalization", {
+  runtime <- native_execution_runtime
+  catalog <- runtime$wlv_runtime_catalog()
+  request <- runtime$wlv_validate_request(
+    "ochoa_1",
+    mode = "recalculate",
+    at_stage = 4L,
+    root = wlv_test_root,
+    allow_experimental = TRUE,
+    catalog = catalog
+  )
+  instances <- runtime$wlv_native_plan_instances(
+    registry = request$native_registry,
+    config = request$configuration$ochoa_1,
+    aggregation_registry = request$aggregation_registries$ochoa_1,
+    indicators = request$indicators$ochoa_1,
+    partitions = "1995-2009",
+    mode = "recalculate",
+    at_stage = 4L,
+    sea_vars = "go_price.r.id"
+  )
+  module_plan <- runtime$wlv_native_preflight_plan(
+    request$native_registry,
+    instances,
+    "1995-2009",
+    mode = "recalculate",
+    source = "wiodr13",
+    at_stage = 4L,
+    indicators = request$indicators$ochoa_1
+  )
+  targets <- runtime$wlv_native_recalculated_anomaly_targets(module_plan)
+  go_targets <- targets[
+    targets$indicator == "go_price.r.id" &
+      targets$artifact %in% c("sea_sectors", "sea_countries"),
+    ,
+    drop = FALSE
+  ]
+  inherited <- go_targets[
+    go_targets$artifact == "sea_sectors" &
+      go_targets$module == "indicator.price_index.normalize",
+    ,
+    drop = FALSE
+  ]
+  reset_candidates <- go_targets[
+    !(go_targets$artifact == "sea_sectors" &
+      go_targets$module == "indicator.price_index.normalize"),
+    ,
+    drop = FALSE
+  ]
+  expect_identical(nrow(inherited), 1L)
+  expect_gt(nrow(reset_candidates), 0L)
+  reset <- reset_candidates[1L, , drop = FALSE]
+
+  contract_runtime <- runtime$wlv_new_contract_runtime(
+    method = "ochoa_1",
+    source = "wiodr13",
+    policy = runtime$wlv_strict_missingness_policy(
+      source = "wiodr13",
+      policy_id = "stage4_inherited_anomaly_test"
+    ),
+    scientific_profile = request$scientific_profiles$ochoa_1
+  )
+  anomaly <- function(target) {
+    data.frame(
+      artifact = target$artifact,
+      indicator = target$indicator,
+      checkpoint = "after_price_normalization",
+      stage = target$stage,
+      module = target$module,
+      year = "2000",
+      country = "USA",
+      sector = "S1",
+      output = NA_character_,
+      original_value = "NaN",
+      policy_id = "wiodr13_v1",
+      action = "mark_not_applicable",
+      stringsAsFactors = FALSE
+    )[runtime$wlv_contract_anomaly_columns]
+  }
+  contract_runtime$anomalies <- rbind(anomaly(inherited), anomaly(reset))
+
+  reset_targets <- runtime$wlv_native_reset_recalculated_anomalies(
+    contract_runtime,
+    module_plan,
+    4L
+  )
+  expect_false(any(
+    reset_targets$artifact == "sea_sectors" &
+      reset_targets$indicator == "go_price.r.id" &
+      reset_targets$module == "indicator.price_index.normalize"
+  ))
+  expect_identical(nrow(contract_runtime$anomalies), 1L)
+  expect_identical(
+    contract_runtime$anomalies$module,
+    "indicator.price_index.normalize"
+  )
 })
 
 test_that("Leontief exception outputs close against lightweight IO metadata", {
@@ -686,18 +786,20 @@ test_that("unsupported papers fail before calculation starts", {
   )
 })
 
-test_that("selective recalculation refreshes only recomputed indicator metadata", {
+test_that("recalculation refreshes only explicitly supplied metadata cells", {
   runtime <- native_execution_runtime
   indicators <- c("kept", "target")
   parent <- data.frame(
     code = indicators,
     name = c("parent kept", "parent target"),
+    observation = c("parent kept source", "parent target source"),
     stringsAsFactors = FALSE,
     row.names = indicators
   )
   current <- data.frame(
     code = indicators,
     name = c("current kept", "current target"),
+    observation = c("current kept source", NA_character_),
     stringsAsFactors = FALSE,
     row.names = indicators
   )
@@ -719,6 +821,7 @@ test_that("selective recalculation refreshes only recomputed indicator metadata"
 
   expect_identical(merged["kept", "name"], "parent kept")
   expect_identical(merged["target", "name"], "current target")
+  expect_identical(merged["target", "observation"], "parent target source")
   expect_identical(row.names(merged), indicators)
 })
 

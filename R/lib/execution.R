@@ -2267,8 +2267,25 @@ wlv_native_recalculated_anomaly_targets <- function(module_plan) {
   targets
 }
 
-wlv_native_reset_recalculated_anomalies <- function(runtime, module_plan) {
+wlv_native_reset_recalculated_anomalies <- function(runtime, module_plan, at_stage) {
+  if (!is.numeric(at_stage) || length(at_stage) != 1L || is.na(at_stage) ||
+      !at_stage %in% c(1L, 4L, 5L)) {
+    stop("Recalculated anomaly reset requires checkpoint 1, 4, or 5.",
+      call. = FALSE
+    )
+  }
   targets <- wlv_native_recalculated_anomaly_targets(module_plan)
+  # Stage four consumes the published go-price generation as the input to the
+  # historical second normalization. Missing values and their states survive
+  # that operation, so the matching parent anomalies remain authoritative too.
+  if (identical(at_stage, 4L) && nrow(targets)) {
+    inherited_go_normalization <-
+      targets$artifact == "sea_sectors" &
+      targets$indicator == "go_price.r.id" &
+      targets$stage == "4" &
+      targets$module == "indicator.price_index.normalize"
+    targets <- targets[!inherited_go_normalization, , drop = FALSE]
+  }
   if (!nrow(targets) || !nrow(runtime$anomalies)) {
     return(invisible(targets))
   }
@@ -2398,7 +2415,8 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
       if (identical(plan$mode, "recalculate")) {
         wlv_native_reset_recalculated_anomalies(
           contract_runtime,
-          module_plan
+          module_plan,
+          plan$at_stage
         )
       }
       module_result <- wlv_run_module_plan(

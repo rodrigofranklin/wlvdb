@@ -340,7 +340,13 @@ wlv_native_merge_recalculation_metadata <- function(
   result <- parent
   if (length(refreshed)) {
     rows <- match(refreshed, indicators)
-    result[rows, ] <- current[rows, , drop = FALSE]
+    current_rows <- current[rows, , drop = FALSE]
+    for (column in setdiff(names(result), "code")) {
+      declared <- !is.na(current_rows[[column]])
+      if (any(declared)) {
+        result[[column]][rows[declared]] <- current_rows[[column]][declared]
+      }
+    }
   }
   row.names(result) <- result$code
   result
