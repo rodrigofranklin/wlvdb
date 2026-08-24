@@ -130,13 +130,18 @@ if (!length(script_arg)) {
 
 script_path <- normalizePath(sub("^--file=", "", script_arg[[1]]), mustWork = TRUE)
 project_root <- normalizePath(file.path(dirname(script_path), ".."), mustWork = TRUE)
-setwd(project_root)
+
+bootstrap_environment <- new.env(parent = baseenv())
+sys.source(
+  file.path(project_root, "R", "bootstrap.R"),
+  envir = bootstrap_environment,
+  chdir = FALSE
+)
 
 if (!is.null(args$list_methods)) {
-  catalog_environment <- new.env(parent = baseenv())
-  sys.source(file.path("R", "lib", "catalog.R"), envir = catalog_environment)
-  catalog <- catalog_environment$wlv_load_catalog(project_root)
-  output <- catalog_environment$wlv_format_catalog_table(
+  runtime <- bootstrap_environment$wlv_load_runtime(project_root)
+  catalog <- runtime$wlv_runtime_catalog()
+  output <- runtime$wlv_format_catalog_table(
     catalog,
     format = args$list_methods
   )
@@ -147,14 +152,17 @@ if (!is.null(args$list_methods)) {
   quit(save = "no", status = 0L)
 }
 
-source(file.path("renv", "activate.R"), local = TRUE)
-sys.source(file.path("R", "main.R"), envir = .GlobalEnv)
+Sys.setenv(RENV_PROJECT = project_root)
+source(file.path(project_root, "renv", "activate.R"), local = TRUE)
+runtime <- bootstrap_environment$wlv_load_runtime(project_root)
+catalog <- runtime$wlv_runtime_catalog()
 
 if (!length(args$methods)) {
   stop("At least one --method is required.", call. = FALSE)
 }
 
 valid_syntax <- grepl("^[A-Za-z0-9][A-Za-z0-9._-]*$", args$methods)
+method_list <- runtime$wlv_catalog_method_table(catalog)$method
 unknown <- args$methods[!valid_syntax | !(args$methods %in% method_list)]
 if (length(unknown)) {
   stop(
@@ -168,7 +176,7 @@ requested_operations <- if (args$prepare_only) {
 } else {
   c(if (args$repeat_pp) "prepare", "calculate")
 }
-request <- wlv_validate_request(
+request <- runtime$wlv_validate_request(
   methods = args$methods,
   repeat_pp = args$repeat_pp,
   papern = args$papern,
@@ -176,15 +184,16 @@ request <- wlv_validate_request(
   workers = args$workers,
   channel = args$channel,
   mode = "calculate",
+  root = project_root,
   requested_operations = requested_operations,
   allow_experimental = args$allow_experimental,
-  catalog = method_catalog
+  catalog = catalog
 )
 
-wlv_assert_dependencies(
+runtime$wlv_assert_dependencies(
   include_preparation = request$repeat_pp,
   include_papers = request$prepaper,
-  attach = !args$check
+  attach = FALSE
 )
 
 if (args$check) {
@@ -193,7 +202,7 @@ if (args$check) {
 }
 
 if (args$prepare_only) {
-  prepare_wlv(
+  runtime$prepare_wlv(
     methods = args$methods,
     allow_experimental = args$allow_experimental
   )
@@ -201,7 +210,7 @@ if (args$prepare_only) {
   quit(save = "no", status = 0L)
 }
 
-get_wlv(
+runtime$get_wlv(
   methods = args$methods,
   repeat_pp = args$repeat_pp,
   papern = args$papern,

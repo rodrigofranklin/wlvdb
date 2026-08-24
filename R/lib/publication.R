@@ -250,8 +250,7 @@ wlv_release_run_record <- function(release, method) {
 wlv_resolve_current_method_run <- function(
     root,
     method,
-    channel = "stable",
-    allow_legacy = TRUE) {
+    channel = "stable") {
   wlv_publication_safe_id(method, "method name")
   release <- wlv_read_current_release(root, channel = channel, required = FALSE)
   paths <- wlv_publication_paths(root)
@@ -282,53 +281,21 @@ wlv_resolve_current_method_run <- function(
       result_id = manifest$result_id,
       manifest = manifest,
       manifest_path = normalizePath(manifest_path, winslash = "/", mustWork = TRUE),
-      release_id = release$manifest$release_id,
-      legacy = FALSE
+      release_id = release$manifest$release_id
     ))
   }
 
-  legacy <- file.path(paths$results, method)
-  if (isTRUE(allow_legacy) && dir.exists(legacy)) {
-    results_root <- wlv_publication_assert_real_directory(
-      paths$results,
-      paths$root,
-      "Legacy results root"
-    )
-    legacy <- wlv_publication_assert_real_directory(
-      legacy,
-      results_root,
-      sprintf("Legacy result for method `%s`", method)
-    )
-    warning(
-      sprintf(
-        "Method `%s` is using an unmanifested legacy result; publish a full run to migrate it.",
-        method
-      ),
-      call. = FALSE
-    )
-    return(list(
-      path = normalizePath(legacy, winslash = "/", mustWork = TRUE),
-      run_id = NULL,
-      result_id = NULL,
-      manifest = NULL,
-      manifest_path = NULL,
-      release_id = NULL,
-      legacy = TRUE
-    ))
-  }
   stop(sprintf("No published results exist for method `%s`.", method), call. = FALSE)
 }
 
 wlv_current_result_dir <- function(
     method,
     root = ".",
-    channel = getOption("wlv.channel", "stable"),
-    allow_legacy = TRUE) {
+    channel = getOption("wlv.channel", "stable")) {
   wlv_resolve_current_method_run(
     root = root,
     method = method,
-    channel = channel,
-    allow_legacy = allow_legacy
+    channel = channel
   )$path
 }
 
@@ -351,6 +318,14 @@ wlv_publication_input_paths <- function(plan, method) {
     ),
     list.files(file.path(plan$root, "catalog"), recursive = TRUE, full.names = TRUE),
     list.files(
+      file.path(plan$root, "config"),
+      recursive = TRUE,
+      full.names = TRUE,
+      all.files = TRUE,
+      include.dirs = FALSE,
+      no.. = TRUE
+    ),
+    list.files(
       file.path(plan$root, "complementar"),
       recursive = TRUE,
       full.names = TRUE,
@@ -360,6 +335,14 @@ wlv_publication_input_paths <- function(plan, method) {
     ),
     list.files(
       file.path(plan$root, "contracts", "results"),
+      recursive = TRUE,
+      full.names = TRUE,
+      all.files = TRUE,
+      include.dirs = FALSE,
+      no.. = TRUE
+    ),
+    list.files(
+      file.path(plan$root, "contracts", "units"),
       recursive = TRUE,
       full.names = TRUE,
       all.files = TRUE,
@@ -385,25 +368,111 @@ wlv_publication_input_paths <- function(plan, method) {
 }
 
 wlv_publication_input_inventory <- function(plan, method) {
-  paths <- wlv_publication_input_paths(plan, method)
-  lapply(paths, function(path) {
-    list(
-      path = wlv_publication_relative_path(path, plan$root),
-      sha256 = wlv_publication_file_sha256(path)
+  capture <- function() {
+    paths <- wlv_publication_input_paths(plan, method)
+    lapply(paths, function(path) {
+      list(
+        path = wlv_publication_relative_path(path, plan$root),
+        sha256 = wlv_publication_file_sha256(path)
+      )
+    })
+  }
+  first <- capture()
+  second <- capture()
+  if (!identical(first, second)) {
+    stop(
+      sprintf(
+        "Publication inputs changed while method `%s` was being inventoried.",
+        method
+      ),
+      call. = FALSE
     )
+  }
+  first
+}
+
+wlv_capture_plan_publication_inputs <- function(plan) {
+  if (!is.list(plan) || !is.character(plan$method_names) ||
+      !length(plan$method_names) || anyNA(plan$method_names)) {
+    stop("A method plan is required to capture publication inputs.", call. = FALSE)
+  }
+  inventories <- lapply(plan$method_names, function(method) {
+    wlv_publication_input_inventory(plan, method)
   })
+  names(inventories) <- plan$method_names
+  inventories
+}
+
+wlv_plan_publication_input_inventory <- function(plan, method) {
+  if (!is.character(method) || length(method) != 1L || is.na(method) ||
+      is.null(plan$publication_inputs) ||
+      !identical(names(plan$publication_inputs), plan$method_names) ||
+      !method %in% names(plan$publication_inputs)) {
+    stop(
+      "The run plan lacks its immutable preflight publication inventory.",
+      call. = FALSE
+    )
+  }
+  plan$publication_inputs[[method]]
+}
+
+wlv_publication_changed_inputs <- function(expected, current) {
+  expected_paths <- vapply(expected, `[[`, character(1L), "path")
+  current_paths <- vapply(current, `[[`, character(1L), "path")
+  paths <- union(expected_paths, current_paths)
+  expected_hashes <- stats::setNames(
+    vapply(expected, `[[`, character(1L), "sha256"),
+    expected_paths
+  )
+  current_hashes <- stats::setNames(
+    vapply(current, `[[`, character(1L), "sha256"),
+    current_paths
+  )
+  paths[vapply(paths, function(path) {
+    !path %in% expected_paths || !path %in% current_paths ||
+      !identical(expected_hashes[[path]], current_hashes[[path]])
+  }, logical(1L))]
+}
+
+wlv_assert_plan_publication_inputs_unchanged <- function(
+    plan,
+    methods = plan$method_names) {
+  if (!is.character(methods) || !length(methods) || anyNA(methods) ||
+      any(!methods %in% plan$method_names)) {
+    stop("Publication input verification received invalid methods.", call. = FALSE)
+  }
+  for (method in methods) {
+    expected <- wlv_plan_publication_input_inventory(plan, method)
+    current <- wlv_publication_input_inventory(plan, method)
+    if (!identical(expected, current)) {
+      changed <- wlv_publication_changed_inputs(expected, current)
+      stop(
+        sprintf(
+          paste0(
+            "Runtime or configuration inputs changed after preflight ",
+            "validation for method `%s`: %s."
+          ),
+          method,
+          paste(changed, collapse = ", ")
+        ),
+        call. = FALSE
+      )
+    }
+  }
+  invisible(TRUE)
 }
 
 wlv_git_publication_status_scope <- function(input_inventory) {
   input_paths <- vapply(input_inventory, `[[`, character(1L), "path")
   status_scope <- vapply(input_paths, function(path) {
     components <- strsplit(path, "/", fixed = TRUE)[[1L]]
-    if (components[[1L]] %in% c("R", "catalog", "complementar")) {
+    if (components[[1L]] %in% c("R", "catalog", "config", "complementar")) {
       return(components[[1L]])
     }
     if (identical(components[[1L]], "contracts") &&
-        length(components) >= 2L && identical(components[[2L]], "results")) {
-      return("contracts/results")
+        length(components) >= 2L &&
+        components[[2L]] %in% c("results", "units")) {
+      return(paste0("contracts/", components[[2L]]))
     }
     if (components[[1L]] %in% c("methods", "parameters") &&
         length(components) >= 2L) {
@@ -418,6 +487,7 @@ wlv_git_publication_status_scope <- function(input_inventory) {
       "catalog",
       "complementar",
       "contracts/results",
+      "contracts/units",
       "DESCRIPTION",
       "renv.lock",
       "scripts/run_wlv.R"
@@ -730,17 +800,22 @@ wlv_run_manifest_result <- function(
     method,
     staging,
     run_data) {
-  input_inventory <- wlv_publication_input_inventory(plan, method)
+  input_inventory <- wlv_plan_publication_input_inventory(plan, method)
+  input_paths <- vapply(input_inventory, `[[`, character(1L), "path")
+  renv_index <- match("renv.lock", input_paths)
   source_provenance <- lapply(seq_len(nrow(run_data$source_provenance)), function(index) {
     as.list(run_data$source_provenance[index, , drop = FALSE])
   })
   source_manifest <- wlv_publication_source_manifest_projection(
     run_data$source_manifest
   )
-  additional_source_inputs <- wlv_publication_source_input_inventory(
-    plan$root,
-    run_data$source_provenance_inputs
-  )
+  additional_source_inputs <- run_data$source_provenance_input_inventory
+  if (!is.list(additional_source_inputs)) {
+    stop(
+      "Validated run data lack the additional source input inventory.",
+      call. = FALSE
+    )
+  }
   anomaly_path <- file.path(staging, "_anomalies.csv")
   anomaly_count <- if (file.exists(anomaly_path)) {
     nrow(utils::read.csv2(anomaly_path, stringsAsFactors = FALSE))
@@ -754,16 +829,10 @@ wlv_run_manifest_result <- function(
   )), method = "radix")
   list(
     provenance = list(
-      complete = if (identical(plan$mode, "recalculate")) {
-        isTRUE(run_data$parent_provenance_complete)
-      } else {
-        TRUE
-      },
-      inherited_legacy_generation = identical(plan$mode, "recalculate") &&
-        !isTRUE(run_data$parent_provenance_complete),
+      complete = TRUE,
       git = wlv_git_publication_provenance(plan$root, input_inventory),
-      renv_lock_sha256 = if (file.exists(file.path(plan$root, "renv.lock"))) {
-        wlv_publication_file_sha256(file.path(plan$root, "renv.lock"))
+      renv_lock_sha256 = if (!is.na(renv_index)) {
+        input_inventory[[renv_index]]$sha256
       } else {
         NULL
       },
@@ -810,6 +879,13 @@ wlv_promote_method_run <- function(
     parent_run_id = NULL,
     started_at,
     warnings = character()) {
+  wlv_assert_plan_publication_inputs_unchanged(plan, method)
+  method_record <- plan$methods[
+    match(method, plan$methods$method),
+    ,
+    drop = FALSE
+  ]
+  wlv_assert_method_source_inputs_unchanged(plan, method_record, run_data)
   paths <- wlv_publication_ensure_store(plan$root)
   finished_at <- Sys.time()
   artifacts <- sort(list.files(
@@ -850,6 +926,8 @@ wlv_promote_method_run <- function(
   manifest_path <- file.path(staging, wlv_run_manifest_filename)
   wlv_write_run_manifest(manifest, manifest_path)
   wlv_verify_run_manifest(manifest, staging, reject_unlisted = TRUE)
+  wlv_assert_plan_publication_inputs_unchanged(plan, method)
+  wlv_assert_method_source_inputs_unchanged(plan, method_record, run_data)
 
   staging <- wlv_publication_assert_real_directory(
     staging,
@@ -886,6 +964,15 @@ wlv_promote_method_run <- function(
   run_environment$wlv_result_id <- installed_manifest$result_id
   run_environment$wlv_run_dir <- final
   run_environment$wlv_run_manifest <- installed_manifest
+  run_environment$wlv_source_provenance <- run_data$source_provenance
+  run_environment$wlv_source_provenance_inputs <-
+    run_data$source_provenance_inputs
+  run_environment$wlv_source_provenance_input_inventory <-
+    run_data$source_provenance_input_inventory
+  wlv_assert_run_environments_source_inputs_unchanged(
+    plan,
+    list(run_environment)
+  )
   run_environment
 }
 
@@ -929,6 +1016,8 @@ wlv_merge_panel_result_tables <- function(paths, key, columns) {
 }
 
 wlv_commit_release <- function(plan, run_environments) {
+  wlv_assert_plan_publication_inputs_unchanged(plan)
+  wlv_assert_run_environments_source_inputs_unchanged(plan, run_environments)
   paths <- wlv_publication_ensure_store(plan$root)
   current <- wlv_read_current_release(plan$root, plan$channel, required = FALSE)
   prior_runs <- if (is.null(current)) list() else current$manifest$runs
@@ -989,10 +1078,21 @@ wlv_commit_release <- function(plan, run_environments) {
   wlv_write_result_csv(indicators, file.path(staging, "indicators_en.csv"))
   wlv_write_result_csv(metadata, file.path(staging, "meta_indicators.csv"))
 
+  wlv_assert_plan_publication_inputs_unchanged(plan)
+  paper_result <- wlv_run_staged_paper(plan, run_environments, staging)
+  wlv_assert_plan_publication_inputs_unchanged(plan)
+  wlv_assert_run_environments_source_inputs_unchanged(plan, run_environments)
+  release_artifacts <- c("indicators_en.csv", "meta_indicators.csv")
+  release_roles <- c("panel_labels", "panel_metadata")
+  if (!is.null(paper_result)) {
+    release_artifacts <- c(release_artifacts, basename(paper_result$output))
+    release_roles <- c(release_roles, "paper")
+  }
+
   release <- wlv_build_release_manifest(
     release_root = staging,
-    artifacts = c("indicators_en.csv", "meta_indicators.csv"),
-    artifact_roles = c("panel_labels", "panel_metadata"),
+    artifacts = release_artifacts,
+    artifact_roles = release_roles,
     release_id = release_id,
     channel = plan$channel,
     sequence = sequence,
@@ -1007,6 +1107,8 @@ wlv_commit_release <- function(plan, run_environments) {
     publication_root = paths$results,
     reject_unlisted = TRUE
   )
+  wlv_assert_plan_publication_inputs_unchanged(plan)
+  wlv_assert_run_environments_source_inputs_unchanged(plan, run_environments)
   final <- file.path(paths$releases, release_id)
   if (file.exists(final) || !file.rename(staging, final)) {
     stop(sprintf("Could not promote release `%s`.", release_id), call. = FALSE)
@@ -1072,6 +1174,8 @@ wlv_commit_release <- function(plan, run_environments) {
     paths$results,
     verify_release = FALSE
   )
+  wlv_assert_plan_publication_inputs_unchanged(plan)
+  wlv_assert_run_environments_source_inputs_unchanged(plan, run_environments)
   if (file.exists(marker_path) ||
       !file.rename(pending_marker_path, marker_path)) {
     stop("Could not atomically install channel marker.", call. = FALSE)
@@ -1123,20 +1227,26 @@ wlv_with_publication_lock <- function(plan, execute) {
 
 wlv_execute_preparation_plan <- function(plan) {
   wlv_with_publication_lock(plan, function() {
+    wlv_assert_plan_publication_inputs_unchanged(plan)
     wlv_prepare_sources(plan)
-    wlv_validate_data(plan)
+    validated <- wlv_validate_data(plan)
+    wlv_assert_plan_publication_inputs_unchanged(validated)
+    validated
   })
 }
 
 wlv_execute_run_plan <- function(plan) {
   wlv_with_publication_lock(plan, function() {
+    wlv_assert_plan_publication_inputs_unchanged(plan)
     if (isTRUE(plan$repeat_pp)) {
       wlv_prepare_sources(plan)
     }
 
     plan <- wlv_validate_data(plan)
+    wlv_assert_plan_publication_inputs_unchanged(plan)
     run_environments <- wlv_with_cluster(plan$workers, function(cluster) {
       lapply(plan$method_names, function(method) {
+        wlv_assert_plan_publication_inputs_unchanged(plan, method)
         message(sprintf(
           "%s %s...",
           if (plan$mode == "recalculate") "Recalculating" else "Calculating",

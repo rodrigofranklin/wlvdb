@@ -32,12 +32,9 @@ wlv_wiodr_radix_key_md5 <- function(keys) {
     stop("GFCF anomaly keys must be non-empty strings.", call. = FALSE)
   }
   keys <- sort(keys, method = "radix")
-  path <- tempfile("wlv-gfcf-", fileext = ".txt")
-  on.exit(unlink(path), add = TRUE)
-  connection <- file(path, open = "wb")
-  writeBin(charToRaw(enc2utf8(paste(keys, collapse = "\n"))), connection)
-  close(connection)
-  unname(tools::md5sum(path))
+  unclass(tolower(as.character(openssl::md5(
+    charToRaw(enc2utf8(paste(keys, collapse = "\n")))
+  ))))
 }
 
 wlv_wiodr_assert_gfcf_array <- function(value) {

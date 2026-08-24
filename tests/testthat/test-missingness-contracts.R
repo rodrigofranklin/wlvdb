@@ -1141,7 +1141,7 @@ test_that("array axis titles do not make otherwise aligned values incompatible",
   )
 })
 
-test_that("Leontief nonzero-over-zero exceptions are method- and hash-pinned", {
+test_that("Leontief nonzero-over-zero exceptions are source- and hash-pinned", {
   policy <- missingness_environment$wlv_strict_missingness_policy(
     source = "synthetic", policy_id = "synthetic_strict"
   )
@@ -1165,7 +1165,7 @@ test_that("Leontief nonzero-over-zero exceptions are method- and hash-pinned", {
   )
 
   wiodr13_runtime <- missingness_environment$wlv_new_contract_runtime(
-    method = "wiodr13", source = "synthetic", policy = policy
+    method = "wiodr13v09", source = "wiodr13", policy = policy
   )
   expect_error(
     missingness_environment$wlv_allowlisted_leontief_zero_output(
@@ -1177,6 +1177,22 @@ test_that("Leontief nonzero-over-zero exceptions are method- and hash-pinned", {
       outputs = "A.X"
     ),
     "differ from the pinned set",
+    fixed = TRUE
+  )
+
+  wrong_source_runtime <- missingness_environment$wlv_new_contract_runtime(
+    method = "wiodr13", source = "synthetic", policy = policy
+  )
+  expect_error(
+    missingness_environment$wlv_allowlisted_leontief_zero_output(
+      wrong_source_runtime,
+      numerator,
+      denominator,
+      years = "2000",
+      inputs = "A.X",
+      outputs = "A.X"
+    ),
+    "undeclared nonzero flow",
     fixed = TRUE
   )
 })

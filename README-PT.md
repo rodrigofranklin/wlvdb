@@ -38,8 +38,10 @@ do projeto e carregue as funções principais de forma explícita:
 
 ```r
 source("renv/activate.R")
-source("R/main.R")
-get_wlv("wiodr13")
+bootstrap <- new.env(parent = baseenv())
+sys.source("R/bootstrap.R", envir = bootstrap)
+wlv <- bootstrap$wlv_load_runtime(".")
+wlv$get_wlv("wiodr13")
 ```
 
 Use `Rscript --vanilla scripts/run_wlv.R --help` para ver todas as opções da

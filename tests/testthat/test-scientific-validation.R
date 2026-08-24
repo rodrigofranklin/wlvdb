@@ -270,7 +270,7 @@ test_that("typed scientific aggregation is an independent reference", {
   )
 })
 
-test_that("legacy scientific routes stay distinct from typed sidecar rows", {
+test_that("scientific validation accepts only complete typed routes", {
   values <- wlv_scientific_test_arrays()
   checks <- scientific_validation_environment$
     wlv_scientific_validate_result_arrays(
@@ -279,21 +279,16 @@ test_that("legacy scientific routes stay distinct from typed sidecar rows", {
       values$sea_countries,
       values$m_countries,
       values$solutions,
-      values$aggregations[FALSE, , drop = FALSE],
-      legacy_aggregations = values$aggregations
+      values$aggregations
     )
   contract_check <- checks$check_id == "aggregation_contract"
-  legacy_check <- checks$check_id == "aggregation_legacy_adapter"
-  expect_identical(checks$observations[contract_check], 0L)
   expect_identical(
-    checks$observations[legacy_check],
+    checks$observations[contract_check],
     as.integer(nrow(values$aggregations))
   )
   routed <- checks$check_id %in% c("sector_to_country", "country_to_world")
-  expect_true(all(startsWith(checks$scope[routed], "legacy_adapter:")))
+  expect_false(any(grepl("legacy", checks$scope[routed], fixed = TRUE)))
 
-  unsupported <- values$aggregations
-  unsupported$strategy[[1L]] <- "ratio_of_sums"
   expect_error(
     scientific_validation_environment$wlv_scientific_validate_result_arrays(
       values$method,
@@ -301,10 +296,24 @@ test_that("legacy scientific routes stay distinct from typed sidecar rows", {
       values$sea_countries,
       values$m_countries,
       values$solutions,
-      values$aggregations[FALSE, , drop = FALSE],
-      legacy_aggregations = unsupported
+      values$aggregations[FALSE, , drop = FALSE]
     ),
-    "typed and legacy routes",
+    "typed routes must be supported",
+    fixed = TRUE
+  )
+
+  unsupported <- values$aggregations
+  unsupported$strategy[[1L]] <- "unsupported"
+  expect_error(
+    scientific_validation_environment$wlv_scientific_validate_result_arrays(
+      values$method,
+      values$sea_sectors,
+      values$sea_countries,
+      values$m_countries,
+      values$solutions,
+      unsupported
+    ),
+    "typed routes must be supported",
     fixed = TRUE
   )
 })
@@ -442,7 +451,6 @@ test_that("scientific checks and sidecar inventory are deterministic", {
       years = "2000",
       io_years = "2000",
       diagnostics = diagnostics,
-      require_io = TRUE,
       sea_sectors = values$sea_sectors
     )
   first <- build()
@@ -463,7 +471,6 @@ test_that("scientific checks and sidecar inventory are deterministic", {
       years = "2000",
       io_years = "2000",
       diagnostics = stale_diagnostics,
-      require_io = TRUE,
       sea_sectors = values$sea_sectors
     ),
     "diagnostic fingerprint does not match",

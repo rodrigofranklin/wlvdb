@@ -1,0 +1,13 @@
+method;profile
+wiodr13;wiodr13_standard
+wiodr16;wiodr16_standard
+alternative_1;wiodr13_reduction
+alternative_2;wiodr13_reduction
+norow_w13;wiodr13_standard
+ochoa_1;wiodr13_reduction
+ochoa_2;wiodr13_reduction
+petrovic;wiodr13_reduction
+wiodr13v09;wiodr13_v09
+wiodr16v09;wiodr16_v09
+zerodep_1;wiodr13_standard
+zerodep_2;wiodr16_standard

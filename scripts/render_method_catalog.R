@@ -176,7 +176,7 @@ render_source_rows <- function(sources) {
       markdown_code(source$parameter_set),
       markdown_code(source$data_dir),
       yes_no(source$can_prepare),
-      markdown_link(source$preparer),
+      markdown_code(source$preparation_task),
       validator,
       markdown_code(source$artifact_profile),
       markdown_code(source$missingness_policy),
@@ -269,7 +269,7 @@ render_document <- function(catalog) {
     "sources",
     c(
       "source", "status", "year_start", "year_end", "parameter_set",
-      "data_dir", "can_prepare", "preparer", "validator_script",
+      "data_dir", "can_prepare", "preparation_task", "validator_script",
       "validator_function", "artifact_profile", "missingness_policy",
       "unit_contract", "documentation", "limitations"
     )
@@ -304,7 +304,7 @@ render_document <- function(catalog) {
   source_table <- markdown_table(
     c(
       "Source", "Status", "Coverage", "Parameter set", "Data directory",
-      "Prepare", "Preparer", "Validator", "Artifact profile",
+      "Prepare", "Preparation task", "Validator", "Artifact profile",
       "Missingness policy", "Unit contract", "Documentation", "Known limitations"
     ),
     render_source_rows(sources)
@@ -400,17 +400,14 @@ project_root <- normalizePath(
   mustWork = TRUE
 )
 
-catalog_environment <- new.env(parent = baseenv())
+bootstrap_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(project_root, "R", "lib", "catalog.R"),
-  envir = catalog_environment,
-  chdir = TRUE
+  file.path(project_root, "R", "bootstrap.R"),
+  envir = bootstrap_environment,
+  chdir = FALSE
 )
-if (!exists("wlv_load_catalog", envir = catalog_environment, inherits = FALSE)) {
-  stop("R/lib/catalog.R does not define wlv_load_catalog().", call. = FALSE)
-}
-
-catalog <- catalog_environment$wlv_load_catalog(project_root)
+runtime <- bootstrap_environment$wlv_load_runtime(project_root)
+catalog <- runtime$wlv_load_catalog(project_root)
 document <- render_document(catalog)
 output_path <- file.path(project_root, "docs", "methods.md")
 

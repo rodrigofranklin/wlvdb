@@ -57,105 +57,104 @@ wlv_runtime_artifact_inventory <- function() {
   })
 }
 
-test_that("main can be sourced without attaching packages", {
+test_that("bootstrap loads a private runtime without attaching packages", {
   search_before <- search()
-  environment <- new.env(parent = globalenv())
-  old_wd <- setwd(wlv_test_root)
-  on.exit(setwd(old_wd), add = TRUE)
+  working_directory <- getwd()
+  runtime <- wlv_test_load_runtime()
 
-  sys.source(file.path(wlv_test_root, "R", "main.R"), envir = environment)
-
-  expect_true(is.function(environment$prepare_wlv))
-  expect_true(is.function(environment$get_wlv))
-  expect_true(is.function(environment$recalc_wlv))
+  expect_true(is.function(runtime$prepare_wlv))
+  expect_true(is.function(runtime$get_wlv))
+  expect_true(is.function(runtime$recalc_wlv))
+  expect_identical(parent.env(runtime), baseenv())
+  expect_true(environmentIsLocked(runtime))
+  expect_true(bindingIsLocked("get_wlv", runtime))
   expect_identical(search(), search_before)
+  expect_identical(getwd(), working_directory)
 })
 
-test_that("stable source validators load from their catalog declarations", {
-  environment <- new.env(parent = globalenv())
-  old_wd <- setwd(wlv_test_root)
-  on.exit(setwd(old_wd), add = TRUE)
-  sys.source(file.path(wlv_test_root, "R", "main.R"), envir = environment)
+test_that("stable source validators are definitions in the private runtime", {
+  runtime <- wlv_test_load_runtime()
+  catalog <- runtime$wlv_runtime_catalog()
 
   for (method in c("wiodr13", "wiodr16")) {
-    calculate_plan <- environment$wlv_validate_request(
+    calculate_plan <- runtime$wlv_validate_request(
       method,
-      catalog = environment$method_catalog
+      root = wlv_test_root,
+      catalog = catalog
     )
     expect_s3_class(calculate_plan, "wlv_run_plan")
     expect_s3_class(
-      environment$wlv_validate_request(
+      runtime$wlv_validate_request(
         method,
         repeat_pp = TRUE,
         requested_operations = "prepare",
-        catalog = environment$method_catalog
+        root = wlv_test_root,
+        catalog = catalog
       ),
       "wlv_run_plan"
     )
     expect_s3_class(
-      environment$wlv_validate_request(
+      runtime$wlv_validate_request(
         method,
         mode = "recalculate",
-        catalog = environment$method_catalog
+        root = wlv_test_root,
+        catalog = catalog
       ),
       "wlv_run_plan"
     )
-    bundle <- environment$wlv_load_catalog_validator(
-      calculate_plan,
-      calculate_plan$methods[1L, , drop = FALSE]
-    )
-    expect_true(is.function(bundle$validate))
-    expect_identical(parent.env(bundle$environment), baseenv())
-    if (method == "wiodr16") {
-      expect_true(exists(
-        "wlv_wiodr13_validate_labels",
-        envir = bundle$environment,
-        inherits = FALSE
-      ))
-      expect_true(exists(
-        "wlv_wiodr16_expected_negative_source_k",
-        envir = bundle$environment,
-        inherits = FALSE
-      ))
-    }
-    expect_false(exists(
-      calculate_plan$methods$validator_function[[1L]],
-      envir = environment,
+    validator <- calculate_plan$methods$validator_function[[1L]]
+    expect_true(exists(
+      validator,
+      envir = runtime,
+      mode = "function",
       inherits = FALSE
     ))
   }
+  expect_true(exists(
+    "wlv_wiodr13_validate_labels",
+    envir = runtime,
+    mode = "function",
+    inherits = FALSE
+  ))
+  expect_true(exists(
+    "wlv_wiodr16_expected_negative_source_k",
+    envir = runtime,
+    mode = "function",
+    inherits = FALSE
+  ))
+  expect_identical(
+    environment(runtime$wlv_validate_wiodr16_prepared),
+    runtime
+  )
 })
 
 test_that("public APIs enforce catalog maturity before side effects", {
-  environment <- new.env(parent = globalenv())
-  old_wd <- setwd(wlv_test_root)
-  on.exit(setwd(old_wd), add = TRUE)
-  sys.source(file.path(wlv_test_root, "R", "main.R"), envir = environment)
+  runtime <- wlv_test_load_runtime()
 
   expect_identical(
-    names(formals(environment$get_wlv)),
+    names(formals(runtime$get_wlv)),
     c(
       "methods", "repeat_pp", "papern", "prepaper", "workers",
       "channel", "allow_experimental"
     )
   )
   expect_identical(
-    names(formals(environment$recalc_wlv)),
+    names(formals(runtime$recalc_wlv)),
     c(
       "methods", "at_stage", "sea_vars", "papern", "prepaper", "workers",
       "channel", "allow_experimental"
     )
   )
   expect_identical(
-    names(formals(environment$prepare_wlv)),
+    names(formals(runtime$prepare_wlv)),
     c("methods", "allow_experimental")
   )
 
-  expect_error(environment$get_wlv("alternative_1"), "experimental")
-  expect_error(environment$prepare_wlv("alternative_1"), "experimental")
-  expect_error(environment$recalc_wlv("alternative_1"), "experimental")
+  expect_error(runtime$get_wlv("alternative_1"), "experimental")
+  expect_error(runtime$prepare_wlv("alternative_1"), "experimental")
+  expect_error(runtime$recalc_wlv("alternative_1"), "experimental")
   expect_error(
-    environment$get_wlv("exiobase395", allow_experimental = TRUE),
+    runtime$get_wlv("exiobase395", allow_experimental = TRUE),
     "disabled"
   )
 })

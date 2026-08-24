@@ -38,12 +38,12 @@ numérica inválidos, ou incompatível com o método e os anos impede a publica�
 | Ausência | `NA` só é aceito nas coordenadas e estados semânticos publicados em `_states.csv`; consulte [`missingness.md`](missingness.md). |
 
 A recomputação de setor para país e de país para mundo usa uma implementação de
-referência independente do dispatcher executado durante o cálculo. Nos métodos
-estáveis, ela lê as linhas tipadas do `_unit_contract.csv`, que devem coincidir
-exatamente com o registro executado. Nos métodos experimentais, ela mantém uma
-rota separada para o adaptador legado de `_method_solutions.csv`; indicadores
-sem definição de unidade podem ficar ausentes do sidecar tipado sem escapar da
-recomputação. Em ambos os casos, aplica separadamente a regra de cada nível e
+referência independente do dispatcher executado durante o cálculo. Para todos
+os métodos executáveis, ela lê as linhas tipadas do `_unit_contract.csv`, que
+devem coincidir exatamente com o registro executado. Os métodos experimentais
+selecionam perfis históricos explícitos WIOD13 ou WIOD16; nenhuma linha é
+inferida de `_method_solutions.csv` e não existe rota de adaptação ou fallback.
+Em todos os casos, a validação aplica separadamente a regra de cada nível e
 compara valores, rótulos e `NA` esperados. A implementação de referência não
 chama `wlv_aggregate()` nem `wlv_aggregate_binding()`, evitando que o validador
 repita o mesmo erro do caminho de produção. Linhas `formula` continuam cobertas

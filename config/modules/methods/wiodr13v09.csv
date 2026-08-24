@@ -1,0 +1,4 @@
+instance_id;module_id;action;replaces;variant;source_variable;args_json
+assumption.row;assumption.row.v09;replace;assumption.row;v09;;"{""source"":""wiodr13""}"
+indicator.exchange.r.us;indicator.exchange.r.us.v09;replace;indicator.exchange.r.us;;;{}
+indicator.exchange.r.id;indicator.exchange.r.id.v09;replace;indicator.exchange.r.id;;;{}

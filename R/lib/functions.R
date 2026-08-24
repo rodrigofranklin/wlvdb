@@ -927,17 +927,3 @@ write_fst_array <- function(m, file_name) {
   )
   invisible(file_name)
 }
-
-convert_array_RDS <- function(nomebase) {
-  nrds <- paste0(nomebase,".rds")
-  print(paste("Converting",nrds))
-  t <- readRDS(nrds)
-  if(class(t) == "array"){
-    print("This is an array object")
-  write_fst_array(t,paste0(nomebase,".fst"))
-  } else {
-    write_fst(t,paste0(nomebase,".fst"))
-  }
-  rm(t)
-  gc()
-}

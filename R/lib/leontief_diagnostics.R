@@ -44,12 +44,9 @@ wlv_lambda_fingerprint <- function(lambda, labels = names(lambda)) {
     sep = "\t",
     collapse = "\n"
   )
-  hash_file <- tempfile("wlv-lambda-", fileext = ".txt")
-  on.exit(unlink(hash_file), add = TRUE)
-  connection <- file(hash_file, open = "wb")
-  writeBin(charToRaw(enc2utf8(payload)), connection)
-  close(connection)
-  unname(tools::md5sum(hash_file))
+  unclass(tolower(as.character(openssl::md5(
+    charToRaw(enc2utf8(payload))
+  ))))
 }
 
 wlv_leontief_policy <- function(dimension, policy = NULL) {

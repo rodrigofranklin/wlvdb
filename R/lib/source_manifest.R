@@ -616,40 +616,42 @@ wlv_read_source_provenance <- function(path) {
 
 wlv_read_result_source_provenance <- function(result_dir) {
   path <- file.path(result_dir, wlv_source_provenance_filename)
-  tryCatch(
-    wlv_read_source_provenance(path),
-    error = function(comma_error) {
-      value <- tryCatch(
-        utils::read.csv2(
-          path,
-          stringsAsFactors = FALSE,
-          colClasses = "character",
-          check.names = FALSE,
-          na.strings = character(),
-          fileEncoding = "UTF-8"
-        ),
-        error = function(error) stop(comma_error)
+  if (!file.exists(path) || isTRUE(file.info(path)$isdir)) {
+    stop(sprintf("Source provenance file is missing: %s.", path), call. = FALSE)
+  }
+  bytes <- readBin(path, what = "raw", n = file.info(path)$size)
+  decoded <- tryCatch(rawToChar(bytes), error = function(error) NA_character_)
+  if (is.na(decoded) || is.na(iconv(decoded, from = "UTF-8", to = "UTF-8", sub = NA))) {
+    stop("Source provenance is not valid UTF-8.", call. = FALSE)
+  }
+  value <- tryCatch(
+    utils::read.csv2(
+      path,
+      stringsAsFactors = FALSE,
+      colClasses = "character",
+      check.names = FALSE,
+      na.strings = character(),
+      fileEncoding = "UTF-8"
+    ),
+    error = function(error) {
+      stop(
+        sprintf("Cannot parse source provenance: %s", conditionMessage(error)),
+        call. = FALSE
       )
-      rownames(value) <- NULL
-      wlv_validate_source_provenance(value)
-      value
     }
   )
-}
-
-wlv_write_result_source_provenance <- function(result_dir, source, manifest) {
-  if (!dir.exists(result_dir)) {
-    stop("Result directory must exist before provenance is written.", call. = FALSE)
+  rownames(value) <- NULL
+  if (!identical(names(value), wlv_source_provenance_schema)) {
+    stop(
+      sprintf(
+        "Source provenance must have exactly these columns: %s.",
+        paste(wlv_source_provenance_schema, collapse = ", ")
+      ),
+      call. = FALSE
+    )
   }
-  provenance <- wlv_source_provenance(manifest, source)
-  wlv_validate_source_provenance(provenance)
-  path <- file.path(result_dir, wlv_source_provenance_filename)
-  wlv_source_write_csv(
-    provenance,
-    path,
-    wlv_read_source_provenance,
-    "source provenance"
-  )
+  wlv_validate_source_provenance(value)
+  value
 }
 
 wlv_assert_recalculation_source_provenance <- function(
@@ -661,7 +663,7 @@ wlv_assert_recalculation_source_provenance <- function(
   if (!file.exists(provenance_path)) {
     stop(
       paste0(
-        "Recalculation is blocked: this legacy result has no source-provenance ",
+        "Recalculation is blocked: the parent run has no source-provenance ",
         "sidecar. Run a full calculation with the current source generation."
       ),
       call. = FALSE

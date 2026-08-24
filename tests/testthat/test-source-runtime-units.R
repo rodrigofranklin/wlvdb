@@ -71,25 +71,20 @@ test_that("legacy scaled SEA expressions fail before data are copied", {
   expect_true(is.na(environment$sea_sectors[, "indicator", "S1", "C1"]))
 })
 
-test_that("stable and synthetic source solutions contain no scale expressions", {
+test_that("native stable output profiles contain identifiers instead of code", {
   paths <- c(
-    file.path("parameters", "wiodr13", "_source_solutions.csv"),
-    file.path("parameters", "wiodr16", "_source_solutions.csv"),
-    file.path(
-      "tests", "fixtures", "synthetic", "parameters", "synthetic",
-      "_source_solutions.csv"
-    )
+    file.path("config", "outputs", "sources", "wiodr13.csv"),
+    file.path("config", "outputs", "sources", "wiodr16.csv")
   )
 
   for (path in paths) {
-    solutions <- utils::read.csv2(
+    outputs <- utils::read.csv2(
       file.path(wlv_test_root, path),
       stringsAsFactors = FALSE,
       check.names = FALSE
     )
-    expect_false(
-      any(grepl("*", solutions$sector_solution, fixed = TRUE)),
-      info = path
-    )
+    expect_identical(names(outputs), "indicator", info = path)
+    expect_true(all(grepl("^[a-z][a-z0-9_.]*$", outputs$indicator)), info = path)
+    expect_false(any(grepl("[/\\\\]|[.]R$", outputs$indicator)), info = path)
   }
 })

@@ -50,7 +50,6 @@ test_that("download verification checks exact size and cryptographic hashes", {
     "SHA1 mismatch"
   )
 })
-
 test_that("a verified download is installed once and then reused", {
   root <- tempfile("wlv-download-cache-")
   dir.create(root)
@@ -92,7 +91,6 @@ test_that("a verified download is installed once and then reused", {
   expect_identical(staged_extensions, "bin")
   expect_identical(list.files(root), "source.bin")
 })
-
 test_that("an invalid cached file is safely replaced", {
   root <- tempfile("wlv-download-replace-")
   dir.create(root)
@@ -166,46 +164,4 @@ test_that("download destinations must be created explicitly", {
     ),
     "directory does not exist"
   )
-})
-
-test_that("array outputs replace their data and metadata as one transaction", {
-  root <- tempfile("wlv-array-write-")
-  dir.create(root)
-  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
-  destination <- wlv_write_raw_file(file.path(root, "array.fst"), "old-data")
-  saveRDS("old-metadata", paste0(destination, ".meta"))
-
-  writer <- function(value, path) {
-    wlv_write_raw_file(path, value$data)
-    saveRDS(value$metadata, paste0(path, ".meta"))
-  }
-  preparation_download_environment$wlv_write_fst_array_atomic(
-    list(data = "new-data", metadata = "new-metadata"),
-    destination,
-    writer = writer
-  )
-
-  expect_identical(readBin(destination, "raw", n = 8L), charToRaw("new-data"))
-  expect_identical(readRDS(paste0(destination, ".meta")), "new-metadata")
-  expect_setequal(list.files(root), c("array.fst", "array.fst.meta"))
-})
-
-test_that("an incomplete array write preserves the previous output pair", {
-  root <- tempfile("wlv-array-rollback-")
-  dir.create(root)
-  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
-  destination <- wlv_write_raw_file(file.path(root, "array.fst"), "old-data")
-  saveRDS("old-metadata", paste0(destination, ".meta"))
-
-  expect_error(
-    preparation_download_environment$wlv_write_fst_array_atomic(
-      "new-data",
-      destination,
-      writer = function(value, path) wlv_write_raw_file(path, value)
-    ),
-    "did not produce"
-  )
-  expect_identical(readBin(destination, "raw", n = 8L), charToRaw("old-data"))
-  expect_identical(readRDS(paste0(destination, ".meta")), "old-metadata")
-  expect_setequal(list.files(root), c("array.fst", "array.fst.meta"))
 })

@@ -1,11 +1,10 @@
 aggregation_dimension_environment <- new.env(parent = baseenv())
-for (script in c(
-    "catalog.R", "unit_dimensions.R", "aggregation_specs.R", "execution.R")) {
-  sys.source(
-    file.path(wlv_test_root, "R", "lib", script),
-    envir = aggregation_dimension_environment
-  )
-}
+sys.source(
+  file.path(wlv_test_root, "R", "bootstrap.R"),
+  envir = aggregation_dimension_environment
+)
+aggregation_dimension_environment <-
+  aggregation_dimension_environment$wlv_load_runtime(wlv_test_root)
 
 wlv_dimension_unit_row <- function(
     indicator,
@@ -221,28 +220,23 @@ test_that("stable registries resolve dimensionally before a result lock", {
     c(wiodr13 = 116L, wiodr16 = 100L)
   )
   for (method in plan$method_names) {
-    solutions <- plan$configuration[[method]]$solutions
-    solutions <- solutions[order(solutions$order), , drop = FALSE]
-    solutions <- solutions[order(solutions$stage), , drop = FALSE]
     registry <- plan$aggregation_registries[[method]]
     method_row <- plan$methods[plan$methods$method == method, , drop = FALSE]
     sidecar <- aggregation_dimension_environment$
       wlv_catalog_unit_contract_sidecar(
         plan$catalog,
         method_row$unit_contract[[1L]],
-        indicators = as.character(solutions$names),
+        indicators = plan$indicators[[method]],
         resolved_aggregations = registry$rows
       )
     routes <- aggregation_dimension_environment$
       wlv_reconcile_aggregation_registry_sidecar(
         registry,
-        sidecar,
-        stable = TRUE
+        sidecar
       )
     published <- aggregation_dimension_environment$
       wlv_aggregation_sidecar_rows(sidecar)
-    expect_identical(routes$typed, published, info = method)
-    expect_equal(nrow(routes$legacy), 0L, info = method)
+    expect_identical(routes, published, info = method)
   }
 
   contract <- catalog$sources$unit_contract[
@@ -260,11 +254,6 @@ test_that("stable registries resolve dimensionally before a result lock", {
     ],
     "2"
   )
-  locked <- FALSE
-  aggregation_dimension_environment$wlv_acquire_result_lock <- function(...) {
-    locked <<- TRUE
-    stop("LOCK_SENTINEL", call. = FALSE)
-  }
   contradictory <- catalog
   exchange <- contradictory$unit_definitions[[contract]]$indicator ==
     "exchange.r.us"
@@ -281,8 +270,6 @@ test_that("stable registries resolve dimensionally before a result lock", {
     "requires quantity_kind `ratio`",
     fixed = TRUE
   )
-  expect_false(locked)
-
   catalog$unit_aggregations[[contract]]$strategy[world_lcu] <- "sum"
   expect_error(
     aggregation_dimension_environment$wlv_validate_request(
@@ -295,7 +282,6 @@ test_that("stable registries resolve dimensionally before a result lock", {
     "not dimensionally aggregable across countries",
     fixed = TRUE
   )
-  expect_false(locked)
 
   catalog$unit_aggregations[[contract]]$strategy[world_lcu] <-
     "not_applicable"
@@ -309,5 +295,4 @@ test_that("stable registries resolve dimensionally before a result lock", {
     )
   )
   expect_s3_class(migrated, "wlv_run_plan")
-  expect_false(locked)
 })

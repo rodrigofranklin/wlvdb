@@ -96,9 +96,9 @@ artifacts, and copies that immutable run into a new staging snapshot. The child
 manifest records `parent_run_id`. The parent is never modified or removed by
 the recalculation itself.
 
-Legacy `results/<method>/` directories remain readable only as an explicit
-warning-based migration fallback when a channel has no marker. They are not
-assigned invented provenance. Create a fresh full run to migrate a method.
+Unmanifested `results/<method>/` directories are not execution inputs. A
+recalculation requires a verified channel marker, release and immutable parent
+run; migrating an older checkout therefore requires a fresh full calculation.
 
 ## Channels and consumers
 
@@ -114,9 +114,8 @@ not symbolic links or junctions. This keeps promotions and marker renames on the
 intended publication volume.
 
 The WLVPanel validates schemas, versions, canonical paths, identities, exact
-inventories, sizes, hashes, and FST/sidecar pairing before loading any modern
-array. An invalid marker never falls back to legacy data. The temporary legacy
-fallback applies only when no marker exists at all.
+inventories, sizes, hashes, and FST/sidecar pairing before loading an array. An
+absent or invalid marker is an error and never selects an unmanifested result.
 
 Immutable history increases storage use. No automatic deletion occurs; see
 [`publication-storage.md`](publication-storage.md) for the dry-run-first,

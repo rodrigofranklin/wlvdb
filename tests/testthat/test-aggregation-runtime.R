@@ -42,8 +42,7 @@ test_that("SEA runtime dispatches independent specifications at each level", {
         country_solution = "sum",
         stringsAsFactors = FALSE
       ),
-      method = "typed_demo",
-      stable = TRUE
+      method = "typed_demo"
     )
   environment$sea_variables <- data.frame(
     names = "metric",
@@ -181,8 +180,7 @@ test_that("world bindings can consume an earlier dependency with runtime states"
         country_solution = c("sum", "mean"),
         stringsAsFactors = FALSE
       ),
-      method = "typed_dependencies",
-      stable = TRUE
+      method = "typed_dependencies"
     )
   environment$sea_variables <- data.frame(
     names = c("weight", "metric"),

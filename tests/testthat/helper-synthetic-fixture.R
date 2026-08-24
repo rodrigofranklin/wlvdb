@@ -1,325 +1,518 @@
-wlv_fixture_read_csv <- function(path) {
-  utils::read.csv(
-    path,
-    sep = ";",
-    check.names = FALSE,
-    stringsAsFactors = FALSE
+wlv_test_clone_runtime <- function(root = wlv_test_root) {
+  source <- wlv_test_load_runtime(root)
+  clone <- new.env(parent = baseenv())
+  for (name in ls(source, all.names = TRUE)) {
+    value <- get(name, envir = source, inherits = FALSE)
+    if (is.function(value) && identical(environment(value), source)) {
+      environment(value) <- clone
+    }
+    assign(name, value, envir = clone)
+  }
+  clone
+}
+
+wlv_native_test_country_total <- function(value) {
+  country <- apply(value, c(1L, 3L), sum)
+  country <- array(
+    country,
+    dim = c(dim(value)[[1L]], dim(value)[[3L]]),
+    dimnames = dimnames(value)[c(1L, 3L)]
+  )
+  dimnames(country) <- stats::setNames(
+    dimnames(country),
+    c("year", "country")
+  )
+  result <- cbind(country, WWW = rowSums(country))
+  dimnames(result) <- list(
+    year = dimnames(country)[[1L]],
+    country = c(dimnames(country)[[2L]], "WWW")
+  )
+  result
+}
+
+wlv_native_test_source_contract <- function(runtime, unit) {
+  runtime$wlv_resource_contract(
+    scope = "run",
+    axes = c("year", "sector", "country"),
+    value_type = "double",
+    unit = unit,
+    missingness = "none",
+    validator = function(value) all(is.finite(value))
   )
 }
 
-wlv_copy_fixture_tree <- function(source, destination) {
-  source <- normalizePath(source, winslash = "/", mustWork = TRUE)
-  dir.create(destination, recursive = TRUE, showWarnings = FALSE)
-
-  directories <- normalizePath(
-    list.dirs(source, recursive = TRUE, full.names = TRUE),
-    winslash = "/",
-    mustWork = TRUE
-  )
-  directories <- directories[directories != source]
-  if (length(directories)) {
-    relative_directories <- substring(directories, nchar(source) + 2L)
-    invisible(lapply(
-      file.path(destination, relative_directories),
-      dir.create,
-      recursive = TRUE,
-      showWarnings = FALSE
-    ))
-  }
-
-  files <- list.files(
-    source,
-    recursive = TRUE,
-    full.names = TRUE,
-    all.files = TRUE,
-    include.dirs = FALSE,
-    no.. = TRUE
-  )
-  if (!length(files)) {
-    return(invisible(destination))
-  }
-
-  normalized_files <- normalizePath(files, winslash = "/", mustWork = TRUE)
-  relative_files <- substring(normalized_files, nchar(source) + 2L)
-  targets <- file.path(destination, relative_files)
-  copied <- file.copy(normalized_files, targets, overwrite = TRUE)
-  if (!all(copied)) {
-    stop(
-      sprintf(
-        "Could not copy synthetic fixture file(s): %s",
-        paste(relative_files[!copied], collapse = ", ")
+wlv_native_test_producer_spec <- function(runtime) {
+  gross_contract <- wlv_native_test_source_contract(runtime, "test:gross")
+  runtime$wlv_module_spec(
+    id = "test.gross",
+    scope = "run",
+    checkpoint = 4L,
+    operations = c("calculate", "recalculate"),
+    parameters = list(
+      predecessor = runtime$wlv_module_parameter(
+        "character",
+        default = ""
       ),
-      call. = FALSE
-    )
-  }
-
-  invisible(destination)
-}
-
-wlv_make_synthetic_calculation_fixture <- function() {
-  template <- file.path(wlv_test_root, "tests", "fixtures", "synthetic")
-  root <- tempfile("wlv-synthetic-")
-  dir.create(root, recursive = TRUE)
-
-  wlv_copy_fixture_tree(file.path(wlv_test_root, "R"), file.path(root, "R"))
-  wlv_copy_fixture_tree(
-    file.path(wlv_test_root, "complementar"),
-    file.path(root, "complementar")
-  )
-  wlv_copy_fixture_tree(
-    file.path(wlv_test_root, "contracts", "results"),
-    file.path(root, "contracts", "results")
-  )
-  wlv_copy_fixture_tree(template, root)
-
-  input_path <- file.path(template, "input")
-  source_path <- file.path(root, "source_data", "synthetic")
-  dir.create(source_path, recursive = TRUE, showWarnings = FALSE)
-  source_csv <- c("countries.csv", "demand.csv")
-  copied <- file.copy(
-    file.path(input_path, source_csv),
-    file.path(source_path, source_csv),
-    overwrite = TRUE
-  )
-  if (!all(copied)) {
-    stop("Could not materialize the synthetic source metadata.", call. = FALSE)
-  }
-
-  countries <- wlv_fixture_read_csv(file.path(input_path, "countries.csv"))
-  demands <- wlv_fixture_read_csv(file.path(input_path, "demand.csv"))
-  sea_table <- wlv_fixture_read_csv(file.path(input_path, "sea.csv"))
-  io_table <- wlv_fixture_read_csv(file.path(input_path, "m_io.csv"))
-
-  years <- unique(as.character(sea_table$year))
-  country_names <- countries$country.source
-  sector_names <- unique(sea_table$sector)
-  sea_variables <- setdiff(names(sea_table), c("year", "country", "sector"))
-
-  sea <- array(
-    NA_real_,
-    dim = c(
-      length(years), length(sea_variables), length(sector_names),
-      length(country_names)
-    ),
-    dimnames = list(years, sea_variables, sector_names, country_names)
-  )
-  for (index in seq_len(nrow(sea_table))) {
-    row <- sea_table[index, ]
-    sea[
-      as.character(row$year),
-      sea_variables,
-      row$sector,
-      row$country
-    ] <- as.numeric(row[sea_variables])
-  }
-
-  inputs <- as.vector(t(outer(country_names, sector_names, paste, sep = ".")))
-  final_demand <- as.vector(
-    t(outer(country_names, demands$demand, paste, sep = "."))
-  )
-  outputs <- c(inputs, final_demand)
-  m_io <- array(
-    NA_real_,
-    dim = c(length(years), length(inputs), length(outputs)),
-    dimnames = list(years, inputs, outputs)
-  )
-  for (index in seq_len(nrow(io_table))) {
-    row <- io_table[index, ]
-    m_io[as.character(row$year), row$input, row$output] <- row$value_millions
-  }
-  if (anyNA(sea) || anyNA(m_io)) {
-    stop("The synthetic fixture does not completely define its input arrays.", call. = FALSE)
-  }
-
-  functions_environment <- new.env(parent = baseenv())
-  sys.source(
-    file.path(root, "R", "lib", "functions.R"),
-    envir = functions_environment
-  )
-  functions_environment$write_fst_array(sea, file.path(source_path, "sea.fst"))
-  functions_environment$write_fst_array(m_io, file.path(source_path, "m_io.fst"))
-
-  source_environment <- new.env(parent = globalenv())
-  for (script in c(
-    "catalog.R", "source_manifest.R", "source_normalization.R"
-  )) {
-    sys.source(
-      file.path(root, "R", "lib", script),
-      envir = source_environment
-    )
-  }
-  source_environment$write_fst_array <- functions_environment$write_fst_array
-  normalization_contract <- source_environment$wlv_new_source_normalization_contract(
-    source = "synthetic",
-    contract_id = "synthetic_source_normalization_v1",
-    m_io_multiplier = 1e6,
-    sea_multipliers = c(LAB = 1, GO = 1e6, PRICE = 1),
-    m_io_source_unit = "million_current_usd",
-    m_io_canonical_unit = "current_usd",
-    sea_source_units = c(
-      LAB = "abstract_labour_hour",
-      GO = "million_current_usd",
-      PRICE = "index"
-    ),
-    sea_canonical_units = c(
-      LAB = "abstract_labour_hour",
-      GO = "current_usd",
-      PRICE = "index"
-    )
-  )
-  normalized <- source_environment$wlv_normalize_source(
-    m_io,
-    sea,
-    source = "synthetic",
-    contract = normalization_contract
-  )
-  catalog <- source_environment$wlv_load_catalog(root)
-  unit_contract <- source_environment$wlv_catalog_unit_contract(
-    catalog,
-    "synthetic_units_v1"
-  )
-  source_environment$wlv_publish_normalized_source(
-    normalized = normalized,
-    source_dir = source_path,
-    unit_contract_id = "synthetic_units_v1",
-    unit_contract_version = as.character(
-      unit_contract$metadata$schema_version[[1L]]
-    ),
-    unit_contract_paths = file.path(
-      root,
-      c(
-        unit_contract$metadata$units[[1L]],
-        unit_contract$metadata$aggregations[[1L]]
+      failure = runtime$wlv_module_parameter(
+        "character",
+        default = "none",
+        choices = c("none", "shape")
+      ),
+      warning = runtime$wlv_module_parameter(
+        "character",
+        default = ""
       )
     ),
-    unit_contract_sidecar = source_environment$wlv_catalog_unit_contract_sidecar(
-      catalog,
-      "synthetic_units_v1"
+    requires = list(
+      gross = runtime$wlv_resource_ref(
+        "test/source/gross",
+        gross_contract,
+        producer = runtime$wlv_runtime_seed_producer
+      )
     ),
-    label_files = c("countries.csv", "demand.csv"),
-    writer = functions_environment$write_fst_array
+    provides = function(args) {
+      action <- if (nzchar(args$predecessor)) "replace" else "create"
+      c(
+        runtime$wlv_native_indicator_output(
+          "gross_output.s.mv",
+          alias = "sector",
+          action = action,
+          predecessor = if (nzchar(args$predecessor)) {
+            args$predecessor
+          } else {
+            NULL
+          }
+        ),
+        runtime$wlv_native_indicator_output(
+          "gross_output.s.mv",
+          alias = "country",
+          level = "country",
+          action = action,
+          predecessor = if (nzchar(args$predecessor)) {
+            args$predecessor
+          } else {
+            NULL
+          }
+        )
+      )
+    },
+    run = function(ctx) {
+      message <- ctx$arg("warning")
+      if (nzchar(message)) warning(message, call. = FALSE)
+      sector <- ctx$input("gross")
+      if (identical(ctx$arg("failure"), "shape")) {
+        sector <- sector[, 1L, ]
+      }
+      runtime$wlv_module_result(list(
+        sector = sector,
+        country = wlv_native_test_country_total(ctx$input("gross"))
+      ), diagnostics = list(
+        `_native_test_gross.csv` = data.frame(
+          check_id = "gross_output",
+          passed = TRUE,
+          stringsAsFactors = FALSE
+        )
+      ))
+    }
   )
+}
 
-  list(
-    root = normalizePath(root, winslash = "/", mustWork = TRUE),
-    method = "synthetic",
-    source_path = source_path,
-    input = list(sea = sea, m_io = m_io),
-    expected = list(
-      sea_sectors = wlv_fixture_read_csv(
-        file.path(template, "expected", "sea_sectors.csv")
+wlv_native_test_productivity_spec <- function(runtime) {
+  labour_contract <- wlv_native_test_source_contract(runtime, "test:labour")
+  runtime$wlv_module_spec(
+    id = "test.productivity",
+    scope = "run",
+    checkpoint = 5L,
+    operations = c("calculate", "recalculate"),
+    requires = c(
+      runtime$wlv_native_indicator_ref(
+        "gross_output.s.mv",
+        alias = "gross",
+        producer = "indicator.gross"
       ),
-      trade = wlv_fixture_read_csv(file.path(template, "expected", "trade.csv"))
+      list(labour = runtime$wlv_resource_ref(
+        "test/source/labour",
+        labour_contract,
+        producer = runtime$wlv_runtime_seed_producer
+      ))
+    ),
+    provides = runtime$wlv_native_stage5_provides(
+      "labour_productivity.r.id"
+    ),
+    run = function(ctx) {
+      gross <- ctx$input("gross")
+      labour <- ctx$input("labour")
+      sector <- gross / labour
+      gross_country <- wlv_native_test_country_total(gross)
+      labour_country <- wlv_native_test_country_total(labour)
+      runtime$wlv_module_result(list(
+        sector = sector,
+        country = gross_country / labour_country
+      ), diagnostics = list())
+    }
+  )
+}
+
+wlv_make_native_calculation_fixture <- function(runtime = wlv_test_load_runtime()) {
+  labels <- list(
+    year = c("2000", "2001"),
+    sector = c("A", "B"),
+    country = c("AAA", "BBB")
+  )
+  gross <- array(
+    c(10, 20, 30, 40, 12, 24, 36, 48),
+    dim = c(2L, 2L, 2L),
+    dimnames = labels
+  )
+  labour <- array(
+    c(2, 4, 5, 8, 3, 6, 6, 12),
+    dim = dim(gross),
+    dimnames = dimnames(gross)
+  )
+  registry <- runtime$wlv_module_registry(list(
+    wlv_native_test_producer_spec(runtime),
+    wlv_native_test_productivity_spec(runtime),
+    runtime$wlv_native_panel_assembler_spec
+  ))
+  list(
+    runtime = runtime,
+    registry = registry,
+    labels = labels,
+    gross = gross,
+    labour = labour,
+    indicators = c("gross_output.s.mv", "labour_productivity.r.id")
+  )
+}
+
+wlv_native_test_base_store <- function(fixture, gross = fixture$gross) {
+  runtime <- fixture$runtime
+  runtime$wlv_new_resource_store(list(
+    runtime$wlv_seed_resource(
+      "dimensions/lists",
+      list(
+        years = fixture$labels$year,
+        sectors = fixture$labels$sector,
+        countries = fixture$labels$country
+      ),
+      runtime$wlv_resource_contract(scope = "run", value_type = "list")
+    ),
+    runtime$wlv_seed_resource(
+      "test/source/gross",
+      gross,
+      wlv_native_test_source_contract(runtime, "test:gross")
+    ),
+    runtime$wlv_seed_resource(
+      "test/source/labour",
+      fixture$labour,
+      wlv_native_test_source_contract(runtime, "test:labour")
+    )
+  ))
+}
+
+wlv_native_test_calculation_instances <- function(
+    fixture,
+    failure = "none",
+    warning = "") {
+  runtime <- fixture$runtime
+  list(
+    runtime$wlv_module_instance(
+      "indicator.gross",
+      "test.gross",
+      args = list(failure = failure, warning = warning)
+    ),
+    runtime$wlv_module_instance(
+      "indicator.productivity",
+      "test.productivity"
+    ),
+    runtime$wlv_module_instance(
+      "assembler.panel",
+      "assembler.panel",
+      args = list(indicators = as.list(fixture$indicators))
     )
   )
 }
 
-wlv_remove_synthetic_calculation_fixture <- function(fixture) {
+wlv_run_native_test_calculation <- function(
+    fixture,
+    gross = fixture$gross,
+    failure = "none",
+    warning = "",
+    reverse_instances = FALSE) {
+  runtime <- fixture$runtime
+  store <- wlv_native_test_base_store(fixture, gross = gross)
+  instances <- wlv_native_test_calculation_instances(
+    fixture,
+    failure = failure,
+    warning = warning
+  )
+  if (reverse_instances) instances <- rev(instances)
+  plan <- runtime$wlv_compile_module_plan(
+    fixture$registry,
+    instances,
+    store,
+    operation = "calculate"
+  )
+  result <- runtime$wlv_run_module_plan(plan, store)
+  list(store = store, plan = plan, result = result)
+}
+
+wlv_native_test_artifacts <- function(fixture, result) {
+  runtime <- fixture$runtime
+  list(
+    sea_sectors = runtime$wlv_native_artifact_value(
+      result$store,
+      "sea_sectors",
+      c("year", "indicator", "sector", "country")
+    ),
+    sea_countries = runtime$wlv_native_artifact_value(
+      result$store,
+      "sea_countries",
+      c("year", "indicator", "country")
+    )
+  )
+}
+
+wlv_run_native_test_selective_recalculation <- function(
+    fixture,
+    parent,
+    gross) {
+  runtime <- fixture$runtime
+  artifacts <- wlv_native_test_artifacts(fixture, parent$result)
+  sector_gross <- artifacts$sea_sectors[, "gross_output.s.mv", , ]
+  country_gross <- artifacts$sea_countries[, "gross_output.s.mv", ]
+  sector_productivity <- artifacts$sea_sectors[
+    , "labour_productivity.r.id", ,
+  ]
+  country_productivity <- artifacts$sea_countries[
+    , "labour_productivity.r.id",
+  ]
+  dimnames(sector_gross) <- stats::setNames(
+    dimnames(sector_gross),
+    c("year", "sector", "country")
+  )
+  dimnames(country_gross) <- stats::setNames(
+    dimnames(country_gross),
+    c("year", "country")
+  )
+  dimnames(sector_productivity) <- stats::setNames(
+    dimnames(sector_productivity),
+    c("year", "sector", "country")
+  )
+  dimnames(country_productivity) <- stats::setNames(
+    dimnames(country_productivity),
+    c("year", "country")
+  )
+  store <- runtime$wlv_new_resource_store(list(
+    runtime$wlv_seed_resource(
+      "dimensions/lists",
+      list(
+        years = fixture$labels$year,
+        sectors = fixture$labels$sector,
+        countries = fixture$labels$country
+      ),
+      runtime$wlv_resource_contract(scope = "run", value_type = "list")
+    ),
+    runtime$wlv_seed_resource(
+      "test/source/gross",
+      gross,
+      wlv_native_test_source_contract(runtime, "test:gross")
+    ),
+    runtime$wlv_seed_resource(
+      runtime$wlv_native_indicator_key("gross_output.s.mv"),
+      sector_gross,
+      runtime$wlv_native_indicator_contract("gross_output.s.mv"),
+      producer = "indicator.gross"
+    ),
+    runtime$wlv_seed_resource(
+      runtime$wlv_native_indicator_key("gross_output.s.mv", "country"),
+      country_gross,
+      runtime$wlv_native_indicator_contract(
+        "gross_output.s.mv",
+        level = "country"
+      ),
+      producer = "indicator.gross"
+    ),
+    runtime$wlv_seed_resource(
+      runtime$wlv_native_indicator_key("labour_productivity.r.id"),
+      sector_productivity,
+      runtime$wlv_native_indicator_contract("labour_productivity.r.id"),
+      producer = "indicator.productivity"
+    ),
+    runtime$wlv_seed_resource(
+      runtime$wlv_native_indicator_key(
+        "labour_productivity.r.id",
+        "country"
+      ),
+      country_productivity,
+      runtime$wlv_native_indicator_contract(
+        "labour_productivity.r.id",
+        level = "country"
+      ),
+      producer = "indicator.productivity"
+    )
+  ))
+  instances <- list(
+    runtime$wlv_module_instance(
+      "recalc.gross",
+      "test.gross",
+      args = list(predecessor = "indicator.gross")
+    ),
+    runtime$wlv_module_instance(
+      "assembler.panel",
+      "assembler.panel",
+      args = list(indicators = as.list(fixture$indicators))
+    )
+  )
+  plan <- runtime$wlv_compile_module_plan(
+    fixture$registry,
+    instances,
+    store,
+    operation = "recalculate"
+  )
+  result <- runtime$wlv_run_module_plan(plan, store)
+  list(store = store, plan = plan, result = result)
+}
+
+wlv_native_test_write_text <- function(path, value) {
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  writeBin(charToRaw(enc2utf8(value)), path)
+  invisible(path)
+}
+
+wlv_make_native_publication_fixture <- function(mutable = FALSE) {
+  runtime <- if (mutable) {
+    wlv_test_clone_runtime()
+  } else {
+    wlv_test_load_runtime()
+  }
+  root <- tempfile("wlv-native-publication-")
+  dir.create(root, recursive = TRUE)
+  runtime$wlv_publication_ensure_store(root)
+  list(
+    root = normalizePath(root, winslash = "/", mustWork = TRUE),
+    runtime = runtime,
+    method = "native_test"
+  )
+}
+
+wlv_remove_native_fixture <- function(fixture) {
   root <- normalizePath(fixture$root, winslash = "/", mustWork = TRUE)
   temporary_root <- normalizePath(tempdir(), winslash = "/", mustWork = TRUE)
   prefix <- paste0(sub("/+$", "", temporary_root), "/")
-  if (!startsWith(root, prefix) || basename(root) == basename(temporary_root)) {
-    stop(sprintf("Refusing to remove non-temporary fixture path: %s", root), call. = FALSE)
+  if (!startsWith(root, prefix) || identical(root, temporary_root)) {
+    stop(sprintf("Refusing to remove non-temporary fixture path: %s", root),
+      call. = FALSE
+    )
   }
   unlink(root, recursive = TRUE, force = TRUE)
   invisible(NULL)
 }
 
-wlv_read_fixture_array <- function(fixture, ...) {
-  functions_environment <- new.env(parent = baseenv())
-  sys.source(
-    file.path(fixture$root, "R", "lib", "functions.R"),
-    envir = functions_environment
-  )
-  path <- file.path(...)
-  if (!grepl("^([A-Za-z]:[/\\\\]|/)", path)) {
-    path <- file.path(fixture$root, path)
-  }
-  functions_environment$read_fst_array(path)
-}
-
-wlv_write_fixture_array <- function(fixture, value, ...) {
-  functions_environment <- new.env(parent = baseenv())
-  sys.source(
-    file.path(fixture$root, "R", "lib", "functions.R"),
-    envir = functions_environment
-  )
-  path <- file.path(...)
-  if (!grepl("^([A-Za-z]:[/\\\\]|/)", path)) {
-    path <- file.path(fixture$root, path)
-  }
-  functions_environment$write_fst_array(value, path)
-}
-
-wlv_fixture_current_run <- function(
+wlv_native_test_run_environment <- function(
     fixture,
-    runtime,
-    channel = "stable") {
-  runtime$wlv_resolve_current_method_run(
-    root = fixture$root,
+    run_id,
     method = fixture$method,
-    channel = channel,
-    allow_legacy = FALSE
+    payload = "native-result-v1",
+    warnings = character(),
+    parent_run_id = NULL) {
+  runtime <- fixture$runtime
+  paths <- runtime$wlv_publication_ensure_store(fixture$root)
+  run_root <- file.path(paths$runs, method, run_id)
+  if (!dir.create(run_root, recursive = TRUE, showWarnings = FALSE)) {
+    stop("Could not create native test run.", call. = FALSE)
+  }
+  wlv_native_test_write_text(file.path(run_root, "payload.txt"), payload)
+  runtime$wlv_write_result_csv(
+    data.frame(
+      cod_label = "gross_output.s.mv",
+      label = "Gross output",
+      stringsAsFactors = FALSE
+    ),
+    file.path(run_root, "_panel_indicators.csv")
   )
+  runtime$wlv_write_result_csv(
+    data.frame(
+      value = "gross_output.s.mv",
+      groups = "Product",
+      type = "value",
+      reverted = FALSE,
+      stringsAsFactors = FALSE
+    ),
+    file.path(run_root, "_panel_meta_indicators.csv")
+  )
+  artifacts <- c(
+    "_panel_indicators.csv",
+    "_panel_meta_indicators.csv",
+    "payload.txt"
+  )
+  manifest <- runtime$wlv_build_run_manifest(
+    run_root = run_root,
+    artifacts = artifacts,
+    artifact_roles = vapply(
+      artifacts,
+      runtime$wlv_result_artifact_role,
+      character(1L)
+    ),
+    run_id = run_id,
+    method = method,
+    result = list(
+      provenance = list(complete = TRUE),
+      request = list(mode = if (is.null(parent_run_id)) {
+        "calculate"
+      } else {
+        "recalculate"
+      }),
+      schema = list(indicators = "gross_output.s.mv"),
+      audit_summary = list(valid = TRUE)
+    ),
+    execution = list(
+      started_at_utc = "2026-08-20T11:59:00Z",
+      finished_at_utc = "2026-08-20T12:00:00Z",
+      duration_seconds = 60,
+      warnings = runtime$wlv_sanitize_publication_warnings(
+        warnings,
+        fixture$root
+      ),
+      host = list(
+        r_version = as.character(getRversion()),
+        platform = R.version$platform,
+        os = unname(Sys.info()[["sysname"]]),
+        arch = unname(Sys.info()[["machine"]])
+      )
+    ),
+    created_at_utc = "2026-08-20T12:00:00Z",
+    parent_run_id = parent_run_id
+  )
+  manifest_path <- file.path(run_root, runtime$wlv_run_manifest_filename)
+  runtime$wlv_write_run_manifest(manifest, manifest_path)
+  runtime$wlv_verify_run_manifest(manifest, run_root, reject_unlisted = TRUE)
+  environment <- new.env(parent = emptyenv())
+  environment$wlv_run_id <- manifest$run_id
+  environment$wlv_result_id <- manifest$result_id
+  environment$wlv_run_dir <- normalizePath(
+    run_root,
+    winslash = "/",
+    mustWork = TRUE
+  )
+  environment$wlv_run_manifest <- manifest
+  environment
 }
 
-wlv_fixture_current_release <- function(
+wlv_native_test_release_plan <- function(
     fixture,
-    runtime,
+    methods = fixture$method,
     channel = "stable") {
-  runtime$wlv_read_current_release(
+  plan <- list(
     root = fixture$root,
     channel = channel,
-    required = TRUE
-  )
-}
-
-wlv_run_synthetic_calculation <- function(
-    fixture,
-    workers = 1L,
-    warn_legacy = FALSE) {
-  old_working_directory <- setwd(fixture$root)
-  on.exit(setwd(old_working_directory), add = TRUE)
-
-  runtime <- new.env(parent = globalenv())
-  sys.source(file.path(fixture$root, "R", "main.R"), envir = runtime)
-  calculate <- function() {
-    runtime$get_wlv(
-      fixture$method,
-      workers = workers,
-      allow_experimental = TRUE
+    method_names = methods,
+    methods = data.frame(
+      method = methods,
+      method_dir = file.path(fixture$root, "methods", methods),
+      parameter_set = methods,
+      stringsAsFactors = FALSE
     )
-  }
-  output <- capture.output(
-    result <- if (warn_legacy) calculate() else suppressWarnings(calculate()),
-    type = "output"
   )
-
-  list(result = result, runtime = runtime, output = output)
-}
-
-wlv_recalculate_synthetic_fixture <- function(
-    fixture,
-    runtime,
-    at_stage = 1L,
-    sea_vars = NULL,
-    workers = 1L,
-    warn_legacy = FALSE) {
-  old_working_directory <- setwd(fixture$root)
-  on.exit(setwd(old_working_directory), add = TRUE)
-
-  recalculate <- function() {
-    runtime$recalc_wlv(
-      fixture$method,
-      at_stage = at_stage,
-      sea_vars = sea_vars,
-      workers = workers,
-      allow_experimental = TRUE
-    )
-  }
-  capture.output(
-    if (warn_legacy) recalculate() else suppressWarnings(recalculate()),
-    type = "output"
-  )
-  invisible(fixture$method)
+  plan$publication_inputs <- fixture$runtime$wlv_capture_plan_publication_inputs(plan)
+  plan
 }

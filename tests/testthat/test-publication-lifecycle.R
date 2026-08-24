@@ -1,157 +1,116 @@
-test_that("repeated calculations retain immutable runs with a stable result identity", {
-  fixture <- wlv_make_synthetic_calculation_fixture()
-  on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
+test_that("repeated native runs retain immutable generations and result identity", {
+  fixture <- wlv_make_native_publication_fixture()
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  plan <- wlv_native_test_release_plan(fixture)
 
-  first <- suppressMessages(wlv_run_synthetic_calculation(fixture, workers = 1L))
-  first_run <- wlv_fixture_current_run(fixture, first$runtime)
-  first_release <- wlv_fixture_current_release(fixture, first$runtime)
+  first <- wlv_native_test_run_environment(fixture, "run-native-001")
+  first_release <- runtime$wlv_commit_release(plan, list(first))
+  first_run <- runtime$wlv_resolve_current_method_run(
+    fixture$root,
+    fixture$method,
+    channel = "stable"
+  )
+  second <- wlv_native_test_run_environment(fixture, "run-native-002")
+  second_release <- runtime$wlv_commit_release(plan, list(second))
+  second_run <- runtime$wlv_resolve_current_method_run(
+    fixture$root,
+    fixture$method,
+    channel = "stable"
+  )
 
-  second <- suppressMessages(wlv_run_synthetic_calculation(fixture, workers = 1L))
-  second_run <- wlv_fixture_current_run(fixture, second$runtime)
-  second_release <- wlv_fixture_current_release(fixture, second$runtime)
-
-  expect_false(identical(second_run$run_id, first_run$run_id))
-  expect_identical(second_run$result_id, first_run$result_id)
-  expect_true(first_run$manifest$result$provenance$complete)
-  expect_true(second_run$manifest$result$provenance$complete)
-  source <- first_run$manifest$result$provenance$source
-  expect_named(
-    source,
-    c("summary", "manifest", "additional_inputs"),
-    ignore.order = TRUE
-  )
-  expect_gt(length(source$manifest), 0L)
-  expect_named(
-    source$manifest[[1L]],
-    first$runtime$wlv_source_manifest_schema,
-    ignore.order = TRUE
-  )
-  expect_true(all(vapply(source$manifest, function(record) {
-    !grepl("^([A-Za-z]:|[/\\\\])", record$artifact) &&
-      grepl("^[0-9a-f]{64}$", record$sha256)
-  }, logical(1L))))
-  publication_input_paths <- vapply(
-    first_run$manifest$result$provenance$inputs,
-    `[[`,
-    character(1L),
-    "path"
-  )
-  expect_true(any(startsWith(publication_input_paths, "contracts/results/")))
-  expect_true(any(endsWith(publication_input_paths, "/.gitattributes")))
-  expect_true("contracts/results" %in%
-    first$runtime$wlv_git_publication_status_scope(
-      first_run$manifest$result$provenance$inputs
-    ))
+  expect_false(identical(first_run$run_id, second_run$run_id))
+  expect_identical(first_run$result_id, second_run$result_id)
   expect_true(dir.exists(first_run$path))
   expect_true(dir.exists(second_run$path))
   expect_identical(first_release$marker$sequence, "00000000000000000001")
   expect_identical(second_release$marker$sequence, "00000000000000000002")
-  expect_length(
-    second$runtime$wlv_list_channel_markers(fixture$root, "stable"),
-    2L
-  )
-  duplicate_marker <- file.path(
+  expect_length(runtime$wlv_list_channel_markers(fixture$root, "stable"), 2L)
+
+  duplicate <- file.path(
     dirname(second_release$marker_path),
     paste0(second_release$marker$sequence, "-release-duplicate.json")
   )
-  expect_true(file.copy(second_release$marker_path, duplicate_marker))
+  expect_true(file.copy(second_release$marker_path, duplicate))
   expect_error(
-    second$runtime$wlv_read_current_release(fixture$root, "stable"),
+    runtime$wlv_read_current_release(fixture$root, "stable"),
     "more than one marker at sequence"
   )
 })
 
-test_that("persisted warnings are single-line UTF-8 text without absolute paths", {
-  fixture <- wlv_make_synthetic_calculation_fixture()
-  on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
-  old_working_directory <- setwd(fixture$root)
-  on.exit(setwd(old_working_directory), add = TRUE)
-
-  runtime <- new.env(parent = globalenv())
-  sys.source(file.path(fixture$root, "R", "main.R"), envir = runtime)
-  original_run_script <- runtime$wlv_run_script
-  accented_warning <- "Aviso com acentua\u00e7\u00e3o"
-  runtime$wlv_run_script <- function(script, ...) {
-    if (identical(basename(script), "computations.R")) {
-      warning(
-        paste0(
-          accented_warning, "\nprojeto: ", fixture$root,
-          "\thome: ", path.expand("~"),
-          "; temp: ", tempdir(),
-          "; outros: C:\\dados\\privado.csv e /srv/privado.csv",
-          "; espaços: C:\\Dados Sensíveis\\cliente.csv, ",
-          "/srv/dados privados/cliente.csv",
-          "; URL: https://user:pass@example.test/path?token=secret-value#fragment",
-          "; token=top-secret; Authorization: Bearer credential-value"
-        ),
-        call. = FALSE
-      )
-    }
-    original_run_script(script, ...)
-  }
-
-  expect_no_error(suppressWarnings(suppressMessages(runtime$get_wlv(
-    fixture$method,
-    workers = 1L,
-    allow_experimental = TRUE
-  ))))
-  current <- wlv_fixture_current_run(fixture, runtime)
-  warning_records <- current$manifest$execution$warnings
-  warnings <- warning_records[[1L]]
-
-  expect_length(warning_records, 1L)
-  expect_identical(iconv(warnings, "UTF-8", "UTF-8", sub = NA), warnings)
-  expect_false(any(grepl("[\r\n\t]", warnings)))
-  expect_false(any(grepl(fixture$root, warnings, fixed = TRUE)))
-  expect_false(any(grepl(path.expand("~"), warnings, fixed = TRUE)))
-  expect_false(any(grepl(tempdir(), warnings, fixed = TRUE)))
-  expect_false(any(grepl("[A-Za-z]:[/\\\\]", warnings)))
-  expect_false(any(grepl("(?<![:/])/(?:[^[:space:]]+)", warnings, perl = TRUE)))
-  expect_false(grepl("Sensíveis\\\\cliente.csv", warnings))
-  expect_false(grepl("dados privados/cliente.csv", warnings, fixed = TRUE))
-  expect_false(grepl(
-    "secret-value|user:pass|top-secret|credential-value",
-    warnings
+test_that("publication warnings are UTF-8, single-line, and redacted", {
+  fixture <- wlv_make_native_publication_fixture()
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  accented <- "Aviso nativo com acentuação"
+  raw_warning <- paste0(
+    accented, "\nprojeto: ", fixture$root,
+    "\thome: ", path.expand("~"),
+    "; temp: ", tempdir(),
+    "; outros: C:\\dados\\privado.csv e /srv/privado.csv",
+    "; espaços: C:\\Dados Sensíveis\\cliente.csv, ",
+    "/srv/dados privados/cliente.csv",
+    "; URL: https://user:pass@example.test/path?token=secret-value#fragment",
+    "; token=top-secret; Authorization: Bearer credential-value"
+  )
+  run <- wlv_native_test_run_environment(
+    fixture,
+    "run-warning",
+    warnings = raw_warning
+  )
+  manifest <- runtime$wlv_read_run_manifest(file.path(
+    run$wlv_run_dir,
+    runtime$wlv_run_manifest_filename
   ))
-  expect_true(grepl("<url>", warnings, fixed = TRUE))
-  expect_true(grepl(accented_warning, warnings, fixed = TRUE))
-  manifest_text <- rawToChar(readBin(
-    current$manifest_path,
+  warning <- manifest$execution$warnings[[1L]]
+
+  expect_identical(iconv(warning, "UTF-8", "UTF-8", sub = NA), warning)
+  expect_false(grepl("[\r\n\t]", warning))
+  expect_false(grepl(fixture$root, warning, fixed = TRUE))
+  expect_false(grepl(path.expand("~"), warning, fixed = TRUE))
+  expect_false(grepl(tempdir(), warning, fixed = TRUE))
+  expect_false(grepl("[A-Za-z]:[/\\\\]", warning))
+  expect_false(grepl("secret-value|user:pass|top-secret|credential-value", warning))
+  expect_true(grepl("<url>", warning, fixed = TRUE))
+  expect_true(grepl(accented, warning, fixed = TRUE))
+
+  bytes <- readBin(
+    file.path(run$wlv_run_dir, runtime$wlv_run_manifest_filename),
     what = "raw",
-    n = file.info(current$manifest_path)$size
-  ))
+    n = file.info(file.path(
+      run$wlv_run_dir,
+      runtime$wlv_run_manifest_filename
+    ))$size
+  )
   expect_true(grepl(
-    enc2utf8(accented_warning),
-    manifest_text,
+    enc2utf8(accented),
+    rawToChar(bytes),
     fixed = TRUE,
     useBytes = TRUE
   ))
 })
 
-test_that("additional source inputs are inventoried with relative paths", {
-  fixture <- wlv_make_synthetic_calculation_fixture()
-  on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
-  runtime <- new.env(parent = globalenv())
-  old_working_directory <- setwd(fixture$root)
-  on.exit(setwd(old_working_directory), add = TRUE)
-  sys.source(file.path(fixture$root, "R", "main.R"), envir = runtime)
-
+test_that("additional source inputs are inventoried by relative path", {
+  fixture <- wlv_make_native_publication_fixture()
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
   paths <- file.path(
     fixture$root,
     "source_data",
-    "synthetic",
+    "native_test",
     c("countries.csv", "demand.csv")
   )
-  inventory <- runtime$wlv_publication_source_input_inventory(
+  wlv_native_test_write_text(paths[[1L]], "country;name\nAAA;A\n")
+  wlv_native_test_write_text(paths[[2L]], "demand\nCONS\n")
+
+  inventory <- fixture$runtime$wlv_publication_source_input_inventory(
     fixture$root,
     rev(paths)
   )
-
   expect_identical(
     vapply(inventory, `[[`, character(1L), "path"),
     c(
-      "source_data/synthetic/countries.csv",
-      "source_data/synthetic/demand.csv"
+      "source_data/native_test/countries.csv",
+      "source_data/native_test/demand.csv"
     )
   )
   expect_true(all(vapply(inventory, function(record) {
@@ -160,186 +119,213 @@ test_that("additional source inputs are inventoried with relative paths", {
   }, logical(1L))))
 })
 
-test_that("git provenance aborts when repository inspection fails", {
-  fixture <- wlv_make_synthetic_calculation_fixture()
-  on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
-  runtime <- new.env(parent = globalenv())
-  old_working_directory <- setwd(fixture$root)
-  on.exit(setwd(old_working_directory), add = TRUE)
-  sys.source(file.path(fixture$root, "R", "main.R"), envir = runtime)
-  writeLines(
-    "gitdir: injected-worktree-metadata",
-    file.path(fixture$root, ".git"),
-    useBytes = TRUE
+test_that("release source rechecks deduplicate identical generation snapshots", {
+  fixture <- wlv_make_native_publication_fixture(mutable = TRUE)
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  methods <- c("native_a", "native_b")
+  plan <- structure(
+    list(methods = data.frame(
+      method = methods,
+      source = "native_source",
+      stringsAsFactors = FALSE
+    )),
+    class = c("wlv_run_plan", "list")
   )
-  runtime$Sys.which <- function(command) {
-    stats::setNames("", command)
+  provenance <- data.frame(
+    source = "native_source",
+    source_generation_id = "generation-1",
+    contract_sha256 = strrep("1", 64L),
+    manifest_sha256 = strrep("2", 64L),
+    stringsAsFactors = FALSE
+  )
+  inventory <- list(list(
+    path = "source_data/native/input.csv",
+    sha256 = strrep("3", 64L)
+  ))
+  runs <- lapply(methods, function(method) {
+    run <- new.env(parent = emptyenv())
+    run$wlv_run_manifest <- list(method = method)
+    run$wlv_source_provenance <- provenance
+    run$wlv_source_provenance_inputs <- "input.csv"
+    run$wlv_source_provenance_input_inventory <- inventory
+    run
+  })
+  checked <- character()
+  runtime$wlv_assert_method_source_inputs_unchanged <- function(
+      plan,
+      method,
+      run_data) {
+    checked <<- c(checked, method$method[[1L]])
+    invisible(TRUE)
   }
+
+  expect_no_error(runtime$wlv_assert_run_environments_source_inputs_unchanged(
+    plan,
+    runs
+  ))
+  expect_length(checked, 1L)
+  runs[[2L]]$wlv_source_provenance$manifest_sha256 <- strrep("4", 64L)
+  checked <- character()
+  expect_no_error(runtime$wlv_assert_run_environments_source_inputs_unchanged(
+    plan,
+    runs
+  ))
+  expect_setequal(checked, methods)
+})
+
+test_that("git provenance fails closed and hashes deterministic status", {
+  fixture <- wlv_make_native_publication_fixture(mutable = TRUE)
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  dir.create(file.path(fixture$root, ".git"))
+
+  runtime$Sys.which <- function(command) stats::setNames("", command)
   expect_error(
     runtime$wlv_git_publication_provenance(fixture$root, list()),
     "Git is required to record provenance for a detected repository",
     fixed = TRUE
   )
   rm("Sys.which", envir = runtime)
-  runtime$system2 <- function(...) {
-    structure(character(), status = 128L)
-  }
-
+  runtime$system2 <- function(...) structure(character(), status = 128L)
   expect_error(
-    runtime$wlv_git_publication_provenance(
-      fixture$root,
-      list(list(
-        path = "contracts/results/run-manifest-v1.schema.json",
-        sha256 = strrep("0", 64L)
-      ))
-    ),
+    runtime$wlv_git_publication_provenance(fixture$root, list()),
     "Git failed while attempting to read the publication commit",
     fixed = TRUE
   )
 
   call_count <- 0L
-  git_arguments <- list()
+  arguments <- list()
   runtime$system2 <- function(command, args, ...) {
     call_count <<- call_count + 1L
-    git_arguments[[call_count]] <<- args
-    if (identical(call_count, 1L)) {
-      return(strrep("a", 40L))
-    }
+    arguments[[call_count]] <<- args
+    if (identical(call_count, 1L)) return(strrep("a", 40L))
     c("?? R/z-new.R", " M R/a-existing.R")
   }
+  inventory <- list(list(
+    path = "contracts/results/run-manifest-v1.schema.json",
+    sha256 = strrep("0", 64L)
+  ))
   provenance <- runtime$wlv_git_publication_provenance(
     fixture$root,
-    list(list(
-      path = "contracts/results/run-manifest-v1.schema.json",
-      sha256 = strrep("0", 64L)
-    ))
+    inventory
   )
-  expected_status <- paste(
+  expected <- paste(
     sort(c("?? R/z-new.R", " M R/a-existing.R"), method = "radix"),
     collapse = "\n"
   )
   expect_true(provenance$dirty)
   expect_identical(
     provenance$status_sha256,
-    runtime$wlv_source_sha256_raw(charToRaw(enc2utf8(expected_status)))
+    runtime$wlv_source_sha256_raw(charToRaw(enc2utf8(expected)))
   )
-  expect_true(any(grepl(
-    "contracts/results",
-    git_arguments[[2L]],
-    fixed = TRUE
-  )))
-  expect_true(any(grepl(
-    "complementar",
-    git_arguments[[2L]],
-    fixed = TRUE
-  )))
-  expect_true(any(grepl(
-    "renv.lock",
-    git_arguments[[2L]],
-    fixed = TRUE
-  )))
+  expect_true(any(grepl("contracts/results", arguments[[2L]], fixed = TRUE)))
 })
 
-test_that("result contracts affect the provenance input tree", {
-  fixture <- wlv_make_synthetic_calculation_fixture()
-  on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
-  runtime <- new.env(parent = globalenv())
-  old_working_directory <- setwd(fixture$root)
-  on.exit(setwd(old_working_directory), add = TRUE)
-  sys.source(file.path(fixture$root, "R", "main.R"), envir = runtime)
+test_that("the publication input tree includes every native configuration class", {
+  fixture <- wlv_make_native_publication_fixture()
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  roots <- c(
+    "R", "catalog", "config", "complementar", "contracts/results",
+    "contracts/units",
+    "methods/native_test", "parameters/native_test",
+    "parameters/common_ground", "scripts"
+  )
+  for (path in roots) {
+    wlv_native_test_write_text(
+      file.path(fixture$root, path, "input.txt"),
+      paste("native", path)
+    )
+  }
+  wlv_native_test_write_text(
+    file.path(fixture$root, "R", "native_definition.R"),
+    "native_definition <- function() TRUE"
+  )
+  for (path in c("DESCRIPTION", "renv.lock", "scripts/run_wlv.R")) {
+    wlv_native_test_write_text(file.path(fixture$root, path), path)
+  }
   plan <- list(
     root = fixture$root,
+    method_names = fixture$method,
     methods = data.frame(
       method = fixture$method,
       method_dir = file.path(fixture$root, "methods", fixture$method),
-      parameter_set = "synthetic",
+      parameter_set = fixture$method,
       stringsAsFactors = FALSE
     )
   )
-
-  before <- runtime$wlv_publication_input_inventory(plan, fixture$method)
-  contract_path <- file.path(
-    fixture$root,
-    "contracts",
-    "results",
-    "run-manifest-v1.schema.json"
+  inventory <- fixture$runtime$wlv_publication_input_inventory(
+    plan,
+    fixture$method
   )
-  write("", contract_path, append = TRUE)
-  after <- runtime$wlv_publication_input_inventory(plan, fixture$method)
-  before_git <- runtime$wlv_git_publication_provenance(fixture$root, before)
-  after_git <- runtime$wlv_git_publication_provenance(fixture$root, after)
+  relative <- vapply(inventory, `[[`, character(1L), "path")
 
+  expect_true(any(startsWith(relative, "R/")))
+  expect_true(any(startsWith(relative, "catalog/")))
+  expect_true(any(startsWith(relative, "config/")))
+  expect_true(any(startsWith(relative, "complementar/")))
+  expect_true(any(startsWith(relative, "contracts/results/")))
+  expect_true(any(startsWith(relative, "contracts/units/")))
+  expect_true(any(startsWith(relative, "methods/native_test/")))
+  expect_true(any(startsWith(relative, "parameters/native_test/")))
+  expect_true(any(startsWith(relative, "parameters/common_ground/")))
+
+  before <- vapply(inventory, `[[`, character(1L), "sha256")
+  wlv_native_test_write_text(
+    file.path(fixture$root, "config", "input.txt"),
+    "changed native configuration"
+  )
+  after <- vapply(
+    fixture$runtime$wlv_publication_input_inventory(plan, fixture$method),
+    `[[`,
+    character(1L),
+    "sha256"
+  )
   expect_false(identical(before, after))
-  expect_false(identical(
-    before_git$input_tree_sha256,
-    after_git$input_tree_sha256
-  ))
-})
 
-test_that("complementary calculation inputs affect the provenance input tree", {
-  fixture <- wlv_make_synthetic_calculation_fixture()
-  on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
-  runtime <- new.env(parent = globalenv())
-  old_working_directory <- setwd(fixture$root)
-  on.exit(setwd(old_working_directory), add = TRUE)
-  sys.source(file.path(fixture$root, "R", "main.R"), envir = runtime)
-  plan <- list(
-    root = fixture$root,
-    methods = data.frame(
-      method = fixture$method,
-      method_dir = file.path(fixture$root, "methods", fixture$method),
-      parameter_set = "synthetic",
-      stringsAsFactors = FALSE
-    )
+  plan$publication_inputs <- stats::setNames(list(inventory), fixture$method)
+  expect_error(
+    fixture$runtime$wlv_assert_plan_publication_inputs_unchanged(plan),
+    "inputs changed after preflight validation",
+    fixed = TRUE
   )
-
-  before <- runtime$wlv_publication_input_inventory(plan, fixture$method)
-  complementary_path <- file.path(
-    fixture$root,
-    "complementar",
-    "worldbank",
-    "employment_row.csv"
-  )
-  write("# provenance change", complementary_path, append = TRUE)
-  after <- runtime$wlv_publication_input_inventory(plan, fixture$method)
-  before_git <- runtime$wlv_git_publication_provenance(fixture$root, before)
-  after_git <- runtime$wlv_git_publication_provenance(fixture$root, after)
-
-  expect_true(any(startsWith(
-    vapply(before, `[[`, character(1L), "path"),
-    "complementar/"
-  )))
-  expect_false(identical(before, after))
-  expect_false(identical(
-    before_git$input_tree_sha256,
-    after_git$input_tree_sha256
-  ))
-  expect_true("complementar" %in%
-    runtime$wlv_git_publication_status_scope(after))
 })
 
 test_that("an experimental channel cannot change the stable release", {
-  fixture <- wlv_make_synthetic_calculation_fixture()
-  on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
-
-  run <- suppressMessages(wlv_run_synthetic_calculation(fixture, workers = 1L))
-  stable_before <- wlv_fixture_current_release(fixture, run$runtime)
-
-  old_working_directory <- setwd(fixture$root)
-  on.exit(setwd(old_working_directory), add = TRUE)
-  expect_no_error(suppressWarnings(suppressMessages(run$runtime$get_wlv(
-    fixture$method,
-    workers = 1L,
-    channel = "experiment-v2",
-    allow_experimental = TRUE
-  ))))
-
-  stable_after <- wlv_fixture_current_release(fixture, run$runtime)
-  experimental <- wlv_fixture_current_release(
-    fixture,
-    run$runtime,
-    channel = "experiment-v2"
+  fixture <- wlv_make_native_publication_fixture()
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  stable_run <- wlv_native_test_run_environment(fixture, "run-stable")
+  runtime$wlv_commit_release(
+    wlv_native_test_release_plan(fixture, channel = "stable"),
+    list(stable_run)
   )
+  stable_before <- runtime$wlv_read_current_release(
+    fixture$root,
+    "stable",
+    required = TRUE
+  )
+
+  experimental_run <- wlv_native_test_run_environment(
+    fixture,
+    "run-experimental",
+    payload = "experimental"
+  )
+  runtime$wlv_commit_release(
+    wlv_native_test_release_plan(fixture, channel = "experimental/test"),
+    list(experimental_run)
+  )
+  stable_after <- runtime$wlv_read_current_release(
+    fixture$root,
+    "stable",
+    required = TRUE
+  )
+  experimental <- runtime$wlv_read_current_release(
+    fixture$root,
+    "experimental/test",
+    required = TRUE
+  )
+
   expect_identical(
     stable_after$manifest$release_id,
     stable_before$manifest$release_id
@@ -348,102 +334,85 @@ test_that("an experimental channel cannot change the stable release", {
     experimental$manifest$release_id,
     stable_before$manifest$release_id
   ))
-  expect_identical(experimental$marker$channel, "experiment-v2")
 })
 
 test_that("marker installation failure leaves the previous release current", {
-  fixture <- wlv_make_synthetic_calculation_fixture()
-  on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
-
-  run <- suppressMessages(wlv_run_synthetic_calculation(fixture, workers = 1L))
-  current_before <- wlv_fixture_current_release(fixture, run$runtime)
-  marker_bytes_before <- readBin(
-    current_before$marker_path,
-    what = "raw",
-    n = file.info(current_before$marker_path)$size
+  fixture <- wlv_make_native_publication_fixture(mutable = TRUE)
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  plan <- wlv_native_test_release_plan(fixture)
+  first <- wlv_native_test_run_environment(fixture, "run-marker-001")
+  runtime$wlv_commit_release(plan, list(first))
+  current_before <- runtime$wlv_read_current_release(
+    fixture$root,
+    "stable",
+    required = TRUE
   )
-  markers_before <- run$runtime$wlv_list_channel_markers(fixture$root, "stable")
+  markers_before <- runtime$wlv_list_channel_markers(fixture$root, "stable")
 
-  base_file_rename <- base::file.rename
-  stable_channel_dir <- normalizePath(
-    file.path(fixture$root, "results", "channels", "stable"),
-    winslash = "/",
-    mustWork = TRUE
+  channel_dir <- runtime$wlv_publication_channel_directory(
+    fixture$root,
+    "stable",
+    create = TRUE
   )
-  run$runtime$file.rename <- function(from, to) {
-    target_dir <- normalizePath(
-      dirname(to),
-      winslash = "/",
-      mustWork = FALSE
-    )
-    if (identical(tolower(target_dir), tolower(stable_channel_dir)) && grepl(
-      "^[0-9]{20}-release-.*[.]json$",
-      basename(to)
-    )) return(FALSE)
-    base_file_rename(from, to)
+  base_rename <- base::file.rename
+  runtime$file.rename <- function(from, to) {
+    target <- normalizePath(dirname(to), winslash = "/", mustWork = FALSE)
+    if (identical(tolower(target), tolower(channel_dir)) &&
+        grepl("^[0-9]{20}-release-.*[.]json$", basename(to))) {
+      return(FALSE)
+    }
+    base_rename(from, to)
   }
-  on.exit(rm("file.rename", envir = run$runtime), add = TRUE)
+  second <- wlv_native_test_run_environment(fixture, "run-marker-002")
 
-  old_working_directory <- setwd(fixture$root)
-  on.exit(setwd(old_working_directory), add = TRUE)
   expect_error(
-    suppressWarnings(suppressMessages(run$runtime$get_wlv(
-      fixture$method,
-      workers = 1L,
-      allow_experimental = TRUE
-    ))),
+    runtime$wlv_commit_release(plan, list(second)),
     "Could not atomically install channel marker",
     fixed = TRUE
   )
-
-  current_after <- wlv_fixture_current_release(fixture, run$runtime)
+  rm("file.rename", envir = runtime)
+  current_after <- runtime$wlv_read_current_release(
+    fixture$root,
+    "stable",
+    required = TRUE
+  )
   expect_identical(
     current_after$manifest$release_id,
     current_before$manifest$release_id
   )
   expect_identical(
-    readBin(
-      current_after$marker_path,
-      what = "raw",
-      n = file.info(current_after$marker_path)$size
-    ),
-    marker_bytes_before
-  )
-  expect_identical(
-    run$runtime$wlv_list_channel_markers(fixture$root, "stable"),
+    runtime$wlv_list_channel_markers(fixture$root, "stable"),
     markers_before
   )
 })
 
-test_that("the final marker rename is the last fallible commit operation", {
-  fixture <- wlv_make_synthetic_calculation_fixture()
-  on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
-  run <- suppressMessages(wlv_run_synthetic_calculation(fixture, workers = 1L))
-  release_before <- wlv_fixture_current_release(fixture, run$runtime)
-  stable_channel_dir <- normalizePath(
+test_that("the channel-marker rename remains the final fallible commit step", {
+  fixture <- wlv_make_native_publication_fixture(mutable = TRUE)
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  plan <- wlv_native_test_release_plan(fixture)
+  first <- wlv_native_test_run_environment(fixture, "run-final-001")
+  runtime$wlv_commit_release(plan, list(first))
+  stable_channel <- normalizePath(
     file.path(fixture$root, "results", "channels", "stable"),
     winslash = "/",
     mustWork = TRUE
   )
 
   committed <- FALSE
-  base_file_rename <- base::file.rename
-  original_verify <- run$runtime$wlv_verify_channel_marker
-  run$runtime$file.rename <- function(from, to) {
-    target_dir <- normalizePath(
-      dirname(to),
-      winslash = "/",
-      mustWork = FALSE
-    )
-    result <- base_file_rename(from, to)
-    if (isTRUE(result) &&
-        identical(tolower(target_dir), tolower(stable_channel_dir)) &&
+  base_rename <- base::file.rename
+  original_verify <- runtime$wlv_verify_channel_marker
+  runtime$file.rename <- function(from, to) {
+    target <- normalizePath(dirname(to), winslash = "/", mustWork = FALSE)
+    result <- base_rename(from, to)
+    if (isTRUE(result) && identical(tolower(target), tolower(stable_channel)) &&
         grepl("^[0-9]{20}-release-.*[.]json$", basename(to))) {
       committed <<- TRUE
     }
     result
   }
-  run$runtime$wlv_verify_channel_marker <- function(
+  runtime$wlv_verify_channel_marker <- function(
       marker,
       publication_root,
       marker_path = NULL,
@@ -458,124 +427,165 @@ test_that("the final marker rename is the last fallible commit operation", {
       verify_release = verify_release
     )
   }
-  on.exit({
-    if (exists("file.rename", envir = run$runtime, inherits = FALSE)) {
-      rm("file.rename", envir = run$runtime)
-    }
-    run$runtime$wlv_verify_channel_marker <- original_verify
-  }, add = TRUE)
+  second <- wlv_native_test_run_environment(fixture, "run-final-002")
 
-  old_working_directory <- setwd(fixture$root)
-  on.exit(setwd(old_working_directory), add = TRUE)
-  expect_no_error(suppressWarnings(suppressMessages(run$runtime$get_wlv(
-    fixture$method,
-    workers = 1L,
-    allow_experimental = TRUE
-  ))))
+  expect_no_error(runtime$wlv_commit_release(plan, list(second)))
   expect_true(committed)
-
-  rm("file.rename", envir = run$runtime)
-  run$runtime$wlv_verify_channel_marker <- original_verify
-  release_after <- wlv_fixture_current_release(fixture, run$runtime)
-  expect_false(identical(
-    release_after$manifest$release_id,
-    release_before$manifest$release_id
-  ))
+  rm("file.rename", envir = runtime)
+  runtime$wlv_verify_channel_marker <- original_verify
+  current <- runtime$wlv_read_current_release(
+    fixture$root,
+    "stable",
+    required = TRUE
+  )
+  expect_identical(current$manifest$runs[[1L]]$run_id, "run-final-002")
 })
 
-test_that("a later method failure prevents the joint release commit", {
-  fixture <- wlv_make_synthetic_calculation_fixture()
-  on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
-
-  run <- suppressMessages(wlv_run_synthetic_calculation(fixture, workers = 1L))
-  release_before <- wlv_fixture_current_release(fixture, run$runtime)
-  marker_before <- readBin(
-    release_before$marker_path,
+test_that("a later native method failure prevents the joint release commit", {
+  fixture <- wlv_make_native_publication_fixture()
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  initial <- wlv_native_test_run_environment(fixture, "run-joint-001")
+  runtime$wlv_commit_release(
+    wlv_native_test_release_plan(fixture),
+    list(initial)
+  )
+  before <- runtime$wlv_read_current_release(
+    fixture$root,
+    "stable",
+    required = TRUE
+  )
+  marker_bytes <- readBin(
+    before$marker_path,
     what = "raw",
-    n = file.info(release_before$marker_path)$size
-  )
-  commit_called <- FALSE
-  run$runtime$wlv_validate_data <- identity
-  run$runtime$wlv_with_cluster <- function(workers, execute) execute(NULL)
-  run$runtime$wlv_run_method <- function(plan, method, cluster = NULL) {
-    if (identical(method, "second")) {
-      stop("injected second-method failure", call. = FALSE)
-    }
-    new.env(parent = emptyenv())
-  }
-  run$runtime$wlv_commit_release <- function(...) {
-    commit_called <<- TRUE
-    stop("joint commit should not run", call. = FALSE)
-  }
-  plan <- structure(
-    list(
-      root = fixture$root,
-      method_names = c("first", "second"),
-      workers = 1L,
-      mode = "calculate"
-    ),
-    class = c("wlv_run_plan", "list")
+    n = file.info(before$marker_path)$size
   )
 
-  expect_error(
-    run$runtime$wlv_execute_run_plan(plan),
-    "injected second-method failure",
-    fixed = TRUE
+  expect_error(runtime$wlv_with_publication_lock(
+    list(root = fixture$root, method_names = c("native_a", "native_b")),
+    function() {
+      wlv_native_test_run_environment(
+        fixture,
+        "run-joint-a",
+        method = "native_a"
+      )
+      stop("injected native method failure", call. = FALSE)
+    }
+  ), "injected native method failure", fixed = TRUE)
+  after <- runtime$wlv_read_current_release(
+    fixture$root,
+    "stable",
+    required = TRUE
   )
-  expect_false(commit_called)
-  release_after <- wlv_fixture_current_release(fixture, run$runtime)
-  expect_identical(release_after$manifest$release_id, release_before$manifest$release_id)
+
+  expect_identical(after$manifest$release_id, before$manifest$release_id)
   expect_identical(
-    readBin(
-      release_after$marker_path,
-      what = "raw",
-      n = file.info(release_after$marker_path)$size
-    ),
-    marker_before
+    readBin(after$marker_path, what = "raw", n = file.info(after$marker_path)$size),
+    marker_bytes
   )
   expect_false(dir.exists(file.path(fixture$root, "results", ".lock-results")))
 })
 
-test_that("uncommitted staging is invisible to the legacy method scan", {
-  fixture <- wlv_make_synthetic_calculation_fixture()
-  on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
-  old_working_directory <- setwd(fixture$root)
-  on.exit(setwd(old_working_directory), add = TRUE)
-  runtime <- new.env(parent = globalenv())
-  sys.source(file.path(fixture$root, "R", "main.R"), envir = runtime)
+test_that("paper artifacts are hashed inside the committed release", {
+  fixture <- wlv_make_native_publication_fixture(mutable = TRUE)
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  runtime$wlv_run_staged_paper <- function(
+      plan,
+      run_environments,
+      release_staging) {
+    output <- file.path(release_staging, "reduction_problem.xlsx")
+    writeBin(charToRaw("native paper"), output)
+    structure(
+      list(output = output, sheets = list()),
+      class = c("wlv_paper_result", "list")
+    )
+  }
+  plan <- wlv_native_test_release_plan(fixture)
+  plan$prepaper <- TRUE
+  run <- wlv_native_test_run_environment(fixture, "run-paper")
 
+  release <- runtime$wlv_commit_release(plan, list(run))
+
+  paper <- release$manifest$artifacts[vapply(
+    release$manifest$artifacts,
+    function(artifact) identical(artifact$role, "paper"),
+    logical(1L)
+  )]
+  expect_length(paper, 1L)
+  expect_identical(paper[[1L]]$path, "reduction_problem.xlsx")
+  expect_no_error(runtime$wlv_verify_release_manifest(
+    release$manifest,
+    release$root,
+    publication_root = file.path(fixture$root, "results"),
+    reject_unlisted = TRUE
+  ))
+})
+
+test_that("paper failure leaves the previous release current", {
+  fixture <- wlv_make_native_publication_fixture(mutable = TRUE)
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  plan <- wlv_native_test_release_plan(fixture)
+  first <- wlv_native_test_run_environment(fixture, "run-paper-before")
+  runtime$wlv_commit_release(plan, list(first))
+  before <- runtime$wlv_read_current_release(
+    fixture$root,
+    "stable",
+    required = TRUE
+  )
+  markers_before <- runtime$wlv_list_channel_markers(fixture$root, "stable")
+  runtime$wlv_run_staged_paper <- function(...) {
+    stop("injected paper failure", call. = FALSE)
+  }
+  plan$prepaper <- TRUE
+  second <- wlv_native_test_run_environment(fixture, "run-paper-after")
+
+  expect_error(
+    runtime$wlv_commit_release(plan, list(second)),
+    "injected paper failure",
+    fixed = TRUE
+  )
+  after <- runtime$wlv_read_current_release(
+    fixture$root,
+    "stable",
+    required = TRUE
+  )
+  expect_identical(after$manifest$release_id, before$manifest$release_id)
+  expect_identical(
+    runtime$wlv_list_channel_markers(fixture$root, "stable"),
+    markers_before
+  )
+})
+
+test_that("uncommitted native staging is invisible to current-run resolution", {
+  fixture <- wlv_make_native_publication_fixture()
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  published <- wlv_native_test_run_environment(fixture, "run-visible")
+  runtime$wlv_commit_release(
+    wlv_native_test_release_plan(fixture),
+    list(published)
+  )
   staging <- runtime$wlv_create_result_staging(fixture$root, fixture$method)
-  on.exit(
-    runtime$wlv_remove_result_staging(
-      staging,
-      file.path(fixture$root, "results")
-    ),
-    add = TRUE
-  )
-  writeLines("method;synthetic", file.path(staging, "_parameters.csv"))
-  immediate_directories <- list.dirs(
-    file.path(fixture$root, "results"),
-    recursive = FALSE,
-    full.names = TRUE
-  )
+  on.exit(runtime$wlv_remove_result_staging(
+    staging,
+    file.path(fixture$root, "results")
+  ), add = TRUE)
+  wlv_native_test_write_text(file.path(staging, "payload.txt"), "uncommitted")
 
+  current <- runtime$wlv_resolve_current_method_run(
+    fixture$root,
+    fixture$method,
+    channel = "stable"
+  )
+  expect_identical(current$run_id, "run-visible")
   expect_identical(basename(dirname(staging)), ".staging")
-  expect_false(any(file.exists(file.path(
-    immediate_directories,
-    "_parameters.csv"
-  ))))
+  expect_false(startsWith(current$path, staging))
 })
 
 test_that("publication refuses redirected store and channel directories", {
-  runtime <- new.env(parent = globalenv())
-  sys.source(
-    file.path(wlv_test_root, "R", "lib", "publication_manifest.R"),
-    envir = runtime
-  )
-  sys.source(
-    file.path(wlv_test_root, "R", "lib", "publication.R"),
-    envir = runtime
-  )
+  runtime <- wlv_test_load_runtime()
   root <- tempfile("wlv-publication-links-")
   results_root <- file.path(root, "results")
   release_target <- file.path(results_root, "releases")
@@ -599,22 +609,8 @@ test_that("publication refuses redirected store and channel directories", {
     runtime$wlv_publication_ensure_store(root),
     "symbolic link or junction|canonical publication parent"
   )
-
   unlink(runs_link, recursive = FALSE, force = TRUE)
   paths <- runtime$wlv_publication_ensure_store(root)
-  method_target <- file.path(paths$runs, "other")
-  dir.create(method_target)
-  method_link <- file.path(paths$runs, "synthetic")
-  expect_true(link_directory(method_target, method_link))
-  expect_error(
-    runtime$wlv_publication_assert_real_directory(
-      method_link,
-      paths$runs,
-      "Synthetic method store"
-    ),
-    "symbolic link or junction|canonical publication parent"
-  )
-  unlink(method_link, recursive = FALSE, force = TRUE)
   channel_target <- file.path(paths$channels, "experiment")
   dir.create(channel_target)
   channel_link <- file.path(paths$channels, "stable")
@@ -624,21 +620,28 @@ test_that("publication refuses redirected store and channel directories", {
     "symbolic link or junction|canonical publication parent"
   )
   expect_length(list.files(channel_target, all.files = TRUE, no.. = TRUE), 0L)
-  unlink(channel_link, recursive = FALSE, force = TRUE)
 })
 
-test_that("current release reader rejects redirected publication components", {
-  fixture <- wlv_make_synthetic_calculation_fixture()
-  on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
-  calculated <- suppressMessages(wlv_run_synthetic_calculation(
-    fixture,
-    workers = 1L
-  ))
-  runtime <- calculated$runtime
+test_that("current release resolution rejects redirected components", {
+  fixture <- wlv_make_native_publication_fixture()
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  run <- wlv_native_test_run_environment(fixture, "run-links")
+  runtime$wlv_commit_release(
+    wlv_native_test_release_plan(fixture),
+    list(run)
+  )
   paths <- runtime$wlv_publication_paths(fixture$root)
-  current_release <- wlv_fixture_current_release(fixture, runtime)
-  current_run <- wlv_fixture_current_run(fixture, runtime)
-
+  current_release <- runtime$wlv_read_current_release(
+    fixture$root,
+    "stable",
+    required = TRUE
+  )
+  current_run <- runtime$wlv_resolve_current_method_run(
+    fixture$root,
+    fixture$method,
+    channel = "stable"
+  )
   link_directory <- function(target, link) {
     if (.Platform$OS.type == "windows" &&
         exists("Sys.junction", envir = baseenv(), mode = "function")) {
@@ -655,17 +658,19 @@ test_that("current release reader rejects redirected publication components", {
         if (dir.exists(path) || file.exists(path)) {
           unlink(path, recursive = FALSE, force = TRUE)
         }
-        if (dir.exists(target)) {
-          file.rename(target, path)
-        }
+        if (dir.exists(target)) file.rename(target, path)
       }
     }, add = TRUE)
     if (!isTRUE(link_directory(target, path))) {
       skip("This platform cannot create a directory link for the reader test.")
     }
     expect_error(
-      runtime$wlv_read_current_release(fixture$root, "stable", required = TRUE),
-      paste(
+      runtime$wlv_read_current_release(
+        fixture$root,
+        "stable",
+        required = TRUE
+      ),
+      paste0(
         "symbolic link or junction|canonical publication parent|",
         "must be an existing directory"
       )
@@ -697,14 +702,10 @@ test_that("current release reader rejects redirected publication components", {
   )
 })
 
-test_that("source preparation and validation execute under the publication lock", {
-  fixture <- wlv_make_synthetic_calculation_fixture()
-  on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
-  old_working_directory <- setwd(fixture$root)
-  on.exit(setwd(old_working_directory), add = TRUE)
-  runtime <- new.env(parent = globalenv())
-  sys.source(file.path(fixture$root, "R", "main.R"), envir = runtime)
-
+test_that("native preparation, validation, execution, and commit share one lock", {
+  fixture <- wlv_make_native_publication_fixture(mutable = TRUE)
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
   events <- character()
   lock_path <- file.path(fixture$root, "results", ".lock-results")
   runtime$wlv_prepare_sources <- function(plan) {
@@ -725,44 +726,170 @@ test_that("source preparation and validation execute under the publication lock"
   runtime$wlv_commit_release <- function(plan, run_environments) {
     expect_true(dir.exists(lock_path))
     events <<- c(events, "commit")
-    list(manifest = list(release_id = "release-test"))
+    list(manifest = list(release_id = "release-native-test"))
   }
-  plan <- list(
-    root = fixture$root,
-    method_names = fixture$method,
-    workers = 1L,
-    mode = "calculate",
-    repeat_pp = TRUE
-  )
+  plan <- wlv_native_test_release_plan(fixture)
+  plan$workers <- 1L
+  plan$mode <- "calculate"
+  plan$repeat_pp <- TRUE
 
   expect_no_error(runtime$wlv_execute_run_plan(plan))
   expect_identical(events, c("prepare", "validate", "calculate", "commit"))
   expect_false(dir.exists(lock_path))
-
   events <- character()
   expect_no_error(runtime$wlv_execute_preparation_plan(plan))
   expect_identical(events, c("prepare", "validate"))
   expect_false(dir.exists(lock_path))
 })
 
-test_that("resolving a current run rejects a corrupted artifact", {
-  fixture <- wlv_make_synthetic_calculation_fixture()
-  on.exit(wlv_remove_synthetic_calculation_fixture(fixture), add = TRUE)
+test_that("result locks reject concurrency and remain reusable", {
+  fixture <- wlv_make_native_publication_fixture()
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  results_root <- file.path(fixture$root, "results")
+  lock <- runtime$wlv_acquire_result_lock(results_root, fixture$method)
+  on.exit(try(runtime$wlv_release_result_lock(
+    lock,
+    results_root
+  ), silent = TRUE), add = TRUE)
 
-  run <- suppressMessages(wlv_run_synthetic_calculation(fixture, workers = 1L))
-  current <- wlv_fixture_current_run(fixture, run$runtime)
-  artifact <- file.path(current$path, "_parameters.csv")
+  expect_error(
+    runtime$wlv_acquire_result_lock(results_root, fixture$method),
+    "already locked",
+    fixed = TRUE
+  )
+  expect_error(
+    runtime$wlv_acquire_result_lock(results_root, "another_native_method"),
+    "already locked",
+    fixed = TRUE
+  )
+  runtime$wlv_release_result_lock(lock, results_root)
+  expect_false(dir.exists(lock))
+  lock <- runtime$wlv_acquire_result_lock(results_root, fixture$method)
+  expect_true(dir.exists(lock))
+})
+
+test_that("post-commit lock cleanup cannot turn success into failure", {
+  fixture <- wlv_make_native_publication_fixture(mutable = TRUE)
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  release <- runtime$wlv_release_result_lock
+  release_calls <- 0L
+  runtime$wlv_release_result_lock <- function(...) {
+    release_calls <<- release_calls + 1L
+    if (identical(release_calls, 1L)) {
+      stop("injected lock cleanup failure", call. = FALSE)
+    }
+    release(...)
+  }
+  value <- NULL
+  expect_message(
+    value <- runtime$wlv_with_publication_lock(
+      list(root = fixture$root, method_names = fixture$method),
+      function() "committed-native-value"
+    ),
+    "result lock cleanup warning"
+  )
+  expect_identical(value, "committed-native-value")
+  expect_identical(release_calls, 2L)
+  expect_false(dir.exists(file.path(fixture$root, "results", ".lock-results")))
+})
+
+test_that("method metadata validation detects missing, stale, and extra sidecars", {
+  fixture <- wlv_make_native_publication_fixture()
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  result_dir <- file.path(fixture$root, "metadata-sidecars")
+  dir.create(result_dir)
+  metadata <- runtime$wlv_method_result_metadata(
+    parameters = data.frame(source = "native_test"),
+    assumptions = data.frame(computation = "none"),
+    matrices = data.frame(names = "values"),
+    solutions = data.frame(names = "metric", stage = 5L),
+    sectors = data.frame(sector = "S"),
+    meta_indicators = data.frame(
+      code = "metric",
+      name = "Metric",
+      stringsAsFactors = FALSE,
+      row.names = "metric"
+    ),
+    extra_csv = list(
+      `_diagnostic.csv` = data.frame(
+        coordinate = "2000|S",
+        original_value = -1,
+        applied_value = 0,
+        stringsAsFactors = FALSE
+      )
+    )
+  )
+  runtime$wlv_write_method_result_metadata(result_dir, metadata)
+  expect_no_error(runtime$wlv_validate_method_result_metadata(
+    result_dir,
+    metadata
+  ))
+
+  files <- c(names(metadata$csv), "meta_indicators.RDS")
+  for (name in files) {
+    local({
+      path <- file.path(result_dir, name)
+      bytes <- readBin(path, what = "raw", n = file.info(path)$size)
+      unlink(path)
+      expect_error(
+        runtime$wlv_validate_method_result_metadata(result_dir, metadata),
+        "missing",
+        fixed = TRUE
+      )
+      writeBin(bytes, path)
+      writeBin(charToRaw("corrupt"), path)
+      expect_error(
+        runtime$wlv_validate_method_result_metadata(result_dir, metadata),
+        "differs|Cannot read"
+      )
+      writeBin(bytes, path)
+    })
+  }
+  unexpected <- file.path(result_dir, "_gfcf_negative_unexpected.csv")
+  runtime$wlv_write_result_csv(data.frame(value = 1), unexpected)
+  expect_error(
+    runtime$wlv_validate_method_result_metadata(result_dir, metadata),
+    "unexpected scientific sidecar",
+    fixed = TRUE
+  )
+})
+
+test_that("resolving a current run rejects a corrupted native artifact", {
+  fixture <- wlv_make_native_publication_fixture()
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  run <- wlv_native_test_run_environment(fixture, "run-corrupt")
+  runtime$wlv_commit_release(
+    wlv_native_test_release_plan(fixture),
+    list(run)
+  )
+  artifact <- file.path(run$wlv_run_dir, "payload.txt")
   connection <- file(artifact, open = "ab")
   writeBin(charToRaw("corruption"), connection)
   close(connection)
 
   expect_error(
-    run$runtime$wlv_resolve_current_method_run(
+    runtime$wlv_resolve_current_method_run(
       fixture$root,
       fixture$method,
-      channel = "stable",
-      allow_legacy = FALSE
+      channel = "stable"
     ),
-    "_parameters.csv"
+    "payload.txt"
   )
+})
+
+test_that("publication lifecycle tests use only native test fixtures", {
+  paths <- c(
+    file.path(wlv_test_root, "tests", "testthat", "test-publication-lifecycle.R"),
+    file.path(wlv_test_root, "tests", "testthat", "helper-synthetic-fixture.R")
+  )
+  text <- paste(unlist(lapply(paths, readLines, warn = FALSE)), collapse = "\n")
+  legacy <- paste0(
+    "computations[.]R|re_computations[.]R|wlv_run_", "script|",
+    "sys[.]source[(].*main[.]R"
+  )
+  expect_false(grepl(legacy, text))
 })

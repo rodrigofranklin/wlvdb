@@ -4,10 +4,7 @@ wlv_dependency_groups <- list(
     "magrittr", "Matrix", "openssl", "readr", "rvest", "tidyr", "xml2"
   ),
   preparation = c("R.matlab", "readODS", "readxl", "WDI"),
-  papers = c(
-    "forcats", "ggplot2", "ggthemes", "hrbrthemes", "MLmetrics", "REdaS",
-    "scales", "tibble", "writexl"
-  )
+  papers = "writexl"
 )
 
 wlv_require_packages <- function(

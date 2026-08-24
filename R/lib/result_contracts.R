@@ -316,15 +316,17 @@ wlv_validate_leontief_zero_output_profile <- function(runtime, profile) {
     stop("Invalid streaming Leontief zero-output profile.", call. = FALSE)
   }
   method <- if (is.null(runtime)) "" else runtime$method
+  source <- if (is.null(runtime)) "" else runtime$source
+  uses_wiodr13_profile <- identical(source, "wiodr13")
   invalid <- profile$invalid
   if (!nrow(invalid)) {
-    if (identical(method, "wiodr13")) {
+    if (uses_wiodr13_profile) {
       stop("The pinned WIOD13 Leontief exception set is unexpectedly empty.", call. = FALSE)
     }
     profile$validated_method <- method
     return(profile)
   }
-  if (!identical(method, "wiodr13")) {
+  if (!uses_wiodr13_profile) {
     stop("Leontief inputs contain an undeclared nonzero flow over zero output.", call. = FALSE)
   }
   observed_years <- profile$years[invalid$year_index]
@@ -334,12 +336,9 @@ wlv_validate_leontief_zero_output_profile <- function(runtime, profile) {
     paste(observed_years, observed_inputs, observed_outputs, sep = "|"),
     method = "radix"
   )
-  hash_file <- tempfile("wlv-leontief-", fileext = ".txt")
-  on.exit(unlink(hash_file), add = TRUE)
-  connection <- file(hash_file, open = "wb")
-  writeBin(charToRaw(enc2utf8(paste(keys, collapse = "\n"))), connection)
-  close(connection)
-  observed_hash <- unname(tools::md5sum(hash_file))
+  observed_hash <- unclass(tolower(as.character(openssl::md5(
+    charToRaw(enc2utf8(paste(keys, collapse = "\n")))
+  ))))
   observed_counts <- table(paste(observed_years, observed_outputs, sep = "|"))
   expected_counts <- c(
     "2005|CYP.23" = 781L,
@@ -2148,7 +2147,7 @@ wlv_exchange_rate_by_country <- function(
   value
 }
 
-wlv_exchange_rate_by_sector_legacy <- function(
+wlv_exchange_rate_by_sector_v09 <- function(
     numerator,
     denominator,
     runtime = NULL,
@@ -2764,7 +2763,6 @@ wlv_validate_staged_results <- function(
     runtime,
     expected_metadata,
     aggregation_registry,
-    stable_aggregations,
     at_stage = NULL,
     reader = read_fst_array) {
   if (!is.function(reader)) {
@@ -2822,10 +2820,9 @@ wlv_validate_staged_results <- function(
   } else {
     NULL
   }
-  aggregation_routes <- wlv_reconcile_aggregation_registry_sidecar(
+  aggregation_rows <- wlv_reconcile_aggregation_registry_sidecar(
     aggregation_registry,
-    persisted_unit_contract,
-    stable = stable_aggregations
+    persisted_unit_contract
   )
   scientific_check_parts <- list(wlv_scientific_validate_result_arrays(
     method = method,
@@ -2833,8 +2830,7 @@ wlv_validate_staged_results <- function(
     sea_countries = sea_countries,
     m_countries = m_countries,
     solutions = solutions,
-    aggregations = aggregation_routes$typed,
-    legacy_aggregations = aggregation_routes$legacy
+    aggregations = aggregation_rows
   ))
   scientific_io_years <- character()
 
@@ -2848,9 +2844,7 @@ wlv_validate_staged_results <- function(
   }
 
   io_files <- sort(list.files(staging, pattern = "^m_io.*\\.fst$", full.names = TRUE))
-  io_required <- !identical(mode, "recalculate") ||
-    is.null(at_stage) || at_stage <= 4L
-  if (!length(io_files) && io_required) {
+  if (!length(io_files)) {
     stop(sprintf("Staged results for `%s` contain no m_io array.", method), call. = FALSE)
   }
   for (path in io_files) {
@@ -2927,7 +2921,6 @@ wlv_validate_staged_results <- function(
     years = dimnames(sea_sectors)[[1L]],
     io_years = scientific_io_years,
     diagnostics = scientific_diagnostics,
-    require_io = io_required,
     sea_sectors = sea_sectors
   )
   wlv_write_result_csv(
@@ -2937,199 +2930,4 @@ wlv_validate_staged_results <- function(
   expected_metadata$csv[["_scientific_checks.csv"]] <- scientific_checks
   wlv_validate_method_result_metadata(staging, expected_metadata)
   invisible(scientific_checks)
-}
-
-wlv_prepare_global_metadata <- function(run_environment, results_root) {
-  indicators <- get0(
-    "wlv_pending_indicators_en",
-    envir = run_environment,
-    inherits = FALSE
-  )
-  metadata <- get0(
-    "wlv_pending_meta_indicators",
-    envir = run_environment,
-    inherits = FALSE
-  )
-  values <- list(
-    indicators_en.csv = indicators,
-    meta_indicators.csv = metadata
-  )
-  values <- values[!vapply(values, is.null, logical(1L))]
-  if (!length(values)) {
-    return(data.frame(
-      target = character(), temporary = character(), backup = character(),
-      had_target = logical(), installed = logical(), stringsAsFactors = FALSE
-    ))
-  }
-
-  transaction <- data.frame(
-    target = file.path(results_root, names(values)),
-    temporary = character(length(values)),
-    backup = character(length(values)),
-    had_target = file.exists(file.path(results_root, names(values))),
-    installed = rep(FALSE, length(values)),
-    stringsAsFactors = FALSE
-  )
-  prepared <- FALSE
-  on.exit({
-    if (!prepared) {
-      unlink(transaction$temporary[nzchar(transaction$temporary)], force = TRUE)
-    }
-  }, add = TRUE)
-  for (index in seq_along(values)) {
-    target <- transaction$target[[index]]
-    temporary <- tempfile(
-      pattern = paste0(".metadata-", basename(target), "-"),
-      tmpdir = results_root
-    )
-    utils::write.csv2(
-      values[[index]],
-      temporary,
-      row.names = FALSE,
-      fileEncoding = "UTF-8"
-    )
-    encoded <- readLines(temporary, warn = FALSE, encoding = "UTF-8")
-    if (any(grepl("\ufffd", encoded, fixed = TRUE))) {
-      stop(sprintf("Global metadata `%s` failed UTF-8 verification.", target), call. = FALSE)
-    }
-    transaction$temporary[[index]] <- temporary
-  }
-  prepared <- TRUE
-  transaction
-}
-
-wlv_rollback_global_metadata <- function(transaction) {
-  if (is.null(transaction) || !nrow(transaction)) {
-    return(invisible(transaction))
-  }
-  new_backups <- rep("", nrow(transaction))
-  moved_new <- rep(FALSE, nrow(transaction))
-  restored_old <- rep(FALSE, nrow(transaction))
-
-  restore_new_generation <- function() {
-    for (index in rev(which(restored_old & moved_new))) {
-      target <- transaction$target[[index]]
-      backup <- transaction$backup[[index]]
-      if (file.exists(target) && !file.exists(backup)) {
-        file.rename(target, backup)
-      }
-    }
-    for (index in which(moved_new)) {
-      target <- transaction$target[[index]]
-      recovery <- new_backups[[index]]
-      if (file.exists(recovery) && !file.exists(target)) {
-        file.rename(recovery, target)
-      }
-    }
-    invisible(NULL)
-  }
-
-  for (index in seq_len(nrow(transaction))) {
-    target <- transaction$target[[index]]
-    if (transaction$installed[[index]] && file.exists(target)) {
-      recovery <- tempfile(
-        pattern = paste0(".rollback-new-metadata-", basename(target), "-"),
-        tmpdir = dirname(target)
-      )
-      if (!file.rename(target, recovery)) {
-        restore_new_generation()
-        stop(
-          sprintf("Could not retain new global metadata `%s` for rollback.", target),
-          call. = FALSE
-        )
-      }
-      new_backups[[index]] <- recovery
-      moved_new[[index]] <- TRUE
-    }
-  }
-
-  for (index in seq_len(nrow(transaction))) {
-    target <- transaction$target[[index]]
-    backup <- transaction$backup[[index]]
-    if (nzchar(backup)) {
-      if (!file.exists(backup) || file.exists(target) ||
-          !file.rename(backup, target)) {
-        restore_new_generation()
-        stop(
-          sprintf(
-            paste0(
-              "Could not restore prior global metadata `%s`; the new ",
-              "metadata generation was retained where recovery succeeded."
-            ),
-            target
-          ),
-          call. = FALSE
-        )
-      }
-      restored_old[[index]] <- TRUE
-    } else if (transaction$had_target[[index]] && !file.exists(target)) {
-      restore_new_generation()
-      stop(
-        sprintf(
-          "Prior global metadata `%s` is missing and has no rollback backup.",
-          target
-        ),
-        call. = FALSE
-      )
-    }
-  }
-
-  unlink(new_backups[nzchar(new_backups)], force = TRUE)
-  if (any(file.exists(new_backups[nzchar(new_backups)]))) {
-    message("Global metadata rollback succeeded, but a new-generation backup remains.")
-  }
-  temporary <- transaction$temporary[nzchar(transaction$temporary)]
-  unlink(temporary, force = TRUE)
-  if (any(file.exists(temporary))) {
-    message("Global metadata rollback succeeded, but a temporary metadata file remains.")
-  }
-  invisible(transaction)
-}
-
-wlv_begin_global_metadata_transaction <- function(run_environment, results_root) {
-  transaction <- wlv_prepare_global_metadata(run_environment, results_root)
-  if (!nrow(transaction)) {
-    return(transaction)
-  }
-  installed <- FALSE
-  on.exit({
-    if (!installed) {
-      wlv_rollback_global_metadata(transaction)
-    }
-  }, add = TRUE)
-  for (index in seq_len(nrow(transaction))) {
-    target <- transaction$target[[index]]
-    if (transaction$had_target[[index]]) {
-      backup <- tempfile(
-        pattern = paste0(".backup-metadata-", basename(target), "-"),
-        tmpdir = results_root
-      )
-      if (!file.rename(target, backup)) {
-        stop(sprintf("Could not back up global metadata `%s`.", target), call. = FALSE)
-      }
-      transaction$backup[[index]] <- backup
-    }
-    if (!file.rename(transaction$temporary[[index]], target)) {
-      stop(sprintf("Could not publish global metadata `%s`.", target), call. = FALSE)
-    }
-    transaction$temporary[[index]] <- ""
-    transaction$installed[[index]] <- TRUE
-  }
-  installed <- TRUE
-  transaction
-}
-
-wlv_finalize_global_metadata <- function(transaction) {
-  backups <- transaction$backup[nzchar(transaction$backup)]
-  if (length(backups)) {
-    unlink(backups, force = TRUE)
-    remaining <- backups[file.exists(backups)]
-    if (length(remaining)) {
-      warning(
-        sprintf("Could not remove global metadata backup(s): %s.", paste(remaining, collapse = ", ")),
-        call. = FALSE
-      )
-    }
-  }
-  invisible(transaction)
 }

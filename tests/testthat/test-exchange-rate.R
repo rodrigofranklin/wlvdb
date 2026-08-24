@@ -136,9 +136,9 @@ test_that("invalid exchange-rate aggregates abort without a fallback", {
   )
 })
 
-test_that("the legacy exchange helper retains sector-level v0.9 values", {
+test_that("the historical exchange helper retains sector-level v0.9 values", {
   fixture <- wlv_exchange_test_fixture()
-  result <- exchange_contract_environment$wlv_exchange_rate_by_sector_legacy(
+  result <- exchange_contract_environment$wlv_exchange_rate_by_sector_v09(
     fixture$numerator,
     fixture$denominator
   )
@@ -150,50 +150,48 @@ test_that("the legacy exchange helper retains sector-level v0.9 values", {
   expect_gt(length(unique(result["2000", , "JPN"])), 1L)
 })
 
-test_that("v0.9 methods explicitly resolve the legacy exchange module", {
-  execution_environment <- new.env(parent = baseenv())
-  sys.source(
-    file.path(wlv_test_root, "R", "lib", "execution.R"),
-    envir = execution_environment
-  )
-  required <- c(
-    "names", "sector_solution", "country_solution", "stage", "order"
+test_that("v0.9 methods explicitly replace the native exchange modules", {
+  runtime <- wlv_test_load_runtime()
+
+  expected <- list(
+    wiodr13v09 = c(
+      "indicator.exchange.r.us.v09",
+      "indicator.exchange.r.id.v09"
+    ),
+    wiodr16v09 = c(
+      "indicator.exchange.r.us.v09",
+      "indicator.exchange.r.id.v09"
+    ),
+    wiodr13 = c(
+      "indicator.exchange.r.us.wiod",
+      "indicator.exchange.r.id.wiod"
+    ),
+    wiodr16 = c(
+      "indicator.exchange.r.us.wiod",
+      "indicator.exchange.r.id.wiod"
+    )
   )
 
-  for (method in c("wiodr13v09", "wiodr16v09")) {
+  for (method in names(expected)) {
     source <- sub("v09$", "", method)
-    resolved <- execution_environment$wlv_effective_parameter_group(
+    resolved <- runtime$wlv_resolve_module_config(
       root = wlv_test_root,
       method = method,
-      source = source,
-      group = "solutions",
-      required_columns = required
+      source = source
     )
-    expect_identical(
-      resolved$sector_solution[resolved$names == "exchange.r.us"],
-      "wiodr13/exchange.r.us.v09.R"
-    )
-    expect_identical(
-      resolved$sector_solution[resolved$names == "exchange.r.id"],
-      "wiodr13/exchange.r.id.v09.R"
-    )
-  }
+    rows <- resolved[match(
+      c("indicator.exchange.r.us", "indicator.exchange.r.id"),
+      resolved$instance_id
+    ), , drop = FALSE]
 
-  for (method in c("wiodr13", "wiodr16")) {
-    resolved <- execution_environment$wlv_effective_parameter_group(
-      root = wlv_test_root,
-      method = method,
-      source = method,
-      group = "solutions",
-      required_columns = required
-    )
-    expect_identical(
-      resolved$sector_solution[resolved$names == "exchange.r.us"],
-      "wiodr13/exchange.r.us.R"
-    )
-    expect_identical(
-      resolved$sector_solution[resolved$names == "exchange.r.id"],
-      "wiodr13/exchange.r.id.R"
+    expect_false(anyNA(rows$instance_id), info = method)
+    expect_identical(rows$module_id, unname(expected[[method]]), info = method)
+    expect_true(all(rows$action == "add"), info = method)
+    expect_no_error(
+      runtime$wlv_native_assert_registry_covers_config(
+        runtime$wlv_native_registry(),
+        resolved
+      )
     )
   }
 })

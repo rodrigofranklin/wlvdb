@@ -55,11 +55,15 @@ jobs:
           source("renv/activate.R")
           files <- list.files("R", pattern = "\\.[Rr]$", recursive = TRUE, full.names = TRUE)
           invisible(lapply(files, parse))
-          source("R/main.R")
+          bootstrap <- new.env(parent = baseenv())
+          sys.source("R/bootstrap.R", envir = bootstrap)
+          runtime <- bootstrap$wlv_load_runtime(".")
           stopifnot(
-            is.function(prepare_wlv),
-            is.function(get_wlv),
-            is.function(recalc_wlv)
+            is.function(runtime$prepare_wlv),
+            is.function(runtime$get_wlv),
+            is.function(runtime$recalc_wlv),
+            identical(parent.env(runtime), baseenv()),
+            environmentIsLocked(runtime)
           )
       - name: Run unit and synthetic integration tests
         shell: Rscript {0}

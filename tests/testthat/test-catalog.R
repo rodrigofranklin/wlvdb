@@ -24,6 +24,7 @@ wlv_make_catalog_fixture <- function() {
     file.path(root, "catalog"),
     file.path(root, "methods", "demo"),
     file.path(root, "parameters", "raw_demo"),
+    file.path(root, "config", "outputs", "sources"),
     file.path(root, "R", "utils"),
     file.path(root, "R", "lib"),
     file.path(root, "docs"),
@@ -41,7 +42,7 @@ wlv_make_catalog_fixture <- function() {
     parameter_set = "raw_demo",
     data_dir = "source_data/demo_source",
     can_prepare = "TRUE",
-    preparer = "R/utils/prepare_demo_data.R",
+    preparation_task = "demo_source",
     validator_script = "R/lib/demo_validation.R",
     validator_function = "wlv_validate_demo_prepared",
     artifact_profile = "demo_core",
@@ -177,16 +178,24 @@ wlv_make_catalog_fixture <- function() {
     file.path(root, "docs", "demo.md")
   )
   wlv_catalog_test_write(
-    file.path(root, "parameters", "raw_demo", "_source_solutions.csv"),
+    file.path(root, "config", "outputs", "method_profiles.csv"),
+    data.frame(method = "demo", profile = "demo_standard")
+  )
+  wlv_catalog_test_write(
+    file.path(root, "config", "outputs", "profiles.csv"),
+    data.frame(profile = "demo_standard", source = "demo_source")
+  )
+  wlv_catalog_test_write(
+    file.path(root, "config", "outputs", "overrides.csv"),
     data.frame(
-      names = "demo.value",
-      sector_solution = "DEMO",
-      country_solution = "sum",
-      stage = "0",
-      order = "1",
-      stringsAsFactors = FALSE,
-      check.names = FALSE
+      profile = "demo_standard",
+      position = "1",
+      indicator = "demo.value"
     )
+  )
+  wlv_catalog_test_write(
+    file.path(root, "config", "outputs", "sources", "demo_source.csv"),
+    data.frame(indicator = "demo.value")
   )
   writeLines(
     "# Demonstration method test",
@@ -773,18 +782,19 @@ test_that("unit sidecars overlay resolved aggregation rows deterministically", {
 
   extra <- resolved[seq_len(2L), , drop = FALSE]
   extra$indicator <- "experimental.extra"
-  overlaid <- catalog_environment$wlv_catalog_unit_contract_sidecar(
-    catalog,
-    "wiodr13_units_v1",
-    indicators = c(contract$units$indicator, "experimental.extra"),
-    require_exact = FALSE,
-    resolved_aggregations = rbind(resolved, extra)
+  expect_error(
+    catalog_environment$wlv_catalog_unit_contract_sidecar(
+      catalog,
+      "wiodr13_units_v1",
+      indicators = c(contract$units$indicator, "experimental.extra"),
+      resolved_aggregations = rbind(resolved, extra)
+    ),
+    "does not exactly match",
+    fixed = TRUE
   )
-  expect_false("experimental.extra" %in% overlaid$indicator)
-  expect_identical(overlaid$aggregation_notes, resolved$notes)
 })
 
-test_that("stable typed aggregation is authoritative over legacy routing", {
+test_that("stable typed aggregation is independent from retired routing fragments", {
   root <- wlv_make_catalog_fixture()
   on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
   path <- file.path(

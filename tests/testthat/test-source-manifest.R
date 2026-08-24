@@ -168,10 +168,17 @@ test_that("result provenance snapshots block unsafe recalculations", {
   dir.create(result_dir)
   manifest <- wlv_build_fixture_manifest(fixture)
 
-  path <- source_manifest_environment$wlv_write_result_source_provenance(
-    result_dir,
-    "wiod-test",
-    manifest
+  path <- file.path(result_dir, "_source_provenance.csv")
+  provenance_payload <- source_manifest_environment$wlv_source_provenance(
+    manifest,
+    "wiod-test"
+  )
+  utils::write.csv2(
+    provenance_payload,
+    path,
+    row.names = FALSE,
+    na = "",
+    fileEncoding = "UTF-8"
   )
   expect_identical(
     path,
@@ -230,7 +237,7 @@ test_that("result provenance snapshots block unsafe recalculations", {
       manifest,
       "wiod-test"
     ),
-    "legacy result has no source-provenance sidecar",
+    "parent run has no source-provenance sidecar",
     fixed = TRUE
   )
 })
