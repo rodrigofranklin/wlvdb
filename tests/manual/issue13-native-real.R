@@ -16,6 +16,10 @@ arguments <- commandArgs(trailingOnly = TRUE)
 method <- if (length(arguments)) arguments[[1L]] else "wiodr13"
 baseline_dir <- if (length(arguments) >= 2L) arguments[[2L]] else NULL
 root <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
+sys.source(
+  file.path(root, "tests", "manual", "issue13-native-parity.R"),
+  envir = environment()
+)
 output_root <- if (length(arguments) >= 3L) {
   arguments[[3L]]
 } else {
@@ -462,12 +466,18 @@ if (!is.null(baseline_dir)) {
   )
   print(indicators_differing, row.names = FALSE)
   baseline_metadata <- readRDS(file.path(baseline_dir, "meta_indicators.RDS"))
+  metadata_identical <- identical(indicator_metadata, baseline_metadata)
   phase(sprintf(
     "indicator metadata identical: %s (candidate=%d x %d; baseline=%d x %d)",
-    identical(indicator_metadata, baseline_metadata),
+    metadata_identical,
     nrow(indicator_metadata), ncol(indicator_metadata),
     nrow(baseline_metadata), ncol(baseline_metadata)
   ))
+  wlv_assert_issue13_parity(
+    comparison,
+    indicators_differing,
+    metadata_identical
+  )
 }
 
 phase("manual native real-data gate finished")

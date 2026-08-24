@@ -10,6 +10,10 @@ if (length(arguments) != 2L) {
 candidate_dir <- normalizePath(arguments[[1L]], winslash = "/", mustWork = TRUE)
 baseline_dir <- normalizePath(arguments[[2L]], winslash = "/", mustWork = TRUE)
 root <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
+sys.source(
+  file.path(root, "tests", "manual", "issue13-native-parity.R"),
+  envir = environment()
+)
 runtime <- new.env(parent = baseenv())
 sys.source(file.path(root, "R", "lib", "functions.R"), envir = runtime)
 
@@ -281,8 +285,11 @@ print(indicator_comparisons, row.names = FALSE)
 
 candidate_metadata <- readRDS(file.path(candidate_dir, "meta_indicators.RDS"))
 baseline_metadata <- readRDS(file.path(baseline_dir, "meta_indicators.RDS"))
-phase(sprintf("indicator metadata identical: %s", identical(
-  candidate_metadata,
-  baseline_metadata
-)))
+metadata_identical <- identical(candidate_metadata, baseline_metadata)
+phase(sprintf("indicator metadata identical: %s", metadata_identical))
+wlv_assert_issue13_parity(
+  comparisons,
+  indicator_comparisons,
+  metadata_identical
+)
 phase("persistent native comparison finished")
