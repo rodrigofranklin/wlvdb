@@ -29,6 +29,7 @@ wlv_native_exchange_us_spec <- function(id, historical_v09 = FALSE) {
     metadata = metadata,
     run = local({
       historical_formula <- historical_v09
+      module_name <- id
       function(ctx) {
         source <- ctx$input("source")
         lists <- ctx$input("lists")
@@ -38,7 +39,8 @@ wlv_native_exchange_us_spec <- function(id, historical_v09 = FALSE) {
           wlv_exchange_rate_by_sector_v09(
             numerator,
             denominator,
-            runtime = ctx$service("contract_runtime")
+            runtime = ctx$service("contract_runtime"),
+            module = module_name
           )
         } else {
           wlv_exchange_rate_by_country(numerator, denominator)
@@ -306,7 +308,8 @@ wlv_indicator_hours_worked_emp_s_hr_wiodr16_spec <- wlv_native_indicator_spec(
       ctx$service("contract_runtime"),
       wlv_native_source_variable(ctx$input("source"), "H_EMPE", lists),
       wlv_native_source_variable(ctx$input("source"), "EMPE", lists),
-      wlv_native_source_variable(ctx$input("source"), "EMP", lists)
+      wlv_native_source_variable(ctx$input("source"), "EMP", lists),
+      module = "indicator.hours_worked.emp.s.hr.wiodr16"
     )
     value <- wlv_native_sector_array(value, lists)
     wlv_module_result(outputs = list(value = value))

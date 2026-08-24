@@ -314,6 +314,109 @@ wlv_native_public_e2e_write_project_contract <- function(root) {
       check.names = FALSE
     )
   )
+  wlv_native_public_e2e_write_csv(
+    file.path(root, "config", "contracts", "scientific_method_profiles.csv"),
+    data.frame(
+      method = method,
+      output_profile = "synthetic_output",
+      scientific_profile = "synthetic_v1",
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+  )
+  wlv_native_public_e2e_write_csv(
+    file.path(root, "config", "contracts", "scientific_profiles.csv"),
+    data.frame(
+      scientific_profile = "synthetic_v1",
+      source = source,
+      leontief_zero_profile = "synthetic_zero_v1",
+      leontief_signed_profile = "synthetic_signed_v1",
+      nonfinite_resolution_profile = "nonfinite_none_v1",
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+  )
+  wlv_native_public_e2e_write_csv(
+    file.path(root, "config", "contracts", "leontief_zero_profiles.csv"),
+    data.frame(
+      leontief_zero_profile = "synthetic_zero_v1",
+      exception_count = "0",
+      coordinate_md5 = "d41d8cd98f00b204e9800998ecf8427e",
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+  )
+  wlv_native_public_e2e_write_csv(
+    file.path(root, "config", "contracts", "leontief_zero_counts.csv"),
+    data.frame(
+      leontief_zero_profile = character(),
+      year = character(),
+      output = character(),
+      exception_count = character(),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+  )
+  wlv_native_public_e2e_write_csv(
+    file.path(root, "config", "contracts", "leontief_signed_profiles.csv"),
+    data.frame(
+      leontief_signed_profile = rep("synthetic_signed_v1", 2L),
+      year = c("2000", "2001"),
+      coefficient_negative_count = rep("0", 2L),
+      certificate_type = rep("productivity_nonnegative", 2L),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+  )
+  wlv_native_public_e2e_write_csv(
+    file.path(
+      root,
+      "config",
+      "contracts",
+      "nonfinite_resolution_profiles.csv"
+    ),
+    data.frame(
+      nonfinite_resolution_profile = "nonfinite_none_v1",
+      action = "reject",
+      expected_count = "0",
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+  )
+  wlv_native_public_e2e_write_csv(
+    file.path(
+      root,
+      "config",
+      "contracts",
+      "nonfinite_resolution_groups.csv"
+    ),
+    data.frame(
+      nonfinite_resolution_profile = character(),
+      binding = character(),
+      indicator = character(),
+      kind = character(),
+      module = character(),
+      expected_count = character(),
+      coordinate_sha256 = character(),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+  )
+  wlv_native_public_e2e_write_csv(
+    file.path(root, "config", "contracts", "nonfinite_resolution_rules.csv"),
+    data.frame(
+      nonfinite_resolution_profile = character(),
+      artifact = character(),
+      indicator = character(),
+      year = character(),
+      country = character(),
+      sector = character(),
+      from = character(),
+      to = character(),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+  )
   invisible(root)
 }
 

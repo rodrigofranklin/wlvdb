@@ -1302,6 +1302,7 @@ wlv_catalog_input_paths <- function(root) {
     "R",
     "catalog",
     file.path("config", "outputs"),
+    file.path("config", "contracts"),
     file.path("contracts", "units"),
     "methods",
     "parameters"

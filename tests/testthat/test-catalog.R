@@ -836,6 +836,19 @@ test_that("constant compensation is declared in additive 2000 USD", {
   }
 })
 
+test_that("scientific profile declarations are immutable catalog inputs", {
+  catalog <- catalog_environment$wlv_load_catalog(wlv_test_root)
+  inventory <- attr(catalog, "wlv_catalog_input_inventory", exact = TRUE)
+  expect_true(all(c(
+    "config/contracts/scientific_method_profiles.csv",
+    "config/contracts/scientific_profiles.csv",
+    "config/contracts/leontief_zero_profiles.csv",
+    "config/contracts/leontief_signed_profiles.csv",
+    "config/contracts/nonfinite_resolution_profiles.csv",
+    "config/contracts/nonfinite_resolution_groups.csv"
+  ) %in% names(inventory)))
+})
+
 test_that("unit contract schemas and foreign keys reject drift", {
   cases <- list(
     list(

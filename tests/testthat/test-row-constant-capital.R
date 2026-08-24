@@ -232,7 +232,8 @@ test_that("modern ROW assumptions rebuild and register two years of constant cap
   set_country_indicator("go_price.r.id", "USA", c(1, 1, 1.25, 1.25))
   set_country_indicator("go_price.r.id", "IND", c(1, 1, 1.25, 1.25))
 
-  environment$wlv_contract_runtime <- environment$wlv_new_contract_runtime(
+  environment$wlv_contract_runtime <- wlv_test_contract_runtime(
+    environment,
     method = "synthetic",
     source = "synthetic",
     policy = environment$wlv_strict_missingness_policy(

@@ -962,7 +962,48 @@ wlv_build_run_manifest <- function(
     created_at_utc = wlv_publication_timestamp(),
     parent_run_id = NULL,
     output_contract_id = wlv_output_contract_id,
-    output_contract_version = wlv_output_contract_version) {
+    output_contract_version = wlv_output_contract_version,
+    validated_artifacts = NULL) {
+  artifact_records <- if (is.null(validated_artifacts)) {
+    wlv_publication_build_artifacts(
+      run_root,
+      artifacts,
+      artifact_roles,
+      allow_empty = FALSE,
+      excluded_paths = wlv_run_manifest_filename
+    )
+  } else {
+    records <- wlv_publication_validate_artifact_records(
+      validated_artifacts,
+      label = "validated artifacts"
+    )
+    declared_paths <- wlv_publication_normalize_relative_paths(
+      artifacts,
+      "artifacts"
+    )
+    if (!is.character(artifact_roles) || anyNA(artifact_roles) ||
+        length(declared_paths) != length(artifact_roles)) {
+      stop("Artifacts and roles must have equal lengths.", call. = FALSE)
+    }
+    order_index <- order(declared_paths, method = "radix")
+    declared_paths <- declared_paths[order_index]
+    declared_roles <- unname(artifact_roles[order_index])
+    observed_paths <- vapply(records, `[[`, character(1L), "path")
+    observed_roles <- vapply(records, `[[`, character(1L), "role")
+    if (!identical(observed_paths, declared_paths) ||
+        !identical(observed_roles, declared_roles)) {
+      stop(
+        "Validated artifact records differ from the declared run inventory.",
+        call. = FALSE
+      )
+    }
+    wlv_publication_resolve_files(
+      run_root,
+      observed_paths,
+      "validated artifacts"
+    )
+    records
+  }
   manifest <- list(
     schema = wlv_run_manifest_schema,
     schema_version = wlv_publication_schema_version,
@@ -977,13 +1018,7 @@ wlv_build_run_manifest <- function(
     ),
     result = wlv_publication_normalize_result(result),
     execution = wlv_publication_normalize_execution(execution),
-    artifacts = wlv_publication_build_artifacts(
-      run_root,
-      artifacts,
-      artifact_roles,
-      allow_empty = FALSE,
-      excluded_paths = wlv_run_manifest_filename
-    )
+    artifacts = artifact_records
   )
   manifest$result_id <- wlv_publication_calculate_result_id(
     manifest$method,

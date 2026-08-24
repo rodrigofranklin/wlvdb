@@ -148,6 +148,27 @@ test_that("the historical exchange helper retains sector-level v0.9 values", {
     c(100, 50, 20)
   )
   expect_gt(length(unique(result["2000", , "JPN"])), 1L)
+
+  runtime <- wlv_test_contract_runtime(
+    exchange_contract_environment,
+    method = "wiodr13v09",
+    source = "wiodr13",
+    policy = exchange_contract_environment$wlv_strict_missingness_policy(
+      source = "wiodr13",
+      policy_id = "exchange_v09_test"
+    )
+  )
+  invalid <- fixture$numerator
+  invalid["2000", "A", "JPN"] <- 0
+  exchange_contract_environment$wlv_exchange_rate_by_sector_v09(
+    invalid,
+    fixture$denominator,
+    runtime = runtime
+  )
+  expect_identical(
+    unique(runtime$anomalies$module),
+    "indicator.exchange.r.us.v09"
+  )
 })
 
 test_that("v0.9 methods explicitly replace the native exchange modules", {

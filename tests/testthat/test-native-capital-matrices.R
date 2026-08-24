@@ -147,7 +147,8 @@ wlv_test_run_native_capital <- function(spec, fixture, method) {
   } else {
     runtime$wlv_wiodr13_missingness_policy()
   }
-  contract_runtime <- runtime$wlv_new_contract_runtime(
+  contract_runtime <- wlv_test_contract_runtime(
+    runtime,
     method = "synthetic",
     source = method,
     policy = policy

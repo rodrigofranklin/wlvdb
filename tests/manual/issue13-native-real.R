@@ -151,10 +151,17 @@ policy <- switch(
   wiodr16_v1 = runtime$wlv_wiodr16_missingness_policy(),
   runtime$wlv_strict_missingness_policy(source, source_policy)
 )
+scientific_profile <- runtime$wlv_native_scientific_profile(
+  root,
+  catalog,
+  method,
+  indicators
+)
 contract_runtime <- runtime$wlv_new_contract_runtime(
   method = method,
   source = source,
-  policy = policy
+  policy = policy,
+  scientific_profile = scientific_profile
 )
 
 phase(sprintf("running %d native graph nodes", length(plan$order)))

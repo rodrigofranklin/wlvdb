@@ -9,6 +9,195 @@ for (script in c(
   )
 }
 
+wlv_scientific_test_profile <- function(
+    method = "demo",
+    source = "demo",
+    years = "2000",
+    signed_counts = rep(0L, length(years))) {
+  scientific_validation_environment$wlv_scientific_profile_contract(
+    id = paste0(method, "_scientific_v1"),
+    method = method,
+    source = source,
+    output_profile = paste0(method, "_output"),
+    leontief_zero = list(
+      id = paste0(method, "_zero_v1"),
+      exception_count = 0L,
+      coordinate_md5 = "d41d8cd98f00b204e9800998ecf8427e",
+      counts = data.frame(
+        year = character(), output = character(),
+        exception_count = integer(), stringsAsFactors = FALSE
+      )
+    ),
+    leontief_signed = list(
+      id = paste0(method, "_signed_v1"),
+      rows = data.frame(
+        year = years,
+        coefficient_negative_count = as.integer(signed_counts),
+        certificate_type = ifelse(
+          signed_counts > 0L,
+          "absolute_convergence_signed",
+          "productivity_nonnegative"
+        ),
+        stringsAsFactors = FALSE
+      )
+    ),
+    nonfinite_resolution = list(
+      id = "nonfinite_none_v1",
+      action = "reject",
+      expected_count = 0L,
+      groups = data.frame(
+        binding = character(), indicator = character(),
+        kind = character(), module = character(),
+        expected_count = integer(), coordinate_sha256 = character(),
+        stringsAsFactors = FALSE
+      ),
+      rules = data.frame(
+        artifact = character(), indicator = character(),
+        year = character(), country = character(), sector = character(),
+        from = character(), to = character(), stringsAsFactors = FALSE
+      )
+    )
+  )
+}
+
+test_that("signed Leontief diagnostics are selected by explicit profile", {
+  e <- scientific_validation_environment
+  profile <- wlv_scientific_test_profile(
+    method = "demo",
+    source = "demo",
+    years = c("2005", "2006", "2007"),
+    signed_counts = c(0L, 397L, 0L)
+  )
+  observed <- profile$leontief_signed$rows
+  expect_identical(
+    e$wlv_scientific_validate_leontief_signed_profile(
+      observed,
+      profile,
+      "demo"
+    ),
+    "2006"
+  )
+
+  wrong_count <- observed
+  wrong_count$coefficient_negative_count[[2L]] <- 396L
+  expect_error(
+    e$wlv_scientific_validate_leontief_signed_profile(
+      wrong_count,
+      profile,
+      "demo"
+    ),
+    "differs from explicit profile"
+  )
+
+  wrong_certificate <- observed
+  wrong_certificate$certificate_type[[2L]] <- "productivity_nonnegative"
+  expect_error(
+    e$wlv_scientific_validate_leontief_signed_profile(
+      wrong_certificate,
+      profile,
+      "demo"
+    ),
+    "differs from explicit profile"
+  )
+
+  zero_profile <- wlv_scientific_test_profile(
+    method = "zerodep_1",
+    source = "wiodr13",
+    years = c("2005", "2006", "2007")
+  )
+  expect_error(
+    e$wlv_scientific_validate_leontief_signed_profile(
+      observed,
+      zero_profile,
+      "zerodep_1"
+    ),
+    "differs from explicit profile"
+  )
+})
+
+test_that("non-finite sidecars pin module identity and every profiled group", {
+  e <- scientific_validation_environment
+  base_profile <- wlv_scientific_test_profile()
+  coordinate_sha256 <- e$wlv_nonfinite_coordinate_sha256("2000|AAA|S1")
+  profile <- e$wlv_scientific_profile_contract(
+    id = "demo_nonfinite_scientific_v1",
+    method = "demo",
+    source = "demo",
+    output_profile = "demo_output",
+    leontief_zero = base_profile$leontief_zero,
+    leontief_signed = base_profile$leontief_signed,
+    nonfinite_resolution = list(
+      id = "demo_nonfinite_v1",
+      action = "replace_nan_with_zero",
+      expected_count = 1L,
+      groups = data.frame(
+        binding = "skill",
+        indicator = "skill",
+        kind = "NaN",
+        module = "module.skill",
+        expected_count = 1L,
+        coordinate_sha256 = coordinate_sha256,
+        stringsAsFactors = FALSE
+      ),
+      rules = data.frame(
+        artifact = "sea_sectors",
+        indicator = "skill",
+        year = "2000",
+        country = "AAA",
+        sector = "S1",
+        from = "NaN",
+        to = "0",
+        stringsAsFactors = FALSE
+      )
+    )
+  )
+  diagnostic <- data.frame(
+    method = "demo",
+    scientific_profile = "demo_nonfinite_scientific_v1",
+    nonfinite_resolution_profile = "demo_nonfinite_v1",
+    action = "replace_nan_with_zero",
+    module = "module.skill",
+    binding = "skill",
+    indicator = "skill",
+    kind = "NaN",
+    resolved_count = 1L,
+    coordinate_sha256 = coordinate_sha256,
+    stringsAsFactors = FALSE
+  )[e$wlv_nonfinite_resolution_diagnostic_columns()]
+  diagnostics <- list(
+    `_nonfinite_resolution_diagnostics.csv` = diagnostic
+  )
+  check <- e$wlv_scientific_validate_nonfinite_resolution(
+    diagnostics,
+    profile,
+    "demo"
+  )
+  expect_identical(check$observations, 1L)
+
+  wrong_module <- diagnostics
+  wrong_module[[1L]]$module <- "module.other"
+  expect_error(
+    e$wlv_scientific_validate_nonfinite_resolution(
+      wrong_module,
+      profile,
+      "demo"
+    ),
+    "published transitions differ from explicit profile"
+  )
+  expect_error(
+    e$wlv_scientific_validate_nonfinite_resolution(list(), profile, "demo"),
+    "requires the non-finite resolution sidecar"
+  )
+  expect_error(
+    e$wlv_scientific_validate_nonfinite_resolution(
+      diagnostics,
+      base_profile,
+      "demo"
+    ),
+    "strict profile published an undeclared resolution sidecar"
+  )
+})
+
 wlv_scientific_test_arrays <- function(method = "demo") {
   years <- "2000"
   indicators <- c(
@@ -443,6 +632,11 @@ test_that("scientific checks and sidecar inventory are deterministic", {
   diagnostics <- list(
     `_leontief_diagnostics.csv` = solved$diagnostics
   )
+  scientific_profile <- wlv_scientific_test_profile(
+    method = values$method,
+    source = "demo",
+    years = "2000"
+  )
   build <- function() scientific_validation_environment$
     wlv_finalize_scientific_checks(
       checks = list(base_checks, io_checks),
@@ -451,7 +645,8 @@ test_that("scientific checks and sidecar inventory are deterministic", {
       years = "2000",
       io_years = "2000",
       diagnostics = diagnostics,
-      sea_sectors = values$sea_sectors
+      sea_sectors = values$sea_sectors,
+      scientific_profile = scientific_profile
     )
   first <- build()
   second <- build()
@@ -471,7 +666,8 @@ test_that("scientific checks and sidecar inventory are deterministic", {
       years = "2000",
       io_years = "2000",
       diagnostics = stale_diagnostics,
-      sea_sectors = values$sea_sectors
+      sea_sectors = values$sea_sectors,
+      scientific_profile = scientific_profile
     ),
     "diagnostic fingerprint does not match",
     fixed = TRUE

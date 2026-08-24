@@ -1329,12 +1329,152 @@ wlv_scientific_validate_lambda_fingerprints <- function(
   )
 }
 
+wlv_scientific_validate_leontief_signed_profile <- function(
+    leontief,
+    scientific_profile,
+    method) {
+  expected <- scientific_profile$leontief_signed$rows
+  valid <-
+    is.data.frame(leontief) &&
+    all(c(
+      "year", "coefficient_negative_count", "certificate_type"
+    ) %in% names(leontief)) &&
+    identical(as.character(leontief$year), as.character(expected$year)) &&
+    identical(
+      as.integer(leontief$coefficient_negative_count),
+      as.integer(expected$coefficient_negative_count)
+    ) &&
+    identical(
+      as.character(leontief$certificate_type),
+      as.character(expected$certificate_type)
+    )
+  if (!valid) {
+    observed <- if (is.data.frame(leontief) && all(c(
+      "year", "coefficient_negative_count", "certificate_type"
+    ) %in% names(leontief))) {
+      paste(
+        leontief$year,
+        leontief$coefficient_negative_count,
+        leontief$certificate_type,
+        sep = ":"
+      )
+    } else {
+      "invalid-schema"
+    }
+    wlv_abort_scientific_validation(
+      method,
+      "leontief_signed_profile",
+      "_leontief_diagnostics.csv",
+      reason = sprintf(
+        paste0(
+          "signed coefficient profile differs from explicit profile `%s` ",
+          "(observed %s)"
+        ),
+        scientific_profile$leontief_signed$id,
+        paste(observed, collapse = ",")
+      )
+    )
+  }
+  as.character(expected$year[expected$coefficient_negative_count > 0L])
+}
+
+wlv_scientific_validate_nonfinite_resolution <- function(
+    diagnostics,
+    scientific_profile,
+    method) {
+  name <- "_nonfinite_resolution_diagnostics.csv"
+  resolution <- scientific_profile$nonfinite_resolution
+  if (identical(resolution$action, "reject")) {
+    if (name %in% names(diagnostics)) {
+      wlv_abort_scientific_validation(
+        method,
+        "nonfinite_resolution",
+        name,
+        reason = "a strict profile published an undeclared resolution sidecar"
+      )
+    }
+    return(NULL)
+  }
+  if (!name %in% names(diagnostics)) {
+    wlv_abort_scientific_validation(
+      method,
+      "nonfinite_resolution",
+      name,
+      reason = sprintf(
+        "profile `%s` requires the non-finite resolution sidecar",
+        resolution$id
+      )
+    )
+  }
+  observed <- tryCatch(
+    wlv_normalize_nonfinite_resolution_diagnostics(diagnostics[[name]]),
+    error = function(error) {
+      wlv_abort_scientific_validation(
+        method,
+        "nonfinite_resolution",
+        name,
+        reason = conditionMessage(error)
+      )
+    }
+  )
+  expected <- resolution$groups[
+    order(resolution$groups$binding, resolution$groups$kind, method = "radix"),
+    ,
+    drop = FALSE
+  ]
+  keys_match <- identical(observed$binding, expected$binding) &&
+    identical(observed$indicator, expected$indicator) &&
+    identical(observed$kind, expected$kind)
+  values_match <- keys_match &&
+    identical(observed$module, expected$module) &&
+    identical(observed$resolved_count, expected$expected_count) &&
+    identical(observed$coordinate_sha256, expected$coordinate_sha256)
+  identity_match <-
+    all(observed$method == method) &&
+    all(observed$scientific_profile == scientific_profile$id) &&
+    all(observed$nonfinite_resolution_profile == resolution$id) &&
+    all(observed$action == resolution$action)
+  if (!values_match || !identity_match ||
+      sum(observed$resolved_count) != resolution$expected_count) {
+    wlv_abort_scientific_validation(
+      method,
+      "nonfinite_resolution",
+      name,
+      reason = sprintf(
+        "published transitions differ from explicit profile `%s`",
+        resolution$id
+      )
+    )
+  }
+  wlv_scientific_check_row(
+    method,
+    "nonfinite_resolution",
+    name,
+    observations = sum(observed$resolved_count),
+    detail = sprintf(
+      "Profile `%s` closed %s declared historical transition(s).",
+      resolution$id,
+      sum(observed$resolved_count)
+    )
+  )
+}
+
 wlv_scientific_validate_diagnostics <- function(
     diagnostics,
     method,
     source,
     years,
-    sea_sectors) {
+    sea_sectors,
+    scientific_profile) {
+  if (is.null(scientific_profile)) {
+    wlv_abort_scientific_validation(
+      method,
+      "scientific_profile",
+      "config/contracts/scientific_profiles.csv",
+      reason = "an explicit scientific profile is required"
+    )
+  }
+  wlv_assert_scientific_profile(scientific_profile, method, source)
   if (!is.list(diagnostics) || is.null(names(diagnostics))) {
     wlv_abort_scientific_validation(
       method, "diagnostic_inventory", "scientific_sidecars",
@@ -1365,52 +1505,11 @@ wlv_scientific_validate_diagnostics <- function(
     sea_sectors = sea_sectors,
     method = method
   )
-  signed <- leontief$coefficient_negative_count > 0
-  if (identical(method, "wiodr13")) {
-    expected_signed <- leontief$year == "2006"
-    valid_signed_profile <-
-      identical(signed, expected_signed) &&
-      identical(
-        as.integer(leontief$coefficient_negative_count[expected_signed]),
-        397L
-      ) &&
-      all(
-        leontief$certificate_type[expected_signed] ==
-          "absolute_convergence_signed"
-      ) &&
-      all(
-        leontief$certificate_type[!expected_signed] ==
-          "productivity_nonnegative"
-      )
-  } else {
-    valid_signed_profile <-
-      !any(signed) &&
-      all(leontief$certificate_type == "productivity_nonnegative")
-  }
-  if (!valid_signed_profile) {
-    observed <- paste(
-      leontief$year,
-      leontief$coefficient_negative_count,
-      leontief$certificate_type,
-      sep = ":"
-    )
-    wlv_abort_scientific_validation(
-      method,
-      "leontief_signed_profile",
-      leontief_name,
-      reason = sprintf(
-        "signed coefficient profile is not closed for this method (observed %s)",
-        paste(observed, collapse = ",")
-      )
-    )
-  }
-  signed_years <- if (
-    "coefficient_negative_count" %in% names(leontief)
-  ) {
-    as.character(leontief$year[leontief$coefficient_negative_count > 0])
-  } else {
-    character()
-  }
+  signed_years <- wlv_scientific_validate_leontief_signed_profile(
+    leontief,
+    scientific_profile,
+    method
+  )
   rows <- list(fingerprint_check, wlv_scientific_check_row(
     method,
     "leontief_diagnostics",
@@ -1448,6 +1547,14 @@ wlv_scientific_validate_diagnostics <- function(
       observations = nrow(leontief),
       detail = "All nonnegative coefficient systems passed the productivity certificate."
     )
+  }
+  nonfinite_check <- wlv_scientific_validate_nonfinite_resolution(
+    diagnostics,
+    scientific_profile,
+    method
+  )
+  if (!is.null(nonfinite_check)) {
+    rows[[length(rows) + 1L]] <- nonfinite_check
   }
 
   gfcf_names <- c(
@@ -1502,7 +1609,8 @@ wlv_finalize_scientific_checks <- function(
     years,
     io_years,
     diagnostics,
-    sea_sectors) {
+    sea_sectors,
+    scientific_profile) {
   rows <- checks
   if (length(io_years)) {
     duplicated_years <- unique(io_years[duplicated(io_years)])
@@ -1538,7 +1646,8 @@ wlv_finalize_scientific_checks <- function(
     method = method,
     source = source,
     years = years,
-    sea_sectors = sea_sectors
+    sea_sectors = sea_sectors,
+    scientific_profile = scientific_profile
   )
   result <- do.call(rbind, rows)
   result <- result[order(
@@ -1554,5 +1663,5 @@ wlv_finalize_scientific_checks <- function(
 }
 
 wlv_scientific_sidecar_pattern <- function() {
-  "^_(gfcf_|leontief_|scientific_).*[.]csv$"
+  "^_(gfcf_|leontief_|nonfinite_resolution_|scientific_).*[.]csv$"
 }

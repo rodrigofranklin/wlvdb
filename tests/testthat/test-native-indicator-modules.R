@@ -178,6 +178,41 @@ test_that("auxiliary indicator instances follow deterministic conventions", {
     function(output) identical(output$predecessor$producer, "assumption.row"),
     logical(1L)
   )))
+
+  explicit <- native_indicator_environment$wlv_native_indicator_specs()
+  explicit_ids <- vapply(explicit, function(spec) spec$id, character(1L))
+  ochoa <- explicit[explicit_ids %in% c(
+    "indicator.complex_labour_multiplier.emp.r.un.ochoa_1",
+    "indicator.complex_labour_multiplier.empe.r.un.ochoa_1",
+    "indicator.complex_labour_multiplier.emp.r.un.ochoa_2",
+    "indicator.complex_labour_multiplier.empe.r.un.ochoa_2"
+  )]
+  expect_true(all(vapply(
+    ochoa,
+    function(spec) identical(spec$services, "contract_runtime"),
+    logical(1L)
+  )))
+  petrovic <- explicit[[match(
+    "indicator.complex_labour_multiplier.empe.r.un.petrovic",
+    explicit_ids
+  )]]
+  expect_identical(petrovic$services, "contract_runtime")
+  reduction_source <- readLines(
+    file.path(
+      wlv_test_root,
+      "R",
+      "modules",
+      "native",
+      "indicator_reduction_modules.R"
+    ),
+    warn = FALSE,
+    encoding = "UTF-8"
+  )
+  expect_false(any(grepl(
+    "is[.](nan|infinite)\\(",
+    reduction_source,
+    perl = TRUE
+  )))
 })
 
 test_that("indicator scopes and checkpoints expose the explicit cutover", {

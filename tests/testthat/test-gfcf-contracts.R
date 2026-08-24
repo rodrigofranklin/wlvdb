@@ -339,7 +339,8 @@ test_that("prepared WIOD sources match exact coordinate and magnitude profiles",
 })
 
 test_that("transformation observations round-trip through _anomalies.csv", {
-  runtime <- gfcf_contract_environment$wlv_new_contract_runtime(
+  runtime <- wlv_test_contract_runtime(
+    gfcf_contract_environment,
     method = "wiodr16",
     source = "wiodr16",
     policy = gfcf_contract_environment$wlv_wiodr16_missingness_policy()

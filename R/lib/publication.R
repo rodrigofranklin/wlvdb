@@ -795,6 +795,53 @@ wlv_result_artifact_role <- function(path) {
   "metadata"
 }
 
+wlv_capture_validated_run_artifacts <- function(staging) {
+  artifacts <- wlv_publication_list_files(
+    staging,
+    exclude = wlv_run_manifest_filename
+  )
+  roles <- vapply(artifacts, wlv_result_artifact_role, character(1L))
+  wlv_publication_build_artifacts(
+    root = staging,
+    artifacts = artifacts,
+    artifact_roles = roles,
+    allow_empty = FALSE,
+    excluded_paths = wlv_run_manifest_filename
+  )
+}
+
+wlv_assert_staged_validation_snapshot <- function(before, after) {
+  before <- wlv_publication_validate_artifact_records(
+    before,
+    label = "pre-validation artifacts"
+  )
+  after <- wlv_publication_validate_artifact_records(
+    after,
+    label = "validated artifacts"
+  )
+  mutable <- "_scientific_checks.csv"
+  before_paths <- vapply(before, `[[`, character(1L), "path")
+  after_paths <- vapply(after, `[[`, character(1L), "path")
+  if (!mutable %in% after_paths) {
+    stop(
+      "Staged validation did not produce `_scientific_checks.csv`.",
+      call. = FALSE
+    )
+  }
+  stable_before <- before[before_paths != mutable]
+  stable_after <- after[after_paths != mutable]
+  if (!identical(stable_before, stable_after)) {
+    stop(
+      paste0(
+        "Staged result artifacts changed while their semantic contracts ",
+        "were being validated."
+      ),
+      call. = FALSE
+    )
+  }
+  invisible(after)
+}
+
 wlv_run_manifest_result <- function(
     plan,
     method,
@@ -822,10 +869,13 @@ wlv_run_manifest_result <- function(
   } else {
     0L
   }
-  diagnostics <- sort(basename(list.files(
-    staging,
-    pattern = "^_(anomalies|gfcf_|leontief_|scientific_).*[.]csv$",
-    full.names = TRUE
+  diagnostics <- sort(unique(c(
+    basename(list.files(
+      staging,
+      pattern = wlv_scientific_sidecar_pattern(),
+      full.names = TRUE
+    )),
+    if (file.exists(anomaly_path)) "_anomalies.csv" else character()
   )), method = "radix")
   list(
     provenance = list(
@@ -879,6 +929,17 @@ wlv_promote_method_run <- function(
     parent_run_id = NULL,
     started_at,
     warnings = character()) {
+  validated_artifacts <- run_environment$wlv_validated_run_artifacts
+  if (is.null(validated_artifacts)) {
+    stop(
+      "Run promotion requires the semantic-validation artifact snapshot.",
+      call. = FALSE
+    )
+  }
+  validated_artifacts <- wlv_publication_validate_artifact_records(
+    validated_artifacts,
+    label = "validated artifacts"
+  )
   wlv_assert_plan_publication_inputs_unchanged(plan, method)
   method_record <- plan$methods[
     match(method, plan$methods$method),
@@ -921,8 +982,18 @@ wlv_promote_method_run <- function(
     execution = execution,
     parent_run_id = parent_run_id,
     output_contract_id = wlv_publication_output_contract_id,
-    output_contract_version = wlv_publication_output_contract_version
+    output_contract_version = wlv_publication_output_contract_version,
+    validated_artifacts = validated_artifacts
   )
+  if (!identical(manifest$artifacts, validated_artifacts)) {
+    stop(
+      paste0(
+        "Staged result artifacts changed after semantic validation and ",
+        "cannot be authenticated."
+      ),
+      call. = FALSE
+    )
+  }
   manifest_path <- file.path(staging, wlv_run_manifest_filename)
   wlv_write_run_manifest(manifest, manifest_path)
   wlv_verify_run_manifest(manifest, staging, reject_unlisted = TRUE)
@@ -960,6 +1031,11 @@ wlv_promote_method_run <- function(
       call. = FALSE
     )
   }
+  wlv_verify_run_manifest(
+    installed_manifest,
+    final,
+    reject_unlisted = TRUE
+  )
   run_environment$wlv_run_id <- installed_manifest$run_id
   run_environment$wlv_result_id <- installed_manifest$result_id
   run_environment$wlv_run_dir <- final
@@ -1122,6 +1198,12 @@ wlv_commit_release <- function(plan, run_environments) {
       call. = FALSE
     )
   }
+  wlv_verify_release_manifest(
+    installed_release,
+    release_root = final,
+    publication_root = paths$results,
+    reject_unlisted = TRUE
+  )
 
   marker <- wlv_build_channel_marker(
     channel = plan$channel,

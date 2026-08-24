@@ -53,6 +53,21 @@ wlv_native_reduction_skill_outputs <- function() {
   )
 }
 
+wlv_native_ochoa_average_wage <- function(ctx, indicator, module) {
+  wlv_resolve_profiled_zero_denominator(
+    ctx$service("contract_runtime"),
+    numerator = ctx$input("compensation"),
+    denominator = ctx$input("hours"),
+    binding = if (grepl("[.]empe[.]", indicator)) "empe" else "emp",
+    indicator = indicator,
+    artifact = "sea_sectors",
+    checkpoint = "after_stage_2",
+    stage = 2L,
+    module = module,
+    axes = c(year = 1L, sector = 2L, country = 3L)
+  )
+}
+
 wlv_native_reduction_ones_spec <- function(id, indicator, employee = FALSE) {
   wlv_native_indicator_spec(
     id,
@@ -126,21 +141,48 @@ wlv_indicator_complex_empe_alternative_2_spec <- wlv_native_indicator_spec(
     paste0("Reduction Problem: Alternative 2: considers a feasible, but arbitrary, ",
       "scale of multipliers (6.25x for high skilled and 2.5x for medium skilled labour).")
   ),
+  services = "contract_runtime",
   run = function(ctx) {
-    multiplier <- ctx$input("multiplier")
-    value <- wlv_native_with_named_axes(multiplier, c("year", "sector", "country"))
-    hours_hs <- (6.25 * ctx$input("hours_hs")) / multiplier
-    hours_ms <- (2.5 * ctx$input("hours_ms")) / multiplier
-    hours_ls <- ctx$input("hours_ls") / multiplier
-    hours_hs <- wlv_native_with_named_axes(hours_hs, c("year", "sector", "country"))
-    hours_ms <- wlv_native_with_named_axes(hours_ms, c("year", "sector", "country"))
-    hours_ls <- wlv_native_with_named_axes(hours_ls, c("year", "sector", "country"))
+    multiplier <- wlv_native_with_named_axes(
+      ctx$input("multiplier"),
+      c("year", "sector", "country")
+    )
+    value <- multiplier
+    resolved_indicators <- c(
+      "hours_worked.empe_hs.r.pc",
+      "hours_worked.empe_ms.r.pc",
+      "hours_worked.empe_ls.r.pc"
+    )
+    numerators <- list(
+      6.25 * ctx$input("hours_hs"),
+      2.5 * ctx$input("hours_ms"),
+      ctx$input("hours_ls")
+    )
+    names(numerators) <- resolved_indicators
+    raw <- lapply(numerators, function(numerator) {
+      wlv_native_with_named_axes(
+        numerator / multiplier,
+        c("year", "sector", "country")
+      )
+    })
+    runtime <- ctx$service("contract_runtime")
+    resolved <- wlv_resolve_profiled_nonfinite(
+      runtime,
+      values = raw,
+      numerators = numerators,
+      denominator = multiplier,
+      artifact = "sea_sectors",
+      checkpoint = "after_stage_2",
+      stage = 2L,
+      module = "indicator.complex_labour_multiplier.empe.r.un.alternative_2",
+      axes = c(year = 1L, sector = 2L, country = 3L)
+    )
     wlv_module_result(outputs = list(
       value = value,
-      hours_hs = hours_hs,
-      hours_ms = hours_ms,
-      hours_ls = hours_ls
-    ))
+      hours_hs = resolved$values[[1L]],
+      hours_ms = resolved$values[[2L]],
+      hours_ls = resolved$values[[3L]]
+    ), diagnostics = resolved$diagnostics)
   }
 )
 
@@ -159,15 +201,15 @@ wlv_native_ochoa_1_spec <- function(id, employee = FALSE) {
       wlv_native_run_ref("dimensions/lists", "lists", "list")
     ),
     provides = wlv_native_reduction_output(indicator),
+    services = "contract_runtime",
     metadata = wlv_native_reduction_metadata(
       indicator,
       paste0("Reduction Problem: Ochoa 1: uses market wages as an index of skill ",
         "and intensity of labour in a world wide process of equalization of rate of surplus value.")
     ),
     run = function(ctx) {
-      w_average <- ctx$input("compensation") / ctx$input("hours")
-      w_average[is.nan(w_average)] <- 0
-      w_average[is.infinite(w_average)] <- 0
+      resolved <- wlv_native_ochoa_average_wage(ctx, indicator, id)
+      w_average <- resolved$value
       w_min <- w_average
       w_min[w_min == 0] <- Inf
       w_min <- rep(
@@ -177,7 +219,10 @@ wlv_native_ochoa_1_spec <- function(id, employee = FALSE) {
       )
       value <- w_average / w_min
       value <- wlv_native_with_named_axes(value, c("year", "sector", "country"))
-      wlv_module_result(outputs = list(value = value))
+      wlv_module_result(
+        outputs = list(value = value),
+        diagnostics = resolved$diagnostics
+      )
     }
   )
 }
@@ -205,6 +250,7 @@ wlv_native_ochoa_2_spec <- function(id, employee = FALSE) {
       wlv_native_run_ref("dimensions/lists", "lists", "list")
     ),
     provides = wlv_native_reduction_output(indicator),
+    services = "contract_runtime",
     metadata = wlv_native_reduction_metadata(
       indicator,
       paste0("Reduction Problem: Ochoa 2: uses market wages as an index of skill ",
@@ -212,9 +258,10 @@ wlv_native_ochoa_2_spec <- function(id, employee = FALSE) {
     ),
     run = function(ctx) {
       lists <- ctx$input("lists")
-      w_average <- ctx$input("compensation") / ctx$input("hours")
-      w_average[is.na(w_average)] <- Inf
-      w_average[w_average == 0] <- Inf
+      resolved <- wlv_native_ochoa_average_wage(ctx, indicator, id)
+      w_average <- resolved$value
+      excluded <- w_average == 0
+      w_average[excluded] <- Inf
       national_min <- apply(
         w_average,
         1L,
@@ -228,10 +275,13 @@ wlv_native_ochoa_2_spec <- function(id, employee = FALSE) {
         length(lists$countries), length(lists$years), length(lists$sectors)
       )
       national_min <- aperm(national_min, c(2L, 3L, 1L))
-      w_average[is.infinite(w_average)] <- 0
+      w_average[excluded] <- 0
       value <- w_average / national_min
       value <- wlv_native_with_named_axes(value, c("year", "sector", "country"))
-      wlv_module_result(outputs = list(value = value))
+      wlv_module_result(
+        outputs = list(value = value),
+        diagnostics = resolved$diagnostics
+      )
     }
   )
 }
@@ -310,6 +360,7 @@ wlv_indicator_complex_empe_petrovic_spec <- wlv_native_indicator_spec(
     wlv_native_reduction_output("complex_labour_multiplier.empe.r.un"),
     wlv_native_reduction_skill_outputs()
   ),
+  services = "contract_runtime",
   metadata = wlv_native_reduction_metadata(
     "complex_labour_multiplier.empe.r.un",
     paste0("Reduction Problem: Petrovic: uses the relationship between average ",
@@ -317,19 +368,46 @@ wlv_indicator_complex_empe_petrovic_spec <- wlv_native_indicator_spec(
   ),
   run = function(ctx) {
     calculated <- wlv_native_petrovic_value(ctx)
-    value <- calculated$value
-    hours_hs <- (calculated$multiplier_h * ctx$input("hours_hs")) / value
-    hours_ms <- (calculated$multiplier_m * ctx$input("hours_ms")) / value
-    hours_ls <- ctx$input("hours_ls") / value
-    value <- wlv_native_with_named_axes(value, c("year", "sector", "country"))
-    hours_hs <- wlv_native_with_named_axes(hours_hs, c("year", "sector", "country"))
-    hours_ms <- wlv_native_with_named_axes(hours_ms, c("year", "sector", "country"))
-    hours_ls <- wlv_native_with_named_axes(hours_ls, c("year", "sector", "country"))
+    value <- wlv_native_with_named_axes(
+      calculated$value,
+      c("year", "sector", "country")
+    )
+    indicators <- c(
+      "hours_worked.empe_hs.r.pc",
+      "hours_worked.empe_ms.r.pc",
+      "hours_worked.empe_ls.r.pc"
+    )
+    numerators <- list(
+      calculated$multiplier_h * ctx$input("hours_hs"),
+      calculated$multiplier_m * ctx$input("hours_ms"),
+      ctx$input("hours_ls")
+    )
+    names(numerators) <- indicators
+    numerators <- lapply(numerators, wlv_native_with_named_axes,
+      axes = c("year", "sector", "country")
+    )
+    raw <- lapply(numerators, function(numerator) {
+      wlv_native_with_named_axes(
+        numerator / value,
+        c("year", "sector", "country")
+      )
+    })
+    resolved <- wlv_resolve_profiled_nonfinite(
+      ctx$service("contract_runtime"),
+      values = raw,
+      numerators = numerators,
+      denominator = value,
+      artifact = "sea_sectors",
+      checkpoint = "after_stage_2",
+      stage = 2L,
+      module = "indicator.complex_labour_multiplier.empe.r.un.petrovic",
+      axes = c(year = 1L, sector = 2L, country = 3L)
+    )
     wlv_module_result(outputs = list(
       value = value,
-      hours_hs = hours_hs,
-      hours_ms = hours_ms,
-      hours_ls = hours_ls
-    ))
+      hours_hs = resolved$values[[indicators[[1L]]]],
+      hours_ms = resolved$values[[indicators[[2L]]]],
+      hours_ls = resolved$values[[indicators[[3L]]]]
+    ), diagnostics = resolved$diagnostics)
   }
 )
