@@ -2135,7 +2135,7 @@ wlv_native_public_array <- function(value) {
   value
 }
 
-wlv_native_write_arrays <- function(
+wlv_native_collect_arrays <- function(
     plan,
     run_data,
     run_result,
@@ -2152,8 +2152,6 @@ wlv_native_write_arrays <- function(
   )
   sea_sectors <- wlv_native_public_array(sea_sectors)
   sea_countries <- wlv_native_public_array(sea_countries)
-  write_fst_array(sea_sectors, file.path(staging, "sea_sectors.fst"))
-  write_fst_array(sea_countries, file.path(staging, "sea_countries.fst"))
 
   artifacts <- list(
     sea_sectors = sea_sectors,
@@ -2172,15 +2170,6 @@ wlv_native_write_arrays <- function(
     )
     m_io <- wlv_native_public_array(m_io)
     m_countries <- wlv_native_public_array(m_countries)
-    write_fst_array(m_countries, file.path(staging, "m_countries.fst"))
-    for (source_path in run_data$source_io) {
-      years <- wlv_native_metadata_years(source_path)
-      selected <- m_io[years, , , , drop = FALSE]
-      write_fst_array(
-        selected,
-        file.path(staging, basename(source_path))
-      )
-    }
     artifacts$m_io <- m_io
     artifacts$m_countries <- m_countries
   } else {
@@ -2189,6 +2178,44 @@ wlv_native_write_arrays <- function(
     )
   }
   artifacts
+}
+
+wlv_native_select_io_years <- function(m_io, years) {
+  if (identical(years, dimnames(m_io)[[1L]])) {
+    return(m_io)
+  }
+  m_io[years, , , , drop = FALSE]
+}
+
+wlv_native_write_arrays <- function(
+    plan,
+    run_data,
+    artifacts,
+    staging) {
+  write_fst_array(
+    artifacts$sea_sectors,
+    file.path(staging, "sea_sectors.fst")
+  )
+  write_fst_array(
+    artifacts$sea_countries,
+    file.path(staging, "sea_countries.fst")
+  )
+  if (identical(plan$mode, "calculate")) {
+    write_fst_array(
+      artifacts$m_countries,
+      file.path(staging, "m_countries.fst")
+    )
+    for (source_path in run_data$source_io) {
+      years <- wlv_native_metadata_years(source_path)
+      selected <- wlv_native_select_io_years(artifacts$m_io, years)
+      write_fst_array(
+        selected,
+        file.path(staging, basename(source_path))
+      )
+      rm(selected)
+    }
+  }
+  invisible(NULL)
 }
 
 wlv_native_clear_recalculated_states <- function(
@@ -2427,7 +2454,7 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
           year_apply = wlv_native_year_apply_service(cluster)
         )
       )
-      arrays <- wlv_native_write_arrays(
+      arrays <- wlv_native_collect_arrays(
         plan,
         run_data,
         module_result,
@@ -2480,10 +2507,19 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
       }
 
       diagnostics <- wlv_native_csv_diagnostics(module_result)
+      native_trace <- module_result$trace
       if (identical(plan$mode, "recalculate")) {
         inherited <- wlv_native_recalculation_diagnostics(run_data)
         diagnostics <- utils::modifyList(inherited, diagnostics)
       }
+      rm(module_result, module_plan, built)
+      invisible(gc(full = TRUE))
+      wlv_native_write_arrays(
+        plan,
+        run_data,
+        arrays,
+        staging
+      )
       for (name in names(diagnostics)) {
         wlv_write_result_csv(diagnostics[[name]], file.path(staging, name))
       }
@@ -2531,6 +2567,8 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         contract_runtime,
         file.path(staging, "_anomalies.csv")
       )
+      rm(arrays)
+      invisible(gc(full = TRUE))
       scientific_checks <- wlv_validate_staged_results(
         staging,
         method = method,
@@ -2559,7 +2597,7 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
       }
       attr(scientific_checks, "wlv_validated_run_artifacts") <- NULL
       environment <- new.env(parent = emptyenv())
-      environment$wlv_native_trace <- module_result$trace
+      environment$wlv_native_trace <- native_trace
       environment$wlv_validated_run_artifacts <- validated_artifacts
       environment$wlv_scientific_diagnostics <- c(
         diagnostics,

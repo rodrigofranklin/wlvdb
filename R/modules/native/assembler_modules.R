@@ -97,14 +97,6 @@ wlv_native_matrix_assembler_spec <- wlv_module_spec(
     io_resources <- unlist(ctx$arg("io_resources"), use.names = FALSE)
     country_resources <- unlist(ctx$arg("country_resources"), use.names = FALSE)
     first_io <- ctx$input(paste0("io.", io_resources[[1L]]))[[1L]]
-    io_values <- lapply(io_resources, function(resource) {
-      wlv_native_collect_partitioned_resource(
-        ctx$input(paste0("io.", resource)),
-        lists$years,
-        dimnames(first_io)[-1L],
-        paste0("io/", resource)
-      )
-    })
     m_io <- array(
       NA_real_,
       dim = c(
@@ -119,19 +111,17 @@ wlv_native_matrix_assembler_spec <- wlv_module_spec(
       )
     )
     for (index in seq_along(io_resources)) {
-      m_io[, index, , ] <- io_values[[index]]
+      resource <- io_resources[[index]]
+      m_io[, index, , ] <- wlv_native_collect_partitioned_resource(
+        ctx$input(paste0("io.", resource)),
+        lists$years,
+        dimnames(first_io)[-1L],
+        paste0("io/", resource)
+      )
     }
     first_country <- ctx$input(
       paste0("country.", country_resources[[1L]])
     )[[1L]]
-    country_values <- lapply(country_resources, function(resource) {
-      wlv_native_collect_partitioned_resource(
-        ctx$input(paste0("country.", resource)),
-        lists$years,
-        dimnames(first_country)[-1L],
-        paste0("country_matrix/", resource)
-      )
-    })
     m_countries <- array(
       NA_real_,
       dim = c(
@@ -146,7 +136,13 @@ wlv_native_matrix_assembler_spec <- wlv_module_spec(
       )
     )
     for (index in seq_along(country_resources)) {
-      m_countries[, index, , ] <- country_values[[index]]
+      resource <- country_resources[[index]]
+      m_countries[, index, , ] <- wlv_native_collect_partitioned_resource(
+        ctx$input(paste0("country.", resource)),
+        lists$years,
+        dimnames(first_country)[-1L],
+        paste0("country_matrix/", resource)
+      )
     }
     wlv_module_result(outputs = list(
       m_io = m_io,
