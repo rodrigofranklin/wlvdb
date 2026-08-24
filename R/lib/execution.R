@@ -2204,6 +2204,14 @@ wlv_native_clear_recalculated_states <- function(
   } else {
     names(stages)[stages >= at_stage]
   }
+  # A stage-four recalculation deliberately treats the published, already
+  # normalized gross-output price as its legacy input and normalizes it again.
+  # Its persisted missingness states therefore describe an input to the new
+  # generation and must remain available until the native normalizer replaces
+  # them. Stage one rebuilds the price from source data and still clears them.
+  if (identical(at_stage, 4L)) {
+    indicators <- setdiff(indicators, "go_price.r.id")
+  }
   wlv_contract_clear_states(runtime, "sea_sectors", indicators)
   wlv_contract_clear_states(runtime, "sea_countries", indicators)
   invisible(indicators)

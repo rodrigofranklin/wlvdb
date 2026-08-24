@@ -486,6 +486,100 @@ test_that("stage-one anomaly owners match their native module generations", {
   }
 })
 
+test_that("stage-four recalculation preserves inherited go-price states", {
+  runtime <- native_execution_runtime
+  catalog <- runtime$wlv_runtime_catalog()
+  plan <- runtime$wlv_validate_request(
+    "ochoa_1",
+    root = wlv_test_root,
+    allow_experimental = TRUE,
+    catalog = catalog
+  )
+  contract_runtime <- runtime$wlv_new_contract_runtime(
+    method = "ochoa_1",
+    source = "wiodr13",
+    policy = runtime$wlv_strict_missingness_policy(
+      source = "wiodr13",
+      policy_id = "stage4_inherited_state_test"
+    ),
+    scientific_profile = plan$scientific_profiles$ochoa_1
+  )
+  value <- array(
+    c(NA_real_, 2),
+    dim = c(1L, 2L, 1L),
+    dimnames = list(
+      year = "2000",
+      sector = c("S1", "S2"),
+      country = "USA"
+    )
+  )
+  states <- array(
+    c("not_applicable", "finite"),
+    dim = dim(value),
+    dimnames = dimnames(value)
+  )
+  runtime$wlv_contract_register_states(
+    contract_runtime,
+    "sea_sectors",
+    "go_price.r.id",
+    states
+  )
+  runtime$wlv_contract_register_states(
+    contract_runtime,
+    "sea_sectors",
+    "gross_output.s.mv",
+    states
+  )
+
+  cleared <- runtime$wlv_native_clear_recalculated_states(
+    contract_runtime,
+    list(indicator_stages = c(
+      "go_price.r.id" = 4L,
+      "gross_output.s.mv" = 4L
+    )),
+    at_stage = 4L,
+    sea_vars = NULL
+  )
+  expect_identical(cleared, "gross_output.s.mv")
+  expect_true(exists(
+    runtime$wlv_contract_state_key("sea_sectors", "go_price.r.id"),
+    envir = contract_runtime$states,
+    inherits = FALSE
+  ))
+  expect_false(exists(
+    runtime$wlv_contract_state_key("sea_sectors", "gross_output.s.mv"),
+    envir = contract_runtime$states,
+    inherits = FALSE
+  ))
+
+  normalized <- runtime$wlv_ratio_runtime(
+    contract_runtime,
+    value,
+    value,
+    zero = "not_applicable",
+    artifact = "sea_sectors",
+    indicator = "go_price.r.id",
+    checkpoint = "after_price_normalization",
+    stage = 4L,
+    module = "indicator.price_index.normalize",
+    axes = c(year = 1L, sector = 2L, country = 3L)
+  )
+  expect_true(is.na(normalized[[1L]]))
+  expect_identical(normalized[[2L]], 1)
+
+  runtime$wlv_native_clear_recalculated_states(
+    contract_runtime,
+    list(indicator_stages = c("go_price.r.id" = 4L)),
+    at_stage = 1L,
+    sea_vars = NULL
+  )
+  expect_false(exists(
+    runtime$wlv_contract_state_key("sea_sectors", "go_price.r.id"),
+    envir = contract_runtime$states,
+    inherits = FALSE
+  ))
+})
+
 test_that("Leontief exception outputs close against lightweight IO metadata", {
   runtime <- native_execution_runtime
   catalog <- runtime$wlv_runtime_catalog()
