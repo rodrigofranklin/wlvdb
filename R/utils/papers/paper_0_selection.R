@@ -293,8 +293,9 @@ wlv_paper_0_tables <- function(stacked) {
     "gross_output.s.du",
     country_selection
   )
+  mp <- gross_output_us[1L, ] / 1000000
   table_1 <- cbind(
-    gross_output_us[1L, ] / 1000000,
+    mp,
     t(gross_output_du) / 1000000,
     t(gross_output_du / gross_output_us)
   )
@@ -313,8 +314,9 @@ wlv_paper_0_tables <- function(stacked) {
     "gdp.s.du",
     country_selection
   )
+  mp <- gdp_us[1L, ] / 1000000
   table_2 <- cbind(
-    gdp_us[1L, ] / 1000000,
+    mp,
     t(gdp_du) / 1000000,
     t(gdp_du / gdp_us)
   )

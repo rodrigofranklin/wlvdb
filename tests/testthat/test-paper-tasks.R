@@ -227,7 +227,13 @@ test_that("paper 0 produces the legacy workbook tables through explicit context"
     "market_prices", "alternative_1", "zerodep_1"
   ))
   expect_identical(dim(result$sheets[[2L]]), c(4L, 5L))
+  expect_identical(names(result$sheets[[2L]]), c(
+    "mp", "alternative_1", "X.", "zerodep_1", "X..1"
+  ))
   expect_identical(dim(result$sheets[[3L]]), c(4L, 5L))
+  expect_identical(names(result$sheets[[3L]]), c(
+    "mp", "alternative_1", "X.", "zerodep_1", "X..1"
+  ))
   expect_identical(dim(result$sheets[[4L]]), c(5L, 2L))
   expect_identical(dim(result$sheets[[5L]]), c(5L, 6L))
   expect_identical(dim(result$sheets[[9L]]), c(4L, 2L))

@@ -49,6 +49,33 @@ test_that("all executable methods resolve only typed native execution inputs", {
   }, logical(1L))))
 })
 
+test_that("alternative 2 preserves the legacy scientific observation metadata", {
+  expected <- paste0(
+    "Reduction Problem: Alternative 2: considers a feasible, but arbitrary, ",
+    "scale of multipliers of high and medium skilled labour regarding low skilled ",
+    "labour (6.25x for high skilled and 2.5x for medium skilled labour)."
+  )
+  registry <- native_execution_runtime$wlv_runtime_catalog()
+  plan <- native_execution_runtime$wlv_validate_request(
+    "alternative_2",
+    root = wlv_test_root,
+    allow_experimental = TRUE,
+    catalog = registry
+  )
+  module_ids <- c(
+    "indicator.complex_labour_multiplier.emp.r.un.alternative_2",
+    "indicator.complex_labour_multiplier.empe.r.un.alternative_2"
+  )
+  observations <- vapply(module_ids, function(module_id) {
+    metadata <- attr(
+      plan$native_registry$specs[[module_id]],
+      "wlv_indicator_metadata"
+    )
+    metadata$observation[[1L]]
+  }, character(1L))
+  expect_identical(unname(observations), rep(expected, 2L))
+})
+
 test_that("run plans reject an in-memory scientific profile substitution", {
   runtime <- native_execution_runtime
   catalog <- runtime$wlv_runtime_catalog()

@@ -112,7 +112,8 @@ wlv_indicator_complex_emp_alternative_2_spec <- wlv_native_indicator_spec(
   metadata = wlv_native_reduction_metadata(
     "complex_labour_multiplier.emp.r.un",
     paste0("Reduction Problem: Alternative 2: considers a feasible, but arbitrary, ",
-      "scale of multipliers (6.25x for high skilled and 2.5x for medium skilled labour).")
+      "scale of multipliers of high and medium skilled labour regarding low skilled ",
+      "labour (6.25x for high skilled and 2.5x for medium skilled labour).")
   ),
   run = function(ctx) {
     value <- (6.25 * ctx$input("hours_hs")) +
@@ -139,7 +140,8 @@ wlv_indicator_complex_empe_alternative_2_spec <- wlv_native_indicator_spec(
   metadata = wlv_native_reduction_metadata(
     "complex_labour_multiplier.empe.r.un",
     paste0("Reduction Problem: Alternative 2: considers a feasible, but arbitrary, ",
-      "scale of multipliers (6.25x for high skilled and 2.5x for medium skilled labour).")
+      "scale of multipliers of high and medium skilled labour regarding low skilled ",
+      "labour (6.25x for high skilled and 2.5x for medium skilled labour).")
   ),
   services = "contract_runtime",
   run = function(ctx) {
