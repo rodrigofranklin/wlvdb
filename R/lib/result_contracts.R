@@ -1596,6 +1596,10 @@ wlv_contract_slice_registered_states <- function(registered, value) {
   array(as.vector(sliced), dim = dim(value), dimnames = value_labels)
 }
 
+wlv_m_io_structural_missing_indicators <- function() {
+  c("k_composition", "k_depreciation", "consumption_basket")
+}
+
 wlv_contract_declared_states <- function(
     runtime,
     artifact,
@@ -1650,7 +1654,7 @@ wlv_contract_declared_states <- function(
 
   if (
     artifact == "m_io" && length(dimensions) == 4L &&
-    indicator %in% c("k_composition", "k_depreciation", "consumption_basket")
+    indicator %in% wlv_m_io_structural_missing_indicators()
   ) {
     inputs <- labels[[3L]]
     outputs <- labels[[4L]]
@@ -1855,7 +1859,10 @@ wlv_validate_sea_stage <- function(
   invisible(sea_sectors)
 }
 
-wlv_validate_m_io_contract <- function(runtime, value, checkpoint = "after_matrices") {
+wlv_validate_m_io_contract_detailed <- function(
+    runtime,
+    value,
+    checkpoint = "after_matrices") {
   indicators <- dimnames(value)[[2L]]
   for (indicator in indicators) {
     indicator_value <- value[, indicator, , , drop = FALSE]
@@ -1884,6 +1891,102 @@ wlv_validate_m_io_contract <- function(runtime, value, checkpoint = "after_matri
     )
   }
   invisible(value)
+}
+
+wlv_contract_has_registered_m_io_states <- function(runtime, indicators) {
+  keys <- wlv_contract_state_key("m_io", indicators)
+  any(vapply(
+    keys,
+    exists,
+    logical(1L),
+    envir = runtime$states,
+    inherits = FALSE
+  ))
+}
+
+wlv_can_validate_m_io_contract_sparse <- function(value) {
+  dimensions <- dim(value)
+  labels <- dimnames(value)
+  is.double(value) &&
+    !is.object(value) &&
+    length(dimensions) == 4L &&
+    length(labels) == 4L &&
+    all(vapply(seq_len(4L), function(axis) {
+      axis_labels <- labels[[axis]]
+      !is.null(axis_labels) &&
+        length(axis_labels) == dimensions[[axis]] &&
+        !anyNA(axis_labels) &&
+        !anyDuplicated(axis_labels) &&
+        all(nzchar(axis_labels))
+    }, logical(1L)))
+}
+
+wlv_validate_m_io_contract_sparse <- function(
+    runtime,
+    value,
+    checkpoint = "after_matrices") {
+  if (!wlv_can_validate_m_io_contract_sparse(value)) {
+    return(wlv_validate_m_io_contract_detailed(runtime, value, checkpoint))
+  }
+
+  dimensions <- dim(value)
+  labels <- dimnames(value)
+  indicators <- labels[[2L]]
+  if (wlv_contract_has_registered_m_io_states(runtime, indicators)) {
+    return(wlv_validate_m_io_contract_detailed(runtime, value, checkpoint))
+  }
+  if (length(indicators)) {
+    wlv_contract_context_for(
+      runtime,
+      artifact = "m_io",
+      indicator = indicators[[1L]],
+      checkpoint = checkpoint,
+      stage = 4L,
+      axes = c(year = 1L, sector = 3L, output = 4L)
+    )
+  }
+  nonfinite_positions <- which(!is.finite(value))
+  if (!length(nonfinite_positions)) {
+    return(invisible(value))
+  }
+
+  offsets <- nonfinite_positions - 1
+  year_count <- dimensions[[1L]]
+  indicator_count <- dimensions[[2L]]
+  input_count <- dimensions[[3L]]
+  indicator_indices <- (offsets %/% year_count) %% indicator_count + 1
+  output_indices <-
+    offsets %/% (year_count * indicator_count * input_count) + 1
+  nonfinite_values <- value[nonfinite_positions]
+  special_indicators <- wlv_m_io_structural_missing_indicators()
+
+  for (indicator_index in seq_along(indicators)) {
+    selected <- indicator_indices == indicator_index
+    if (!any(selected)) {
+      next
+    }
+    indicator <- indicators[[indicator_index]]
+    observed <- nonfinite_values[selected]
+    selected_outputs <- output_indices[selected]
+    invalid_numeric <- is.nan(observed) | is.infinite(observed)
+    ordinary_missing <- is.na(observed) & !is.nan(observed)
+    allowed_missing <- rep(FALSE, length(observed))
+    if (
+      indicator %in% special_indicators &&
+        !is.null(labels[[3L]]) && !is.null(labels[[4L]])
+    ) {
+      allowed_missing <- !labels[[4L]][selected_outputs] %in% labels[[3L]]
+    }
+    unexpected_missing <- ordinary_missing & !allowed_missing
+    if (any(invalid_numeric) || any(unexpected_missing)) {
+      return(wlv_validate_m_io_contract_detailed(runtime, value, checkpoint))
+    }
+  }
+  invisible(value)
+}
+
+wlv_validate_m_io_contract <- function(runtime, value, checkpoint = "after_matrices") {
+  wlv_validate_m_io_contract_sparse(runtime, value, checkpoint)
 }
 
 wlv_validate_m_countries_contract <- function(
