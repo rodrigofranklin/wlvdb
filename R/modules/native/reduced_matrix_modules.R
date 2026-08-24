@@ -12,12 +12,13 @@ wlv_native_reduce_country_matrix <- function(
       each = nums$years
     )
   }
+  country_groups <- base::as.factor(filters["countries", , ])
   grouped <- year_apply(
     newDim(value, c(nums$years, nums$input, nums$output)),
     1L,
-    tapply,
-    filters["countries", , ],
-    sum,
+    base::tapply,
+    country_groups,
+    base::sum,
     na.rm = TRUE
   )
   result <- aperm(grouped, c(2L, 1L)) *
