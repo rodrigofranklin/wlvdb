@@ -84,3 +84,28 @@ test_that("manual issue 13 parity gate fails closed on every difference", {
     FALSE
   ))
 })
+
+test_that("manual issue 13 real gate collects declared diagnostics", {
+  path <- file.path(
+    wlv_test_root,
+    "tests",
+    "manual",
+    "issue13-native-real.R"
+  )
+  script <- paste(
+    readLines(path, warn = FALSE, encoding = "UTF-8"),
+    collapse = "\n"
+  )
+
+  expect_false(grepl("result$diagnostics", script, fixed = TRUE))
+  expect_match(
+    script,
+    "module_diagnostics <- runtime\\$wlv_native_csv_diagnostics\\(",
+    perl = TRUE
+  )
+  expect_match(
+    script,
+    "expected_years = runtime\\$wlv_native_metadata_years\\(source_sea\\)",
+    perl = TRUE
+  )
+})

@@ -226,7 +226,12 @@ indicator_metadata <- runtime$wlv_store_read(
     runtime$wlv_native_indicator_metadata_contract()
   )
 )
-module_diagnostics <- result$diagnostics
+module_diagnostics <- runtime$wlv_native_csv_diagnostics(
+  result,
+  method = method,
+  source = source,
+  expected_years = runtime$wlv_native_metadata_years(source_sea)
+)
 module_trace <- result$trace
 
 for (name in names(artifacts)) {
