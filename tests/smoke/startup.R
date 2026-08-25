@@ -10,6 +10,9 @@ script_path <- if (length(script_arg)) {
 }
 repo_root <- normalizePath(file.path(dirname(script_path), "../.."), mustWork = TRUE)
 
+Sys.setenv(RENV_PROJECT = repo_root)
+source(file.path(repo_root, "renv", "activate.R"), local = TRUE)
+
 profile_path <- file.path(repo_root, ".Rprofile")
 project_path <- file.path(repo_root, "worldlabourvalues.Rproj")
 
