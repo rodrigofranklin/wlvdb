@@ -60,7 +60,7 @@ test_that("publication warnings are UTF-8, single-line, and redacted", {
   )
   manifest <- runtime$wlv_read_run_manifest(file.path(
     run$wlv_run_dir,
-    runtime$wlv_run_manifest_filename
+    runtime$wlv_run_manifest_filename()
   ))
   warning <- manifest$execution$warnings[[1L]]
 
@@ -75,11 +75,11 @@ test_that("publication warnings are UTF-8, single-line, and redacted", {
   expect_true(grepl(accented, warning, fixed = TRUE))
 
   bytes <- readBin(
-    file.path(run$wlv_run_dir, runtime$wlv_run_manifest_filename),
+    file.path(run$wlv_run_dir, runtime$wlv_run_manifest_filename()),
     what = "raw",
     n = file.info(file.path(
       run$wlv_run_dir,
-      runtime$wlv_run_manifest_filename
+      runtime$wlv_run_manifest_filename()
     ))$size
   )
   expect_true(grepl(

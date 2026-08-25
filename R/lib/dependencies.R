@@ -1,4 +1,5 @@
-wlv_dependency_groups <- list(
+wlv_dependency_groups <- function() {
+  list(
   runtime = c(
     "abind", "countrycode", "dplyr", "fst", "jsonlite", "lubridate",
     "magrittr", "Matrix", "openssl", "readr", "rvest", "tidyr", "xml2"
@@ -6,6 +7,7 @@ wlv_dependency_groups <- list(
   preparation = c("R.matlab", "readODS", "readxl", "WDI"),
   papers = "writexl"
 )
+}
 
 wlv_require_packages <- function(
     packages,
@@ -49,6 +51,6 @@ wlv_assert_dependencies <- function(
     groups <- c(groups, "papers")
   }
 
-  packages <- unique(unlist(wlv_dependency_groups[groups], use.names = FALSE))
+  packages <- unique(unlist(wlv_dependency_groups()[groups], use.names = FALSE))
   wlv_require_packages(packages, attach = attach, checker = checker)
 }

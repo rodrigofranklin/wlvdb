@@ -187,7 +187,7 @@ test_that("result provenance snapshots block unsafe recalculations", {
   provenance <- source_manifest_environment$wlv_read_result_source_provenance(result_dir)
   expect_identical(
     names(provenance),
-    source_manifest_environment$wlv_source_provenance_schema
+    source_manifest_environment$wlv_source_provenance_schema()
   )
   expect_identical(provenance$source_generation_id, manifest$source_generation_id[[1L]])
   expect_no_error(

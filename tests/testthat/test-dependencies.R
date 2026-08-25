@@ -24,7 +24,7 @@ test_that("feature dependency groups remain declared", {
   declared <- trimws(unlist(strsplit(declared, ",")))
   declared <- sub("[[:space:]]*\\(.*$", "", declared)
 
-  grouped <- unique(unlist(environment$wlv_dependency_groups, use.names = FALSE))
+  grouped <- unique(unlist(environment$wlv_dependency_groups(), use.names = FALSE))
   expect_true(all(grouped %in% declared))
 })
 

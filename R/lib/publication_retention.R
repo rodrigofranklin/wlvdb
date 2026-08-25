@@ -270,7 +270,7 @@ wlv_prune_scan_runs <- function(paths) {
         directory = TRUE
       )
       wlv_prune_assert_tree(run_path, paths$runs, "Run directory")
-      manifest_path <- file.path(run_path, wlv_run_manifest_filename)
+      manifest_path <- file.path(run_path, wlv_run_manifest_filename())
       wlv_prune_assert_inside(
         manifest_path,
         run_path,
@@ -303,7 +303,7 @@ wlv_prune_validate_run_reference_path <- function(reference) {
     "runs",
     reference$method,
     reference$run_id,
-    wlv_run_manifest_filename,
+    wlv_run_manifest_filename(),
     sep = "/"
   )
   if (!identical(reference$manifest_path, expected)) {
@@ -333,7 +333,7 @@ wlv_prune_scan_releases <- function(paths) {
       directory = TRUE
     )
     wlv_prune_assert_tree(release_path, paths$releases, "Release directory")
-    manifest_path <- file.path(release_path, wlv_release_manifest_filename)
+    manifest_path <- file.path(release_path, wlv_release_manifest_filename())
     wlv_prune_assert_inside(
       manifest_path,
       release_path,
@@ -426,7 +426,7 @@ wlv_prune_scan_markers <- function(paths) {
       expected_release_path <- paste(
         "releases",
         marker$release_id,
-        wlv_release_manifest_filename,
+        wlv_release_manifest_filename(),
         sep = "/"
       )
       if (!identical(marker$release_manifest_path, expected_release_path)) {
@@ -478,7 +478,7 @@ wlv_prune_validate_store_links <- function(scans) {
     }
   }
   run_paths <- if (nrow(runs)) {
-    paste0(runs$path, "/", wlv_run_manifest_filename)
+    paste0(runs$path, "/", wlv_run_manifest_filename())
   } else {
     character()
   }

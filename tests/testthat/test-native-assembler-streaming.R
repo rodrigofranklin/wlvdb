@@ -73,7 +73,7 @@ test_that("matrix assembler preserves buffered semantics while streaming resourc
     )
   }
 
-  result <- runtime$wlv_native_matrix_assembler_spec$run(
+  result <- runtime$wlv_native_matrix_assembler_spec()$run(
     make_context(module_inputs)
   )
   expected_io <- array(
@@ -111,7 +111,7 @@ test_that("matrix assembler preserves buffered semantics while streaming resourc
     late = io_zeta["2002", , , drop = FALSE]
   )
   expect_error(
-    runtime$wlv_native_matrix_assembler_spec$run(make_context(incomplete)),
+    runtime$wlv_native_matrix_assembler_spec()$run(make_context(incomplete)),
     "Assembler coverage for `io/zeta` is not exact .*missing=2001"
   )
 })

@@ -228,24 +228,78 @@ wlv_validate_release_channel <- function(value) {
   value
 }
 
+wlv_runtime_definition_sha256_file <- function(path) {
+  connection <- file(path, open = "rb")
+  on.exit(close(connection), add = TRUE)
+  as.character(openssl::sha256(connection))
+}
+
+wlv_runtime_definition_generation <- function(sha256) {
+  if (
+    !is.character(sha256) || !length(sha256) || is.null(names(sha256)) ||
+      anyNA(sha256) || any(!nzchar(names(sha256))) ||
+      anyDuplicated(names(sha256)) || any(!grepl("^[0-9a-f]{64}$", sha256))
+  ) {
+    stop("Runtime generation received an invalid SHA-256 inventory.", call. = FALSE)
+  }
+  payload <- paste(
+    c(
+      "wlv-runtime-definitions/1",
+      paste(names(sha256), sha256, sep = "\034")
+    ),
+    collapse = "\035"
+  )
+  as.character(openssl::sha256(charToRaw(enc2utf8(payload))))
+}
+
 wlv_assert_loaded_runtime_unchanged <- function() {
-  paths <- .wlv_runtime_definition_paths
-  expected <- .wlv_runtime_definition_md5
+  paths <- .wlv_runtime_definition_paths()
+  expected_md5 <- .wlv_runtime_definition_md5()
+  expected_sha256 <- .wlv_runtime_definition_sha256()
+  expected_generation <- .wlv_runtime_generation()
   if (
     !is.character(paths) || !length(paths) || is.null(names(paths)) ||
-      !is.character(expected) || !identical(names(expected), names(paths)) ||
-      anyNA(paths) || anyNA(expected) || any(!file.exists(paths))
+      !is.character(expected_md5) ||
+      !identical(names(expected_md5), names(paths)) ||
+      !is.character(expected_sha256) ||
+      !identical(names(expected_sha256), names(paths)) ||
+      !is.character(expected_generation) || length(expected_generation) != 1L ||
+      is.na(expected_generation) ||
+      !grepl("^[0-9a-f]{64}$", expected_generation) ||
+      anyNA(paths) || anyNA(expected_md5) || anyNA(expected_sha256) ||
+      any(!file.exists(paths)) ||
+      !identical(
+        expected_generation,
+        wlv_runtime_definition_generation(expected_sha256)
+      )
   ) {
     stop("The loaded runtime lacks a valid definition inventory.", call. = FALSE)
   }
   capture <- function() {
-    hashes <- unname(tools::md5sum(unname(paths)))
-    stats::setNames(hashes, names(paths))
+    list(
+      md5 = stats::setNames(
+        unname(tools::md5sum(unname(paths))),
+        names(paths)
+      ),
+      sha256 = stats::setNames(
+        vapply(unname(paths), wlv_runtime_definition_sha256_file, character(1L)),
+        names(paths)
+      )
+    )
   }
   current <- capture()
-  if (!identical(expected, current) || !identical(current, capture())) {
+  if (
+    !identical(expected_md5, current$md5) ||
+      !identical(expected_sha256, current$sha256) ||
+      !identical(
+        expected_generation,
+        wlv_runtime_definition_generation(current$sha256)
+      ) ||
+      !identical(current, capture())
+  ) {
     changed <- names(paths)[vapply(names(paths), function(path) {
-      !identical(expected[[path]], current[[path]])
+      !identical(expected_md5[[path]], current$md5[[path]]) ||
+        !identical(expected_sha256[[path]], current$sha256[[path]])
     }, logical(1L))]
     stop(
       sprintf(
@@ -1011,7 +1065,9 @@ wlv_euklems_files <- function(root, source_io, matrix_modules) {
   )
 }
 
-wlv_wiodr13_euklems_files <- wlv_euklems_files
+wlv_wiodr13_euklems_files <- function(root, source_io, matrix_modules) {
+  wlv_euklems_files(root, source_io, matrix_modules)
+}
 
 # Native graph and data preflight. Every graph is resolved before any FST
 # payload is deserialized.
@@ -1161,7 +1217,7 @@ wlv_native_indicator_stage_map <- function(
   for (module in resolved) {
     rank <- wlv_runtime_checkpoint_rank(
       module$checkpoint,
-      wlv_default_checkpoint_order
+      wlv_default_checkpoint_order()
     )
     for (output in module$provides) {
       prefix <- "sea/sector/"
@@ -2012,7 +2068,7 @@ wlv_native_configuration_sidecars <- function(
   for (module in resolved) {
     rank <- wlv_runtime_checkpoint_rank(
       module$checkpoint,
-      wlv_default_checkpoint_order
+      wlv_default_checkpoint_order()
     )
     for (output in module$provides) {
       key <- output$ref$key
@@ -2377,7 +2433,7 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
       staging,
       reject_unlisted = TRUE
     )
-    inherited_manifest <- file.path(staging, wlv_run_manifest_filename)
+    inherited_manifest <- file.path(staging, wlv_run_manifest_filename())
     if (file.exists(inherited_manifest)) unlink(inherited_manifest, force = TRUE)
     if (file.exists(inherited_manifest)) {
       stop("Could not remove inherited run manifest from staging.", call. = FALSE)
@@ -2526,11 +2582,11 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
       wlv_assert_method_source_inputs_unchanged(plan, method_record, run_data)
       wlv_write_result_csv(
         run_data$source_provenance,
-        file.path(staging, wlv_source_provenance_filename)
+        file.path(staging, wlv_source_provenance_filename())
       )
       source_sidecar <- stats::setNames(
         list(run_data$source_provenance),
-        wlv_source_provenance_filename
+        wlv_source_provenance_filename()
       )
       unit_sidecar <- wlv_catalog_unit_contract_sidecar(
         plan$catalog,

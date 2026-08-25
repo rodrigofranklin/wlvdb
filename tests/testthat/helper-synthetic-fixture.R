@@ -67,7 +67,7 @@ wlv_native_test_producer_spec <- function(runtime) {
       gross = runtime$wlv_resource_ref(
         "test/source/gross",
         gross_contract,
-        producer = runtime$wlv_runtime_seed_producer
+        producer = runtime$wlv_runtime_seed_producer()
       )
     ),
     provides = function(args) {
@@ -133,7 +133,7 @@ wlv_native_test_productivity_spec <- function(runtime) {
       list(labour = runtime$wlv_resource_ref(
         "test/source/labour",
         labour_contract,
-        producer = runtime$wlv_runtime_seed_producer
+        producer = runtime$wlv_runtime_seed_producer()
       ))
     ),
     provides = runtime$wlv_native_stage5_provides(
@@ -172,7 +172,7 @@ wlv_make_native_calculation_fixture <- function(runtime = wlv_test_load_runtime(
   registry <- runtime$wlv_module_registry(list(
     wlv_native_test_producer_spec(runtime),
     wlv_native_test_productivity_spec(runtime),
-    runtime$wlv_native_panel_assembler_spec
+    runtime$wlv_native_panel_assembler_spec()
   ))
   list(
     runtime = runtime,
@@ -483,7 +483,7 @@ wlv_native_test_run_environment <- function(
     created_at_utc = "2026-08-20T12:00:00Z",
     parent_run_id = parent_run_id
   )
-  manifest_path <- file.path(run_root, runtime$wlv_run_manifest_filename)
+  manifest_path <- file.path(run_root, runtime$wlv_run_manifest_filename())
   runtime$wlv_write_run_manifest(manifest, manifest_path)
   runtime$wlv_verify_run_manifest(manifest, run_root, reject_unlisted = TRUE)
   environment <- new.env(parent = emptyenv())

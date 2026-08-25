@@ -345,7 +345,9 @@ cnames <- function(a,b) {
   match(a$names,b$names)
 }
 
-wlv_fst_sidecar_schema_version <- "1"
+wlv_fst_sidecar_schema_version <- function() {
+  "1"
+}
 
 wlv_fst_file_sha256 <- function(path) {
   if (
@@ -502,7 +504,7 @@ wlv_fst_parse_sidecar <- function(metadata, file_name) {
       call. = FALSE
     )
   }
-  if (!identical(extra[[1L]], wlv_fst_sidecar_schema_version)) {
+  if (!identical(extra[[1L]], wlv_fst_sidecar_schema_version())) {
     stop(
       sprintf(
         "Unsupported FST sidecar schema version for `%s`: %s.",
@@ -662,7 +664,7 @@ wlv_fst_sidecar <- function(value, fst_sha256) {
   c(
     metadata,
     list(
-      schema_version = wlv_fst_sidecar_schema_version,
+      schema_version = wlv_fst_sidecar_schema_version(),
       fst_sha256 = fst_sha256,
       array_dimnames = array_dimnames
     )

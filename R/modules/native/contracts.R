@@ -33,7 +33,7 @@ wlv_native_run_ref <- function(
       "any", "numeric", "integer", "double", "logical", "character",
       "list", "data.frame", "array"
     ),
-    producer = wlv_runtime_seed_producer,
+    producer = wlv_runtime_seed_producer(),
     optional = FALSE) {
   value_type <- match.arg(value_type)
   stats::setNames(
@@ -170,7 +170,7 @@ wlv_native_source_io_ref <- function(alias = "source_io") {
     list(wlv_resource_ref(
       "source/io",
       wlv_native_source_io_contract(),
-      producer = wlv_runtime_seed_producer
+      producer = wlv_runtime_seed_producer()
     )),
     alias
   )
@@ -386,7 +386,7 @@ wlv_native_indicator_metadata_contract <- function() {
 
 wlv_native_indicator_metadata_ref <- function(
     alias = "indicator_metadata",
-    producer = wlv_runtime_seed_producer) {
+    producer = wlv_runtime_seed_producer()) {
   stats::setNames(
     list(wlv_resource_ref(
       "metadata/indicators",

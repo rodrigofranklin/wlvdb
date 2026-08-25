@@ -4,13 +4,15 @@ wlv_native_aggregation_alias <- function(prefix, indicator) {
   paste(prefix, indicator, sep = ".")
 }
 
-wlv_native_aggregation_parameters <- list(
+wlv_native_aggregation_parameters <- function() {
+  list(
   indicators = wlv_module_parameter("list", scalar = FALSE),
   direct = wlv_module_parameter("list", scalar = FALSE),
   formula = wlv_module_parameter("list", scalar = FALSE),
   country_bindings = wlv_module_parameter("list", scalar = FALSE),
   world_bindings = wlv_module_parameter("list", scalar = FALSE)
 )
+}
 
 wlv_native_aggregation_requires <- function(args) {
   direct <- unlist(args$direct, use.names = FALSE)
@@ -85,12 +87,13 @@ wlv_native_aggregation_allowed_states <- function(
   }), names(values))
 }
 
-wlv_native_aggregation_spec <- wlv_module_spec(
+wlv_native_aggregation_spec <- function() {
+  wlv_module_spec(
   id = "aggregation.direct",
   scope = "run",
   checkpoint = "after_world_aggregation",
   operations = c("calculate", "recalculate"),
-  parameters = wlv_native_aggregation_parameters,
+  parameters = wlv_native_aggregation_parameters(),
   requires = wlv_native_aggregation_requires,
   provides = wlv_native_aggregation_provides,
   services = "contract_runtime",
@@ -214,6 +217,7 @@ wlv_native_aggregation_spec <- wlv_module_spec(
     )
   }
 )
+}
 
 wlv_native_aggregation_instance <- function(
     registry,

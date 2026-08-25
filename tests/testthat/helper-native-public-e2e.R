@@ -783,7 +783,7 @@ wlv_native_public_e2e_matrix_spec <- function(runtime) {
 
 wlv_native_public_e2e_install_runtime_seams <- function(runtime, root) {
   root <- normalizePath(root, winslash = "/", mustWork = TRUE)
-  assign(".wlv_runtime_root", root, envir = runtime)
+  assign(".wlv_runtime_root", function() root, envir = runtime)
 
   registry_factory <- function() {
     runtime$wlv_module_registry(list(
@@ -791,9 +791,9 @@ wlv_native_public_e2e_install_runtime_seams <- function(runtime, root) {
       wlv_native_public_e2e_gross_mv_spec(runtime),
       wlv_native_public_e2e_value_spec(runtime),
       wlv_native_public_e2e_matrix_spec(runtime),
-      runtime$wlv_native_aggregation_spec,
-      runtime$wlv_native_matrix_assembler_spec,
-      runtime$wlv_native_panel_assembler_spec
+      runtime$wlv_native_aggregation_spec(),
+      runtime$wlv_native_matrix_assembler_spec(),
+      runtime$wlv_native_panel_assembler_spec()
     ))
   }
   assign("wlv_native_registry", registry_factory, envir = runtime)

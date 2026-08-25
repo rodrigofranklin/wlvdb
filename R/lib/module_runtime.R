@@ -36,10 +36,18 @@ wlv_runtime_scalar_logical <- function(value, name) {
   value
 }
 
-wlv_runtime_identifier_pattern <- "^[a-z][A-Za-z0-9_.-]*$"
-wlv_runtime_module_pattern <- "^[a-z][A-Za-z0-9_.-]*(/[a-z][A-Za-z0-9_.-]*)*$"
-wlv_runtime_resource_pattern <- "^[A-Za-z0-9][A-Za-z0-9_.-]*(/[A-Za-z0-9][A-Za-z0-9_.-]*)*$"
-wlv_runtime_seed_producer <- ".seed"
+wlv_runtime_identifier_pattern <- function() {
+  "^[a-z][A-Za-z0-9_.-]*$"
+}
+wlv_runtime_module_pattern <- function() {
+  "^[a-z][A-Za-z0-9_.-]*(/[a-z][A-Za-z0-9_.-]*)*$"
+}
+wlv_runtime_resource_pattern <- function() {
+  "^[A-Za-z0-9][A-Za-z0-9_.-]*(/[A-Za-z0-9][A-Za-z0-9_.-]*)*$"
+}
+wlv_runtime_seed_producer <- function() {
+  ".seed"
+}
 
 wlv_runtime_validate_names <- function(value, name, allow_empty = TRUE) {
   if (!is.character(value) || anyNA(value) || any(!nzchar(value)) || anyDuplicated(value)) {
@@ -143,14 +151,14 @@ wlv_resource_ref <- function(
   key <- wlv_runtime_scalar_character(
     key,
     "key",
-    wlv_runtime_resource_pattern
+    wlv_runtime_resource_pattern()
   )
   wlv_resource_contract_assert(contract)
   if (!is.null(producer)) {
     producer <- wlv_runtime_scalar_character(producer, "producer")
     if (
-      !identical(producer, wlv_runtime_seed_producer) &&
-        !grepl(wlv_runtime_identifier_pattern, producer)
+      !identical(producer, wlv_runtime_seed_producer()) &&
+        !grepl(wlv_runtime_identifier_pattern(), producer)
     ) {
       wlv_runtime_abort(
         "`producer` must be an instance identifier or `.seed`.",
@@ -342,7 +350,7 @@ wlv_module_spec <- function(
     provides = list(),
     services = character(),
     run) {
-  id <- wlv_runtime_scalar_character(id, "id", wlv_runtime_module_pattern)
+  id <- wlv_runtime_scalar_character(id, "id", wlv_runtime_module_pattern())
   scope <- match.arg(scope)
   if (
     !((is.numeric(checkpoint) && length(checkpoint) == 1L &&
@@ -474,7 +482,7 @@ wlv_module_registry <- function(specs = list()) {
 }
 
 wlv_registry_module <- function(registry, id) {
-  id <- wlv_runtime_scalar_character(id, "id", wlv_runtime_module_pattern)
+  id <- wlv_runtime_scalar_character(id, "id", wlv_runtime_module_pattern())
   if (!inherits(registry, "wlv_module_registry") || !is.environment(registry)) {
     wlv_runtime_abort("`registry` must be a module registry.", "wlv_registry_error")
   }
@@ -495,9 +503,9 @@ wlv_seed_resource <- function(
     value,
     contract = wlv_resource_contract(),
     partition = NULL,
-    producer = wlv_runtime_seed_producer) {
+    producer = wlv_runtime_seed_producer()) {
   if (!is.null(key)) {
-    key <- wlv_runtime_scalar_character(key, "key", wlv_runtime_resource_pattern)
+    key <- wlv_runtime_scalar_character(key, "key", wlv_runtime_resource_pattern())
   }
   wlv_resource_contract_assert(contract)
   if (!is.null(partition)) {
@@ -505,8 +513,8 @@ wlv_seed_resource <- function(
   }
   producer <- wlv_runtime_scalar_character(producer, "producer")
   if (
-    !identical(producer, wlv_runtime_seed_producer) &&
-      !grepl(wlv_runtime_identifier_pattern, producer)
+    !identical(producer, wlv_runtime_seed_producer()) &&
+      !grepl(wlv_runtime_identifier_pattern(), producer)
   ) {
     wlv_runtime_abort(
       "An inherited resource producer must be an instance identifier.",
@@ -712,7 +720,7 @@ wlv_new_resource_store <- function(seeds = list(), seal = TRUE) {
         seed$key <- wlv_runtime_scalar_character(
           supplied_name,
           "seed name",
-          wlv_runtime_resource_pattern
+          wlv_runtime_resource_pattern()
         )
       } else if (nzchar(supplied_name) && !identical(supplied_name, seed$key)) {
         wlv_runtime_abort(
@@ -747,7 +755,7 @@ wlv_new_resource_store <- function(seeds = list(), seal = TRUE) {
         producer = seed$producer,
         value = seed$value,
         contract = seed$contract,
-        action = if (identical(seed$producer, wlv_runtime_seed_producer)) {
+        action = if (identical(seed$producer, wlv_runtime_seed_producer())) {
           "seed"
         } else {
           "inherited"
@@ -959,12 +967,12 @@ wlv_module_instance <- function(
   instance_id <- wlv_runtime_scalar_character(
     instance_id,
     "instance_id",
-    wlv_runtime_identifier_pattern
+    wlv_runtime_identifier_pattern()
   )
   module_id <- wlv_runtime_scalar_character(
     module_id,
     "module_id",
-    wlv_runtime_module_pattern
+    wlv_runtime_module_pattern()
   )
   if (!is.list(args) || (length(args) && (
     is.null(names(args)) || any(!nzchar(names(args))) || anyDuplicated(names(args))
@@ -1382,7 +1390,8 @@ wlv_runtime_checkpoint_rank <- function(checkpoint, checkpoint_order) {
   as.integer(checkpoint_order[[checkpoint]])
 }
 
-wlv_default_checkpoint_order <- c(
+wlv_default_checkpoint_order <- function() {
+  c(
   source_preflight = 0L,
   recalc_input = 0L,
   after_assumptions = 1L,
@@ -1400,6 +1409,7 @@ wlv_default_checkpoint_order <- c(
   post_roundtrip = 7L,
   post_roundtrip_persisted = 8L
 )
+}
 
 wlv_runtime_resolve_instance <- function(registry, instance, operation, partitions) {
   spec <- wlv_registry_module(registry, instance$module_id)
@@ -1863,7 +1873,7 @@ wlv_compile_module_plan <- function(
     store = wlv_new_resource_store(),
     operation = c("calculate", "recalculate"),
     partitions = character(),
-    checkpoint_order = wlv_default_checkpoint_order) {
+    checkpoint_order = wlv_default_checkpoint_order()) {
   operation <- match.arg(operation)
   if (!inherits(registry, "wlv_module_registry") || !is.environment(registry)) {
     wlv_runtime_abort("`registry` must be a module registry.", "wlv_preflight_error")

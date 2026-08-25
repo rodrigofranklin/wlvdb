@@ -48,7 +48,7 @@ wlv_reduced_matrix_spec <- function(
       list(filters = wlv_resource_ref(
         "dimensions/io_filters",
         wlv_native_filters_contract(),
-        producer = wlv_runtime_seed_producer
+        producer = wlv_runtime_seed_producer()
       )),
       wlv_native_run_ref("dimensions/nums", "nums", "list")
     ),
@@ -94,35 +94,45 @@ wlv_reduced_matrix_spec <- function(
   )
 }
 
-wlv_reduced_exports_values_spec <- wlv_reduced_matrix_spec(
+wlv_reduced_exports_values_spec <- function() {
+  wlv_reduced_matrix_spec(
   "reduced_matrix.exports_values",
   "exports_values",
   "values"
 )
-wlv_reduced_exports_mp_spec <- wlv_reduced_matrix_spec(
+}
+wlv_reduced_exports_mp_spec <- function() {
+  wlv_reduced_matrix_spec(
   "reduced_matrix.exports_mp",
   "exports_mp",
   "source_io",
   source = "source"
 )
-wlv_reduced_exports_productive_mp_spec <- wlv_reduced_matrix_spec(
+}
+wlv_reduced_exports_productive_mp_spec <- function() {
+  wlv_reduced_matrix_spec(
   "reduced_matrix.exports_productive_mp",
   "exports_productive_mp",
   "source_io",
   source = "source",
   productive = TRUE
 )
-wlv_reduced_transfers_values_spec <- wlv_reduced_matrix_spec(
+}
+wlv_reduced_transfers_values_spec <- function() {
+  wlv_reduced_matrix_spec(
   "reduced_matrix.transfers_values",
   "transfers_values",
   "transfers_values"
 )
-wlv_reduced_transfers_productive_values_spec <- wlv_reduced_matrix_spec(
+}
+wlv_reduced_transfers_productive_values_spec <- function() {
+  wlv_reduced_matrix_spec(
   "reduced_matrix.transfers_productive_values",
   "transfers_productive_values",
   "transfers_values",
   productive = TRUE
 )
+}
 
 wlv_reduced_direct_price_spec <- function(id, output, input) {
   wlv_module_spec(
@@ -150,13 +160,17 @@ wlv_reduced_direct_price_spec <- function(id, output, input) {
   )
 }
 
-wlv_reduced_transfers_dp_spec <- wlv_reduced_direct_price_spec(
+wlv_reduced_transfers_dp_spec <- function() {
+  wlv_reduced_direct_price_spec(
   "reduced_matrix.transfers_dp",
   "transfers_dp",
   "transfers_values"
 )
-wlv_reduced_transfers_productive_dp_spec <- wlv_reduced_direct_price_spec(
+}
+wlv_reduced_transfers_productive_dp_spec <- function() {
+  wlv_reduced_direct_price_spec(
   "reduced_matrix.transfers_productive_dp",
   "transfers_productive_dp",
   "transfers_productive_values"
 )
+}

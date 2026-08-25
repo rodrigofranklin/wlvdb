@@ -94,17 +94,22 @@ wlv_native_reduction_ones_spec <- function(id, indicator, employee = FALSE) {
   )
 }
 
-wlv_indicator_complex_emp_alternative_1_spec <- wlv_native_reduction_ones_spec(
+wlv_indicator_complex_emp_alternative_1_spec <- function() {
+  wlv_native_reduction_ones_spec(
   "indicator.complex_labour_multiplier.emp.r.un.alternative_1",
   "complex_labour_multiplier.emp.r.un"
 )
-wlv_indicator_complex_empe_alternative_1_spec <- wlv_native_reduction_ones_spec(
+}
+wlv_indicator_complex_empe_alternative_1_spec <- function() {
+  wlv_native_reduction_ones_spec(
   "indicator.complex_labour_multiplier.empe.r.un.alternative_1",
   "complex_labour_multiplier.empe.r.un",
   TRUE
 )
+}
 
-wlv_indicator_complex_emp_alternative_2_spec <- wlv_native_indicator_spec(
+wlv_indicator_complex_emp_alternative_2_spec <- function() {
+  wlv_native_indicator_spec(
   "indicator.complex_labour_multiplier.emp.r.un.alternative_2",
   checkpoint = 2L,
   requires = wlv_native_reduction_skill_refs(),
@@ -122,8 +127,10 @@ wlv_indicator_complex_emp_alternative_2_spec <- wlv_native_indicator_spec(
     wlv_module_result(outputs = list(value = value))
   }
 )
+}
 
-wlv_indicator_complex_empe_alternative_2_spec <- wlv_native_indicator_spec(
+wlv_indicator_complex_empe_alternative_2_spec <- function() {
+  wlv_native_indicator_spec(
   "indicator.complex_labour_multiplier.empe.r.un.alternative_2",
   checkpoint = 2L,
   requires = c(
@@ -187,6 +194,7 @@ wlv_indicator_complex_empe_alternative_2_spec <- wlv_native_indicator_spec(
     ), diagnostics = resolved$diagnostics)
   }
 )
+}
 
 wlv_native_ochoa_1_spec <- function(id, employee = FALSE) {
   indicator <- paste0(
@@ -229,12 +237,16 @@ wlv_native_ochoa_1_spec <- function(id, employee = FALSE) {
   )
 }
 
-wlv_indicator_complex_emp_ochoa_1_spec <- wlv_native_ochoa_1_spec(
+wlv_indicator_complex_emp_ochoa_1_spec <- function() {
+  wlv_native_ochoa_1_spec(
   "indicator.complex_labour_multiplier.emp.r.un.ochoa_1"
 )
-wlv_indicator_complex_empe_ochoa_1_spec <- wlv_native_ochoa_1_spec(
+}
+wlv_indicator_complex_empe_ochoa_1_spec <- function() {
+  wlv_native_ochoa_1_spec(
   "indicator.complex_labour_multiplier.empe.r.un.ochoa_1", TRUE
 )
+}
 
 wlv_native_ochoa_2_spec <- function(id, employee = FALSE) {
   indicator <- paste0(
@@ -288,12 +300,16 @@ wlv_native_ochoa_2_spec <- function(id, employee = FALSE) {
   )
 }
 
-wlv_indicator_complex_emp_ochoa_2_spec <- wlv_native_ochoa_2_spec(
+wlv_indicator_complex_emp_ochoa_2_spec <- function() {
+  wlv_native_ochoa_2_spec(
   "indicator.complex_labour_multiplier.emp.r.un.ochoa_2"
 )
-wlv_indicator_complex_empe_ochoa_2_spec <- wlv_native_ochoa_2_spec(
+}
+wlv_indicator_complex_empe_ochoa_2_spec <- function() {
+  wlv_native_ochoa_2_spec(
   "indicator.complex_labour_multiplier.empe.r.un.ochoa_2", TRUE
 )
+}
 
 wlv_native_petrovic_requirements <- function(employee = FALSE) {
   person <- if (employee) "empe" else "emp"
@@ -337,7 +353,8 @@ wlv_native_petrovic_value <- function(ctx) {
   list(value = value, multiplier_h = multiplier_h, multiplier_m = multiplier_m)
 }
 
-wlv_indicator_complex_emp_petrovic_spec <- wlv_native_indicator_spec(
+wlv_indicator_complex_emp_petrovic_spec <- function() {
+  wlv_native_indicator_spec(
   "indicator.complex_labour_multiplier.emp.r.un.petrovic",
   checkpoint = 2L,
   requires = wlv_native_petrovic_requirements(FALSE),
@@ -353,8 +370,10 @@ wlv_indicator_complex_emp_petrovic_spec <- wlv_native_indicator_spec(
     wlv_module_result(outputs = list(value = value))
   }
 )
+}
 
-wlv_indicator_complex_empe_petrovic_spec <- wlv_native_indicator_spec(
+wlv_indicator_complex_empe_petrovic_spec <- function() {
+  wlv_native_indicator_spec(
   "indicator.complex_labour_multiplier.empe.r.un.petrovic",
   checkpoint = 2L,
   requires = wlv_native_petrovic_requirements(TRUE),
@@ -413,3 +432,4 @@ wlv_indicator_complex_empe_petrovic_spec <- wlv_native_indicator_spec(
     ), diagnostics = resolved$diagnostics)
   }
 )
+}

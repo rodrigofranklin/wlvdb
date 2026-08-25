@@ -46,14 +46,15 @@ wlv_native_assumption_table_ref <- function(key, alias) {
   wlv_native_run_ref(key, alias, "data.frame")
 }
 
-wlv_assumption_china_wiodr13_spec <- wlv_module_spec(
+wlv_assumption_china_wiodr13_spec <- function() {
+  wlv_module_spec(
   id = "assumption.china.wiodr13",
   scope = "run",
   checkpoint = "after_assumptions",
   operations = c("calculate", "recalculate"),
   parameters = list(),
   requires = c(
-    wlv_native_parameters_ref(producer = wlv_runtime_seed_producer),
+    wlv_native_parameters_ref(producer = wlv_runtime_seed_producer()),
     wlv_native_indicator_ref("emp.s.un", "employment", producer = "indicator.emp.s.un"),
     wlv_native_indicator_ref(
       "hours_worked.emp.s.hr",
@@ -68,7 +69,7 @@ wlv_assumption_china_wiodr13_spec <- wlv_module_spec(
     )
   ),
   provides = c(
-    wlv_native_parameters_output(wlv_runtime_seed_producer),
+    wlv_native_parameters_output(wlv_runtime_seed_producer()),
     wlv_native_replace_indicator("empe.s.un", "employees", "indicator.empe.s.un"),
     wlv_native_replace_indicator(
       "hours_worked.empe.s.hr",
@@ -95,15 +96,17 @@ wlv_assumption_china_wiodr13_spec <- wlv_module_spec(
     ))
   }
 )
+}
 
-wlv_assumption_china_reduction_spec <- wlv_module_spec(
+wlv_assumption_china_reduction_spec <- function() {
+  wlv_module_spec(
   id = "assumption.china.reduction_problem",
   scope = "run",
   checkpoint = "after_assumptions",
   operations = c("calculate", "recalculate"),
   parameters = list(),
   requires = c(
-    wlv_native_parameters_ref(producer = wlv_runtime_seed_producer),
+    wlv_native_parameters_ref(producer = wlv_runtime_seed_producer()),
     wlv_native_indicator_ref("emp.s.un", "employment", producer = "indicator.emp.s.un"),
     wlv_native_indicator_ref(
       "hours_worked.emp.s.hr",
@@ -122,7 +125,7 @@ wlv_assumption_china_reduction_spec <- wlv_module_spec(
     )
   ),
   provides = c(
-    wlv_native_parameters_output(wlv_runtime_seed_producer),
+    wlv_native_parameters_output(wlv_runtime_seed_producer()),
     wlv_native_replace_indicator("empe.s.un", "employees", "indicator.empe.s.un"),
     wlv_native_replace_indicator(
       "hours_worked.empe.s.hr",
@@ -155,15 +158,17 @@ wlv_assumption_china_reduction_spec <- wlv_module_spec(
     ))
   }
 )
+}
 
-wlv_assumption_china_wiodr16_spec <- wlv_module_spec(
+wlv_assumption_china_wiodr16_spec <- function() {
+  wlv_module_spec(
   id = "assumption.china.wiodr16",
   scope = "run",
   checkpoint = "after_assumptions",
   operations = c("calculate", "recalculate"),
   parameters = list(),
   requires = c(
-    wlv_native_parameters_ref(producer = wlv_runtime_seed_producer),
+    wlv_native_parameters_ref(producer = wlv_runtime_seed_producer()),
     wlv_native_indicator_ref("emp.s.un", "employment", producer = "indicator.emp.s.un"),
     wlv_native_indicator_ref(
       "hours_worked.emp.s.hr",
@@ -183,11 +188,11 @@ wlv_assumption_china_wiodr16_spec <- wlv_module_spec(
         axes = c("year", "sector"),
         missingness = "none"
       ),
-      producer = wlv_runtime_seed_producer
+      producer = wlv_runtime_seed_producer()
     ))
   ),
   provides = c(
-    wlv_native_parameters_output(wlv_runtime_seed_producer),
+    wlv_native_parameters_output(wlv_runtime_seed_producer()),
     wlv_native_replace_indicator(
       "hours_worked.emp.s.hr",
       "hours",
@@ -229,8 +234,10 @@ wlv_assumption_china_wiodr16_spec <- wlv_module_spec(
     ))
   }
 )
+}
 
-wlv_assumption_row_none_spec <- wlv_module_spec(
+wlv_assumption_row_none_spec <- function() {
+  wlv_module_spec(
   id = "assumption.row.none",
   scope = "run",
   checkpoint = "after_assumptions",
@@ -333,6 +340,7 @@ wlv_assumption_row_none_spec <- wlv_module_spec(
     wlv_module_result(outputs = outputs)
   }
 )
+}
 
 wlv_native_row_hours_producer <- function(source) {
   if (identical(source, "wiodr16")) "assumption.china" else {
@@ -505,13 +513,14 @@ wlv_native_row_standard_provides <- function(args) {
         "constant_capital",
         "indicator.capital_stock.s.cu"
       ),
-      wlv_native_indicator_metadata_output(wlv_runtime_seed_producer)
+      wlv_native_indicator_metadata_output(wlv_runtime_seed_producer())
     )
   }
   result
 }
 
-wlv_assumption_row_standard_spec <- wlv_module_spec(
+wlv_assumption_row_standard_spec <- function() {
+  wlv_module_spec(
   id = "assumption.row.standard",
   scope = "run",
   checkpoint = "after_assumptions",
@@ -619,6 +628,7 @@ wlv_assumption_row_standard_spec <- wlv_module_spec(
     wlv_module_result(outputs = outputs, diagnostics = diagnostics)
   }
 )
+}
 
 wlv_native_row_v09_requires <- function(args) {
   c(
@@ -669,7 +679,8 @@ wlv_native_row_v09_provides <- function(args) {
   )
 }
 
-wlv_assumption_row_v09_spec <- wlv_module_spec(
+wlv_assumption_row_v09_spec <- function() {
+  wlv_module_spec(
   id = "assumption.row.v09",
   scope = "run",
   checkpoint = "after_assumptions",
@@ -724,8 +735,10 @@ wlv_assumption_row_v09_spec <- wlv_module_spec(
     ))
   }
 )
+}
 
-wlv_assumption_row_reduction_spec <- wlv_module_spec(
+wlv_assumption_row_reduction_spec <- function() {
+  wlv_module_spec(
   id = "assumption.row.reduction_problem",
   scope = "run",
   checkpoint = "after_assumptions",
@@ -985,3 +998,4 @@ wlv_assumption_row_reduction_spec <- wlv_module_spec(
     ))
   }
 )
+}

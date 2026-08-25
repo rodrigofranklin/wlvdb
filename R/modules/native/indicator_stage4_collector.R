@@ -6,7 +6,8 @@
 # the same key at run scope.  The collector requires exact, non-overlapping
 # coverage of `dimensions/lists$years` and preserves all values and NA states.
 
-wlv_indicator_stage4_collector_spec <- wlv_module_spec(
+wlv_indicator_stage4_collector_spec <- function() {
+  wlv_module_spec(
   id = "indicator.stage4_collector",
   scope = "run",
   checkpoint = "after_stage_4",
@@ -75,3 +76,4 @@ wlv_indicator_stage4_collector_spec <- wlv_module_spec(
     wlv_module_result(outputs = list(value = result))
   }
 )
+}

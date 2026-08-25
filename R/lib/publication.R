@@ -1,5 +1,9 @@
-wlv_publication_output_contract_id <- "wlvpanel-output"
-wlv_publication_output_contract_version <- "1.0.0"
+wlv_publication_output_contract_id <- function() {
+  "wlvpanel-output"
+}
+wlv_publication_output_contract_version <- function() {
+  "1.0.0"
+}
 
 wlv_publication_paths <- function(root) {
   root <- normalizePath(root, winslash = "/", mustWork = TRUE)
@@ -798,7 +802,7 @@ wlv_result_artifact_role <- function(path) {
 wlv_capture_validated_run_artifacts <- function(staging) {
   artifacts <- wlv_publication_list_files(
     staging,
-    exclude = wlv_run_manifest_filename
+    exclude = wlv_run_manifest_filename()
   )
   roles <- vapply(artifacts, wlv_result_artifact_role, character(1L))
   wlv_publication_build_artifacts(
@@ -806,7 +810,7 @@ wlv_capture_validated_run_artifacts <- function(staging) {
     artifacts = artifacts,
     artifact_roles = roles,
     allow_empty = FALSE,
-    excluded_paths = wlv_run_manifest_filename
+    excluded_paths = wlv_run_manifest_filename()
   )
 }
 
@@ -957,7 +961,7 @@ wlv_promote_method_run <- function(
     include.dirs = FALSE,
     no.. = TRUE
   ), method = "radix")
-  artifacts <- artifacts[artifacts != wlv_run_manifest_filename]
+  artifacts <- artifacts[artifacts != wlv_run_manifest_filename()]
   roles <- vapply(artifacts, wlv_result_artifact_role, character(1L))
   result <- wlv_run_manifest_result(
     plan,
@@ -981,8 +985,8 @@ wlv_promote_method_run <- function(
     result = result,
     execution = execution,
     parent_run_id = parent_run_id,
-    output_contract_id = wlv_publication_output_contract_id,
-    output_contract_version = wlv_publication_output_contract_version,
+    output_contract_id = wlv_publication_output_contract_id(),
+    output_contract_version = wlv_publication_output_contract_version(),
     validated_artifacts = validated_artifacts
   )
   if (!identical(manifest$artifacts, validated_artifacts)) {
@@ -994,7 +998,7 @@ wlv_promote_method_run <- function(
       call. = FALSE
     )
   }
-  manifest_path <- file.path(staging, wlv_run_manifest_filename)
+  manifest_path <- file.path(staging, wlv_run_manifest_filename())
   wlv_write_run_manifest(manifest, manifest_path)
   wlv_verify_run_manifest(manifest, staging, reject_unlisted = TRUE)
   wlv_assert_plan_publication_inputs_unchanged(plan, method)
@@ -1025,7 +1029,7 @@ wlv_promote_method_run <- function(
     stop(sprintf("Could not promote validated run `%s`.", run_id), call. = FALSE)
   }
   final <- normalizePath(final, winslash = "/", mustWork = TRUE)
-  installed_manifest <- wlv_read_run_manifest(file.path(final, wlv_run_manifest_filename))
+  installed_manifest <- wlv_read_run_manifest(file.path(final, wlv_run_manifest_filename()))
   if (!wlv_publication_json_identical(installed_manifest, manifest)) {
     stop("Installed run manifest differs from its verified staging manifest.",
       call. = FALSE
@@ -1102,7 +1106,7 @@ wlv_commit_release <- function(plan, run_environments) {
   }, logical(1L))
   prior_runs <- prior_runs[!replaced]
   new_runs <- lapply(run_environments, function(environment) {
-    manifest_path <- file.path(environment$wlv_run_dir, wlv_run_manifest_filename)
+    manifest_path <- file.path(environment$wlv_run_dir, wlv_run_manifest_filename())
     wlv_build_release_run_reference(
       publication_root = paths$results,
       method = environment$wlv_run_manifest$method,
@@ -1175,7 +1179,7 @@ wlv_commit_release <- function(plan, run_environments) {
     runs = runs,
     metadata = list(methods = vapply(runs, `[[`, character(1L), "method"))
   )
-  release_path <- file.path(staging, wlv_release_manifest_filename)
+  release_path <- file.path(staging, wlv_release_manifest_filename())
   wlv_write_release_manifest(release, release_path)
   wlv_verify_release_manifest(
     release,
@@ -1191,7 +1195,7 @@ wlv_commit_release <- function(plan, run_environments) {
   }
   staging_open <- FALSE
   final <- normalizePath(final, winslash = "/", mustWork = TRUE)
-  installed_release_path <- file.path(final, wlv_release_manifest_filename)
+  installed_release_path <- file.path(final, wlv_release_manifest_filename())
   installed_release <- wlv_read_release_manifest(installed_release_path)
   if (!wlv_publication_json_identical(installed_release, release)) {
     stop("Installed release manifest differs from its verified staging manifest.",

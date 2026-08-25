@@ -2,13 +2,13 @@
 
 wlv_native_assumption_specs <- function() {
   list(
-    wlv_assumption_china_reduction_spec,
-    wlv_assumption_china_wiodr13_spec,
-    wlv_assumption_china_wiodr16_spec,
-    wlv_assumption_row_none_spec,
-    wlv_assumption_row_reduction_spec,
-    wlv_assumption_row_standard_spec,
-    wlv_assumption_row_v09_spec
+    wlv_assumption_china_reduction_spec(),
+    wlv_assumption_china_wiodr13_spec(),
+    wlv_assumption_china_wiodr16_spec(),
+    wlv_assumption_row_none_spec(),
+    wlv_assumption_row_reduction_spec(),
+    wlv_assumption_row_standard_spec(),
+    wlv_assumption_row_v09_spec()
   )
 }
 
@@ -16,28 +16,28 @@ wlv_native_matrix_specs <- function() {
   c(
     wlv_native_capital_matrix_specs(),
     list(
-      wlv_matrix_transformation_spec,
-      wlv_matrix_transfers_spec,
-      wlv_matrix_basket_national_spec,
-      wlv_matrix_basket_international_spec,
-      wlv_matrix_zero_depreciation_wiodr13_spec,
-      wlv_matrix_zero_depreciation_wiodr16_spec,
-      wlv_reduced_exports_values_spec,
-      wlv_reduced_exports_mp_spec,
-      wlv_reduced_exports_productive_mp_spec,
-      wlv_reduced_transfers_values_spec,
-      wlv_reduced_transfers_productive_values_spec,
-      wlv_reduced_transfers_dp_spec,
-      wlv_reduced_transfers_productive_dp_spec
+      wlv_matrix_transformation_spec(),
+      wlv_matrix_transfers_spec(),
+      wlv_matrix_basket_national_spec(),
+      wlv_matrix_basket_international_spec(),
+      wlv_matrix_zero_depreciation_wiodr13_spec(),
+      wlv_matrix_zero_depreciation_wiodr16_spec(),
+      wlv_reduced_exports_values_spec(),
+      wlv_reduced_exports_mp_spec(),
+      wlv_reduced_exports_productive_mp_spec(),
+      wlv_reduced_transfers_values_spec(),
+      wlv_reduced_transfers_productive_values_spec(),
+      wlv_reduced_transfers_dp_spec(),
+      wlv_reduced_transfers_productive_dp_spec()
     )
   )
 }
 
 wlv_native_infrastructure_specs <- function() {
   list(
-    wlv_native_aggregation_spec,
-    wlv_native_matrix_assembler_spec,
-    wlv_native_panel_assembler_spec
+    wlv_native_aggregation_spec(),
+    wlv_native_matrix_assembler_spec(),
+    wlv_native_panel_assembler_spec()
   )
 }
 

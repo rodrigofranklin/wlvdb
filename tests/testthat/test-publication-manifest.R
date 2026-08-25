@@ -408,7 +408,7 @@ test_that("release and channel marker verify the complete publication chain", {
   )
   expect_identical(
     names(run_reference),
-    publication_manifest_environment$wlv_publication_run_reference_fields
+    publication_manifest_environment$wlv_publication_run_reference_fields()
   )
 
   release_root <- file.path(fixture$root, "releases", "release-001")

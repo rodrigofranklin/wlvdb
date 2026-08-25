@@ -16,7 +16,7 @@ wlv_native_euklems_table_list_contract <- function(resource) {
 wlv_native_euklems_table_list_ref <- function(
     resource,
     alias = resource,
-    producer = wlv_runtime_seed_producer) {
+    producer = wlv_runtime_seed_producer()) {
   stats::setNames(
     list(wlv_resource_ref(
       key = paste0("source/euklems/", resource),
@@ -38,7 +38,7 @@ wlv_native_gfcf_observations_contract <- function() {
 
 wlv_native_gfcf_observations_ref <- function(
     alias = "gfcf_observations",
-    producer = wlv_runtime_seed_producer,
+    producer = wlv_runtime_seed_producer(),
     optional = TRUE) {
   stats::setNames(
     list(wlv_resource_ref(
@@ -697,34 +697,40 @@ wlv_native_capital_spec <- function(
   )
 }
 
-wlv_matrix_capital_wiodr13_spec <- wlv_native_capital_spec(
+wlv_matrix_capital_wiodr13_spec <- function() {
+  wlv_native_capital_spec(
   id = "matrix.capital.wiodr13",
   method = "wiodr13",
   depreciation_year_offset = 1L,
   use_wiodr13_contract = TRUE,
   record_wiodr13_fallback = TRUE
 )
+}
 
-wlv_matrix_capital_wiodr16_spec <- wlv_native_capital_spec(
+wlv_matrix_capital_wiodr16_spec <- function() {
+  wlv_native_capital_spec(
   id = "matrix.capital.wiodr16",
   method = "wiodr16",
   depreciation_year_offset = 1L
 )
+}
 
-wlv_matrix_capital_reduction_problem_spec <- wlv_native_capital_spec(
+wlv_matrix_capital_reduction_problem_spec <- function() {
+  wlv_native_capital_spec(
   id = "matrix.capital.reduction_problem",
   method = "wiodr13",
   depreciation_year_offset = 0L,
   use_wiodr13_contract = FALSE,
   record_wiodr13_fallback = FALSE
 )
+}
 
 wlv_native_capital_matrix_specs <- function() {
   stats::setNames(
     list(
-      wlv_matrix_capital_wiodr13_spec,
-      wlv_matrix_capital_wiodr16_spec,
-      wlv_matrix_capital_reduction_problem_spec
+      wlv_matrix_capital_wiodr13_spec(),
+      wlv_matrix_capital_wiodr16_spec(),
+      wlv_matrix_capital_reduction_problem_spec()
     ),
     c(
       "matrix.capital.wiodr13",

@@ -123,7 +123,7 @@ test_that("native preflight rejects invented seeds and incompatible seed contrac
       requires = list(value = e$wlv_resource_ref(
         key,
         contract,
-        producer = e$wlv_runtime_seed_producer
+        producer = e$wlv_runtime_seed_producer()
       )),
       provides = list(value = e$wlv_resource_output(e$wlv_resource_ref(
         paste0("artifact/", id),

@@ -38,17 +38,19 @@ wlv_native_complex_multiplier_spec <- function(id, indicator, employee = FALSE) 
   )
 }
 
-wlv_indicator_complex_labour_multiplier_emp_spec <-
+wlv_indicator_complex_labour_multiplier_emp_spec <- function() {
   wlv_native_complex_multiplier_spec(
     "indicator.complex_labour_multiplier.emp.r.un",
     "complex_labour_multiplier.emp.r.un"
   )
-wlv_indicator_complex_labour_multiplier_empe_spec <-
+}
+wlv_indicator_complex_labour_multiplier_empe_spec <- function() {
   wlv_native_complex_multiplier_spec(
     "indicator.complex_labour_multiplier.empe.r.un",
     "complex_labour_multiplier.empe.r.un",
     employee = TRUE
   )
+}
 
 wlv_native_abstract_labour_spec <- function(employee = FALSE) {
   person <- if (employee) "empe" else "emp"
@@ -83,12 +85,15 @@ wlv_native_abstract_labour_spec <- function(employee = FALSE) {
   )
 }
 
-wlv_indicator_abstract_labour_emp_s_mv_spec <-
+wlv_indicator_abstract_labour_emp_s_mv_spec <- function() {
   wlv_native_abstract_labour_spec(FALSE)
-wlv_indicator_abstract_labour_empe_s_mv_spec <-
+}
+wlv_indicator_abstract_labour_empe_s_mv_spec <- function() {
   wlv_native_abstract_labour_spec(TRUE)
+}
 
-wlv_indicator_gdp_s_mv_spec <- wlv_native_indicator_spec(
+wlv_indicator_gdp_s_mv_spec <- function() {
+  wlv_native_indicator_spec(
   "indicator.gdp.s.mv",
   checkpoint = 2L,
   requires = c(
@@ -117,8 +122,10 @@ wlv_indicator_gdp_s_mv_spec <- wlv_native_indicator_spec(
     wlv_module_result(outputs = list(value = value))
   }
 )
+}
 
-wlv_indicator_gdp_p_s_us_spec <- wlv_native_indicator_spec(
+wlv_indicator_gdp_p_s_us_spec <- function() {
+  wlv_native_indicator_spec(
   "indicator.gdp.p.s.us",
   checkpoint = 2L,
   requires = c(
@@ -147,6 +154,7 @@ wlv_indicator_gdp_p_s_us_spec <- wlv_native_indicator_spec(
     wlv_module_result(outputs = list(value = value))
   }
 )
+}
 
 # Stage 4: matrices to sector indicators ----------------------------------
 
@@ -171,7 +179,7 @@ wlv_native_stage4_rowsum_spec <- function(
       list(filters = wlv_resource_ref(
         "dimensions/io_filters",
         wlv_native_filters_contract(),
-        producer = wlv_runtime_seed_producer
+        producer = wlv_runtime_seed_producer()
       ))
     )
   }
@@ -208,7 +216,8 @@ wlv_native_stage4_rowsum_spec <- function(
   )
 }
 
-wlv_indicator_gross_output_s_mv_spec <- wlv_native_stage4_rowsum_spec(
+wlv_indicator_gross_output_s_mv_spec <- function() {
+  wlv_native_stage4_rowsum_spec(
   "indicator.gross_output.s.mv",
   "values",
   wlv_native_indicator_metadata_row(
@@ -223,8 +232,10 @@ wlv_indicator_gross_output_s_mv_spec <- wlv_native_stage4_rowsum_spec(
     NA_character_, "Product", "usd"
   )
 )
+}
 
-wlv_indicator_exports_s_mv_spec <- wlv_native_stage4_rowsum_spec(
+wlv_indicator_exports_s_mv_spec <- function() {
+  wlv_native_stage4_rowsum_spec(
   "indicator.exports.s.mv",
   "values",
   wlv_native_indicator_metadata_row(
@@ -236,8 +247,10 @@ wlv_indicator_exports_s_mv_spec <- wlv_native_stage4_rowsum_spec(
   ),
   filter_name = "trade"
 )
+}
 
-wlv_indicator_exports_s_us_spec <- wlv_native_stage4_rowsum_spec(
+wlv_indicator_exports_s_us_spec <- function() {
+  wlv_native_stage4_rowsum_spec(
   "indicator.exports.s.us",
   "source_io",
   wlv_native_indicator_metadata_row(
@@ -248,6 +261,7 @@ wlv_indicator_exports_s_us_spec <- wlv_native_stage4_rowsum_spec(
   source = TRUE,
   filter_name = "trade"
 )
+}
 
 wlv_native_stage4_import_spec <- function(id, resource, metadata, source = FALSE) {
   wlv_native_indicator_spec(
@@ -259,7 +273,7 @@ wlv_native_stage4_import_spec <- function(id, resource, metadata, source = FALSE
       list(filters = wlv_resource_ref(
         "dimensions/io_filters",
         wlv_native_filters_contract(),
-        producer = wlv_runtime_seed_producer
+        producer = wlv_runtime_seed_producer()
       ))
     ),
     services = "year_apply",
@@ -286,7 +300,8 @@ wlv_native_stage4_import_spec <- function(id, resource, metadata, source = FALSE
   )
 }
 
-wlv_indicator_imports_s_mv_spec <- wlv_native_stage4_import_spec(
+wlv_indicator_imports_s_mv_spec <- function() {
+  wlv_native_stage4_import_spec(
   "indicator.imports.s.mv",
   "values",
   wlv_native_indicator_metadata_row(
@@ -296,7 +311,9 @@ wlv_indicator_imports_s_mv_spec <- wlv_native_stage4_import_spec(
     "International trade", "value"
   )
 )
-wlv_indicator_imports_s_us_spec <- wlv_native_stage4_import_spec(
+}
+wlv_indicator_imports_s_us_spec <- function() {
+  wlv_native_stage4_import_spec(
   "indicator.imports.s.us",
   "source_io",
   wlv_native_indicator_metadata_row(
@@ -306,6 +323,7 @@ wlv_indicator_imports_s_us_spec <- wlv_native_stage4_import_spec(
   ),
   source = TRUE
 )
+}
 
 wlv_native_stage4_trade_transfer_spec <- function(id, productive, metadata) {
   wlv_native_indicator_spec(
@@ -317,7 +335,7 @@ wlv_native_stage4_trade_transfer_spec <- function(id, productive, metadata) {
       list(filters = wlv_resource_ref(
         "dimensions/io_filters",
         wlv_native_filters_contract(),
-        producer = wlv_runtime_seed_producer
+        producer = wlv_runtime_seed_producer()
       )),
       wlv_native_run_ref("dimensions/lists", "lists", "list"),
       wlv_native_run_ref("dimensions/nums", "nums", "list")
@@ -356,7 +374,8 @@ wlv_native_stage4_trade_transfer_spec <- function(id, productive, metadata) {
   )
 }
 
-wlv_indicator_trade_transfers_s_mv_spec <- wlv_native_stage4_trade_transfer_spec(
+wlv_indicator_trade_transfers_s_mv_spec <- function() {
+  wlv_native_stage4_trade_transfer_spec(
   "indicator.trade_transfers.s.mv",
   FALSE,
   wlv_native_indicator_metadata_row(
@@ -368,7 +387,9 @@ wlv_indicator_trade_transfers_s_mv_spec <- wlv_native_stage4_trade_transfer_spec
     NA_character_, "International trade", "value"
   )
 )
-wlv_indicator_trade_transfers_p_s_mv_spec <- wlv_native_stage4_trade_transfer_spec(
+}
+wlv_indicator_trade_transfers_p_s_mv_spec <- function() {
+  wlv_native_stage4_trade_transfer_spec(
   "indicator.trade_transfers.p.s.mv",
   TRUE,
   wlv_native_indicator_metadata_row(
@@ -377,6 +398,7 @@ wlv_indicator_trade_transfers_p_s_mv_spec <- wlv_native_stage4_trade_transfer_sp
     NA_character_, "International trade", "value"
   )
 )
+}
 
 wlv_native_stage4_labour_force_spec <- function(id, compensation, metadata) {
   wlv_native_indicator_spec(
@@ -420,7 +442,8 @@ wlv_native_stage4_labour_force_spec <- function(id, compensation, metadata) {
   )
 }
 
-wlv_indicator_labour_force_value_s_mv_spec <- wlv_native_stage4_labour_force_spec(
+wlv_indicator_labour_force_value_s_mv_spec <- function() {
+  wlv_native_stage4_labour_force_spec(
   "indicator.labour_force_value.s.mv",
   "compensation.empe.s.us",
   wlv_native_indicator_metadata_row(
@@ -430,7 +453,9 @@ wlv_indicator_labour_force_value_s_mv_spec <- wlv_native_stage4_labour_force_spe
     "Wages and value of labour force", "value"
   )
 )
-wlv_indicator_labour_force_value_emp_s_mv_spec <- wlv_native_stage4_labour_force_spec(
+}
+wlv_indicator_labour_force_value_emp_s_mv_spec <- function() {
+  wlv_native_stage4_labour_force_spec(
   "indicator.labour_force_value.emp.s.mv",
   "compensation.emp.s.us",
   wlv_native_indicator_metadata_row(
@@ -440,8 +465,10 @@ wlv_indicator_labour_force_value_emp_s_mv_spec <- wlv_native_stage4_labour_force
     "Wages and value of labour force", "value"
   )
 )
+}
 
-wlv_indicator_value_m_mv_spec <- wlv_native_indicator_spec(
+wlv_indicator_value_m_mv_spec <- function() {
+  wlv_native_indicator_spec(
   "indicator.value.m.mv",
   checkpoint = 4L,
   scope = "io_period",
@@ -461,8 +488,10 @@ wlv_indicator_value_m_mv_spec <- wlv_native_indicator_spec(
     wlv_module_result(outputs = list(value = value))
   }
 )
+}
 
-wlv_indicator_capital_depreciation_s_us_spec <- wlv_native_indicator_spec(
+wlv_indicator_capital_depreciation_s_us_spec <- function() {
+  wlv_native_indicator_spec(
   "indicator.capital_depreciation.s.us",
   checkpoint = 4L,
   scope = "io_period",
@@ -491,6 +520,7 @@ wlv_indicator_capital_depreciation_s_us_spec <- wlv_native_indicator_spec(
     wlv_module_result(outputs = list(value = value))
   }
 )
+}
 
 # Stage 5: final sector and country indicators -----------------------------
 
@@ -549,7 +579,8 @@ wlv_native_stage5_ratio_spec <- function(
   )
 }
 
-wlv_indicator_abstract_labour_empe_m_mv_spec <- wlv_native_stage5_ratio_spec(
+wlv_indicator_abstract_labour_empe_m_mv_spec <- function() {
+  wlv_native_stage5_ratio_spec(
   "indicator.abstract_labour.empe.m.mv",
   "abstract_labour.empe.s.mv", "empe.s.un",
   wlv_native_indicator_metadata_row(
@@ -558,7 +589,9 @@ wlv_indicator_abstract_labour_empe_m_mv_spec <- wlv_native_stage5_ratio_spec(
     NA_character_, "Labour and employment", "value"
   )
 )
-wlv_indicator_abstract_labour_emp_m_mv_spec <- wlv_native_stage5_ratio_spec(
+}
+wlv_indicator_abstract_labour_emp_m_mv_spec <- function() {
+  wlv_native_stage5_ratio_spec(
   "indicator.abstract_labour.emp.m.mv",
   "abstract_labour.emp.s.mv", "emp.s.un",
   wlv_native_indicator_metadata_row(
@@ -567,7 +600,9 @@ wlv_indicator_abstract_labour_emp_m_mv_spec <- wlv_native_stage5_ratio_spec(
     NA_character_, "Labour and employment", "value"
   )
 )
-wlv_indicator_labour_force_value_m_mv_spec <- wlv_native_stage5_ratio_spec(
+}
+wlv_indicator_labour_force_value_m_mv_spec <- function() {
+  wlv_native_stage5_ratio_spec(
   "indicator.labour_force_value.m.mv",
   "labour_force_value.s.mv", "empe.s.un",
   wlv_native_indicator_metadata_row(
@@ -577,7 +612,9 @@ wlv_indicator_labour_force_value_m_mv_spec <- wlv_native_stage5_ratio_spec(
     "Wages and value of labour force", "value"
   )
 )
-wlv_indicator_labour_force_value_emp_m_mv_spec <- wlv_native_stage5_ratio_spec(
+}
+wlv_indicator_labour_force_value_emp_m_mv_spec <- function() {
+  wlv_native_stage5_ratio_spec(
   "indicator.labour_force_value.emp.m.mv",
   "labour_force_value.emp.s.mv", "emp.s.un",
   wlv_native_indicator_metadata_row(
@@ -587,7 +624,9 @@ wlv_indicator_labour_force_value_emp_m_mv_spec <- wlv_native_stage5_ratio_spec(
     "Wages and value of labour force", "value"
   )
 )
-wlv_indicator_surplus_value_empe_r_pc_spec <- wlv_native_stage5_ratio_spec(
+}
+wlv_indicator_surplus_value_empe_r_pc_spec <- function() {
+  wlv_native_stage5_ratio_spec(
   "indicator.surplus_value.empe.r.pc",
   "abstract_labour.empe.s.mv", "labour_force_value.s.mv",
   wlv_native_indicator_metadata_row(
@@ -598,7 +637,9 @@ wlv_indicator_surplus_value_empe_r_pc_spec <- wlv_native_stage5_ratio_spec(
   ),
   subtract_one = TRUE
 )
-wlv_indicator_surplus_value_emp_r_pc_spec <- wlv_native_stage5_ratio_spec(
+}
+wlv_indicator_surplus_value_emp_r_pc_spec <- function() {
+  wlv_native_stage5_ratio_spec(
   "indicator.surplus_value.emp.r.pc",
   "abstract_labour.emp.s.mv", "labour_force_value.emp.s.mv",
   wlv_native_indicator_metadata_row(
@@ -609,6 +650,7 @@ wlv_indicator_surplus_value_emp_r_pc_spec <- wlv_native_stage5_ratio_spec(
   ),
   subtract_one = TRUE
 )
+}
 wlv_native_appropriated_profit_spec <- function() {
   wlv_native_indicator_spec(
     "indicator.appropriated_profit.r.pc",
@@ -662,10 +704,12 @@ wlv_native_appropriated_profit_spec <- function() {
   )
 }
 
-wlv_indicator_appropriated_profit_r_pc_spec <-
+wlv_indicator_appropriated_profit_r_pc_spec <- function() {
   wlv_native_appropriated_profit_spec()
+}
 
-wlv_indicator_trade_transfers_p_m_pc_spec <- wlv_native_stage5_ratio_spec(
+wlv_indicator_trade_transfers_p_m_pc_spec <- function() {
+  wlv_native_stage5_ratio_spec(
   "indicator.trade_transfers.p.m.pc",
   "trade_transfers.p.s.mv", "gdp.s.mv",
   wlv_native_indicator_metadata_row(
@@ -674,6 +718,7 @@ wlv_indicator_trade_transfers_p_m_pc_spec <- wlv_native_stage5_ratio_spec(
     NA_character_, "International trade", "percent"
   )
 )
+}
 
 wlv_native_stage5_sum_spec <- function(
     id,
@@ -703,7 +748,8 @@ wlv_native_stage5_sum_spec <- function(
   )
 }
 
-wlv_indicator_trade_transfers_u_s_mv_spec <- wlv_native_stage5_sum_spec(
+wlv_indicator_trade_transfers_u_s_mv_spec <- function() {
+  wlv_native_stage5_sum_spec(
   "indicator.trade_transfers.u.s.mv",
   c(
     wlv_native_indicator_ref("trade_transfers.s.mv", "total"),
@@ -716,7 +762,9 @@ wlv_indicator_trade_transfers_u_s_mv_spec <- wlv_native_stage5_sum_spec(
     NA_character_, "International trade", "value"
   )
 )
-wlv_indicator_trade_balance_s_us_spec <- wlv_native_stage5_sum_spec(
+}
+wlv_indicator_trade_balance_s_us_spec <- function() {
+  wlv_native_stage5_sum_spec(
   "indicator.trade_balance.s.us",
   c(
     wlv_native_indicator_ref("exports.s.us", "exports"),
@@ -729,7 +777,9 @@ wlv_indicator_trade_balance_s_us_spec <- wlv_native_stage5_sum_spec(
     NA_character_, "International trade", "usd"
   )
 )
-wlv_indicator_trade_balance_s_mv_spec <- wlv_native_stage5_sum_spec(
+}
+wlv_indicator_trade_balance_s_mv_spec <- function() {
+  wlv_native_stage5_sum_spec(
   "indicator.trade_balance.s.mv",
   c(
     wlv_native_indicator_ref("exports.s.mv", "exports"),
@@ -742,6 +792,7 @@ wlv_indicator_trade_balance_s_mv_spec <- wlv_native_stage5_sum_spec(
     NA_character_, "International trade", "value"
   )
 )
+}
 
 wlv_native_direct_price_spec <- function(id, base_indicator, metadata) {
   wlv_native_stage5_sum_spec(
@@ -770,7 +821,8 @@ wlv_native_direct_price_spec <- function(id, base_indicator, metadata) {
   )
 }
 
-wlv_indicator_gdp_s_du_spec <- wlv_native_direct_price_spec(
+wlv_indicator_gdp_s_du_spec <- function() {
+  wlv_native_direct_price_spec(
   "indicator.gdp.s.du", "gdp.s.mv",
   wlv_native_indicator_metadata_row(
     "gdp.s.du", "Gross Domestic Product (direct prices - USD) ",
@@ -779,8 +831,10 @@ wlv_indicator_gdp_s_du_spec <- wlv_native_direct_price_spec(
     "Product", "usd"
   )
 )
+}
 
-wlv_indicator_gross_output_s_du_spec <- wlv_native_direct_price_spec(
+wlv_indicator_gross_output_s_du_spec <- function() {
+  wlv_native_direct_price_spec(
   "indicator.gross_output.s.du", "gross_output.s.mv",
   wlv_native_indicator_metadata_row(
     "gross_output.s.du", "Gross output (direct prices - USD)",
@@ -788,6 +842,7 @@ wlv_indicator_gross_output_s_du_spec <- wlv_native_direct_price_spec(
     NA_character_, "Product", "usd"
   )
 )
+}
 
 wlv_native_productive_surplus_spec <- function(employee = FALSE) {
   person <- if (employee) "empe" else "emp"
@@ -852,7 +907,9 @@ wlv_native_productive_surplus_spec <- function(employee = FALSE) {
   )
 }
 
-wlv_indicator_surplus_value_emp_p_r_pc_spec <-
+wlv_indicator_surplus_value_emp_p_r_pc_spec <- function() {
   wlv_native_productive_surplus_spec(FALSE)
-wlv_indicator_surplus_value_empe_p_r_pc_spec <-
+}
+wlv_indicator_surplus_value_empe_p_r_pc_spec <- function() {
   wlv_native_productive_surplus_spec(TRUE)
+}

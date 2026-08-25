@@ -31,7 +31,14 @@ wlv_runtime_static_files <- function(root = ".") {
     inherits = TRUE,
     ifnotfound = NULL
   )
-  if (is.null(definition_files) || !is.character(definition_files) ||
+  if (!is.function(definition_files)) {
+    stop(
+      "Reachable static analysis requires the deterministic runtime bootstrap.",
+      call. = FALSE
+    )
+  }
+  definition_files <- definition_files()
+  if (!is.character(definition_files) ||
       !length(definition_files) || anyNA(definition_files)) {
     stop(
       "Reachable static analysis requires the deterministic runtime bootstrap.",

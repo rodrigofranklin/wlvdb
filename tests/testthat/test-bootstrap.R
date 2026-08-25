@@ -37,14 +37,67 @@ test_that("runtime loading is independent of the process working directory", {
   )
   expect_identical(search(), search_before)
   expect_identical(
-    runtime$.wlv_runtime_root,
+    runtime$.wlv_runtime_root(),
     normalizePath(wlv_test_root, winslash = "/", mustWork = TRUE)
   )
   expect_identical(parent.env(runtime), baseenv())
   expect_true(environmentIsLocked(runtime))
   bindings <- ls(runtime, all.names = TRUE)
+  expect_true(all(vapply(
+    bindings,
+    function(name) is.function(get(name, envir = runtime, inherits = FALSE)),
+    logical(1L)
+  )))
+  sealed_accessors <- c(
+    ".wlv_runtime_root",
+    ".wlv_runtime_files",
+    ".wlv_runtime_definition_paths",
+    ".wlv_runtime_definition_md5",
+    ".wlv_runtime_definition_sha256",
+    ".wlv_runtime_generation"
+  )
+  expect_true(all(vapply(
+    setdiff(bindings, sealed_accessors),
+    function(name) identical(
+      environment(get(name, envir = runtime, inherits = FALSE)),
+      runtime
+    ),
+    logical(1L)
+  )))
+  expect_true(all(vapply(sealed_accessors, function(name) {
+    holder <- environment(get(name, envir = runtime, inherits = FALSE))
+    identical(parent.env(holder), baseenv()) &&
+      environmentIsLocked(holder) &&
+      exists(".value", envir = holder, inherits = FALSE) &&
+      bindingIsLocked(".value", holder)
+  }, logical(1L))))
+  expect_true(all(grepl(
+    "^[0-9a-f]{64}$",
+    runtime$.wlv_runtime_definition_sha256()
+  )))
+  expect_match(runtime$.wlv_runtime_generation(), "^[0-9a-f]{64}$")
+  expect_identical(
+    runtime$.wlv_runtime_generation(),
+    runtime$wlv_runtime_definition_generation(
+      runtime$.wlv_runtime_definition_sha256()
+    )
+  )
   expect_true(all(vapply(bindings, bindingIsLocked, logical(1L), env = runtime)))
   expect_error(runtime$temporary_binding <- TRUE, "locked environment")
+})
+
+test_that("bootstrap metadata accessors seal and defensively copy containers", {
+  bootstrap <- new.env(parent = baseenv())
+  sys.source(file.path(wlv_test_root, "R", "bootstrap.R"), envir = bootstrap)
+  accessor <- bootstrap$wlv_bootstrap_value_accessor(list(nested = list(1L)))
+  first <- accessor()
+  first$nested[[1L]] <- 2L
+
+  expect_identical(accessor(), list(nested = list(1L)))
+  holder <- environment(accessor)
+  expect_true(environmentIsLocked(holder))
+  expect_true(bindingIsLocked(".value", holder))
+  expect_error(assign(".value", list(), envir = holder), "locked binding")
 })
 
 test_that("bootstrap rejects incomplete project roots before loading", {
@@ -60,7 +113,39 @@ test_that("bootstrap rejects incomplete project roots before loading", {
   )
 })
 
-test_that("bootstrap accepts definitions and rejects top-level task execution", {
+test_that("every runtime manifest file contains only function definitions", {
+  bootstrap <- new.env(parent = baseenv())
+  sys.source(file.path(wlv_test_root, "R", "bootstrap.R"), envir = bootstrap)
+
+  for (relative_path in bootstrap$wlv_runtime_definition_manifest()) {
+    expressions <- parse(
+      file.path(wlv_test_root, relative_path),
+      encoding = "UTF-8",
+      keep.source = TRUE
+    )
+    function_definitions <- vapply(expressions, function(expression) {
+      is.call(expression) && length(expression) == 3L &&
+        is.symbol(expression[[1L]]) &&
+        identical(as.character(expression[[1L]]), "<-") &&
+        is.symbol(expression[[2L]]) &&
+        is.call(expression[[3L]]) &&
+        length(expression[[3L]]) >= 3L &&
+        is.symbol(expression[[3L]][[1L]]) &&
+        identical(as.character(expression[[3L]][[1L]]), "function")
+    }, logical(1L))
+
+    expect_true(
+      length(expressions) > 0L && all(function_definitions),
+      info = relative_path
+    )
+    expect_no_error(bootstrap$wlv_bootstrap_validate_definitions(
+      expressions,
+      relative_path
+    ))
+  }
+})
+
+test_that("bootstrap accepts functions and rejects every non-function RHS", {
   bootstrap <- new.env(parent = baseenv())
   sys.source(file.path(wlv_test_root, "R", "bootstrap.R"), envir = bootstrap)
 
@@ -82,6 +167,24 @@ test_that("bootstrap accepts definitions and rejects top-level task execution", 
     ),
     "top-level execution"
   )
+  invalid_definitions <- list(
+    literal = expression(value <- "literal"),
+    vector = expression(value <- c("one", "two")),
+    container = expression(value <- list(one = 1L)),
+    module_spec = expression(value <- wlv_module_spec(id = "module")),
+    factory_call = expression(value <- make_definition()),
+    alias = expression(value <- another_function)
+  )
+  for (label in names(invalid_definitions)) {
+    expect_error(
+      bootstrap$wlv_bootstrap_validate_definitions(
+        invalid_definitions[[label]],
+        paste0("R/lib/", label, ".R")
+      ),
+      "top-level execution",
+      info = label
+    )
+  }
   expect_identical(
     bootstrap$wlv_bootstrap_definition_names(expression(
       first <- function() TRUE,

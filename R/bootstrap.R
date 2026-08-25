@@ -181,65 +181,15 @@ wlv_bootstrap_validate_api <- function(namespace) {
 }
 
 wlv_bootstrap_validate_definitions <- function(expressions, relative_path) {
-  declarative_calls <- base::c(
-    ":", "as.character", "as.integer", "c", "list", "paste0", "sprintf",
-    "wlv_matrix_basket_spec", "wlv_matrix_zero_depreciation_spec",
-    "wlv_module_parameter", "wlv_module_spec",
-    "wlv_native_abstract_labour_spec", "wlv_native_array_contract",
-    "wlv_native_artifact_output", "wlv_native_assumption_table_ref",
-    "wlv_native_appropriated_profit_spec",
-    "wlv_native_capital_spec", "wlv_native_complex_multiplier_spec",
-    "wlv_native_constant_compensation_spec", "wlv_native_current_usd_spec",
-    "wlv_native_direct_price_spec", "wlv_native_exchange_index_spec",
-    "wlv_native_exchange_us_spec", "wlv_native_filters_contract",
-    "wlv_native_indicator_metadata_row", "wlv_native_indicator_output",
-    "wlv_native_indicator_ref", "wlv_native_indicator_spec",
-    "wlv_native_intermediate_contract", "wlv_native_intermediate_output",
-    "wlv_native_intermediate_ref", "wlv_native_io_contract",
-    "wlv_native_io_output", "wlv_native_io_ref", "wlv_native_ochoa_1_spec",
-    "wlv_native_ochoa_2_spec", "wlv_native_parameters_output",
-    "wlv_native_parameters_ref", "wlv_native_petrovic_requirements",
-    "wlv_native_productive_surplus_spec", "wlv_native_reduction_metadata",
-    "wlv_native_reduction_ones_spec", "wlv_native_reduction_output",
-    "wlv_native_reduction_skill_outputs", "wlv_native_reduction_skill_refs",
-    "wlv_native_replace_indicator", "wlv_native_run_ref",
-    "wlv_native_skill_surplus_spec", "wlv_native_source_io_ref",
-    "wlv_native_source_requirements", "wlv_native_source_sea_contract",
-    "wlv_native_stage4_import_spec", "wlv_native_stage4_labour_force_spec",
-    "wlv_native_stage4_matrix_requirements", "wlv_native_stage4_rowsum_spec",
-    "wlv_native_stage4_trade_transfer_spec", "wlv_native_stage5_ratio_spec",
-    "wlv_native_stage5_sum_spec", "wlv_native_wiodr16_capital_spec",
-    "wlv_reduced_direct_price_spec", "wlv_reduced_matrix_spec",
-    "wlv_resource_ref"
-  )
-  declarative_rhs <- function(value) {
-    if (base::is.null(value) || base::is.atomic(value) || base::is.symbol(value)) {
-      return(TRUE)
-    }
-    if (!base::is.call(value) || !base::length(value) ||
-        !base::is.symbol(value[[1L]])) {
-      return(FALSE)
-    }
-    head <- base::as.character(value[[1L]])
-    if (base::identical(head, "function")) {
-      return(TRUE)
-    }
-    if (!head %in% declarative_calls) {
-      return(FALSE)
-    }
-    arguments <- base::as.list(value)[-1L]
-    !base::length(arguments) || base::all(base::vapply(
-      arguments,
-      declarative_rhs,
-      logical(1L)
-    ))
-  }
   definitions <- base::vapply(expressions, function(expression) {
     base::is.call(expression) && base::length(expression) == 3L &&
       base::is.symbol(expression[[1L]]) &&
       base::identical(base::as.character(expression[[1L]]), "<-") &&
       base::is.symbol(expression[[2L]]) &&
-      declarative_rhs(expression[[3L]])
+      base::is.call(expression[[3L]]) &&
+      base::length(expression[[3L]]) >= 3L &&
+      base::is.symbol(expression[[3L]][[1L]]) &&
+      base::identical(base::as.character(expression[[3L]][[1L]]), "function")
   }, logical(1L))
   if (base::length(definitions) && !base::all(definitions)) {
     base::stop(
@@ -251,6 +201,23 @@ wlv_bootstrap_validate_definitions <- function(expressions, relative_path) {
     )
   }
   base::invisible(expressions)
+}
+
+wlv_bootstrap_value_accessor <- function(value) {
+  base::force(value)
+  holder <- base::new.env(parent = base::baseenv())
+  base::assign(".value", value, envir = holder)
+  accessor <- function() {
+    value <- base::get(".value", inherits = TRUE)
+    if (base::is.list(value)) {
+      return(base::unserialize(base::serialize(value, NULL, version = 3L)))
+    }
+    value
+  }
+  base::environment(accessor) <- holder
+  base::lockBinding(".value", holder)
+  base::lockEnvironment(holder, bindings = TRUE)
+  accessor
 }
 
 wlv_bootstrap_definition_names <- function(expressions) {
@@ -277,6 +244,48 @@ wlv_bootstrap_definition_inventory <- function(paths, relative_paths) {
   stats::setNames(hashes, relative_paths)
 }
 
+wlv_bootstrap_sha256_file <- function(path) {
+  connection <- base::file(path, open = "rb")
+  on.exit(base::close(connection), add = TRUE)
+  base::as.character(openssl::sha256(connection))
+}
+
+wlv_bootstrap_definition_sha256 <- function(paths, relative_paths) {
+  if (
+    !base::is.character(paths) || !base::is.character(relative_paths) ||
+      !base::length(paths) || !base::identical(base::length(paths), base::length(relative_paths)) ||
+      base::anyNA(paths) || base::anyNA(relative_paths) ||
+      base::any(!base::file.exists(paths)) || base::anyDuplicated(relative_paths)
+  ) {
+    base::stop("Runtime SHA-256 inventory received invalid files.", call. = FALSE)
+  }
+  hashes <- base::vapply(paths, wlv_bootstrap_sha256_file, character(1L))
+  if (base::anyNA(hashes) || base::any(!base::grepl("^[0-9a-f]{64}$", hashes))) {
+    base::stop("Could not SHA-256 hash every runtime definition file.", call. = FALSE)
+  }
+  stats::setNames(base::unname(hashes), relative_paths)
+}
+
+wlv_bootstrap_definition_generation <- function(sha256) {
+  if (
+    !base::is.character(sha256) || !base::length(sha256) ||
+      base::is.null(base::names(sha256)) || base::anyNA(sha256) ||
+      base::any(!base::nzchar(base::names(sha256))) ||
+      base::anyDuplicated(base::names(sha256)) ||
+      base::any(!base::grepl("^[0-9a-f]{64}$", sha256))
+  ) {
+    base::stop("Runtime generation received an invalid SHA-256 inventory.", call. = FALSE)
+  }
+  payload <- base::paste(
+    base::c(
+      "wlv-runtime-definitions/1",
+      base::paste(base::names(sha256), sha256, sep = "\034")
+    ),
+    collapse = "\035"
+  )
+  base::as.character(openssl::sha256(base::charToRaw(base::enc2utf8(payload))))
+}
+
 wlv_load_runtime <- function(root = ".") {
   root <- wlv_bootstrap_root(root)
   files <- wlv_runtime_definition_files(root)
@@ -292,9 +301,20 @@ wlv_load_runtime <- function(root = ".") {
     inventory_paths,
     inventory_relative
   )
+  inventory_sha256 <- wlv_bootstrap_definition_sha256(
+    inventory_paths,
+    inventory_relative
+  )
+  inventory_generation <- wlv_bootstrap_definition_generation(inventory_sha256)
   if (!base::identical(
     inventory,
     wlv_bootstrap_definition_inventory(inventory_paths, inventory_relative)
+  ) || !base::identical(
+    inventory_sha256,
+    wlv_bootstrap_definition_sha256(inventory_paths, inventory_relative)
+  ) || !base::identical(
+    inventory_generation,
+    wlv_bootstrap_definition_generation(inventory_sha256)
   )) {
     base::stop(
       "Runtime definitions changed while their bootstrap inventory was captured.",
@@ -338,8 +358,16 @@ wlv_load_runtime <- function(root = ".") {
   }
 
   namespace <- base::new.env(parent = base::baseenv())
-  base::assign(".wlv_runtime_root", root, envir = namespace)
-  base::assign(".wlv_runtime_files", files, envir = namespace)
+  base::assign(
+    ".wlv_runtime_root",
+    wlv_bootstrap_value_accessor(root),
+    envir = namespace
+  )
+  base::assign(
+    ".wlv_runtime_files",
+    wlv_bootstrap_value_accessor(files),
+    envir = namespace
+  )
   working_directory <- base::getwd()
   search_path <- base::search()
 
@@ -377,10 +405,23 @@ wlv_load_runtime <- function(root = ".") {
     inventory_paths,
     inventory_relative
   )
+  current_sha256 <- wlv_bootstrap_definition_sha256(
+    inventory_paths,
+    inventory_relative
+  )
   if (!base::identical(inventory, current_inventory) ||
+      !base::identical(inventory_sha256, current_sha256) ||
+      !base::identical(
+        inventory_generation,
+        wlv_bootstrap_definition_generation(current_sha256)
+      ) ||
       !base::identical(
         current_inventory,
         wlv_bootstrap_definition_inventory(inventory_paths, inventory_relative)
+      ) ||
+      !base::identical(
+        current_sha256,
+        wlv_bootstrap_definition_sha256(inventory_paths, inventory_relative)
       )) {
     base::stop(
       "Runtime definitions changed while the private namespace was loading.",
@@ -389,15 +430,89 @@ wlv_load_runtime <- function(root = ".") {
   }
   base::assign(
     ".wlv_runtime_definition_paths",
-    stats::setNames(inventory_paths, inventory_relative),
+    wlv_bootstrap_value_accessor(
+      stats::setNames(inventory_paths, inventory_relative)
+    ),
     envir = namespace
   )
   base::assign(
     ".wlv_runtime_definition_md5",
-    inventory,
+    wlv_bootstrap_value_accessor(inventory),
+    envir = namespace
+  )
+  base::assign(
+    ".wlv_runtime_definition_sha256",
+    wlv_bootstrap_value_accessor(inventory_sha256),
+    envir = namespace
+  )
+  base::assign(
+    ".wlv_runtime_generation",
+    wlv_bootstrap_value_accessor(inventory_generation),
     envir = namespace
   )
   bindings <- base::ls(namespace, all.names = TRUE)
+  non_functions <- bindings[!base::vapply(
+    bindings,
+    function(name) base::is.function(base::get(name, envir = namespace, inherits = FALSE)),
+    logical(1L)
+  )]
+  if (base::length(non_functions)) {
+    base::stop(
+      base::sprintf(
+        "Runtime definitions created non-function binding(s): %s.",
+        base::paste(non_functions, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  sealed_accessors <- base::c(
+    ".wlv_runtime_root",
+    ".wlv_runtime_files",
+    ".wlv_runtime_definition_paths",
+    ".wlv_runtime_definition_md5",
+    ".wlv_runtime_definition_sha256",
+    ".wlv_runtime_generation"
+  )
+  escaped <- base::setdiff(bindings, sealed_accessors)
+  escaped <- escaped[!base::vapply(
+    escaped,
+    function(name) base::identical(
+      base::environment(base::get(name, envir = namespace, inherits = FALSE)),
+      namespace
+    ),
+    logical(1L)
+  )]
+  if (base::length(escaped)) {
+    base::stop(
+      base::sprintf(
+        "Runtime function(s) escaped the private namespace: %s.",
+        base::paste(escaped, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  invalid_accessors <- sealed_accessors[!base::vapply(
+    sealed_accessors,
+    function(name) {
+      value <- base::get(name, envir = namespace, inherits = FALSE)
+      holder <- base::environment(value)
+      base::identical(base::parent.env(holder), base::baseenv()) &&
+        base::environmentIsLocked(holder) &&
+        base::exists(".value", envir = holder, inherits = FALSE) &&
+        base::bindingIsLocked(".value", holder) &&
+        !base::length(base::formals(value))
+    },
+    logical(1L)
+  )]
+  if (base::length(invalid_accessors)) {
+    base::stop(
+      base::sprintf(
+        "Runtime metadata accessor(s) are not sealed: %s.",
+        base::paste(invalid_accessors, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
   active <- bindings[base::vapply(
     bindings,
     base::bindingIsActive,

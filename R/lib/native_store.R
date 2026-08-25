@@ -82,7 +82,7 @@ wlv_native_inherited_producer <- function(
       call. = FALSE
     )
   }
-  if (length(requested)) requested[[1L]] else wlv_runtime_seed_producer
+  if (length(requested)) requested[[1L]] else wlv_runtime_seed_producer()
 }
 
 wlv_native_replace_seed <- function(seeds, replacement) {

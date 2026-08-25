@@ -1,4 +1,5 @@
-wlv_source_manifest_schema <- c(
+wlv_source_manifest_schema <- function() {
+  c(
   "schema_version",
   "source_generation_id",
   "contract_id",
@@ -9,8 +10,10 @@ wlv_source_manifest_schema <- c(
   "size_bytes",
   "sha256"
 )
+}
 
-wlv_source_provenance_schema <- c(
+wlv_source_provenance_schema <- function() {
+  c(
   "schema_version",
   "source",
   "source_generation_id",
@@ -19,9 +22,14 @@ wlv_source_provenance_schema <- c(
   "contract_sha256",
   "manifest_sha256"
 )
+}
 
-wlv_source_manifest_version <- "1"
-wlv_source_provenance_filename <- "_source_provenance.csv"
+wlv_source_manifest_version <- function() {
+  "1"
+}
+wlv_source_provenance_filename <- function() {
+  "_source_provenance.csv"
+}
 
 wlv_source_sha256_raw <- function(value) {
   if (!is.raw(value)) {
@@ -224,11 +232,11 @@ wlv_source_file_record <- function(path) {
 }
 
 wlv_source_manifest_generation_id <- function(manifest) {
-  if (!is.data.frame(manifest) || !identical(names(manifest), wlv_source_manifest_schema)) {
+  if (!is.data.frame(manifest) || !identical(names(manifest), wlv_source_manifest_schema())) {
     stop("Invalid source manifest schema.", call. = FALSE)
   }
   payload <- manifest[setdiff(
-    wlv_source_manifest_schema,
+    wlv_source_manifest_schema(),
     "source_generation_id"
   )]
   wlv_source_sha256_raw(wlv_source_table_payload(
@@ -242,17 +250,17 @@ wlv_source_manifest_sha256 <- function(manifest) {
   wlv_validate_source_manifest(manifest)
   wlv_source_sha256_raw(wlv_source_table_payload(
     manifest,
-    wlv_source_manifest_schema,
+    wlv_source_manifest_schema(),
     "wlv-source-manifest-v1"
   ))
 }
 
 wlv_validate_source_manifest <- function(manifest) {
-  if (!is.data.frame(manifest) || !identical(names(manifest), wlv_source_manifest_schema)) {
+  if (!is.data.frame(manifest) || !identical(names(manifest), wlv_source_manifest_schema())) {
     stop(
       sprintf(
         "Source manifest must have exactly these columns: %s.",
-        paste(wlv_source_manifest_schema, collapse = ", ")
+        paste(wlv_source_manifest_schema(), collapse = ", ")
       ),
       call. = FALSE
     )
@@ -264,7 +272,7 @@ wlv_validate_source_manifest <- function(manifest) {
     unlist(manifest, use.names = FALSE),
     "source manifest"
   )
-  if (any(manifest$schema_version != wlv_source_manifest_version)) {
+  if (any(manifest$schema_version != wlv_source_manifest_version())) {
     stop("Unsupported source manifest schema version.", call. = FALSE)
   }
 
@@ -332,7 +340,7 @@ wlv_build_source_manifest <- function(
   records <- lapply(paths, wlv_source_file_record)
   order_index <- order(artifacts, method = "radix")
   manifest <- data.frame(
-    schema_version = rep(wlv_source_manifest_version, length(artifacts)),
+    schema_version = rep(wlv_source_manifest_version(), length(artifacts)),
     source_generation_id = rep("", length(artifacts)),
     contract_id = rep(contract_id, length(artifacts)),
     contract_version = rep(contract_version, length(artifacts)),
@@ -344,7 +352,7 @@ wlv_build_source_manifest <- function(
     stringsAsFactors = FALSE,
     check.names = FALSE
   )
-  manifest <- manifest[order_index, wlv_source_manifest_schema, drop = FALSE]
+  manifest <- manifest[order_index, wlv_source_manifest_schema(), drop = FALSE]
   rownames(manifest) <- NULL
   manifest$source_generation_id <- rep(
     wlv_source_manifest_generation_id(manifest),
@@ -402,7 +410,7 @@ wlv_source_read_csv <- function(path, schema, label) {
 }
 
 wlv_read_source_manifest <- function(path) {
-  manifest <- wlv_source_read_csv(path, wlv_source_manifest_schema, "Source manifest")
+  manifest <- wlv_source_read_csv(path, wlv_source_manifest_schema(), "Source manifest")
   wlv_validate_source_manifest(manifest)
   manifest
 }
@@ -561,7 +569,7 @@ wlv_source_provenance <- function(
     stop("`source` must be one value.", call. = FALSE)
   }
   data.frame(
-    schema_version = wlv_source_manifest_version,
+    schema_version = wlv_source_manifest_version(),
     source = source,
     source_generation_id = manifest$source_generation_id[[1L]],
     contract_id = manifest$contract_id[[1L]],
@@ -579,20 +587,20 @@ wlv_source_provenance <- function(
 wlv_validate_source_provenance <- function(provenance) {
   if (
     !is.data.frame(provenance) ||
-    !identical(names(provenance), wlv_source_provenance_schema) ||
+    !identical(names(provenance), wlv_source_provenance_schema()) ||
     nrow(provenance) != 1L ||
     any(!vapply(provenance, is.character, logical(1)))
   ) {
     stop(
       sprintf(
         "Source provenance must contain one row with exactly these columns: %s.",
-        paste(wlv_source_provenance_schema, collapse = ", ")
+        paste(wlv_source_provenance_schema(), collapse = ", ")
       ),
       call. = FALSE
     )
   }
   wlv_source_validate_text(unlist(provenance, use.names = FALSE), "source provenance")
-  if (!identical(provenance$schema_version, wlv_source_manifest_version)) {
+  if (!identical(provenance$schema_version, wlv_source_manifest_version())) {
     stop("Unsupported source provenance schema version.", call. = FALSE)
   }
   hashes <- provenance[c(
@@ -607,7 +615,7 @@ wlv_validate_source_provenance <- function(provenance) {
 wlv_read_source_provenance <- function(path) {
   provenance <- wlv_source_read_csv(
     path,
-    wlv_source_provenance_schema,
+    wlv_source_provenance_schema(),
     "Source provenance"
   )
   wlv_validate_source_provenance(provenance)
@@ -615,7 +623,7 @@ wlv_read_source_provenance <- function(path) {
 }
 
 wlv_read_result_source_provenance <- function(result_dir) {
-  path <- file.path(result_dir, wlv_source_provenance_filename)
+  path <- file.path(result_dir, wlv_source_provenance_filename())
   if (!file.exists(path) || isTRUE(file.info(path)$isdir)) {
     stop(sprintf("Source provenance file is missing: %s.", path), call. = FALSE)
   }
@@ -641,11 +649,11 @@ wlv_read_result_source_provenance <- function(result_dir) {
     }
   )
   rownames(value) <- NULL
-  if (!identical(names(value), wlv_source_provenance_schema)) {
+  if (!identical(names(value), wlv_source_provenance_schema())) {
     stop(
       sprintf(
         "Source provenance must have exactly these columns: %s.",
-        paste(wlv_source_provenance_schema, collapse = ", ")
+        paste(wlv_source_provenance_schema(), collapse = ", ")
       ),
       call. = FALSE
     )
@@ -659,7 +667,7 @@ wlv_assert_recalculation_source_provenance <- function(
     current_manifest,
     source,
     additional_paths = character()) {
-  provenance_path <- file.path(result_dir, wlv_source_provenance_filename)
+  provenance_path <- file.path(result_dir, wlv_source_provenance_filename())
   if (!file.exists(provenance_path)) {
     stop(
       paste0(

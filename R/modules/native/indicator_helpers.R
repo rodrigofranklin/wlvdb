@@ -215,7 +215,7 @@ wlv_native_source_requirements <- function(extra = list()) {
     list(source = wlv_resource_ref(
       "source/sea",
       wlv_native_source_sea_contract(),
-      producer = wlv_runtime_seed_producer
+      producer = wlv_runtime_seed_producer()
     )),
     wlv_native_run_ref("dimensions/lists", "lists", "list"),
     extra

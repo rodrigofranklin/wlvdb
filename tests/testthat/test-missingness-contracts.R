@@ -1378,7 +1378,7 @@ test_that("persisted Leontief exceptions remain closed under the current profile
     policy_id = "persisted_zero_test_v1",
     action = "allowlisted_nonzero_over_zero",
     stringsAsFactors = FALSE
-  )[e$wlv_contract_anomaly_columns]
+  )[e$wlv_contract_anomaly_columns()]
   expect_invisible(
     e$wlv_validate_leontief_zero_output_anomalies(runtime, anomaly)
   )

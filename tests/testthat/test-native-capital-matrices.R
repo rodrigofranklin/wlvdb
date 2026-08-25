@@ -209,7 +209,7 @@ test_that("WIOD13 native capital allocation conserves stock and preserves NA sli
   runtime <- native_capital_environment
   fixture <- wlv_test_native_capital_fixture("wiodr13")
   result <- wlv_test_run_native_capital(
-    runtime$wlv_matrix_capital_wiodr13_spec,
+    runtime$wlv_matrix_capital_wiodr13_spec(),
     fixture,
     "wiodr13"
   )
@@ -239,12 +239,12 @@ test_that("reduction-problem capital uses the contemporaneous depreciation table
   runtime <- native_capital_environment
   fixture <- wlv_test_native_capital_fixture("wiodr13")
   standard <- wlv_test_run_native_capital(
-    runtime$wlv_matrix_capital_wiodr13_spec,
+    runtime$wlv_matrix_capital_wiodr13_spec(),
     fixture,
     "wiodr13"
   )
   reduction <- wlv_test_run_native_capital(
-    runtime$wlv_matrix_capital_reduction_problem_spec,
+    runtime$wlv_matrix_capital_reduction_problem_spec(),
     fixture,
     "wiodr13"
   )
@@ -260,7 +260,7 @@ test_that("WIOD16 native capital uses c60 and the validated allocation path", {
   runtime <- native_capital_environment
   fixture <- wlv_test_native_capital_fixture("wiodr16")
   result <- wlv_test_run_native_capital(
-    runtime$wlv_matrix_capital_wiodr16_spec,
+    runtime$wlv_matrix_capital_wiodr16_spec(),
     fixture,
     "wiodr16"
   )
@@ -289,7 +289,7 @@ test_that("capital execution fails before publication when an EU KLEMS year is a
   fixture$depreciation_rates[["2001"]] <- NULL
   expect_error(
     wlv_test_run_native_capital(
-      runtime$wlv_matrix_capital_wiodr13_spec,
+      runtime$wlv_matrix_capital_wiodr13_spec(),
       fixture,
       "wiodr13"
     ),

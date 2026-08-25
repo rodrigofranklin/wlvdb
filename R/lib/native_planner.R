@@ -40,7 +40,7 @@ wlv_native_instance_indicators <- function(registry, instance) {
 
 wlv_native_instance_checkpoint <- function(registry, instance) {
   spec <- wlv_registry_module(registry, instance$module_id)
-  wlv_runtime_checkpoint_rank(spec$checkpoint, wlv_default_checkpoint_order)
+  wlv_runtime_checkpoint_rank(spec$checkpoint, wlv_default_checkpoint_order())
 }
 
 wlv_native_is_matrix_instance <- function(instance) {
@@ -434,7 +434,7 @@ wlv_native_preflight_store <- function(
   requests <- list()
   add_request <- function(ref, partition) {
     producer <- if (is.null(ref$producer)) {
-      wlv_runtime_seed_producer
+      wlv_runtime_seed_producer()
     } else {
       ref$producer
     }
@@ -492,7 +492,7 @@ wlv_native_preflight_store <- function(
     explicit <- unique(vapply(group, function(request) {
       request$producer
     }, character(1L)))
-    explicit <- setdiff(explicit, wlv_runtime_seed_producer)
+    explicit <- setdiff(explicit, wlv_runtime_seed_producer())
     if (length(explicit) > 1L) {
       stop(
         sprintf(
@@ -503,7 +503,7 @@ wlv_native_preflight_store <- function(
         call. = FALSE
       )
     }
-    producer <- if (length(explicit)) explicit[[1L]] else wlv_runtime_seed_producer
+    producer <- if (length(explicit)) explicit[[1L]] else wlv_runtime_seed_producer()
     contracts <- lapply(group, function(request) request$ref$contract)
     compatible <- vapply(contracts[-1L], function(contract) {
       wlv_runtime_contract_compatible(contracts[[1L]], contract) &&

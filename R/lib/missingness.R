@@ -1,4 +1,5 @@
-wlv_contract_anomaly_columns <- c(
+wlv_contract_anomaly_columns <- function() {
+  c(
   "artifact",
   "indicator",
   "checkpoint",
@@ -12,8 +13,10 @@ wlv_contract_anomaly_columns <- c(
   "policy_id",
   "action"
 )
+}
 
-wlv_wiodr13_result_source_missing <- c(
+wlv_wiodr13_result_source_missing <- function() {
+  c(
   "empe.s.un", "hours_worked.empe.s.hr",
   "compensation.empe_hs.r.pc", "compensation.empe_ms.r.pc",
   "compensation.empe_ls.r.pc", "hours_worked.empe_hs.r.pc",
@@ -28,8 +31,10 @@ wlv_wiodr13_result_source_missing <- c(
   "labour_force_value.emp.m.mv", "surplus_value.emp.r.pc",
   "surplus_value.emp_p.r.pc", "surplus_value.empe_p.r.pc"
 )
+}
 
-wlv_wiodr16_result_source_missing <- c(
+wlv_wiodr16_result_source_missing <- function() {
+  c(
   "empe.s.un", "hours_worked.empe.s.hr", "exchange.r.us",
   "compensation.empe.s.us", "compensation.emp.s.us", "profit.s.us",
   "appropriated_profit.r.pc", "capital_stock.s.cu",
@@ -40,6 +45,7 @@ wlv_wiodr16_result_source_missing <- c(
   "labour_force_value.emp.m.mv", "surplus_value.emp.r.pc",
   "surplus_value.emp_p.r.pc", "surplus_value.empe_p.r.pc"
 )
+}
 
 wlv_new_missingness_policy <- function(
     policy_id,
@@ -145,7 +151,7 @@ wlv_wiodr13_missingness_policy <- function() {
       stringsAsFactors = FALSE
     ),
     result_source_missing = list(
-      row_indicators = wlv_wiodr13_result_source_missing,
+      row_indicators = wlv_wiodr13_result_source_missing(),
       stage1_china_indicators = character()
     )
   )
@@ -166,7 +172,7 @@ wlv_wiodr16_missingness_policy <- function() {
       stringsAsFactors = FALSE
     ),
     result_source_missing = list(
-      row_indicators = wlv_wiodr16_result_source_missing,
+      row_indicators = wlv_wiodr16_result_source_missing(),
       stage1_china_indicators = c(
         "empe.s.un", "hours_worked.empe.s.hr", "hours_worked.emp.s.hr"
       )
@@ -261,12 +267,12 @@ wlv_as_contract_context <- function(context) {
 wlv_empty_contract_table <- function() {
   value <- as.data.frame(
     stats::setNames(
-      rep(list(character()), length(wlv_contract_anomaly_columns)),
-      wlv_contract_anomaly_columns
+      rep(list(character()), length(wlv_contract_anomaly_columns())),
+      wlv_contract_anomaly_columns()
     ),
     stringsAsFactors = FALSE
   )
-  value[wlv_contract_anomaly_columns]
+  value[wlv_contract_anomaly_columns()]
 }
 
 wlv_bind_contract_tables <- function(...) {
@@ -277,13 +283,13 @@ wlv_bind_contract_tables <- function(...) {
   }
   value <- do.call(rbind, values)
   row.names(value) <- NULL
-  value[wlv_contract_anomaly_columns]
+  value[wlv_contract_anomaly_columns()]
 }
 
 wlv_new_contract_error <- function(message, anomalies, call = NULL) {
   if (
     !is.data.frame(anomalies) ||
-      !identical(names(anomalies), wlv_contract_anomaly_columns) ||
+      !identical(names(anomalies), wlv_contract_anomaly_columns()) ||
       !nrow(anomalies)
   ) {
     stop("A contract error requires a non-empty canonical anomaly table.", call. = FALSE)
@@ -425,7 +431,7 @@ wlv_contract_table <- function(value, failed, context, action) {
     policy_id = rep(context$policy_id, length(positions)),
     action = rep(action, length(positions)),
     stringsAsFactors = FALSE
-  )[wlv_contract_anomaly_columns]
+  )[wlv_contract_anomaly_columns()]
 }
 
 wlv_character_like <- function(value, fill = NA_character_) {

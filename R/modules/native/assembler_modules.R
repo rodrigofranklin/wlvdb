@@ -72,7 +72,8 @@ wlv_native_matrix_assembler_requires <- function(args) {
   )
 }
 
-wlv_native_matrix_assembler_spec <- wlv_module_spec(
+wlv_native_matrix_assembler_spec <- function() {
+  wlv_module_spec(
   id = "assembler.matrices",
   scope = "run",
   checkpoint = "pre_publish",
@@ -150,6 +151,7 @@ wlv_native_matrix_assembler_spec <- wlv_module_spec(
     ))
   }
 )
+}
 
 wlv_native_panel_assembler_requires <- function(args) {
   indicators <- unlist(args$indicators, use.names = FALSE)
@@ -173,7 +175,8 @@ wlv_native_panel_assembler_requires <- function(args) {
   )
 }
 
-wlv_native_panel_assembler_spec <- wlv_module_spec(
+wlv_native_panel_assembler_spec <- function() {
+  wlv_module_spec(
   id = "assembler.panel",
   scope = "run",
   checkpoint = "pre_publish",
@@ -239,3 +242,4 @@ wlv_native_panel_assembler_spec <- wlv_module_spec(
     ))
   }
 )
+}

@@ -53,13 +53,15 @@ wlv_native_exchange_us_spec <- function(id, historical_v09 = FALSE) {
   )
 }
 
-wlv_indicator_exchange_r_us_wiod_spec <-
+wlv_indicator_exchange_r_us_wiod_spec <- function() {
   wlv_native_exchange_us_spec("indicator.exchange.r.us.wiod")
-wlv_indicator_exchange_r_us_v09_spec <-
+}
+wlv_indicator_exchange_r_us_v09_spec <- function() {
   wlv_native_exchange_us_spec(
     "indicator.exchange.r.us.v09",
     historical_v09 = TRUE
   )
+}
 
 wlv_native_exchange_index_spec <- function(id, historical_v09 = FALSE) {
   wlv_native_indicator_spec(
@@ -106,13 +108,15 @@ wlv_native_exchange_index_spec <- function(id, historical_v09 = FALSE) {
   )
 }
 
-wlv_indicator_exchange_r_id_wiod_spec <-
+wlv_indicator_exchange_r_id_wiod_spec <- function() {
   wlv_native_exchange_index_spec("indicator.exchange.r.id.wiod")
-wlv_indicator_exchange_r_id_v09_spec <-
+}
+wlv_indicator_exchange_r_id_v09_spec <- function() {
   wlv_native_exchange_index_spec(
     "indicator.exchange.r.id.v09",
     historical_v09 = TRUE
   )
+}
 
 wlv_native_current_usd_spec <- function(id, indicator, source_variable, metadata) {
   wlv_native_indicator_spec(
@@ -140,7 +144,8 @@ wlv_native_current_usd_spec <- function(id, indicator, source_variable, metadata
   )
 }
 
-wlv_indicator_compensation_empe_s_us_spec <- wlv_native_current_usd_spec(
+wlv_indicator_compensation_empe_s_us_spec <- function() {
+  wlv_native_current_usd_spec(
   "indicator.compensation.empe.s.us", "compensation.empe.s.us", "COMP",
   wlv_native_indicator_metadata_row(
     "compensation.empe.s.us", "Salaries and wages (USD)",
@@ -149,7 +154,9 @@ wlv_indicator_compensation_empe_s_us_spec <- wlv_native_current_usd_spec(
     "Wages and value of labour force", "usd"
   )
 )
-wlv_indicator_compensation_emp_s_us_spec <- wlv_native_current_usd_spec(
+}
+wlv_indicator_compensation_emp_s_us_spec <- function() {
+  wlv_native_current_usd_spec(
   "indicator.compensation.emp.s.us", "compensation.emp.s.us", "LAB",
   wlv_native_indicator_metadata_row(
     "compensation.emp.s.us", "Labour compensation (USD)",
@@ -162,7 +169,9 @@ wlv_indicator_compensation_emp_s_us_spec <- wlv_native_current_usd_spec(
     "Wages and value of labour force", "usd"
   )
 )
-wlv_indicator_profit_s_us_spec <- wlv_native_current_usd_spec(
+}
+wlv_indicator_profit_s_us_spec <- function() {
+  wlv_native_current_usd_spec(
   "indicator.profit.s.us", "profit.s.us", "CAP",
   wlv_native_indicator_metadata_row(
     "profit.s.us", "Profit (USD)", "Profit and others capital compensations.",
@@ -170,8 +179,10 @@ wlv_indicator_profit_s_us_spec <- wlv_native_current_usd_spec(
     "Capital", "usd"
   )
 )
+}
 
-wlv_indicator_capital_stock_s_us_wiodr13_spec <- wlv_native_indicator_spec(
+wlv_indicator_capital_stock_s_us_wiodr13_spec <- function() {
+  wlv_native_indicator_spec(
   "indicator.capital_stock.s.us.wiodr13",
   checkpoint = 1L,
   requires = wlv_native_source_requirements(
@@ -195,6 +206,7 @@ wlv_indicator_capital_stock_s_us_wiodr13_spec <- wlv_native_indicator_spec(
     wlv_module_result(outputs = list(value = value))
   }
 )
+}
 
 wlv_native_wiodr16_capital_spec <- function(
     id,
@@ -281,16 +293,19 @@ wlv_native_wiodr16_capital_spec <- function(
   )
 }
 
-wlv_indicator_capital_stock_s_us_wiodr16_spec <-
+wlv_indicator_capital_stock_s_us_wiodr16_spec <- function() {
   wlv_native_wiodr16_capital_spec(
     "indicator.capital_stock.s.us.wiodr16", "capital_stock.s.us"
   )
-wlv_indicator_capital_stock_s_cu_wiodr16_spec <-
+}
+wlv_indicator_capital_stock_s_cu_wiodr16_spec <- function() {
   wlv_native_wiodr16_capital_spec(
     "indicator.capital_stock.s.cu.wiodr16", "capital_stock.s.cu", TRUE
   )
+}
 
-wlv_indicator_hours_worked_emp_s_hr_wiodr16_spec <- wlv_native_indicator_spec(
+wlv_indicator_hours_worked_emp_s_hr_wiodr16_spec <- function() {
+  wlv_native_indicator_spec(
   "indicator.hours_worked.emp.s.hr.wiodr16",
   checkpoint = 1L,
   requires = wlv_native_source_requirements(),
@@ -315,8 +330,10 @@ wlv_indicator_hours_worked_emp_s_hr_wiodr16_spec <- wlv_native_indicator_spec(
     wlv_module_result(outputs = list(value = value))
   }
 )
+}
 
-wlv_indicator_go_price_r_id_wiodr16_spec <- wlv_native_indicator_spec(
+wlv_indicator_go_price_r_id_wiodr16_spec <- function() {
+  wlv_native_indicator_spec(
   "indicator.go_price.r.id.wiodr16",
   checkpoint = 1L,
   requires = wlv_native_source_requirements(),
@@ -344,9 +361,11 @@ wlv_indicator_go_price_r_id_wiodr16_spec <- wlv_native_indicator_spec(
     wlv_module_result(outputs = list(value = value))
   }
 )
+}
 
 # The base basket and base lambda are run resources shared by every period.
-wlv_indicator_basket_zero_collector_spec <- wlv_module_spec(
+wlv_indicator_basket_zero_collector_spec <- function() {
+  wlv_module_spec(
   id = "indicator.basket_zero.collector",
   scope = "run",
   checkpoint = 3L,
@@ -441,8 +460,10 @@ wlv_indicator_basket_zero_collector_spec <- wlv_module_spec(
     wlv_module_result(outputs = list(basket_zero = basket, lambda_zero = lambda))
   }
 )
+}
 
-wlv_indicator_basket_price_r_pc_spec <- wlv_native_indicator_spec(
+wlv_indicator_basket_price_r_pc_spec <- function() {
+  wlv_native_indicator_spec(
   "indicator.basket_price.r.pc",
   checkpoint = 4L,
   scope = "io_period",
@@ -492,8 +513,10 @@ wlv_indicator_basket_price_r_pc_spec <- wlv_native_indicator_spec(
     wlv_module_result(outputs = list(value = value))
   }
 )
+}
 
-wlv_indicator_basket_value_r_pc_spec <- wlv_native_indicator_spec(
+wlv_indicator_basket_value_r_pc_spec <- function() {
+  wlv_native_indicator_spec(
   "indicator.basket_value.r.pc",
   checkpoint = 4L,
   scope = "io_period",
@@ -563,9 +586,11 @@ wlv_indicator_basket_value_r_pc_spec <- wlv_native_indicator_spec(
     wlv_module_result(outputs = list(value = value))
   }
 )
+}
 
 # One instance per price indicator keeps selective recalculation atomic.
-wlv_indicator_price_index_normalize_spec <- wlv_module_spec(
+wlv_indicator_price_index_normalize_spec <- function() {
+  wlv_module_spec(
   id = "indicator.price_index.normalize",
   scope = "run",
   checkpoint = "after_price_normalization",
@@ -621,6 +646,7 @@ wlv_indicator_price_index_normalize_spec <- wlv_module_spec(
     wlv_module_result(outputs = list(value = value))
   }
 )
+}
 
 wlv_native_constant_compensation_spec <- function(id, indicator, source_variable) {
   wlv_native_indicator_spec(
@@ -689,12 +715,16 @@ wlv_native_constant_compensation_spec <- function(id, indicator, source_variable
   )
 }
 
-wlv_indicator_compensation_emp_s_cu_spec <- wlv_native_constant_compensation_spec(
+wlv_indicator_compensation_emp_s_cu_spec <- function() {
+  wlv_native_constant_compensation_spec(
   "indicator.compensation.emp.s.cu", "compensation.emp.s.cu", "LAB"
 )
-wlv_indicator_compensation_empe_s_cu_spec <- wlv_native_constant_compensation_spec(
+}
+wlv_indicator_compensation_empe_s_cu_spec <- function() {
+  wlv_native_constant_compensation_spec(
   "indicator.compensation.empe.s.cu", "compensation.empe.s.cu", "COMP"
 )
+}
 
 wlv_native_skill_surplus_spec <- function(skill) {
   indicator <- paste0("surplus_value.empe_", skill, ".r.pc")
@@ -748,6 +778,12 @@ wlv_native_skill_surplus_spec <- function(skill) {
   )
 }
 
-wlv_indicator_surplus_value_empe_hs_r_pc_spec <- wlv_native_skill_surplus_spec("hs")
-wlv_indicator_surplus_value_empe_ms_r_pc_spec <- wlv_native_skill_surplus_spec("ms")
-wlv_indicator_surplus_value_empe_ls_r_pc_spec <- wlv_native_skill_surplus_spec("ls")
+wlv_indicator_surplus_value_empe_hs_r_pc_spec <- function() {
+  wlv_native_skill_surplus_spec("hs")
+}
+wlv_indicator_surplus_value_empe_ms_r_pc_spec <- function() {
+  wlv_native_skill_surplus_spec("ms")
+}
+wlv_indicator_surplus_value_empe_ls_r_pc_spec <- function() {
+  wlv_native_skill_surplus_spec("ls")
+}

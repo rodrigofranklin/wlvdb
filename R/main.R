@@ -10,7 +10,7 @@
 
 wlv_runtime_catalog <- function() {
   wlv_assert_loaded_runtime_unchanged()
-  wlv_load_catalog(.wlv_runtime_root)
+  wlv_load_catalog(.wlv_runtime_root())
 }
 
 prepare_wlv <- function(methods = "wiodr13", allow_experimental = FALSE) {
@@ -21,7 +21,7 @@ prepare_wlv <- function(methods = "wiodr13", allow_experimental = FALSE) {
     workers = 1L,
     mode = "calculate",
     requested_operations = "prepare",
-    root = .wlv_runtime_root,
+    root = .wlv_runtime_root(),
     allow_experimental = allow_experimental,
     catalog = catalog
   )
@@ -48,7 +48,7 @@ get_wlv <- function(
     workers = workers,
     channel = channel,
     mode = "calculate",
-    root = .wlv_runtime_root,
+    root = .wlv_runtime_root(),
     allow_experimental = allow_experimental,
     catalog = catalog
   )
@@ -83,7 +83,7 @@ recalc_wlv <- function(
     mode = "recalculate",
     at_stage = at_stage,
     sea_vars = sea_vars,
-    root = .wlv_runtime_root,
+    root = .wlv_runtime_root(),
     allow_experimental = allow_experimental,
     catalog = catalog
   )

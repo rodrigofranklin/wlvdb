@@ -15,12 +15,7 @@ for (path in c(
 }
 
 wlv_test_native_indicator_specs <- function() {
-  values <- mget(
-    ls(native_indicator_environment, all.names = TRUE),
-    envir = native_indicator_environment,
-    inherits = FALSE
-  )
-  specs <- Filter(function(value) inherits(value, "wlv_module_spec"), values)
+  specs <- native_indicator_environment$wlv_native_indicator_specs()
   ids <- vapply(specs, function(spec) spec$id, character(1L))
   specs[!duplicated(ids)]
 }
@@ -110,7 +105,7 @@ test_that("auxiliary indicator instances follow deterministic conventions", {
   go_normalizer <- instances[[match("normalize.indicator.go_price.r.id", ids)]]
   expect_identical(go_normalizer$args$predecessor, "assumption.row")
   registry <- native_indicator_environment$wlv_module_registry(
-    list(native_indicator_environment$wlv_indicator_price_index_normalize_spec)
+    list(native_indicator_environment$wlv_indicator_price_index_normalize_spec())
   )
   resolved <- native_indicator_environment$wlv_runtime_resolve_instance(
     registry, go_normalizer, "calculate", c("2000", "2001")
@@ -150,7 +145,7 @@ test_that("auxiliary indicator instances follow deterministic conventions", {
   )
 
   basket_registry <- native_indicator_environment$wlv_module_registry(list(
-    native_indicator_environment$wlv_indicator_basket_price_r_pc_spec
+    native_indicator_environment$wlv_indicator_basket_price_r_pc_spec()
   ))
   basket <- native_indicator_environment$wlv_runtime_resolve_instance(
     basket_registry,
@@ -167,7 +162,7 @@ test_that("auxiliary indicator instances follow deterministic conventions", {
 
   reduction <- native_indicator_environment[[
     "wlv_indicator_complex_empe_alternative_2_spec"
-  ]]
+  ]]()
   expect_true(all(vapply(
     reduction$requires[c("hours_hs", "hours_ms", "hours_ls")],
     function(ref) identical(ref$producer, "assumption.row"),
@@ -282,7 +277,7 @@ test_that("stage-4 collector preserves values and enforces exact year coverage",
       e$wlv_resource_contract(scope = "run", value_type = "list")
     )
   ))
-  registry <- e$wlv_module_registry(list(e$wlv_indicator_stage4_collector_spec))
+  registry <- e$wlv_module_registry(list(e$wlv_indicator_stage4_collector_spec()))
   plan <- e$wlv_compile_module_plan(
     registry,
     list(e$wlv_module_instance(
@@ -345,7 +340,7 @@ test_that("native reduction and stage-5 formulas preserve legacy arithmetic", {
     services = list(), service_names = character(),
     partition = NULL, instance_id = "alternative-2-test"
   )
-  result <- e$wlv_indicator_complex_emp_alternative_2_spec$run(ctx)
+  result <- e$wlv_indicator_complex_emp_alternative_2_spec()$run(ctx)
   expect_equal(result$outputs$value, (6.25 * hs) + (2.5 * ms) + ls)
 
   lists <- list(years = axes$year, sectors = axes$sector, countries = axes$country)
@@ -358,7 +353,7 @@ test_that("native reduction and stage-5 formulas preserve legacy arithmetic", {
     services = list(), service_names = character(),
     partition = NULL, instance_id = "trade-balance-test"
   )
-  result <- e$wlv_indicator_trade_balance_s_us_spec$run(ctx)
+  result <- e$wlv_indicator_trade_balance_s_us_spec()$run(ctx)
   expect_equal(result$outputs$sector, exports - imports)
   expect_identical(names(result$outputs), "sector")
 })

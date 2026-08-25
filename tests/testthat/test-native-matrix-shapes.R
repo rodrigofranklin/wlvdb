@@ -36,7 +36,7 @@ test_that("native basket preserves the complete public output axis", {
     demands = data.frame(demand = "c41", stringsAsFactors = FALSE)
   )
   context <- list(input = function(name) values[[name]])
-  result <- e$wlv_matrix_basket_national_spec$run(context)$outputs$value
+  result <- e$wlv_matrix_basket_national_spec()$run(context)$outputs$value
 
   expect_identical(dim(result), dim(source_io))
   expect_identical(dimnames(result), dimnames(source_io))
@@ -63,7 +63,7 @@ test_that("basket-zero collector extracts the inter-industry block by label", {
     input = function(name) values[[name]],
     arg = function(name) if (identical(name, "base_year")) "2000" else NULL
   )
-  result <- e$wlv_indicator_basket_zero_collector_spec$run(context)$outputs
+  result <- e$wlv_indicator_basket_zero_collector_spec()$run(context)$outputs
 
   expect_identical(dim(result$basket_zero), c(4L, 4L))
   expect_identical(dimnames(result$basket_zero), list(input = inputs, output = inputs))
@@ -97,7 +97,7 @@ test_that("basket-zero collector derives the historical first matrix year", {
     input = function(name) values[[name]],
     arg = function(name) if (identical(name, "base_year")) "first" else NULL
   )
-  result <- e$wlv_indicator_basket_zero_collector_spec$run(context)$outputs
+  result <- e$wlv_indicator_basket_zero_collector_spec()$run(context)$outputs
 
   expect_true(all(result$basket_zero == 1995))
   expect_identical(as.vector(result$lambda_zero), c(1, 2))

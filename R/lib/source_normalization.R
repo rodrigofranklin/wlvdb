@@ -2,7 +2,9 @@
 # not read or write files; callers remain responsible for persisting the
 # explicit normalization marker together with an artifact.
 
-wlv_source_normalization_marker_name <- "wlv.source_normalization"
+wlv_source_normalization_marker_name <- function() {
+  "wlv.source_normalization"
+}
 
 wlv_normalization_unit_vector <- function(value, variables, label) {
   if (is.null(value)) {
@@ -276,7 +278,7 @@ wlv_validate_source_normalization_contract <- function(contract) {
 }
 
 wlv_source_normalization_marker <- function(value) {
-  attr(value, wlv_source_normalization_marker_name, exact = TRUE)
+  attr(value, wlv_source_normalization_marker_name(), exact = TRUE)
 }
 
 wlv_validate_source_array <- function(value, artifact, contract) {
@@ -368,7 +370,7 @@ wlv_normalize_source_array <- function(value, contract, artifact = c("m_io", "se
       result[, variable, , ] <- result[, variable, , ] * multipliers[[variable]]
     }
   }
-  attr(result, wlv_source_normalization_marker_name) <-
+  attr(result, wlv_source_normalization_marker_name()) <-
     wlv_source_normalization_marker_value(contract, artifact)
   result
 }

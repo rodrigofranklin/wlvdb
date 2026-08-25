@@ -8,7 +8,8 @@ wlv_native_filters_contract <- function() {
   )
 }
 
-wlv_matrix_transformation_spec <- wlv_module_spec(
+wlv_matrix_transformation_spec <- function() {
+  wlv_module_spec(
   id = "matrix.transformation",
   scope = "io_period",
   checkpoint = 3L,
@@ -186,8 +187,10 @@ wlv_matrix_transformation_spec <- wlv_module_spec(
     )
   }
 )
+}
 
-wlv_matrix_transfers_spec <- wlv_module_spec(
+wlv_matrix_transfers_spec <- function() {
+  wlv_module_spec(
   id = "matrix.transfers",
   scope = "io_period",
   checkpoint = 3L,
@@ -198,7 +201,7 @@ wlv_matrix_transfers_spec <- wlv_module_spec(
     list(filters = wlv_resource_ref(
       "dimensions/io_filters",
       wlv_native_filters_contract(),
-      producer = wlv_runtime_seed_producer
+      producer = wlv_runtime_seed_producer()
     )),
     wlv_native_run_ref("dimensions/nums", "nums", "list")
   ),
@@ -248,6 +251,7 @@ wlv_matrix_transfers_spec <- wlv_module_spec(
     ))
   }
 )
+}
 
 wlv_matrix_basket_spec <- function(id, international = FALSE) {
   wlv_module_spec(
@@ -315,14 +319,18 @@ wlv_matrix_basket_spec <- function(id, international = FALSE) {
   )
 }
 
-wlv_matrix_basket_national_spec <- wlv_matrix_basket_spec(
+wlv_matrix_basket_national_spec <- function() {
+  wlv_matrix_basket_spec(
   "matrix.basket.national",
   international = FALSE
 )
-wlv_matrix_basket_international_spec <- wlv_matrix_basket_spec(
+}
+wlv_matrix_basket_international_spec <- function() {
+  wlv_matrix_basket_spec(
   "matrix.basket.international",
   international = TRUE
 )
+}
 
 wlv_matrix_zero_depreciation_spec <- function(id) {
   wlv_module_spec(
@@ -347,7 +355,9 @@ wlv_matrix_zero_depreciation_spec <- function(id) {
   )
 }
 
-wlv_matrix_zero_depreciation_wiodr13_spec <-
+wlv_matrix_zero_depreciation_wiodr13_spec <- function() {
   wlv_matrix_zero_depreciation_spec("matrix.depreciation.zero.wiodr13")
-wlv_matrix_zero_depreciation_wiodr16_spec <-
+}
+wlv_matrix_zero_depreciation_wiodr16_spec <- function() {
   wlv_matrix_zero_depreciation_spec("matrix.depreciation.zero.wiodr16")
+}

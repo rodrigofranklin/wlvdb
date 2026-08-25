@@ -228,7 +228,7 @@ test_that("profiled non-finite coordinates close against normalized source label
       policy_id = "test_policy",
       action = "test_action",
       stringsAsFactors = FALSE
-    )[runtime$wlv_contract_anomaly_columns]
+    )[runtime$wlv_contract_anomaly_columns()]
   }
   target_indicator <- target_scope$indicator[[1L]]
   nonfinite_group <- profile$nonfinite_resolution$groups[1L, , drop = FALSE]
@@ -478,7 +478,7 @@ test_that("stage-one anomaly owners match their native module generations", {
       policy_id = "test_policy",
       action = "test_action",
       stringsAsFactors = FALSE
-    )[runtime$wlv_contract_anomaly_columns]
+    )[runtime$wlv_contract_anomaly_columns()]
     runtime$wlv_native_reset_recalculated_anomalies(
       contract_runtime,
       module_plan,
@@ -659,7 +659,7 @@ test_that("stage-four anomaly reset preserves inherited go-price normalization",
       policy_id = "wiodr13_v1",
       action = "mark_not_applicable",
       stringsAsFactors = FALSE
-    )[runtime$wlv_contract_anomaly_columns]
+    )[runtime$wlv_contract_anomaly_columns()]
   }
   contract_runtime$anomalies <- rbind(anomaly(inherited), anomaly(reset))
 

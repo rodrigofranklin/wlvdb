@@ -687,7 +687,7 @@ wlv_validate_leontief_zero_output_anomalies <- function(runtime, anomalies) {
     runtime$source
   )
   if (!is.data.frame(anomalies) ||
-      !identical(names(anomalies), wlv_contract_anomaly_columns)) {
+      !identical(names(anomalies), wlv_contract_anomaly_columns())) {
     stop("Leontief anomaly validation received an invalid audit trail.",
       call. = FALSE
     )
@@ -807,7 +807,7 @@ wlv_leontief_zero_output_contract_table <- function(
       nrow(positions)
     ),
     stringsAsFactors = FALSE
-  )[wlv_contract_anomaly_columns]
+  )[wlv_contract_anomaly_columns()]
 }
 
 wlv_record_leontief_zero_output_profile <- function(
@@ -1003,7 +1003,7 @@ wlv_validate_nonfinite_resolution_anomalies <- function(runtime, anomalies) {
     runtime$source
   )
   if (!is.data.frame(anomalies) ||
-      !identical(names(anomalies), wlv_contract_anomaly_columns)) {
+      !identical(names(anomalies), wlv_contract_anomaly_columns())) {
     stop("Non-finite anomaly validation received an invalid audit trail.",
       call. = FALSE
     )
@@ -3410,10 +3410,10 @@ wlv_read_contract_report <- function(path) {
     na.strings = "",
     fileEncoding = "UTF-8"
   )
-  if (!identical(names(records), wlv_contract_anomaly_columns)) {
+  if (!identical(names(records), wlv_contract_anomaly_columns())) {
     stop("Contract report has an invalid schema.", call. = FALSE)
   }
-  records <- records[wlv_contract_anomaly_columns]
+  records <- records[wlv_contract_anomaly_columns()]
   row.names(records) <- NULL
   records
 }
@@ -3427,15 +3427,17 @@ wlv_load_contract_report <- function(runtime, path) {
   invisible(TRUE)
 }
 
-wlv_contract_state_columns <- c(
+wlv_contract_state_columns <- function() {
+  c(
   "artifact", "indicator", "year", "country", "sector", "output", "state"
 )
+}
 
 wlv_empty_contract_states <- function() {
   as.data.frame(
     stats::setNames(
-      rep(list(character()), length(wlv_contract_state_columns)),
-      wlv_contract_state_columns
+      rep(list(character()), length(wlv_contract_state_columns())),
+      wlv_contract_state_columns()
     ),
     stringsAsFactors = FALSE
   )
@@ -3505,7 +3507,7 @@ wlv_collect_contract_states <- function(runtime, artifact, value) {
       output = coordinates$output,
       state = as.vector(states)[as.vector(selected)],
       stringsAsFactors = FALSE
-    )[wlv_contract_state_columns]
+    )[wlv_contract_state_columns()]
   }
   result <- do.call(rbind, rows)
   row.names(result) <- NULL
@@ -3561,11 +3563,11 @@ wlv_read_contract_states <- function(path) {
     check.names = FALSE,
     fileEncoding = "UTF-8"
   )
-  if (!identical(names(records), wlv_contract_state_columns)) {
+  if (!identical(names(records), wlv_contract_state_columns())) {
     stop("Persisted missingness states have an invalid schema.", call. = FALSE)
   }
   records[is.na(records)] <- ""
-  records <- records[wlv_contract_state_columns]
+  records <- records[wlv_contract_state_columns()]
   row.names(records) <- NULL
   records
 }
@@ -3573,7 +3575,7 @@ wlv_read_contract_states <- function(path) {
 wlv_normalize_contract_states <- function(records) {
   records[] <- lapply(records, as.character)
   records[is.na(records)] <- ""
-  records <- records[wlv_contract_state_columns]
+  records <- records[wlv_contract_state_columns()]
   row.names(records) <- NULL
   records
 }
@@ -3614,7 +3616,7 @@ wlv_load_contract_states <- function(runtime, path, values) {
   ) {
     stop("Persisted missingness states contain an invalid artifact or state.", call. = FALSE)
   }
-  key <- do.call(paste, c(records[wlv_contract_state_columns[-7L]], sep = "\034"))
+  key <- do.call(paste, c(records[wlv_contract_state_columns()[-7L]], sep = "\034"))
   if (anyDuplicated(key)) {
     stop("Persisted missingness states contain duplicate coordinates.", call. = FALSE)
   }
@@ -3947,7 +3949,7 @@ wlv_assert_staged_result_artifact_allowlist <- function(
   )
   observed <- wlv_publication_list_files(
     staging,
-    exclude = wlv_run_manifest_filename
+    exclude = wlv_run_manifest_filename()
   )
   required <- if (isTRUE(require_scientific_checks)) {
     expected_artifacts

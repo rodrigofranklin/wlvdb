@@ -48,14 +48,14 @@ wlv_retention_test_run <- function(root, method, run_id, payload = run_id) {
   )
   manifest_path <- file.path(
     run_root,
-    retention_environment$wlv_run_manifest_filename
+    retention_environment$wlv_run_manifest_filename()
   )
   retention_environment$wlv_write_run_manifest(manifest, manifest_path)
   relative_manifest <- paste(
     "runs",
     method,
     run_id,
-    retention_environment$wlv_run_manifest_filename,
+    retention_environment$wlv_run_manifest_filename(),
     sep = "/"
   )
   list(
@@ -93,7 +93,7 @@ wlv_retention_test_release <- function(
   )
   manifest_path <- file.path(
     release_root,
-    retention_environment$wlv_release_manifest_filename
+    retention_environment$wlv_release_manifest_filename()
   )
   retention_environment$wlv_write_release_manifest(manifest, manifest_path)
   marker_path <- NULL
@@ -105,7 +105,7 @@ wlv_retention_test_release <- function(
       release_manifest_path = paste(
         "releases",
         release_id,
-        retention_environment$wlv_release_manifest_filename,
+        retention_environment$wlv_release_manifest_filename(),
         sep = "/"
       ),
       release_manifest_sha256 =

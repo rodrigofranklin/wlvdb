@@ -1,4 +1,5 @@
-wlv_catalog_schemas <- list(
+wlv_catalog_schemas <- function() {
+  list(
   sources = c(
     "source", "status", "year_start", "year_end", "parameter_set",
     "data_dir", "can_prepare", "preparation_task", "validator_script",
@@ -25,6 +26,7 @@ wlv_catalog_schemas <- list(
     "denominator", "weight", "zero_denominator", "notes"
   )
 )
+}
 
 wlv_catalog_stop <- function(message, ...) {
   stop(sprintf(message, ...), call. = FALSE)
@@ -833,13 +835,13 @@ wlv_catalog_validate_unit_contracts <- function(contracts, root) {
     contract <- contracts$contract[[index]]
     units <- wlv_catalog_read_csv(
       file.path(root, contracts$units[[index]]),
-      wlv_catalog_schemas$unit_definitions,
+      wlv_catalog_schemas()$unit_definitions,
       sprintf("unit definitions for contract `%s`", contract)
     )
     units <- wlv_catalog_validate_unit_definitions(units, contract)
     aggregation <- wlv_catalog_read_csv(
       file.path(root, contracts$aggregations[[index]]),
-      wlv_catalog_schemas$unit_aggregations,
+      wlv_catalog_schemas()$unit_aggregations,
       sprintf("unit aggregations for contract `%s`", contract)
     )
     aggregation <- wlv_catalog_validate_unit_aggregations(
@@ -1368,27 +1370,27 @@ wlv_load_catalog <- function(root = ".") {
 
   sources <- wlv_catalog_read_csv(
     file.path(catalog_dir, "sources.csv"),
-    wlv_catalog_schemas$sources,
+    wlv_catalog_schemas()$sources,
     "sources"
   )
   methods <- wlv_catalog_read_csv(
     file.path(catalog_dir, "methods.csv"),
-    wlv_catalog_schemas$methods,
+    wlv_catalog_schemas()$methods,
     "methods"
   )
   artifacts <- wlv_catalog_read_csv(
     file.path(catalog_dir, "artifact-profiles.csv"),
-    wlv_catalog_schemas$artifacts,
+    wlv_catalog_schemas()$artifacts,
     "artifact profiles"
   )
   missingness_policies <- wlv_catalog_read_csv(
     file.path(catalog_dir, "missingness-policies.csv"),
-    wlv_catalog_schemas$missingness,
+    wlv_catalog_schemas()$missingness,
     "missingness policies"
   )
   unit_contracts <- wlv_catalog_read_csv(
     file.path(catalog_dir, "unit-contracts.csv"),
-    wlv_catalog_schemas$unit_contracts,
+    wlv_catalog_schemas()$unit_contracts,
     "unit contracts"
   )
 

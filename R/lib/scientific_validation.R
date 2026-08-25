@@ -1,8 +1,10 @@
-wlv_scientific_check_columns <- c(
+wlv_scientific_check_columns <- function() {
+  c(
   "method", "check_id", "artifact", "indicator", "scope", "status",
   "observations", "maximum_absolute_error", "maximum_scaled_error",
   "tolerance", "detail"
 )
+}
 
 wlv_empty_scientific_checks <- function() {
   data.frame(
@@ -18,7 +20,7 @@ wlv_empty_scientific_checks <- function() {
     tolerance = character(),
     detail = character(),
     stringsAsFactors = FALSE
-  )[wlv_scientific_check_columns]
+  )[wlv_scientific_check_columns()]
 }
 
 wlv_new_scientific_validation_error <- function(
@@ -97,7 +99,7 @@ wlv_scientific_check_row <- function(
     tolerance = as.character(tolerance),
     detail = as.character(detail),
     stringsAsFactors = FALSE
-  )[wlv_scientific_check_columns]
+  )[wlv_scientific_check_columns()]
 }
 
 wlv_scientific_not_applicable <- function(
@@ -1069,7 +1071,7 @@ wlv_scientific_validate_result_arrays <- function(
 
   result <- do.call(rbind, rows)
   row.names(result) <- NULL
-  result[wlv_scientific_check_columns]
+  result[wlv_scientific_check_columns()]
 }
 
 wlv_scientific_validate_io_array <- function(method, m_io, sea_sectors) {
@@ -1235,13 +1237,13 @@ wlv_scientific_validate_io_array <- function(method, m_io, sea_sectors) {
 
   result <- do.call(rbind, rows)
   row.names(result) <- NULL
-  result[wlv_scientific_check_columns]
+  result[wlv_scientific_check_columns()]
 }
 
 wlv_validate_scientific_check_artifact <- function(value, method) {
   if (
     !is.data.frame(value) ||
-      !identical(names(value), wlv_scientific_check_columns) ||
+      !identical(names(value), wlv_scientific_check_columns()) ||
       !nrow(value) || anyNA(value[c(
         "method", "check_id", "artifact", "indicator", "scope", "status",
         "observations", "tolerance", "detail"

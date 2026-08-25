@@ -1,18 +1,25 @@
 # Constants and structural checks for the WIOD 2016 source files.
 
-wiodr16_years <- as.character(2000:2014)
-wiodr16_countries <- c(
+wiodr16_years <- function() {
+  as.character(2000:2014)
+}
+wiodr16_countries <- function() {
+  c(
   "AUS", "AUT", "BEL", "BGR", "BRA", "CAN", "CHE", "CHN", "CYP",
   "CZE", "DEU", "DNK", "ESP", "EST", "FIN", "FRA", "GBR", "GRC",
   "HRV", "HUN", "IDN", "IND", "IRL", "ITA", "JPN", "KOR", "LTU",
   "LUX", "LVA", "MEX", "MLT", "NLD", "NOR", "POL", "PRT", "ROU",
   "RUS", "SVK", "SVN", "SWE", "TUR", "TWN", "USA"
 )
-wiodr16_sea_variables <- c(
+}
+wiodr16_sea_variables <- function() {
+  c(
   "CAP", "COMP", "EMP", "EMPE", "GO", "GO_PI", "GO_QI", "H_EMPE",
   "II", "II_PI", "II_QI", "K", "LAB", "VA", "VA_PI", "VA_QI"
 )
-wiodr16_sectors <- c(
+}
+wiodr16_sectors <- function() {
+  c(
   "A01", "A02", "A03", "B", "C10-C12", "C13-C15", "C16", "C17",
   "C18", "C19", "C20", "C21", "C22", "C23", "C24", "C25", "C26",
   "C27", "C28", "C29", "C30", "C31_C32", "C33", "D35", "E36",
@@ -21,16 +28,24 @@ wiodr16_sectors <- c(
   "K66", "L68", "M69_M70", "M71", "M72", "M73", "M74_M75", "N",
   "O84", "P85", "Q", "R_S", "T", "U"
 )
-wiodr16_demand <- paste0("c", 57:61)
-wiodr16_supplementary_rows <- c(
+}
+wiodr16_demand <- function() {
+  paste0("c", 57:61)
+}
+wiodr16_supplementary_rows <- function() {
+  c(
   "II_fob", "TXSP", "EXP_adj", "PURR", "PURNR", "VA", "IntTTM", "GO"
 )
-wiodr16_rdata_members <- sprintf(
+}
+wiodr16_rdata_members <- function() {
+  sprintf(
   "WIOT%d_October16_ROW.RData",
-  as.integer(wiodr16_years)
+  as.integer(wiodr16_years())
 )
+}
 
-wiodr16_download_manifest <- list(
+wiodr16_download_manifest <- function() {
+  list(
   wiots = list(
     url = "https://dataverse.nl/api/access/datafile/199101",
     destination = "source_data/wiodr16/WIOTS_in_R.zip",
@@ -46,6 +61,7 @@ wiodr16_download_manifest <- list(
     hash = "821bba29c42f3a42009eb1b14dbdaa2922d01236"
   )
 )
+}
 
 wlv_validate_wiodr16_wiots_archive <- function(
     path,
@@ -54,8 +70,8 @@ wlv_validate_wiodr16_wiots_archive <- function(
   if (!is.data.frame(listing) || !all(c("Name", "Length") %in% names(listing))) {
     stop("WIOD16 WIOT ZIP listing is invalid.", call. = FALSE)
   }
-  missing <- setdiff(wiodr16_rdata_members, listing$Name)
-  unexpected <- setdiff(listing$Name, wiodr16_rdata_members)
+  missing <- setdiff(wiodr16_rdata_members(), listing$Name)
+  unexpected <- setdiff(listing$Name, wiodr16_rdata_members())
   if (length(missing) || length(unexpected)) {
     stop(
       sprintf(
@@ -66,7 +82,7 @@ wlv_validate_wiodr16_wiots_archive <- function(
       call. = FALSE
     )
   }
-  required_sizes <- listing$Length[match(wiodr16_rdata_members, listing$Name)]
+  required_sizes <- listing$Length[match(wiodr16_rdata_members(), listing$Name)]
   if (anyNA(required_sizes) || any(required_sizes <= 0)) {
     stop("One or more WIOD16 WIOT ZIP members are empty.", call. = FALSE)
   }
@@ -83,7 +99,7 @@ wlv_validate_wiodr16_sea_workbook <- function(
   }
   columns <- names(read_excel(path, sheet = "DATA", n_max = 0))
   required_columns <- c(
-    "country", "variable", "description", "code", wiodr16_years
+    "country", "variable", "description", "code", wiodr16_years()
   )
   missing <- setdiff(required_columns, columns)
   if (length(missing)) {
@@ -97,10 +113,10 @@ wlv_validate_wiodr16_sea_workbook <- function(
 
 wlv_validate_wiodr16_sea_data <- function(
     sea,
-    years = wiodr16_years,
-    countries = wiodr16_countries,
-    variables = wiodr16_sea_variables,
-    sectors = wiodr16_sectors) {
+    years = wiodr16_years(),
+    countries = wiodr16_countries(),
+    variables = wiodr16_sea_variables(),
+    sectors = wiodr16_sectors()) {
   required_columns <- c("country", "variable", "description", "code", years)
   missing_columns <- setdiff(required_columns, names(sea))
   if (length(missing_columns)) {
@@ -174,10 +190,10 @@ wlv_validate_wiodr16_sea_data <- function(
 wlv_convert_wiodr16_wiot <- function(
     wiot,
     year,
-    countries = c(wiodr16_countries, "ROW"),
-    sectors = wiodr16_sectors,
-    demand = wiodr16_demand,
-    supplementary_rows = wiodr16_supplementary_rows) {
+    countries = c(wiodr16_countries(), "ROW"),
+    sectors = wiodr16_sectors(),
+    demand = wiodr16_demand(),
+    supplementary_rows = wiodr16_supplementary_rows()) {
   metadata_columns <- c(
     "IndustryCode", "IndustryDescription", "Country", "RNr", "Year"
   )

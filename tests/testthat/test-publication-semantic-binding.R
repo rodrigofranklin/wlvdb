@@ -54,7 +54,7 @@ test_that("promotion verifies validated artifacts after the atomic move", {
     function(from, to) {
       renamed <- base::file.rename(from, to)
       if (isTRUE(renamed) && !injected &&
-          file.exists(file.path(to, runtime$wlv_run_manifest_filename))) {
+          file.exists(file.path(to, runtime$wlv_run_manifest_filename()))) {
         path <- file.path(to, "_states.csv")
         size <- file.info(path)$size
         bytes <- readBin(path, "raw", n = size)
@@ -184,7 +184,7 @@ test_that("release artifacts are verified again after the atomic move", {
     function(from, to) {
       renamed <- base::file.rename(from, to)
       if (isTRUE(renamed) && !injected &&
-          file.exists(file.path(to, runtime$wlv_release_manifest_filename))) {
+          file.exists(file.path(to, runtime$wlv_release_manifest_filename()))) {
         path <- file.path(to, "indicators_en.csv")
         size <- file.info(path)$size
         bytes <- readBin(path, "raw", n = size)

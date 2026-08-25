@@ -9,7 +9,8 @@ wlv_native_source_sea_contract <- function() {
   )
 }
 
-wlv_source_indicator_spec <- wlv_module_spec(
+wlv_source_indicator_spec <- function() {
+  wlv_module_spec(
   id = "source_indicator",
   scope = "run",
   checkpoint = 0L,
@@ -22,7 +23,7 @@ wlv_source_indicator_spec <- wlv_module_spec(
     source = wlv_resource_ref(
       "source/sea",
       wlv_native_source_sea_contract(),
-      producer = wlv_runtime_seed_producer
+      producer = wlv_runtime_seed_producer()
     )
   ),
   provides = function(args) {
@@ -53,3 +54,4 @@ wlv_source_indicator_spec <- wlv_module_spec(
     wlv_module_result(outputs = list(value = value))
   }
 )
+}
