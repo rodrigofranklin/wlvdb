@@ -20,6 +20,12 @@ $scripts = @(
   'issue13-v5-render-report.ps1',
   'issue13-v5-static-verify.ps1'
 )
+$legacyGeneration = 'v' + '4'
+$legacyPathNeedles = @(
+  'issue13-native-gate-orchestrator-' + $legacyGeneration,
+  'final-evidence-' + $legacyGeneration,
+  'final-control-' + $legacyGeneration
+)
 $records = [Collections.Generic.List[object]]::new()
 foreach ($name in $scripts) {
   $path = Join-Path $root $name
@@ -45,7 +51,10 @@ foreach ($name in $scripts) {
   }
   $text = [IO.File]::ReadAllText($path,
     [Text.UTF8Encoding]::new($false, $true))
-  if ($text -match '(?i)issue13-native-gate-orchestrator-v4|final-evidence-v4|final-control-v4') {
+  $legacyMatches = @($legacyPathNeedles | Where-Object {
+    $text.IndexOf($_, [StringComparison]::OrdinalIgnoreCase) -ge 0
+  })
+  if ($legacyMatches.Count -ne 0) {
     throw "Coordinator depends on a legacy V4 path: $name"
   }
   $records.Add([ordered]@{
