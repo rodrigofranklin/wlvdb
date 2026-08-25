@@ -974,7 +974,7 @@ wlv_catalog_validate_methods <- function(methods, sources, root) {
       utils::read.csv2(
         text = readLines(
           parameter_file,
-          encoding = "latin1",
+          encoding = "UTF-8",
           warn = FALSE
         ),
         stringsAsFactors = FALSE,

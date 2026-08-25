@@ -316,15 +316,52 @@ wlv_validate_leontief_zero_output_profile <- function(runtime, profile) {
     stop("Invalid streaming Leontief zero-output profile.", call. = FALSE)
   }
   method <- if (is.null(runtime)) "" else runtime$method
+  # Issue #13 validation overlay: methods are bound to exact WIOD13 profiles.
+  # Count, per-year/output counts and the full coordinate hash must all match;
+  # adding a method never permits a new numerical profile implicitly.
+  profile_by_method <- c(
+    "wiodr13" = "stable",
+    "wiodr13v09" = "v09",
+    "alternative_1" = "v09",
+    "alternative_2" = "v09",
+    "norow_w13" = "stable",
+    "ochoa_1" = "v09",
+    "ochoa_2" = "v09",
+    "petrovic" = "v09"
+  )
+  profile_specs <- list(
+    stable = list(
+      count = 3150L,
+      counts = c(
+        "2005|CYP.23" = 781L,
+        "2006|CYP.23" = 776L,
+        "2007|CYP.23" = 786L,
+        "2005|MLT.23" = 807L
+      ),
+      hash = "f66341eea44e71728bbda6f8e25765ba"
+    ),
+    v09 = list(
+      count = 2945L,
+      counts = c(
+        "2005|CYP.23" = 730L,
+        "2005|MLT.23" = 753L,
+        "2006|CYP.23" = 728L,
+        "2007|CYP.23" = 734L
+      ),
+      hash = "3fd6663ca00317b42d3044df5019db4c"
+    )
+  )
+  profile_id <- unname(profile_by_method[method])
+  expects_wiodr13_profile <- length(profile_id) == 1L && !is.na(profile_id)
   invalid <- profile$invalid
   if (!nrow(invalid)) {
-    if (identical(method, "wiodr13")) {
+    if (expects_wiodr13_profile) {
       stop("The pinned WIOD13 Leontief exception set is unexpectedly empty.", call. = FALSE)
     }
     profile$validated_method <- method
     return(profile)
   }
-  if (!identical(method, "wiodr13")) {
+  if (!expects_wiodr13_profile) {
     stop("Leontief inputs contain an undeclared nonzero flow over zero output.", call. = FALSE)
   }
   observed_years <- profile$years[invalid$year_index]
@@ -341,26 +378,27 @@ wlv_validate_leontief_zero_output_profile <- function(runtime, profile) {
   close(connection)
   observed_hash <- unname(tools::md5sum(hash_file))
   observed_counts <- table(paste(observed_years, observed_outputs, sep = "|"))
-  expected_counts <- c(
-    "2005|CYP.23" = 781L,
-    "2006|CYP.23" = 776L,
-    "2007|CYP.23" = 786L,
-    "2005|MLT.23" = 807L
-  )
-  expected_hash <- "f66341eea44e71728bbda6f8e25765ba"
+  expected <- profile_specs[[profile_id]]
+  expected_counts <- expected$counts
   counts_match <-
     identical(sort(names(observed_counts)), sort(names(expected_counts))) &&
     identical(
       as.integer(observed_counts[names(expected_counts)]),
       as.integer(expected_counts)
     )
-  if (length(keys) != 3150L || !counts_match || !identical(observed_hash, expected_hash)) {
+  if (
+    length(keys) != expected$count ||
+    !counts_match ||
+    !identical(observed_hash, expected$hash)
+  ) {
     stop(
       sprintf(
         paste0(
           "WIOD13 Leontief exceptions differ from the pinned set ",
-          "(count=%s, md5=%s)."
+          "for method `%s`/profile `%s` (count=%s, md5=%s)."
         ),
+        method,
+        profile_id,
         length(keys),
         observed_hash
       ),
@@ -368,6 +406,7 @@ wlv_validate_leontief_zero_output_profile <- function(runtime, profile) {
     )
   }
   profile$validated_method <- method
+  profile$validated_profile <- profile_id
   profile
 }
 

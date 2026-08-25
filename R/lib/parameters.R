@@ -5,7 +5,10 @@ method_path <- paste0("methods/", method_version,"/")
 ## load all parameters of the choosed method
 #Read method parameters
 parameters <- 
-  read.csv2(paste0(method_path,"_parameters.csv"))
+  read.csv2(
+    paste0(method_path,"_parameters.csv"),
+    encoding = "UTF-8"
+  )
 
 #Def source basepath
 source_version <- parameters$source

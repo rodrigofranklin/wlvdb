@@ -1426,27 +1426,46 @@ wlv_scientific_validate_diagnostics <- function(
     method = method
   )
   signed <- leontief$coefficient_negative_count > 0
-  if (identical(method, "wiodr13")) {
-    expected_signed <- leontief$year == "2006"
-    valid_signed_profile <-
-      identical(signed, expected_signed) &&
-      identical(
-        as.integer(leontief$coefficient_negative_count[expected_signed]),
-        397L
-      ) &&
-      all(
-        leontief$certificate_type[expected_signed] ==
-          "absolute_convergence_signed"
-      ) &&
-      all(
-        leontief$certificate_type[!expected_signed] ==
-          "productivity_nonnegative"
-      )
-  } else {
-    valid_signed_profile <-
-      !any(signed) &&
-      all(leontief$certificate_type == "productivity_nonnegative")
+  # Issue #13 validation overlay: signed Leontief coefficients are closed by
+  # method and year. Unlisted methods retain the original all-nonnegative rule.
+  signed_counts_by_method <- list(
+    "wiodr13" = c("2006" = 397L),
+    "wiodr13v09" = c("2006" = 396L),
+    "alternative_1" = c("2006" = 396L),
+    "alternative_2" = c("2006" = 396L),
+    "norow_w13" = c("2006" = 397L),
+    "ochoa_1" = c("2006" = 396L),
+    "ochoa_2" = c("2006" = 396L),
+    "petrovic" = c("2006" = 396L)
+  )
+  expected_negative_counts <- stats::setNames(
+    integer(nrow(leontief)),
+    leontief$year
+  )
+  declared_signed_counts <- signed_counts_by_method[[method]]
+  declared_years_valid <-
+    is.null(declared_signed_counts) ||
+    all(names(declared_signed_counts) %in% leontief$year)
+  if (!is.null(declared_signed_counts) && declared_years_valid) {
+    expected_negative_counts[names(declared_signed_counts)] <-
+      declared_signed_counts
   }
+  expected_signed <- expected_negative_counts > 0L
+  valid_signed_profile <-
+    declared_years_valid &&
+    identical(
+      as.integer(leontief$coefficient_negative_count),
+      as.integer(expected_negative_counts)
+    ) &&
+    identical(signed, unname(expected_signed)) &&
+    all(
+      leontief$certificate_type[expected_signed] ==
+        "absolute_convergence_signed"
+    ) &&
+    all(
+      leontief$certificate_type[!expected_signed] ==
+        "productivity_nonnegative"
+    )
   if (!valid_signed_profile) {
     observed <- paste(
       leontief$year,
