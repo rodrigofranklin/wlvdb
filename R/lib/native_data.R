@@ -280,6 +280,125 @@ wlv_native_assumption_seeds <- function(root, source, dimensions, sectors) {
   result
 }
 
+wlv_native_stateful_seed_pair <- function(seed, states = NULL) {
+  if (!inherits(seed, "wlv_seed_resource") || is.null(seed$key)) {
+    stop("A semantic seed pair requires one keyed seed resource.", call. = FALSE)
+  }
+  contract <- seed$contract
+  if (!identical(contract$role, "value") || !isTRUE(contract$semantic_state)) {
+    stop(
+      sprintf("Seed `%s` is not declared as a stateful value.", seed$key),
+      call. = FALSE
+    )
+  }
+  embedded <- attr(seed$value, "wlv_state", exact = TRUE)
+  if (is.null(states) && is.null(embedded) &&
+      !seed$key %in% c("source/sea", "source/io")) {
+    stop(
+      sprintf(
+        "Stateful inherited seed `%s` lacks explicit semantic-state provenance.",
+        seed$key
+      ),
+      call. = FALSE
+    )
+  }
+  captured <- wlv_semantic_capture_value_state(
+    value = seed$value,
+    target_key = seed$key,
+    axes = contract$axes,
+    states = states
+  )
+  list(
+    wlv_seed_resource(
+      key = seed$key,
+      value = captured$value,
+      contract = contract,
+      partition = seed$partition,
+      producer = seed$producer
+    ),
+    wlv_seed_resource(
+      key = wlv_semantic_state_key(seed$key),
+      value = captured$state,
+      contract = wlv_native_semantic_state_contract(contract),
+      partition = seed$partition,
+      producer = seed$producer
+    )
+  )
+}
+
+wlv_native_validate_seed_semantic_pairs <- function(seeds) {
+  if (!is.list(seeds) || any(!vapply(
+    seeds,
+    inherits,
+    logical(1L),
+    "wlv_seed_resource"
+  ))) {
+    stop("Semantic seed validation requires seed resources.", call. = FALSE)
+  }
+  locators <- vapply(seeds, function(seed) {
+    if (is.null(seed$key)) {
+      stop("Semantic seed validation found an unkeyed seed.", call. = FALSE)
+    }
+    wlv_runtime_locator_id(seed$key, seed$partition, seed$producer)
+  }, character(1L))
+  if (anyDuplicated(locators)) {
+    stop("Semantic seed validation found duplicate resource locators.", call. = FALSE)
+  }
+  by_locator <- stats::setNames(seeds, locators)
+  stateful <- Filter(function(seed) {
+    identical(seed$contract$role, "value") && isTRUE(seed$contract$semantic_state)
+  }, seeds)
+  states <- Filter(function(seed) {
+    identical(seed$contract$role, "semantic_state")
+  }, seeds)
+  expected_state_locators <- vapply(stateful, function(seed) {
+    wlv_runtime_locator_id(
+      wlv_semantic_state_key(seed$key),
+      seed$partition,
+      seed$producer
+    )
+  }, character(1L))
+  observed_state_locators <- vapply(states, function(seed) {
+    wlv_runtime_locator_id(seed$key, seed$partition, seed$producer)
+  }, character(1L))
+  missing <- setdiff(expected_state_locators, observed_state_locators)
+  orphan <- setdiff(observed_state_locators, expected_state_locators)
+  if (length(missing) || length(orphan)) {
+    stop(
+      sprintf(
+        "Semantic seed pairs are incomplete (missing=%s; orphan=%s).",
+        paste(missing, collapse = ", "),
+        paste(orphan, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  for (index in seq_along(stateful)) {
+    value_seed <- stateful[[index]]
+    state_seed <- by_locator[[expected_state_locators[[index]]]]
+    expected_contract <- wlv_native_semantic_state_contract(
+      value_seed$contract
+    )
+    if (!wlv_runtime_contract_same(state_seed$contract, expected_contract)) {
+      stop(
+        sprintf(
+          "Semantic-state seed for `%s` has an incompatible contract.",
+          value_seed$key
+        ),
+        call. = FALSE
+      )
+    }
+    wlv_semantic_state_validate(
+      state_seed$value,
+      value = value_seed$value,
+      target_key = value_seed$key,
+      axes = value_seed$contract$axes,
+      state_key = state_seed$key
+    )
+  }
+  invisible(seeds)
+}
+
 wlv_native_base_seeds <- function(
     plan,
     method_record,
@@ -339,16 +458,39 @@ wlv_native_base_seeds <- function(
     }
     metadata[source_indicators, "observation"] <- paste("Source:", source)
   }
-  seeds <- list(
+  missingness_policy <- wlv_load_run_missingness_policy(plan, method_record)
+  scientific_profile <- plan$scientific_profiles[[method]]
+  if (!is.list(scientific_profile)) {
+    stop(
+      sprintf("Method `%s` lacks its explicit scientific profile.", method),
+      call. = FALSE
+    )
+  }
+  source_seeds <- wlv_native_stateful_seed_pair(wlv_seed_resource(
+    "source/sea",
+    source_sea,
+    wlv_native_source_sea_contract()
+  ))
+  seeds <- c(list(
     wlv_seed_resource(
       "request/method",
       method,
-      wlv_resource_contract(scope = "run", value_type = "character", axes = character())
+      wlv_native_control_contract("character")
     ),
     wlv_seed_resource(
       "request/source",
       source,
-      wlv_resource_contract(scope = "run", value_type = "character", axes = character())
+      wlv_native_control_contract("character")
+    ),
+    wlv_seed_resource(
+      "configuration/missingness_policy",
+      missingness_policy,
+      wlv_native_control_contract("list")
+    ),
+    wlv_seed_resource(
+      "configuration/scientific_profile",
+      scientific_profile,
+      wlv_native_control_contract("list")
     ),
     wlv_seed_resource(
       "configuration/parameters",
@@ -394,18 +536,14 @@ wlv_native_base_seeds <- function(
       "labels/demands",
       dimensions$demands,
       wlv_resource_contract(scope = "run", value_type = "data.frame")
-    ),
-    wlv_seed_resource(
-      "source/sea",
-      source_sea,
-      wlv_native_source_sea_contract()
-    ),
+    )
+  ), source_seeds, list(
     wlv_seed_resource(
       "metadata/indicators",
       metadata,
       wlv_native_indicator_metadata_contract()
     )
-  )
+  ))
   seeds <- c(
     seeds,
     wlv_native_assumption_seeds(
@@ -415,6 +553,7 @@ wlv_native_base_seeds <- function(
       parameters$sectors
     )
   )
+  wlv_native_validate_seed_semantic_pairs(seeds)
   list(
     seeds = seeds,
     dimensions = dimensions,
@@ -426,12 +565,12 @@ wlv_native_base_seeds <- function(
 wlv_native_io_seed <- function(path, partition) {
   value <- read_fst_array(path)
   value <- wlv_native_with_named_axes(value, c("year", "input", "output"))
-  wlv_seed_resource(
+  wlv_native_stateful_seed_pair(wlv_seed_resource(
     "source/io",
     value,
     wlv_native_source_io_contract(),
     partition = partition
-  )
+  ))
 }
 
 wlv_native_io_years <- function(path) {
@@ -476,10 +615,10 @@ wlv_native_source_io_seeds <- function(paths) {
   if (anyDuplicated(partitions)) {
     stop("Normalized input-output artifacts have duplicate periods.", call. = FALSE)
   }
-  stats::setNames(
-    Map(wlv_native_io_seed, paths, partitions),
-    partitions
-  )
+  grouped <- Map(wlv_native_io_seed, paths, partitions)
+  seeds <- unlist(grouped, recursive = FALSE, use.names = FALSE)
+  wlv_native_validate_seed_semantic_pairs(seeds)
+  seeds
 }
 
 wlv_native_read_euklems_tables <- function(root, prefix) {

@@ -21,6 +21,78 @@ test_that("runtime manifest is explicit, ordered, and excludes legacy executors"
   )))
 })
 
+test_that("bootstrap evaluates the exact captured and validated expressions", {
+  bootstrap <- new.env(parent = baseenv())
+  sys.source(file.path(wlv_test_root, "R", "bootstrap.R"), envir = bootstrap)
+  definition <- tempfile("wlv-bootstrap-captured-", fileext = ".R")
+  on.exit(unlink(definition, force = TRUE), add = TRUE)
+  writeLines(
+    "captured_value <- function() 'captured'",
+    definition,
+    useBytes = TRUE
+  )
+  captured <- bootstrap$wlv_bootstrap_capture_definitions(
+    definition,
+    "R/lib/captured.R"
+  )
+  writeLines(
+    "captured_value <- function() 'changed'",
+    definition,
+    useBytes = TRUE
+  )
+  expressions <- parse(
+    text = bootstrap$wlv_bootstrap_definition_text(
+      captured$bytes[[1L]],
+      "R/lib/captured.R"
+    ),
+    encoding = "UTF-8"
+  )
+  bootstrap$wlv_bootstrap_validate_definitions(
+    expressions,
+    "R/lib/captured.R"
+  )
+  namespace <- new.env(parent = baseenv())
+  eval(expressions, envir = namespace)
+
+  expect_identical(namespace$captured_value(), "captured")
+  expect_identical(
+    unname(captured$sha256),
+    unclass(as.character(openssl::sha256(captured$bytes[[1L]])))
+  )
+  loader <- paste(deparse(body(bootstrap$wlv_load_runtime)), collapse = "\n")
+  expect_match(loader, "eval\\(parsed_definitions", perl = TRUE)
+  expect_false(grepl("sys.source", loader, fixed = TRUE))
+  expect_false(grepl("parse(file", loader, fixed = TRUE))
+})
+
+test_that("runtime cannot attest a bootstrap loaded from another root", {
+  bootstrap <- new.env(parent = baseenv())
+  sys.source(file.path(wlv_test_root, "R", "bootstrap.R"), envir = bootstrap)
+  other_root <- tempfile("wlv-bootstrap-other-root-")
+  dir.create(other_root)
+  on.exit(unlink(other_root, recursive = TRUE, force = TRUE), add = TRUE)
+  relative <- c("R/bootstrap.R", bootstrap$wlv_runtime_definition_manifest())
+  for (path in relative) {
+    source <- file.path(wlv_test_root, path)
+    destination <- file.path(other_root, path)
+    dir.create(dirname(destination), recursive = TRUE, showWarnings = FALSE)
+    expect_true(file.copy(source, destination, overwrite = FALSE))
+  }
+  path <- file.path(other_root, "R", "bootstrap.R")
+  text <- readLines(path, warn = FALSE, encoding = "UTF-8")
+  target <- "The runtime definition manifest is invalid."
+  replacement <- "The selected runtime definition manifest is invalid."
+  expect_true(any(grepl(target, text, fixed = TRUE)))
+  text <- sub(target, replacement, text, fixed = TRUE)
+  writeLines(enc2utf8(text), path, useBytes = TRUE)
+
+  expect_error(
+    bootstrap$wlv_load_runtime(other_root),
+    "executed bootstrap is not structurally identical",
+    fixed = TRUE
+  )
+})
+
 test_that("runtime loading is independent of the process working directory", {
   outside <- tempfile("wlv-bootstrap-outside-")
   dir.create(outside)
@@ -54,7 +126,9 @@ test_that("runtime loading is independent of the process working directory", {
     ".wlv_runtime_definition_paths",
     ".wlv_runtime_definition_md5",
     ".wlv_runtime_definition_sha256",
-    ".wlv_runtime_generation"
+    ".wlv_runtime_definition_compatibility_sha256",
+    ".wlv_runtime_generation",
+    ".wlv_runtime_compatibility_generation"
   )
   expect_true(all(vapply(
     setdiff(bindings, sealed_accessors),
@@ -76,6 +150,20 @@ test_that("runtime loading is independent of the process working directory", {
     runtime$.wlv_runtime_definition_sha256()
   )))
   expect_match(runtime$.wlv_runtime_generation(), "^[0-9a-f]{64}$")
+  expect_match(
+    runtime$.wlv_runtime_compatibility_generation(),
+    "^[0-9a-f]{64}$"
+  )
+  expect_true(all(grepl(
+    "^[0-9a-f]{64}$",
+    runtime$.wlv_runtime_definition_compatibility_sha256()
+  )))
+  expect_identical(
+    runtime$.wlv_runtime_compatibility_generation(),
+    runtime$wlv_runtime_definition_generation(
+      runtime$.wlv_runtime_definition_compatibility_sha256()
+    )
+  )
   expect_identical(
     runtime$.wlv_runtime_generation(),
     runtime$wlv_runtime_definition_generation(
@@ -98,6 +186,25 @@ test_that("bootstrap metadata accessors seal and defensively copy containers", {
   expect_true(environmentIsLocked(holder))
   expect_true(bindingIsLocked(".value", holder))
   expect_error(assign(".value", list(), envir = holder), "locked binding")
+})
+
+test_that("runtime compatibility generation is invariant to line endings", {
+  bootstrap <- new.env(parent = baseenv())
+  sys.source(file.path(wlv_test_root, "R", "bootstrap.R"), envir = bootstrap)
+  lf <- charToRaw("alpha <- function() {\n  1L\n}\n")
+  crlf <- charToRaw("alpha <- function() {\r\n  1L\r\n}\r\n")
+  cr <- charToRaw("alpha <- function() {\r  1L\r}\r")
+  hashes <- vapply(
+    list(lf, crlf, cr),
+    bootstrap$wlv_bootstrap_compatibility_sha256_bytes,
+    character(1L),
+    relative_path = "R/example.R"
+  )
+  expect_identical(unname(hashes), rep(hashes[[1L]], 3L))
+  expect_false(identical(
+    as.character(openssl::sha256(lf)),
+    as.character(openssl::sha256(crlf))
+  ))
 })
 
 test_that("bootstrap rejects incomplete project roots before loading", {

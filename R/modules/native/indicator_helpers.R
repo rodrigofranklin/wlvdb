@@ -169,14 +169,15 @@ wlv_native_indicator_spec <- function(
     scope = c("run", "io_period"),
     provides = NULL,
     parameters = list(),
-    services = character()) {
+    services = character(),
+    anomaly_bindings = list()) {
   scope <- match.arg(scope)
   indicator <- sub("^indicator[.]", "", id)
   if (is.null(provides)) {
     provides <- wlv_native_indicator_output(indicator, scope = scope)
   }
   wlv_native_attach_indicator_metadata(
-    wlv_module_spec(
+    wlv_native_module_spec(
       id = id,
       scope = scope,
       checkpoint = checkpoint,
@@ -184,6 +185,7 @@ wlv_native_indicator_spec <- function(
       parameters = parameters,
       requires = requires,
       provides = provides,
+      anomaly_bindings = anomaly_bindings,
       services = services,
       run = run
     ),

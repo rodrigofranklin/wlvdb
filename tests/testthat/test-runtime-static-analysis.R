@@ -52,6 +52,152 @@ test_that("static analysis identifies direct, qualified, and indirect escapes", 
   )
 })
 
+test_that("runtime escapes cannot be hidden behind aliases or target variables", {
+  root <- tempfile("wlv-static-runtime-alias-")
+  dir.create(file.path(root, "R", "lib"), recursive = TRUE)
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  task <- file.path(root, "R", "lib", "task.R")
+  writeLines(
+    c(
+      "loader <- base::source",
+      "second_loader <- loader",
+      "directory_changer <- get('setwd')",
+      "environment_reader <- base::globalenv",
+      "source_name <- 'sys.source'",
+      "runtime_tools <- list(loader = base::source, changer = base::setwd)",
+      "selected_loader <- runtime_tools$loader",
+      "copied_tools <- runtime_tools",
+      "run <- function(tool_name) {",
+      "  second_loader('module.R')",
+      "  directory_changer('elsewhere')",
+      "  environment_reader()",
+      "  do.call(source_name, list('module.R'))",
+      "  get(source_name)",
+      "  match.fun(source_name)",
+      "  runtime_tools$loader('module.R')",
+      "  runtime_tools[['changer']]('elsewhere')",
+      "  runtime_tools[[tool_name]]('module.R')",
+      "  selected_loader('module.R')",
+      "  copied_tools$loader('module.R')",
+      "}"
+    ),
+    task
+  )
+
+  violations <- runtime_static_environment$wlv_runtime_static_violations(
+    root = root,
+    files = task,
+    allowlist = character()
+  )
+
+  expect_true(any(violations$rule == "dynamic_source"))
+  expect_true(any(violations$rule == "working_directory"))
+  expect_true(any(violations$rule == "global_environment"))
+  expect_gte(sum(violations$rule == "indirect_runtime_escape"), 3L)
+  expect_true(any(grepl(
+    "second_loader->source",
+    violations$symbol,
+    fixed = TRUE
+  )))
+  expect_true(any(violations$symbol == "sys.source"))
+  expect_true(any(grepl(
+    "runtime_tools$loader->source",
+    violations$symbol,
+    fixed = TRUE
+  )))
+  expect_true(any(grepl(
+    "selected_loader->source",
+    violations$symbol,
+    fixed = TRUE
+  )))
+  expect_true(any(grepl(
+    "copied_tools$loader->source",
+    violations$symbol,
+    fixed = TRUE
+  )))
+})
+
+test_that("ordinary data fields named source are not executable aliases", {
+  root <- tempfile("wlv-static-source-fields-")
+  dir.create(file.path(root, "R", "lib"), recursive = TRUE)
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  task <- file.path(root, "R", "lib", "task.R")
+  writeLines(
+    c(
+      "run <- function(source, record) {",
+      "  selected <- record$source",
+      "  payload <- list(source = source, selected = selected)",
+      "  data.frame(source = payload$source, value = 1L)",
+      "}"
+    ),
+    task
+  )
+
+  expect_identical(
+    nrow(runtime_static_environment$wlv_runtime_static_violations(
+      root = root,
+      files = task,
+      allowlist = character()
+    )),
+    0L
+  )
+})
+
+test_that("parsed expressions cannot be dynamically evaluated", {
+  root <- tempfile("wlv-static-eval-parse-")
+  dir.create(file.path(root, "R", "lib"), recursive = TRUE)
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  task <- file.path(root, "R", "lib", "task.R")
+  writeLines(
+    c(
+      "parser <- base::parse",
+      "evaluator <- base::eval",
+      "run <- function(text) {",
+      "  parsed <- parser(text = text)",
+      "  evaluator(parsed)",
+      "  caught <- tryCatch(identity(parser(text = text)), error = identity)",
+      "  evaluator(caught)",
+      "  do.call('eval', list(parse(text = text)))",
+      "  lapply(parse(text = text), eval)",
+      "  captured <- vector('list', 1L)",
+      "  captured[[1L]] <- parsed",
+      "  evaluator(captured[[1L]])",
+      "  nested <- list(value = identity(str2expression(text)))",
+      "  evaluator(nested$value)",
+      "  language_tools <- list(parser = base::str2lang, evaluator = base::eval)",
+      "  boxed <- list(language_tools$parser(text))",
+      "  language_tools$evaluator(boxed[[1L]])",
+      "}",
+      "safe_parser <- function(path) parse(file = path)"
+    ),
+    task
+  )
+
+  violations <- runtime_static_environment$wlv_runtime_static_violations(
+    root = root,
+    files = task,
+    allowlist = character()
+  )
+
+  expect_gte(sum(violations$rule == "dynamic_evaluation"), 7L)
+  expect_true(any(grepl("evaluator->eval", violations$symbol, fixed = TRUE)))
+  expect_true(any(grepl(
+    "language_tools$evaluator->eval",
+    violations$symbol,
+    fixed = TRUE
+  )))
+  safe_only <- file.path(root, "R", "lib", "safe.R")
+  writeLines("safe_parser <- function(path) parse(file = path)", safe_only)
+  expect_identical(
+    nrow(runtime_static_environment$wlv_runtime_static_violations(
+      root = root,
+      files = safe_only,
+      allowlist = character()
+    )),
+    0L
+  )
+})
+
 test_that("bootstrap and launcher exceptions never permit global-state escape", {
   root <- tempfile("wlv-static-allow-")
   dir.create(file.path(root, "R", "lib"), recursive = TRUE)
@@ -60,7 +206,12 @@ test_that("bootstrap and launcher exceptions never permit global-state escape", 
   loader <- file.path(root, "R", "bootstrap.R")
   task <- file.path(root, "R", "lib", "task.R")
   launcher <- file.path(root, "scripts", "run_wlv.R")
-  writeLines(c("source('definitions.R')", "setwd('elsewhere')"), loader)
+  writeLines(c(
+    "source('definitions.R')",
+    "parsed <- parse(text = 'value <- function() TRUE')",
+    "eval(parsed)",
+    "setwd('elsewhere')"
+  ), loader)
   writeLines("source('definitions.R')", task)
   writeLines("sys.source('R/main.R', envir = .GlobalEnv)", launcher)
 
@@ -75,7 +226,17 @@ test_that("bootstrap and launcher exceptions never permit global-state escape", 
   )
   expect_setequal(
     violations$rule,
-    c("working_directory", "dynamic_source", "global_environment")
+    c(
+      "working_directory", "dynamic_source", "global_environment",
+      "dynamic_evaluation"
+    )
+  )
+  expect_identical(
+    sum(
+      violations$file == "R/bootstrap.R" &
+        violations$rule == "dynamic_evaluation"
+    ),
+    1L
   )
   expect_identical(
     violations$symbol[violations$file == "scripts/run_wlv.R"],
@@ -88,6 +249,63 @@ test_that("bootstrap and launcher exceptions never permit global-state escape", 
       allowlist = "R/lib/task.R"
     ),
     "allowlist is restricted"
+  )
+})
+
+test_that("bootstrap permits exactly its one structurally pinned evaluation", {
+  root <- tempfile("wlv-static-bootstrap-eval-")
+  dir.create(file.path(root, "R"), recursive = TRUE)
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  loader <- file.path(root, "R", "bootstrap.R")
+  exact_call <- paste0(
+    "base::eval(parsed_definitions[[index]], ",
+    "envir = namespace)"
+  )
+  writeLines(c(
+    "parsed_definitions <- vector('list', 1L)",
+    "parsed_definitions[[1L]] <- parse(text = 'value <- 1')",
+    "index <- 1L",
+    "namespace <- new.env(parent = baseenv())",
+    exact_call
+  ), loader)
+
+  exact <- runtime_static_environment$wlv_runtime_static_violations(
+    root = root,
+    files = loader
+  )
+  expect_identical(nrow(exact), 0L)
+
+  writeLines(c(
+    "parsed_definitions <- vector('list', 1L)",
+    "parsed_definitions[[1L]] <- parse(text = 'value <- 1')",
+    "index <- 1L",
+    "namespace <- new.env(parent = baseenv())",
+    exact_call,
+    exact_call
+  ), loader)
+  duplicated <- runtime_static_environment$wlv_runtime_static_violations(
+    root = root,
+    files = loader
+  )
+  expect_identical(
+    sum(duplicated$rule == "dynamic_evaluation"),
+    2L
+  )
+
+  writeLines(c(
+    "parsed_definitions <- vector('list', 1L)",
+    "parsed_definitions[[1L]] <- parse(text = 'value <- 1')",
+    "index <- 1L",
+    "namespace <- new.env(parent = baseenv())",
+    "base::eval(parsed_definitions[[index]], envir = parent.frame())"
+  ), loader)
+  near_miss <- runtime_static_environment$wlv_runtime_static_violations(
+    root = root,
+    files = loader
+  )
+  expect_identical(
+    sum(near_miss$rule == "dynamic_evaluation"),
+    1L
   )
 })
 
@@ -145,6 +363,100 @@ test_that("scientific IO cannot be hidden behind aliases or dynamic lookup", {
   expect_true(all(violations$rule == "scientific_io"))
   expect_true(any(grepl("reader->readRDS", violations$symbol, fixed = TRUE)))
   expect_true(any(violations$symbol == "get"))
+})
+
+test_that("namespaced and higher-order scientific escapes are rejected", {
+  root <- tempfile("wlv-static-science-namespaced-")
+  dir.create(file.path(root, "R", "modules", "native"), recursive = TRUE)
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  module <- file.path(root, "R", "modules", "native", "probe.R")
+  writeLines(
+    c(
+      "probe <- function(paths) {",
+      "  fs::file_delete(paths[[1L]])",
+      "  readr::read_csv(paths[[1L]])",
+      "  processx::run('Rscript', '--version')",
+      "  processx::process$new('Rscript', '--version')",
+      "  base::.Call('native_symbol')",
+      "  lapply(paths, base::readRDS)",
+      "  purrr::walk(paths, fs::file_delete)",
+      "}"
+    ),
+    module
+  )
+
+  violations <- runtime_static_environment$wlv_runtime_static_violations(
+    root = root,
+    files = module,
+    allowlist = character()
+  )
+  scientific <- violations[violations$rule == "scientific_io", , drop = FALSE]
+
+  expect_true(any(scientific$symbol == "fs::file_delete"))
+  expect_true(any(scientific$symbol == "readr::read_csv"))
+  expect_true(any(scientific$symbol == "processx::run"))
+  expect_true(any(scientific$symbol == "processx::process$new"))
+  expect_true(any(scientific$symbol == ".Call"))
+  expect_true(any(grepl("lapply->readRDS", scientific$symbol, fixed = TRUE)))
+  expect_true(any(grepl(
+    "walk->fs::file_delete",
+    scientific$symbol,
+    fixed = TRUE
+  )))
+})
+
+test_that("reachable runtime rejects legacy executor paths", {
+  root <- tempfile("wlv-static-legacy-path-")
+  dir.create(file.path(root, "R", "lib"), recursive = TRUE)
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  task <- file.path(root, "R", "lib", "task.R")
+  writeLines(
+    c(
+      "legacy <- function() c(",
+      "  file.path('R', 'lib', 'computations.R'),",
+      "  'R/modules/variables/sea_sectors.R',",
+      "  'methods/demo/_method_solutions.csv'",
+      ")",
+      "public_artifact <- function() '_method_solutions.csv'"
+    ),
+    task
+  )
+
+  violations <- runtime_static_environment$wlv_runtime_static_violations(
+    root = root,
+    files = task,
+    allowlist = character()
+  )
+  legacy <- violations[violations$rule == "legacy_path", , drop = FALSE]
+
+  expect_gte(nrow(legacy), 3L)
+  expect_false(any(legacy$expression == "\"_method_solutions.csv\""))
+})
+
+test_that("tests and renv retain their explicit infrastructure exceptions", {
+  root <- tempfile("wlv-static-infrastructure-")
+  dir.create(file.path(root, "tests", "testthat"), recursive = TRUE)
+  dir.create(file.path(root, "renv"), recursive = TRUE)
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  contents <- c(
+    "source('R/lib/computations.R')",
+    "setwd('elsewhere')",
+    "assign('value', 1, envir = .GlobalEnv)",
+    "do.call('source', list('module.R'))",
+    "eval(parse(text = 'value <- 1'))",
+    "legacy <- 'methods/demo/_method_solutions.csv'"
+  )
+  test_file <- file.path(root, "tests", "testthat", "helper-probe.R")
+  renv_file <- file.path(root, "renv", "activate.R")
+  writeLines(contents, test_file)
+  writeLines(contents, renv_file)
+
+  violations <- runtime_static_environment$wlv_runtime_static_violations(
+    root = root,
+    files = c(test_file, renv_file)
+  )
+
+  expect_identical(nrow(violations), 0L)
 })
 
 test_that("scientific IO cannot be hidden behind runtime helpers", {

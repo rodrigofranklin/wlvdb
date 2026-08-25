@@ -365,7 +365,7 @@ wlv_indicator_go_price_r_id_wiodr16_spec <- function() {
 
 # The base basket and base lambda are run resources shared by every period.
 wlv_indicator_basket_zero_collector_spec <- function() {
-  wlv_module_spec(
+  wlv_native_module_spec(
   id = "indicator.basket_zero.collector",
   scope = "run",
   checkpoint = 3L,
@@ -590,7 +590,7 @@ wlv_indicator_basket_value_r_pc_spec <- function() {
 
 # One instance per price indicator keeps selective recalculation atomic.
 wlv_indicator_price_index_normalize_spec <- function() {
-  wlv_module_spec(
+  wlv_native_module_spec(
   id = "indicator.price_index.normalize",
   scope = "run",
   checkpoint = "after_price_normalization",
@@ -614,6 +614,21 @@ wlv_indicator_price_index_normalize_spec <- function() {
       args$indicator,
       action = "replace",
       predecessor = args$predecessor
+    )
+  },
+  anomaly_bindings = function(args) {
+    if (!identical(args$indicator, "go_price.r.id")) {
+      return(list())
+    }
+    lapply(
+      paste0(args$indicator, c("", ".numerator", ".denominator")),
+      function(indicator) {
+        wlv_native_anomaly_binding(
+          "sea_sectors",
+          indicator,
+          action = "preserve"
+        )
+      }
     )
   },
   services = "contract_runtime",

@@ -108,8 +108,9 @@ test_that("parallel errors preserve the original condition and stop once", {
   expect_identical(stops, 1L)
 })
 
-test_that("a failing stopper does not hide the computation error", {
+test_that("a transient stopper failure is retried without hiding computation error", {
   stops <- 0L
+  stopped <- FALSE
   original <- simpleError("original computation failure")
 
   caught <- suppressWarnings(tryCatch(
@@ -119,14 +120,18 @@ test_that("a failing stopper does not hide the computation error", {
       make_cluster = function(workers) structure(list(), class = "wlv_test_cluster"),
       stop_cluster = function(cluster) {
         stops <<- stops + 1L
-        stop("cleanup failure")
+        if (stops == 1L) {
+          stop("cleanup failure")
+        }
+        stopped <<- TRUE
       }
     ),
     error = identity
   ))
 
   expect_identical(caught, original)
-  expect_identical(stops, 1L)
+  expect_identical(stops, 2L)
+  expect_true(stopped)
 })
 
 test_that("a failing stopper is reported after successful computation", {
@@ -145,7 +150,7 @@ test_that("a failing stopper is reported after successful computation", {
     "cleanup failure",
     fixed = TRUE
   )
-  expect_identical(stops, 1L)
+  expect_identical(stops, 2L)
 })
 
 test_that("cluster cleanup leaves unrelated connections open", {

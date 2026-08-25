@@ -1,9 +1,9 @@
 # Native aggregation registry resolution ----------------------------------
 #
-# Stable methods retain their versioned unit contracts while native formula
-# routing comes from an explicit module-ID map. Experimental methods use their
-# versioned historical native profiles. No script path is interpreted by the
-# runtime.
+# Stable methods retain their versioned unit contracts, whose formula rows
+# carry native module IDs directly. Experimental methods use their versioned
+# historical native profiles. No script path or secondary routing map is
+# interpreted by the runtime.
 
 wlv_native_formula_aggregation_id <- function(indicator) {
   if (!is.character(indicator) || length(indicator) != 1L ||
@@ -51,6 +51,24 @@ wlv_native_aggregation_rows <- function(value, label) {
   value
 }
 
+wlv_native_catalog_aggregation_rows <- function(value, label) {
+  columns <- wlv_aggregation_contract_columns()
+  catalog_columns <- columns
+  catalog_columns[catalog_columns == "module"] <- "module_id"
+  if (!is.data.frame(value) || !identical(names(value), catalog_columns)) {
+    stop(
+      sprintf(
+        "%s must contain the exact catalog aggregation schema with `module_id`.",
+        label
+      ),
+      call. = FALSE
+    )
+  }
+  value <- value[catalog_columns]
+  names(value)[names(value) == "module_id"] <- "module"
+  wlv_native_aggregation_rows(value, label)
+}
+
 wlv_native_aggregation_canonical_rows <- function(value, units, label) {
   value <- wlv_native_aggregation_rows(value, label)
   if (!is.data.frame(units) || !"indicator" %in% names(units)) {
@@ -91,65 +109,6 @@ wlv_native_aggregation_canonical_rows <- function(value, units, label) {
   value <- value[match(expected_keys, keys), , drop = FALSE]
   row.names(value) <- NULL
   value
-}
-
-wlv_native_stable_formula_modules <- function(root, contract, rows) {
-  path <- file.path(
-    root,
-    "config",
-    "aggregations",
-    "stable_formula_modules.csv"
-  )
-  if (!file.exists(path) || isTRUE(file.info(path)$isdir)) {
-    stop("Stable native formula module map does not exist.", call. = FALSE)
-  }
-  mapping <- utils::read.csv2(
-    path,
-    stringsAsFactors = FALSE,
-    colClasses = "character",
-    check.names = FALSE,
-    na.strings = NULL,
-    fileEncoding = "UTF-8"
-  )
-  if (!identical(names(mapping), c("contract", "indicator", "module_id")) ||
-      anyNA(mapping) || !nrow(mapping)) {
-    stop("Stable native formula module map has an invalid schema.", call. = FALSE)
-  }
-  keys <- paste(mapping$contract, mapping$indicator, sep = "\034")
-  if (anyDuplicated(keys) || any(!grepl(
-    "^aggregation[.][a-z][a-z0-9_.]*$",
-    mapping$module_id
-  )) || any(grepl("[/\\\\]|[.]R$", mapping$module_id))) {
-    stop("Stable native formula module map has invalid declarations.", call. = FALSE)
-  }
-  selected <- mapping[mapping$contract == contract, , drop = FALSE]
-  formula <- rows$strategy == "formula"
-  expected <- unique(rows$indicator[formula])
-  if (!setequal(selected$indicator, expected) ||
-      nrow(selected) != length(expected)) {
-    stop(
-      sprintf(
-        "Stable native formula module map does not exactly cover `%s`.",
-        contract
-      ),
-      call. = FALSE
-    )
-  }
-  expected_ids <- vapply(
-    selected$indicator,
-    wlv_native_formula_aggregation_id,
-    character(1L)
-  )
-  if (!identical(unname(selected$module_id), unname(expected_ids))) {
-    stop(
-      sprintf("Stable native formula module map is invalid for `%s`.", contract),
-      call. = FALSE
-    )
-  }
-  rows$module[formula] <- selected$module_id[
-    match(rows$indicator[formula], selected$indicator)
-  ]
-  rows
 }
 
 wlv_native_validate_formula_module_ids <- function(rows, label) {
@@ -362,12 +321,8 @@ wlv_native_aggregation_registry <- function(
         call. = FALSE
       )
     }
-    rows <- wlv_native_stable_formula_modules(
-      root,
-      contract_id,
-      contract$aggregations
-    )
     label <- sprintf("Stable unit contract `%s`", contract_id)
+    rows <- wlv_native_catalog_aggregation_rows(contract$aggregations, label)
   } else {
     if (nrow(selected_profile) != 1L) {
       stop(

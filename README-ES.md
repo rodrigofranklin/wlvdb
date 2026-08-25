@@ -54,15 +54,18 @@ iniciar cálculos.
 La función ** get_wlv **  es una función que ejecuta todos los cálculos y genera archivos con las estimaciones en la carpeta de resultados con todas las variables y matrices, sectoriales (M_IO, y m_countries) , y cuentas socioeconómicas del país y sectoriales (sea_Countries y sea_Sectors) correspondientes a las estimaciones no ortodoxas. 
 
 Por ejemplo, para calcular el método estándar actual con WIOD13, ejecute
-`get_wlv("wiodr13")` después de cargar `R/main.R`.
+`wlv$get_wlv("wiodr13")` en el runtime privado devuelto por el bootstrap.
+`R/main.R` contiene definiciones y no debe cargarse directamente.
 
 La función acepta los siguientes argumentos: 
 
 * methods: una cadena o un vector de caracteres como `c("wiodr13", "wiodr16")`, especificando los métodos a calcular o recalcular. Por defecto, `"wiodr13"`
 * repeat_pp : Verdadero / Falso para indicar si se debe ejecutar la preparación completa de descarga y datos de origen. Por defecto, falso .
-* papern : referencia al número del paper sobre el que computar  tablas y / o gráficos que comparen diferentes métodos, indicadores transversales y longitudinales, es decir, cualquier análisis personalizado que se incluye en análisis identificado por ese número. 
-* prepaper: Verdadero / Falso: si se debe ejecutar, de hecho, la preparación de dicho análisis personalizado (realizando la llamada correspondiente en el script de la carpeta *papers*) 
+* papern: tarea nativa de paper que se ejecuta después del cálculo; solo se admite el paper 0
+* prepaper: Verdadero / Falso para ejecutar la tarea nativa admitida
 * workers: entero positivo que controla los workers PSOCK. El valor predeterminado es `1`, que ejecuta secuencialmente sin crear un clúster
+* channel: canal de publicación en minúsculas, como `stable` o `research/input-v3`
+* allow_experimental: habilitación explícita de métodos experimentales; los métodos deshabilitados permanecen bloqueados
 
 ## Estructura / organización de la carpeta del repositorio 
 
@@ -70,13 +73,14 @@ La función acepta los siguientes argumentos:
 
 Carpeta con datos descargados de fuentes primarias de productos de entrada en subcarpetas de acuerdo con la fuente. También se formatean los datos en esta carpeta para mantener una estructura tratable de diferentes fuentes para el mismo flujo de procesamiento. 
 
-### 2) parameters
+### 2) Catálogo y configuración
 
-Algunos pocos parámetros en archivos CSV para una fácil edición, organizados en subcarpetas, una para parámetros globales, o comunes a todas fuentes (subcarpeta *common_ground* ) y parámetros generales para cada fuente principal de IO, por ejemplo, "WIOD13".  En general, Los siguientes archivos: 
-
-* _source_assumptions.csv - indica cómo tratar la estimación de información importante (y ausente de la fuente), actualmente respecto al trabajo en el resto del mundo y China 
-* _source_matrices.csv - indica cómo tratar principalmente a matrices de capital y depreciación 
-* _source_solutions.csv: indica como calcular las variables, llamando a los scripts correspondientes (o , de ser muy sencilla, directamente la operación aritmética) , utilizados uno a uno por defecto en caso de no indicarse distintamente en método específico
+`catalog/` declara fuentes, métodos, capacidades, perfiles de validación y
+contratos públicos. `config/modules/` compone instancias nativas de método,
+fuente y `common` mediante operaciones tipadas `add`, `replace` y `remove`.
+`config/aggregations/` declara los perfiles históricos de agregación. Los CSV
+contienen únicamente identificadores y argumentos tipados; no contienen rutas
+ejecutables, expresiones R ni orden semántico.
 
 ### 3) methods
 
@@ -84,35 +88,29 @@ Algunos pocos parámetros en archivos CSV para una fácil edición, organizados 
  
  Una de las características de la  Base de Datos de Valores Trabajo Mundiales es la facilidad de crear, aplicar y comparar diferentes métodos para la estimación de indicadores de categorías. Como tal, proporciona complemento subsidiario a las discusiones teóricas. 
  
- Las subcarpetas en los métodos se refieren a un método específico. 
- 
- Su estructura es similar a la de parámetros:
-* _methods_assumptions.csv - indica cómo tratar la estimación de información importante (y ausente de la fuente), actualmente respecto al trabajo en el resto del mundo y China . Si se especifica, tiene preferencia respecto a lo definido en parameters.
-* _methods_matrices.csv - indica cómo tratar principalmente a matrices de capital y depreciación . Si se especifica, tiene preferencia respecto a lo definido en parameters.
-* _methods_solutions.csv: indica como calcular las variables, llamando a los scripts correspondientes (o , de ser muy sencilla, directamente la operación aritmética) . Si se especifica, tiene preferencia respecto a lo definido en parameters.
+Las subcarpetas en `methods/` contienen metadatos, parámetros y clasificaciones
+sectoriales. El comportamiento científico ejecutable se registra como
+funciones nativas en `R/modules/native/`; el orden lo determina el grafo de
+dependencias compilado, nunca la posición de las filas en los CSV.
  
  
 
 ### 4) results - a descargar por separado si se desea verificar los resultados ya producidos por nuestro equipo - [enlace aquí] https://coletiva.imperialismodependecia.org/s/nmmdymxl8fwxfjq) 
 
-Los resultados de la Los cálculos se guardan como archivos en subcarpetas nombrados por el método que los generó. Las variables se guardan en: M_IO (en valores, por ejemplo, por) por sector o nacional (m_countries), Cuentas socioeconómicas sectoriales (SEA_SECTORS) y nacionales (SEA_COUNTRIES) .
+Los resultados son runs inmutables en `results/runs/<método>/<run_id>/`.
+Las releases de `results/releases/` fijan conjuntos coherentes y los marcadores
+append-only de `results/channels/<canal>/` seleccionan la release vigente.
 
 ### 5) papers 
 
-1 archivo (principal, al menos) de script para cada análisis, o artículo, identificado por un número. 
+El paper 0 es una tarea nativa registrada que consume runs publicados e
+inmutables. Los papers 3 y 4 fallan en el preflight porque sus insumos y
+nomenclaturas históricos ya no son compatibles.
 
-Para casi la totalidad de los análisis  generalmente se requiere un nuevo procesamiento de los resultados, dado su volumen:  indicadores, regiones y o sectores y métdoso, nuevos cálculos se pueden filtrar, ver, por ejemplo, el ensayo referido. 
+### 6) Runtime R
 
-### 6) scripts
-
-Carpeta de scripts con scripts en R, organizado en:
-
-- lib
-- modules
-  - assumptions
-  - matrices
-  - reduced_matrices
-  - variables
--utils
-
- Cada subcarpeta está estructurada en scripts y por fuente o método.
+El bootstrap determinista carga definiciones de función de `R/lib/`,
+`R/modules/native/`, `R/preparation/` y `R/main.R` en un único namespace
+privado y bloqueado. Los módulos científicos reciben entradas, argumentos y
+servicios inyectados mediante un contexto explícito; los ejecutores legacy
+basados en `source()` no forman parte del runtime alcanzable.

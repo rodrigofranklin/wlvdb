@@ -103,6 +103,10 @@ test_that("contract runtimes require one explicit canonical scientific profile",
   )
   expect_true(is.environment(runtime))
   expect_identical(runtime$scientific_profile, profile)
+  expect_identical(runtime$semantic_states, stats::setNames(
+    vector("list", 0L),
+    character()
+  ))
 
   forged <- profile
   forged$leontief_zero$exception_count <- 1L

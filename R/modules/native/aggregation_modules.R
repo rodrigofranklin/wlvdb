@@ -88,7 +88,7 @@ wlv_native_aggregation_allowed_states <- function(
 }
 
 wlv_native_aggregation_spec <- function() {
-  wlv_module_spec(
+  wlv_native_module_spec(
   id = "aggregation.direct",
   scope = "run",
   checkpoint = "after_world_aggregation",

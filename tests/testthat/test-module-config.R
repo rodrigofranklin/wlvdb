@@ -157,7 +157,7 @@ test_that("all executable methods have a deterministic typed configuration", {
 })
 
 wlv_test_historical_aggregation <- function(source) {
-  old <- utils::read.csv2(
+  utils::read.csv2(
     file.path(
       wlv_test_root,
       "contracts",
@@ -169,16 +169,6 @@ wlv_test_historical_aggregation <- function(source) {
     check.names = FALSE,
     na.strings = NULL
   )
-  formula <- nzchar(old$module)
-  old$module[formula] <- paste0(
-    "aggregation.",
-    sub(
-      "-country[.]R$",
-      "",
-      sub("^[^/]+/", "", old$module[formula])
-    )
-  )
-  old
 }
 
 test_that("experimental methods select two shared explicit historical profiles", {
@@ -199,14 +189,15 @@ test_that("experimental methods select two shared explicit historical profiles",
       paste0(source, "_historical_v1")
     )
     historical <- wlv_test_historical_aggregation(source)
+    names(profile)[names(profile) == "module"] <- "module_id"
     compared <- setdiff(names(profile), "notes")
     expect_identical(
       as.data.frame(profile)[compared],
       historical[compared],
       info = source
     )
-    expect_false(any(grepl("[/\\\\]", profile$module)), info = source)
-    expect_false(any(grepl("[.]R$", profile$module)), info = source)
+    expect_false(any(grepl("[/\\\\]", profile$module_id)), info = source)
+    expect_false(any(grepl("[.]R$", profile$module_id)), info = source)
     expect_false("legacy" %in% names(profile), info = source)
   }
 })

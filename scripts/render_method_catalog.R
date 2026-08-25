@@ -151,7 +151,7 @@ render_method_rows <- function(methods, sources) {
       yes_no(method$can_calculate),
       yes_no(method$can_recalculate),
       markdown_cell(method$description),
-      markdown_link(method$test),
+      markdown_code(method$validation_id),
       markdown_link(method$documentation),
       markdown_cell(method$limitations)
     )
@@ -163,12 +163,6 @@ render_source_rows <- function(sources) {
 
   lapply(seq_len(nrow(sources)), function(i) {
     source <- sources[i, , drop = FALSE]
-    validator <- if (nzchar(source$validator_script) && nzchar(source$validator_function)) {
-      sprintf("%s (`%s`)", markdown_link(source$validator_script), source$validator_function)
-    } else {
-      wlv_markdown_em_dash
-    }
-
     c(
       markdown_code(source$source),
       markdown_code(source$status),
@@ -177,7 +171,7 @@ render_source_rows <- function(sources) {
       markdown_code(source$data_dir),
       yes_no(source$can_prepare),
       markdown_code(source$preparation_task),
-      validator,
+      markdown_code(source$validator_id),
       markdown_code(source$artifact_profile),
       markdown_code(source$missingness_policy),
       markdown_code(source$unit_contract),
@@ -215,8 +209,6 @@ render_missingness_policy_rows <- function(policies) {
     policy <- policies[i, , drop = FALSE]
     c(
       markdown_code(policy$policy),
-      markdown_link(policy$script),
-      markdown_code(policy$factory),
       markdown_link(policy$documentation)
     )
   })
@@ -261,7 +253,7 @@ render_document <- function(catalog) {
     "methods",
     c(
       "method", "source", "description", "status", "can_calculate",
-      "can_recalculate", "test", "documentation", "limitations"
+      "can_recalculate", "validation_id", "documentation", "limitations"
     )
   )
   assert_columns(
@@ -269,8 +261,8 @@ render_document <- function(catalog) {
     "sources",
     c(
       "source", "status", "year_start", "year_end", "parameter_set",
-      "data_dir", "can_prepare", "preparation_task", "validator_script",
-      "validator_function", "artifact_profile", "missingness_policy",
+      "data_dir", "can_prepare", "preparation_task", "validator_id",
+      "artifact_profile", "missingness_policy",
       "unit_contract", "documentation", "limitations"
     )
   )
@@ -282,7 +274,7 @@ render_document <- function(catalog) {
   assert_columns(
     missingness_policies,
     "missingness_policies",
-    c("policy", "script", "factory", "documentation")
+    c("policy", "documentation")
   )
   assert_columns(
     unit_contracts,
@@ -296,7 +288,7 @@ render_document <- function(catalog) {
   method_table <- markdown_table(
     c(
       "Method", "Source", "Method status", "Source status", "Coverage",
-      "Prepare", "Calculate", "Recalculate", "Description", "Test/fixture",
+      "Prepare", "Calculate", "Recalculate", "Description", "Validation ID",
       "Documentation", "Known limitations"
     ),
     render_method_rows(methods, sources)
@@ -304,13 +296,13 @@ render_document <- function(catalog) {
   source_table <- markdown_table(
     c(
       "Source", "Status", "Coverage", "Parameter set", "Data directory",
-      "Prepare", "Preparation task", "Validator", "Artifact profile",
+      "Prepare", "Preparation task", "Validator ID", "Artifact profile",
       "Missingness policy", "Unit contract", "Documentation", "Known limitations"
     ),
     render_source_rows(sources)
   )
   missingness_policy_table <- markdown_table(
-    c("Policy", "Script", "Factory", "Documentation"),
+    c("Policy", "Documentation"),
     render_missingness_policy_rows(missingness_policies)
   )
   unit_contract_table <- markdown_table(
@@ -333,7 +325,7 @@ render_document <- function(catalog) {
     "This matrix is generated from the canonical, machine-readable registries in",
     "[`catalog/methods.csv`](../catalog/methods.csv),",
     "[`catalog/sources.csv`](../catalog/sources.csv),",
-    "[`catalog/artifact-profiles.csv`](../catalog/artifact-profiles.csv), and",
+    "[`catalog/artifact-profiles.csv`](../catalog/artifact-profiles.csv),",
     "[`catalog/missingness-policies.csv`](../catalog/missingness-policies.csv), and",
     "[`catalog/unit-contracts.csv`](../catalog/unit-contracts.csv).",
     "Regenerate it with `Rscript --vanilla scripts/render_method_catalog.R` and",
@@ -341,11 +333,11 @@ render_document <- function(catalog) {
     "",
     "## Status semantics",
     "",
-    "- `stable`: the declared operations are supported by recovered preparation, validation, tests, and documentation.",
+    "- `stable`: the declared operations are supported by recovered preparation, registered validation, and documentation.",
     "- `experimental`: the method or source is available for development and evaluation, but requires explicit opt-in with `--allow-experimental` and is not yet a supported scientific release.",
     "- `disabled`: execution is blocked, including with experimental opt-in, until the listed recovery work is complete.",
     "",
-    "A method and its source have independent statuses. For example, a source may remain experimental while methods that depend on its incomplete lifecycle are disabled. Capabilities are also explicit: a directory or script existing in the repository does not by itself mean that preparation, calculation, or recalculation is supported.",
+    "A method and its source have independent statuses. For example, a source may remain experimental while methods that depend on its incomplete lifecycle are disabled. Capabilities are also explicit: repository contents alone do not imply that preparation, calculation, or recalculation is supported.",
     "",
     "## Methods",
     "",
@@ -359,7 +351,7 @@ render_document <- function(catalog) {
     "",
     "## Missingness policies",
     "",
-    "Sources reference versioned policy factories; catalog loading validates declarations without executing them.",
+    "Sources reference versioned policy identifiers; catalog loading validates those declarations against the native registry.",
     "",
     missingness_policy_table,
     "",

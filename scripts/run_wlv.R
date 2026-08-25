@@ -138,6 +138,14 @@ sys.source(
   chdir = FALSE
 )
 
+Sys.setenv(RENV_PROJECT = project_root)
+invisible(utils::capture.output(
+  suppressMessages(suppressWarnings(
+    source(file.path(project_root, "renv", "activate.R"), local = TRUE)
+  )),
+  type = "output"
+))
+
 if (!is.null(args$list_methods)) {
   runtime <- bootstrap_environment$wlv_load_runtime(project_root)
   catalog <- runtime$wlv_runtime_catalog()
@@ -152,8 +160,6 @@ if (!is.null(args$list_methods)) {
   quit(save = "no", status = 0L)
 }
 
-Sys.setenv(RENV_PROJECT = project_root)
-source(file.path(project_root, "renv", "activate.R"), local = TRUE)
 runtime <- bootstrap_environment$wlv_load_runtime(project_root)
 catalog <- runtime$wlv_runtime_catalog()
 

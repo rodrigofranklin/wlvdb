@@ -645,9 +645,19 @@ read_fst_array <- function(file_name) {
   wlv_fst_read_bundle(file_name)
 }
 
-wlv_fst_sidecar <- function(value, fst_sha256) {
+wlv_fst_sidecar <- function(value, fst_sha256, drop_axis_names = FALSE) {
+  if (!is.logical(drop_axis_names) || length(drop_axis_names) != 1L ||
+      is.na(drop_axis_names)) {
+    stop("`drop_axis_names` must be TRUE or FALSE.", call. = FALSE)
+  }
   dimensions <- dim(value)
   array_dimnames <- dimnames(value)
+  if (isTRUE(drop_axis_names) && !is.null(array_dimnames)) {
+    # The names belong to the (small) dimnames list, not to the numeric array.
+    # Dropping them here preserves the public sidecar contract without forcing
+    # a second copy of a potentially multi-gigabyte array.
+    names(array_dimnames) <- NULL
+  }
   legacy_dimnames <- if (is.null(array_dimnames)) {
     rep(list(NULL), length(dimensions))
   } else {
@@ -671,9 +681,17 @@ wlv_fst_sidecar <- function(value, fst_sha256) {
   )
 }
 
-wlv_fst_arrays_identical <- function(actual, expected) {
+wlv_fst_arrays_identical <- function(
+    actual,
+    expected,
+    drop_axis_names = FALSE) {
+  actual_dimnames <- dimnames(actual)
+  expected_dimnames <- dimnames(expected)
+  if (isTRUE(drop_axis_names) && !is.null(expected_dimnames)) {
+    names(expected_dimnames) <- NULL
+  }
   identical(dim(actual), dim(expected)) &&
-    identical(dimnames(actual), dimnames(expected)) &&
+    identical(actual_dimnames, expected_dimnames) &&
     identical(as.vector(actual), as.vector(expected))
 }
 
@@ -821,7 +839,7 @@ wlv_fst_install_bundle <- function(
   invisible(destination_data)
 }
 
-write_fst_array <- function(m, file_name) {
+write_fst_array <- function(m, file_name, drop_axis_names = FALSE) {
   if (!is.array(m)) {
     stop("`m` must be an array or matrix.", call. = FALSE)
   }
@@ -830,6 +848,10 @@ write_fst_array <- function(m, file_name) {
     is.na(file_name) || !nzchar(file_name)
   ) {
     stop("`file_name` must be one non-empty path.", call. = FALSE)
+  }
+  if (!is.logical(drop_axis_names) || length(drop_axis_names) != 1L ||
+      is.na(drop_axis_names)) {
+    stop("`drop_axis_names` must be TRUE or FALSE.", call. = FALSE)
   }
   destination_directory <- dirname(file_name)
   if (!dir.exists(destination_directory)) {
@@ -891,7 +913,11 @@ write_fst_array <- function(m, file_name) {
   }
 
   fst_sha256 <- wlv_fst_file_sha256(temporary_data)
-  metadata <- wlv_fst_sidecar(m, fst_sha256)
+  metadata <- wlv_fst_sidecar(
+    m,
+    fst_sha256,
+    drop_axis_names = drop_axis_names
+  )
   tryCatch(
     saveRDS(metadata, temporary_metadata, version = 3L),
     error = function(error) {
@@ -907,7 +933,11 @@ write_fst_array <- function(m, file_name) {
   )
 
   round_trip <- wlv_fst_read_bundle(temporary_data)
-  if (!wlv_fst_arrays_identical(round_trip, m)) {
+  if (!wlv_fst_arrays_identical(
+    round_trip,
+    m,
+    drop_axis_names = drop_axis_names
+  )) {
     stop(
       sprintf(
         paste0(

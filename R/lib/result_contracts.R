@@ -307,6 +307,7 @@ wlv_new_contract_runtime <- function(
   runtime$scientific_profile <- scientific_profile
   runtime$anomalies <- wlv_empty_contract_table()
   runtime$states <- new.env(parent = emptyenv())
+  runtime$semantic_states <- stats::setNames(vector("list", 0L), character())
   runtime
 }
 
@@ -373,6 +374,130 @@ wlv_contract_register_states <- function(runtime, artifact, indicator, states) {
     envir = runtime$states
   )
   invisible(states)
+}
+
+wlv_contract_register_semantic_states <- function(
+    runtime,
+    artifact,
+    resource,
+    value) {
+  if (!is.character(artifact) || length(artifact) != 1L || is.na(artifact) ||
+      !artifact %in% c("m_io")) {
+    stop("Sparse contract states received an unsupported artifact.", call. = FALSE)
+  }
+  target_key <- paste0("artifact/", artifact)
+  axes <- names(dimnames(value))
+  wlv_semantic_state_validate(
+    resource,
+    value = value,
+    target_key = target_key,
+    axes = axes,
+    state_key = wlv_semantic_state_key(target_key)
+  )
+  semantic_states <- runtime$semantic_states
+  if (is.null(semantic_states)) {
+    semantic_states <- stats::setNames(vector("list", 0L), character())
+  }
+  if (!is.list(semantic_states) || is.null(names(semantic_states)) ||
+      anyNA(names(semantic_states)) || any(!nzchar(names(semantic_states))) ||
+      anyDuplicated(names(semantic_states))) {
+    stop("Contract runtime sparse states are not canonical.", call. = FALSE)
+  }
+  # The sealed runner store and the validation runtime only read this canonical
+  # data frame. Sharing it preserves copy-on-write and avoids duplicating a
+  # potentially large sparse IO state table.
+  semantic_states[[target_key]] <- resource
+  runtime$semantic_states <- semantic_states
+  invisible(resource)
+}
+
+wlv_contract_semantic_states <- function(runtime, artifact) {
+  semantic_states <- runtime$semantic_states
+  if (is.null(semantic_states)) {
+    return(NULL)
+  }
+  if (!is.list(semantic_states) || is.null(names(semantic_states)) ||
+      anyNA(names(semantic_states)) || any(!nzchar(names(semantic_states))) ||
+      anyDuplicated(names(semantic_states))) {
+    stop("Contract runtime sparse states are not canonical.", call. = FALSE)
+  }
+  target_key <- paste0("artifact/", artifact)
+  resource <- semantic_states[[target_key]]
+  if (is.null(resource)) {
+    return(NULL)
+  }
+  if (!is.data.frame(resource) || !inherits(resource, "wlv_semantic_state") ||
+      !identical(attr(resource, "target_key", exact = TRUE), target_key)) {
+    stop("Contract runtime sparse state binding is invalid.", call. = FALSE)
+  }
+  resource
+}
+
+wlv_contract_semantic_state_filter <- function(resource, selected) {
+  if (!is.logical(selected) || length(selected) != nrow(resource) || anyNA(selected)) {
+    stop("Sparse contract-state selection is invalid.", call. = FALSE)
+  }
+  if (all(selected)) {
+    return(resource)
+  }
+  axes <- attr(resource, "axes", exact = TRUE)
+  target_key <- attr(resource, "target_key", exact = TRUE)
+  result <- resource[selected, c(axes, "state"), drop = FALSE]
+  row.names(result) <- NULL
+  class(result) <- c("wlv_semantic_state", "data.frame")
+  attr(result, "target_key") <- target_key
+  attr(result, "axes") <- axes
+  attr(result, "version") <- wlv_semantic_state_version()
+  result
+}
+
+wlv_contract_semantic_state_subset <- function(runtime, artifact, value) {
+  resource <- wlv_contract_semantic_states(runtime, artifact)
+  if (is.null(resource)) {
+    return(NULL)
+  }
+  axes <- attr(resource, "axes", exact = TRUE)
+  labels <- dimnames(value)
+  label_axes <- names(labels)
+  if (is.null(labels) || length(labels) != length(axes) ||
+      (!is.null(label_axes) && !identical(label_axes, axes))) {
+    stop(
+      "Registered missingness state labels do not match the result array.",
+      call. = FALSE
+    )
+  }
+  retains_all <- all(vapply(seq_along(axes), function(index) {
+    all(unique(resource[[axes[[index]]]]) %in% labels[[index]])
+  }, logical(1L)))
+  if (retains_all) {
+    return(resource)
+  }
+  selected <- rep(TRUE, nrow(resource))
+  for (index in seq_along(axes)) {
+    selected <- selected & resource[[axes[[index]]]] %in% labels[[index]]
+  }
+  wlv_contract_semantic_state_filter(resource, selected)
+}
+
+wlv_contract_semantic_state_slice <- function(
+    runtime,
+    artifact,
+    indicator,
+    value) {
+  resource <- wlv_contract_semantic_state_subset(runtime, artifact, value)
+  if (is.null(resource)) {
+    return(NULL)
+  }
+  axes <- attr(resource, "axes", exact = TRUE)
+  labels <- dimnames(value)
+  if (length(axes) < 2L || !identical(labels[[2L]], indicator)) {
+    stop(
+      "Registered missingness state labels do not match the result slice.",
+      call. = FALSE
+    )
+  }
+  selected <- resource[[axes[[2L]]]] == indicator
+  wlv_contract_semantic_state_filter(resource, selected)
 }
 
 wlv_contract_copy_indicator_states <- function(
@@ -1663,6 +1788,40 @@ wlv_contract_declared_states <- function(
     }
   }
 
+  semantic <- wlv_contract_semantic_state_slice(
+    runtime,
+    artifact,
+    indicator,
+    value
+  )
+  if (!is.null(semantic) && nrow(semantic)) {
+    positions <- wlv_semantic_state_linear_indices(semantic, value)
+    registered <- semantic$state
+    conflict <- !is.na(states[positions]) & states[positions] != registered
+    if (any(conflict)) {
+      conflicts <- unique(data.frame(
+        declared = states[positions][conflict],
+        registered = registered[conflict],
+        stringsAsFactors = FALSE
+      ))
+      stop(
+        sprintf(
+          paste0(
+            "Conflicting missingness states were registered for `%s/%s`: %s."
+          ),
+          artifact,
+          indicator,
+          paste(
+            paste(conflicts$declared, conflicts$registered, sep = " -> "),
+            collapse = ", "
+          )
+        ),
+        call. = FALSE
+      )
+    }
+    states[positions] <- registered
+  }
+
   key <- wlv_contract_state_key(artifact, indicator)
   if (exists(key, envir = runtime$states, inherits = FALSE)) {
     registered <- get(key, envir = runtime$states, inherits = FALSE)
@@ -1921,6 +2080,33 @@ wlv_can_validate_m_io_contract_sparse <- function(value) {
     }, logical(1L)))
 }
 
+wlv_m_io_nonfinite_positions <- function(value, chunk_values = 2^20) {
+  if (!is.double(value) || !is.numeric(chunk_values) ||
+      length(chunk_values) != 1L || is.na(chunk_values) ||
+      !is.finite(chunk_values) || chunk_values < 1L) {
+    stop("Sparse m_io scan received invalid inputs.", call. = FALSE)
+  }
+  chunk_values <- as.integer(chunk_values)
+  total <- length(value)
+  if (!total) {
+    return(integer())
+  }
+  positions <- vector("list", ceiling(total / chunk_values))
+  index <- 0L
+  for (start in seq.int(1L, total, by = chunk_values)) {
+    end <- min(total, start + chunk_values - 1L)
+    current <- which(!is.finite(value[start:end]))
+    if (length(current)) {
+      index <- index + 1L
+      positions[[index]] <- as.integer(current + start - 1L)
+    }
+  }
+  if (!index) {
+    return(integer())
+  }
+  as.integer(unlist(positions[seq_len(index)], use.names = FALSE))
+}
+
 wlv_validate_m_io_contract_sparse <- function(
     runtime,
     value,
@@ -1935,6 +2121,15 @@ wlv_validate_m_io_contract_sparse <- function(
   if (wlv_contract_has_registered_m_io_states(runtime, indicators)) {
     return(wlv_validate_m_io_contract_detailed(runtime, value, checkpoint))
   }
+  semantic <- wlv_contract_semantic_state_subset(runtime, "m_io", value)
+  if (!is.null(semantic)) {
+    structural_registered <-
+      semantic$variable %in% wlv_m_io_structural_missing_indicators() &
+      !semantic$output %in% labels[[3L]]
+    if (any(structural_registered & semantic$state != "not_applicable")) {
+      return(wlv_validate_m_io_contract_detailed(runtime, value, checkpoint))
+    }
+  }
   if (length(indicators)) {
     wlv_contract_context_for(
       runtime,
@@ -1945,9 +2140,20 @@ wlv_validate_m_io_contract_sparse <- function(
       axes = c(year = 1L, sector = 3L, output = 4L)
     )
   }
-  nonfinite_positions <- which(!is.finite(value))
+  nonfinite_positions <- wlv_m_io_nonfinite_positions(value)
   if (!length(nonfinite_positions)) {
     return(invisible(value))
+  }
+
+  semantic_positions <- if (is.null(semantic) || !nrow(semantic)) {
+    integer()
+  } else {
+    wlv_semantic_state_linear_indices(semantic, value)
+  }
+  semantic_matches <- if (length(semantic_positions)) {
+    match(nonfinite_positions, semantic_positions)
+  } else {
+    rep(NA_integer_, length(nonfinite_positions))
   }
 
   offsets <- nonfinite_positions - 1
@@ -1977,6 +2183,8 @@ wlv_validate_m_io_contract_sparse <- function(
     ) {
       allowed_missing <- !labels[[4L]][selected_outputs] %in% labels[[3L]]
     }
+    registered <- semantic_matches[selected]
+    allowed_missing <- allowed_missing | !is.na(registered)
     unexpected_missing <- ordinary_missing & !allowed_missing
     if (any(invalid_numeric) || any(unexpected_missing)) {
       return(wlv_validate_m_io_contract_detailed(runtime, value, checkpoint))
@@ -3935,6 +4143,7 @@ wlv_expected_staged_result_artifacts <- function(
     paste0(expected_io_artifacts, ".meta"),
     names(expected_metadata$csv),
     "meta_indicators.RDS", "_states.csv", "_anomalies.csv",
+    wlv_runtime_snapshot_filename(),
     "_scientific_checks.csv"
   )), method = "radix")
 }
@@ -4004,7 +4213,7 @@ wlv_validate_staged_results <- function(
     "sea_countries.fst", "sea_countries.fst.meta",
     "meta_indicators.RDS", "_parameters.csv", "_method_assumptions.csv",
     "_method_matrices.csv", "_method_solutions.csv", "_sectors.csv",
-    "_states.csv", "_anomalies.csv"
+    "_states.csv", "_anomalies.csv", wlv_runtime_snapshot_filename()
   )
   missing <- required[!file.exists(file.path(staging, required))]
   if (length(missing)) {
@@ -4013,6 +4222,17 @@ wlv_validate_staged_results <- function(
       call. = FALSE
     )
   }
+  runtime_partitions <- vapply(
+    file.path(staging, expected_io_artifacts),
+    wlv_native_io_partition,
+    character(1L)
+  )
+  wlv_runtime_snapshot_read(
+    staging,
+    method = method,
+    source = runtime$source,
+    partitions = runtime_partitions
+  )
   expected_artifacts <- wlv_expected_staged_result_artifacts(
     expected_metadata,
     expected_io_artifacts

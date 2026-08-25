@@ -5,12 +5,13 @@ wlv_native_source_sea_contract <- function() {
     scope = "run",
     axes = c("year", "variable", "sector", "country"),
     unit = "normalized_source_sea",
-    missingness = "source_contract"
+    missingness = "source_contract",
+    semantic_state = TRUE
   )
 }
 
 wlv_source_indicator_spec <- function() {
-  wlv_module_spec(
+  wlv_native_module_spec(
   id = "source_indicator",
   scope = "run",
   checkpoint = 0L,

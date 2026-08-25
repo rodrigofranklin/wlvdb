@@ -865,6 +865,16 @@ wlv_native_productive_surplus_spec <- function(employee = FALSE) {
       wlv_native_run_ref("dimensions/lists", "lists", "list")
     ),
     provides = wlv_native_stage5_provides(indicator),
+    anomaly_bindings = list(
+      wlv_native_anomaly_binding(
+        "sea_countries",
+        paste0(indicator, ".numerator")
+      ),
+      wlv_native_anomaly_binding(
+        "sea_countries",
+        paste0(indicator, ".denominator")
+      )
+    ),
     services = "contract_runtime",
     metadata = wlv_native_indicator_metadata_row(
       indicator,

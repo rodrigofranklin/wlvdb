@@ -29,7 +29,6 @@ wlv_test_native_aggregation_fixture_root <- function(catalog) {
   dir.create(config, recursive = TRUE, showWarnings = FALSE)
   files <- c(
     "method_profiles.csv",
-    "stable_formula_modules.csv",
     "wiodr13_historical_v1.csv",
     "wiodr16_historical_v1.csv"
   )
@@ -124,15 +123,19 @@ test_that("stable registries preserve v2 contracts and validate dimensions", {
       method
     )
     expected <- native_aggregation_environment$
-      wlv_native_aggregation_canonical_rows(
+      wlv_native_catalog_aggregation_rows(
         contract$aggregations,
+        method
+      )
+    expected <- native_aggregation_environment$
+      wlv_native_aggregation_canonical_rows(
+        expected,
         contract$units,
         method
       )
-    formula <- expected$strategy == "formula"
-    expected$module[formula] <- paste0(
-      "aggregation.",
-      expected$indicator[formula]
+    expect_true(
+      "module_id" %in% names(contract$aggregations),
+      info = method
     )
     expect_identical(registry$rows, expected, info = method)
     expect_no_error(native_aggregation_environment$
@@ -166,38 +169,22 @@ test_that("stable registries preserve v2 contracts and validate dimensions", {
 
 test_that("stable formula routing fails closed without native module IDs", {
   catalog <- wlv_test_native_aggregation_catalog()
-  fixture <- wlv_test_native_aggregation_fixture_root(catalog)
-  on.exit(unlink(fixture$root, recursive = TRUE), add = TRUE)
-  path <- file.path(
-    fixture$root,
-    "config",
-    "aggregations",
-    "stable_formula_modules.csv"
+  source_record <- native_aggregation_environment$wlv_catalog_source(
+    catalog,
+    "wiodr13"
   )
-  mapping <- utils::read.csv2(
-    path,
-    stringsAsFactors = FALSE,
-    colClasses = "character",
-    check.names = FALSE,
-    na.strings = NULL
-  )
-  mapping$module_id[[1L]] <- "common/legacy-country.R"
-  utils::write.table(
-    mapping,
-    path,
-    sep = ";",
-    row.names = FALSE,
-    col.names = TRUE,
-    quote = FALSE,
-    fileEncoding = "UTF-8"
-  )
+  contract_id <- source_record$unit_contract[[1L]]
+  rows <- catalog$unit_aggregations[[contract_id]]
+  formula <- which(rows$strategy == "formula")[[1L]]
+  rows$module_id[[formula]] <- "common/legacy-country.R"
+  catalog$unit_aggregations[[contract_id]] <- rows
   expect_error(
     native_aggregation_environment$wlv_native_aggregation_registry(
-      fixture$root,
-      fixture$catalog,
+      wlv_test_root,
+      catalog,
       "wiodr13"
     ),
-    "invalid declarations",
+    "explicit native formula module IDs",
     fixed = TRUE
   )
 })

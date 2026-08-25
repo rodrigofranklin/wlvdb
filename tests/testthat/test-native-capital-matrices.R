@@ -1,6 +1,7 @@
 native_capital_environment <- new.env(parent = globalenv())
 for (native_capital_file in c(
   "R/lib/module_runtime.R",
+  "R/lib/semantic_resources.R",
   "R/lib/missingness.R",
   "R/lib/result_contracts.R",
   "R/lib/functions.R",
@@ -121,26 +122,17 @@ wlv_test_native_capital_fixture <- function(method = c("wiodr13", "wiodr16")) {
 
 wlv_test_run_native_capital <- function(spec, fixture, method) {
   runtime <- native_capital_environment
-  seeds <- lapply(names(spec$requires), function(alias) {
-    ref <- spec$requires[[alias]]
-    runtime$wlv_seed_resource(
-      key = ref$key,
-      value = fixture[[alias]],
-      contract = ref$contract,
-      partition = if (identical(ref$contract$scope, "io_period")) "all" else NULL
-    )
-  })
-  store <- runtime$wlv_new_resource_store(seeds)
+  instance <- runtime$wlv_module_instance(
+    "matrix.capital",
+    spec$id,
+    partition = "all"
+  )
   registry <- runtime$wlv_module_registry(list(spec))
-  plan <- runtime$wlv_compile_module_plan(
+  resolved <- runtime$wlv_runtime_resolve_instance(
     registry,
-    list(runtime$wlv_module_instance(
-      "matrix.capital",
-      spec$id,
-      partition = "all"
-    )),
-    store,
-    partitions = "all"
+    instance,
+    "calculate",
+    "all"
   )
   policy <- if (identical(method, "wiodr16")) {
     runtime$wlv_wiodr16_missingness_policy()
@@ -153,10 +145,55 @@ wlv_test_run_native_capital <- function(spec, fixture, method) {
     source = method,
     policy = policy
   )
+  controls <- list(
+    "request/method" = contract_runtime$method,
+    "request/source" = contract_runtime$source,
+    "configuration/missingness_policy" = contract_runtime$policy,
+    "configuration/scientific_profile" = contract_runtime$scientific_profile
+  )
+  seeds <- lapply(names(resolved$requires), function(alias) {
+    ref <- resolved$requires[[alias]]
+    value <- if (identical(ref$contract$role, "control")) {
+      controls[[ref$key]]
+    } else if (identical(ref$contract$role, "semantic_state")) {
+      target_key <- sub("^semantic_state/", "", ref$key)
+      target_alias <- names(resolved$requires)[vapply(
+        resolved$requires,
+        function(candidate) identical(candidate$key, target_key),
+        logical(1L)
+      )][[1L]]
+      target_ref <- resolved$requires[[target_alias]]
+      runtime$wlv_semantic_capture_value_state(
+        fixture[[target_alias]],
+        target_key,
+        target_ref$contract$axes,
+        runtime = contract_runtime
+      )$state
+    } else {
+      fixture[[alias]]
+    }
+    runtime$wlv_seed_resource(
+      key = ref$key,
+      value = value,
+      contract = ref$contract,
+      partition = ref$partition,
+      producer = if (is.null(ref$producer)) {
+        runtime$wlv_runtime_seed_producer()
+      } else {
+        ref$producer
+      }
+    )
+  })
+  store <- runtime$wlv_new_resource_store(seeds)
+  plan <- runtime$wlv_compile_module_plan(
+    registry,
+    list(instance),
+    store,
+    partitions = "all"
+  )
   result <- runtime$wlv_run_module_plan(
     plan,
-    store,
-    services = list(contract_runtime = contract_runtime)
+    store
   )
   read_matrix <- function(resource) {
     runtime$wlv_store_read(
@@ -171,7 +208,19 @@ wlv_test_run_native_capital <- function(spec, fixture, method) {
   list(
     composition = read_matrix("k_composition"),
     depreciation = read_matrix("k_depreciation"),
-    diagnostics = result$diagnostics[["matrix.capital@all"]],
+    diagnostics = runtime$wlv_store_read(
+      result$store,
+      runtime$wlv_resource_ref(
+        "diagnostic/matrix.capital",
+        runtime$wlv_resource_contract(
+          scope = "io_period",
+          value_type = "list",
+          role = "diagnostic"
+        ),
+        producer = "matrix.capital",
+        partition = "all"
+      )
+    ),
     trace = result$trace,
     contract_runtime = contract_runtime
   )
@@ -198,11 +247,32 @@ test_that("native capital specs declare every external input", {
     rep(3L, 3L)
   )
   expect_true(all(vapply(specs, function(spec) {
-    identical(names(spec$requires), expected_inputs) &&
-      identical(names(spec$provides), c("k_composition", "k_depreciation")) &&
-      identical(spec$services, "contract_runtime")
+    instance <- runtime$wlv_module_instance(
+      paste0(spec$id, ".test"),
+      spec$id,
+      partition = "all"
+    )
+    requires <- spec$requires(list(), instance)
+    provides <- spec$provides(list(), instance)
+    scientific_requires <- requires[!vapply(requires, function(ref) {
+      ref$contract$role %in% c("semantic_state", "control")
+    }, logical(1L))]
+    scientific_provides <- provides[vapply(provides, function(output) {
+      identical(output$ref$contract$role, "value")
+    }, logical(1L))]
+    identical(names(scientific_requires), expected_inputs) &&
+      identical(names(scientific_provides), c("k_composition", "k_depreciation")) &&
+      setequal(spec$services, c("contract_runtime", "module_contract"))
   }, logical(1L))))
-  expect_true(specs[[1L]]$requires$gfcf_observations$optional)
+  first_instance <- runtime$wlv_module_instance(
+    paste0(specs[[1L]]$id, ".test"),
+    specs[[1L]]$id,
+    partition = "all"
+  )
+  expect_true(specs[[1L]]$requires(
+    list(),
+    first_instance
+  )$gfcf_observations$optional)
 })
 
 test_that("WIOD13 native capital allocation conserves stock and preserves NA slices", {

@@ -47,6 +47,97 @@ test_that("all executable methods resolve only typed native execution inputs", {
       ))
     )
   }, logical(1L))))
+  compatibility <- lapply(plan$method_names, function(method) {
+    record <- plan$methods[plan$methods$method == method, , drop = FALSE]
+    runtime$wlv_native_runtime_compatibility(
+      plan,
+      record,
+      runtime$wlv_load_run_missingness_policy(plan, record)
+    )
+  })
+  expect_length(compatibility, 12L)
+  hashes <- vapply(compatibility, `[[`, character(1L), "sha256")
+  expect_true(all(grepl("^[0-9a-f]{64}$", hashes)))
+  expect_identical(anyDuplicated(hashes), 0L)
+  hash <- runtime$wlv_runtime_snapshot_value_sha256
+  for (index in seq_along(plan$method_names)) {
+    method_parameters <- runtime$wlv_native_method_parameters(
+      plan$root,
+      plan$method_names[[index]]
+    )
+    expect_identical(
+      compatibility[[index]]$method_parameters_sha256,
+      hash(method_parameters$parameters)
+    )
+    expect_identical(
+      compatibility[[index]]$method_sectors_sha256,
+      hash(method_parameters$sectors)
+    )
+  }
+  repeated <- lapply(plan$method_names, function(method) {
+    record <- plan$methods[plan$methods$method == method, , drop = FALSE]
+    runtime$wlv_native_runtime_compatibility(
+      plan,
+      record,
+      runtime$wlv_load_run_missingness_policy(plan, record)
+    )
+  })
+  expect_identical(repeated, compatibility)
+
+  method <- plan$method_names[[1L]]
+  configuration <- plan$configuration[[method]]
+  canonical <- runtime$wlv_native_configuration_descriptor(
+    configuration,
+    plan$native_registry
+  )
+  presentation_only <- configuration[rev(seq_len(nrow(configuration))), , drop = FALSE]
+  args_index <- which(lengths(presentation_only$args) > 1L)[[1L]]
+  presentation_only$args[[args_index]] <-
+    presentation_only$args[[args_index]][rev(names(
+      presentation_only$args[[args_index]]
+    ))]
+  presentation_only$args_json <- paste0("  ", presentation_only$args_json, "  ")
+  presentation_only$layer <- "presentation-only"
+  attr(presentation_only, "history") <- list("presentation-only")
+  expect_identical(
+    runtime$wlv_native_configuration_descriptor(
+      presentation_only,
+      plan$native_registry
+    ),
+    canonical
+  )
+  changed_configuration <- configuration
+  changed_configuration$instance_id[[1L]] <- paste0(
+    changed_configuration$instance_id[[1L]],
+    ".changed"
+  )
+  expect_false(identical(
+    runtime$wlv_native_configuration_descriptor(
+      changed_configuration,
+      plan$native_registry
+    ),
+    canonical
+  ))
+
+  aggregation <- plan$aggregation_registries[[method]]
+  rebuilt_aggregation <- runtime$wlv_native_aggregation_registry(
+    wlv_test_root,
+    catalog,
+    method
+  )
+  expect_identical(hash(rebuilt_aggregation), hash(aggregation))
+  binding_index <- which(vapply(
+    aggregation$bindings,
+    function(binding) !is.null(binding$spec),
+    logical(1L)
+  ))[[1L]]
+  changed_missing <- aggregation
+  changed_missing$bindings[[binding_index]]$spec$missing <- "strict"
+  changed_tolerance <- aggregation
+  changed_tolerance$bindings[[binding_index]]$spec$tolerance <-
+    changed_tolerance$bindings[[binding_index]]$spec$tolerance * 2
+  expect_false(identical(hash(changed_missing), hash(aggregation)))
+  expect_false(identical(hash(changed_tolerance), hash(aggregation)))
 })
 
 test_that("alternative 2 preserves the legacy scientific observation metadata", {
@@ -271,10 +362,20 @@ test_that("profiled non-finite coordinates close against normalized source label
     targets$artifact == "sea_countries" &
       targets$indicator == target_indicator
   ))
-  expect_false(any(contract_runtime$anomalies$indicator %in% c(
-    target_indicator,
+  expect_false(any(
+    contract_runtime$anomalies$indicator == target_indicator &
+      contract_runtime$anomalies$module == target_scope$module[[1L]]
+  ))
+  expect_setequal(
+    contract_runtime$anomalies$indicator[
+      contract_runtime$anomalies$module == target_scope$module[[1L]] &
+        contract_runtime$anomalies$indicator %in% paste0(
+          target_indicator,
+          c(".numerator", ".denominator")
+        )
+    ],
     paste0(target_indicator, c(".numerator", ".denominator"))
-  ) & contract_runtime$anomalies$module == target_scope$module[[1L]]))
+  )
   expect_identical(
     sum(contract_runtime$anomalies$indicator == "kept.indicator"),
     2L
@@ -488,100 +589,6 @@ test_that("stage-one anomaly owners match their native module generations", {
   }
 })
 
-test_that("stage-four recalculation preserves inherited go-price states", {
-  runtime <- native_execution_runtime
-  catalog <- runtime$wlv_runtime_catalog()
-  plan <- runtime$wlv_validate_request(
-    "ochoa_1",
-    root = wlv_test_root,
-    allow_experimental = TRUE,
-    catalog = catalog
-  )
-  contract_runtime <- runtime$wlv_new_contract_runtime(
-    method = "ochoa_1",
-    source = "wiodr13",
-    policy = runtime$wlv_strict_missingness_policy(
-      source = "wiodr13",
-      policy_id = "stage4_inherited_state_test"
-    ),
-    scientific_profile = plan$scientific_profiles$ochoa_1
-  )
-  value <- array(
-    c(NA_real_, 2),
-    dim = c(1L, 2L, 1L),
-    dimnames = list(
-      year = "2000",
-      sector = c("S1", "S2"),
-      country = "USA"
-    )
-  )
-  states <- array(
-    c("not_applicable", "finite"),
-    dim = dim(value),
-    dimnames = dimnames(value)
-  )
-  runtime$wlv_contract_register_states(
-    contract_runtime,
-    "sea_sectors",
-    "go_price.r.id",
-    states
-  )
-  runtime$wlv_contract_register_states(
-    contract_runtime,
-    "sea_sectors",
-    "gross_output.s.mv",
-    states
-  )
-
-  cleared <- runtime$wlv_native_clear_recalculated_states(
-    contract_runtime,
-    list(indicator_stages = c(
-      "go_price.r.id" = 4L,
-      "gross_output.s.mv" = 4L
-    )),
-    at_stage = 4L,
-    sea_vars = NULL
-  )
-  expect_identical(cleared, "gross_output.s.mv")
-  expect_true(exists(
-    runtime$wlv_contract_state_key("sea_sectors", "go_price.r.id"),
-    envir = contract_runtime$states,
-    inherits = FALSE
-  ))
-  expect_false(exists(
-    runtime$wlv_contract_state_key("sea_sectors", "gross_output.s.mv"),
-    envir = contract_runtime$states,
-    inherits = FALSE
-  ))
-
-  normalized <- runtime$wlv_ratio_runtime(
-    contract_runtime,
-    value,
-    value,
-    zero = "not_applicable",
-    artifact = "sea_sectors",
-    indicator = "go_price.r.id",
-    checkpoint = "after_price_normalization",
-    stage = 4L,
-    module = "indicator.price_index.normalize",
-    axes = c(year = 1L, sector = 2L, country = 3L)
-  )
-  expect_true(is.na(normalized[[1L]]))
-  expect_identical(normalized[[2L]], 1)
-
-  runtime$wlv_native_clear_recalculated_states(
-    contract_runtime,
-    list(indicator_stages = c("go_price.r.id" = 4L)),
-    at_stage = 1L,
-    sea_vars = NULL
-  )
-  expect_false(exists(
-    runtime$wlv_contract_state_key("sea_sectors", "go_price.r.id"),
-    envir = contract_runtime$states,
-    inherits = FALSE
-  ))
-})
-
 test_that("stage-four anomaly reset preserves inherited go-price normalization", {
   runtime <- native_execution_runtime
   catalog <- runtime$wlv_runtime_catalog()
@@ -613,6 +620,21 @@ test_that("stage-four anomaly reset preserves inherited go-price normalization",
     indicators = request$indicators$ochoa_1
   )
   targets <- runtime$wlv_native_recalculated_anomaly_targets(module_plan)
+  normalization_targets <- targets[
+    targets$artifact == "sea_sectors" &
+      targets$module == "indicator.price_index.normalize",
+    ,
+    drop = FALSE
+  ]
+  expect_setequal(
+    normalization_targets$indicator,
+    c(
+      "go_price.r.id",
+      "go_price.r.id.numerator",
+      "go_price.r.id.denominator"
+    )
+  )
+  expect_true(all(normalization_targets$action == "preserve"))
   go_targets <- targets[
     targets$indicator == "go_price.r.id" &
       targets$artifact %in% c("sea_sectors", "sea_countries"),
@@ -678,6 +700,58 @@ test_that("stage-four anomaly reset preserves inherited go-price normalization",
     contract_runtime$anomalies$module,
     "indicator.price_index.normalize"
   )
+
+  stage1_instances <- runtime$wlv_native_plan_instances(
+    registry = request$native_registry,
+    config = request$configuration$ochoa_1,
+    aggregation_registry = request$aggregation_registries$ochoa_1,
+    indicators = request$indicators$ochoa_1,
+    partitions = "1995-2009",
+    mode = "recalculate",
+    at_stage = 1L
+  )
+  stage1_plan <- runtime$wlv_native_preflight_plan(
+    request$native_registry,
+    stage1_instances,
+    "1995-2009",
+    mode = "recalculate",
+    source = "wiodr13",
+    at_stage = 1L,
+    indicators = request$indicators$ochoa_1
+  )
+  stage1_target <- runtime$wlv_native_recalculated_anomaly_targets(stage1_plan)
+  stage1_target <- stage1_target[
+    stage1_target$artifact == "sea_sectors" &
+      stage1_target$indicator == "go_price.r.id" &
+      stage1_target$module == "indicator.price_index.normalize",
+    ,
+    drop = FALSE
+  ]
+  expect_identical(nrow(stage1_target), 1L)
+  stale <- do.call(rbind, lapply(
+    c("go_price.r.id", "go_price.r.id.numerator", "go_price.r.id.denominator"),
+    function(indicator) {
+      value <- anomaly(stage1_target)
+      value$indicator <- indicator
+      value
+    }
+  ))
+  row.names(stale) <- NULL
+  contract_runtime$anomalies <- stale
+  reset_stage1 <- runtime$wlv_native_reset_recalculated_anomalies(
+    contract_runtime,
+    stage1_plan,
+    1L
+  )
+  normalized <- reset_stage1[
+    reset_stage1$artifact == "sea_sectors" &
+      reset_stage1$indicator == "go_price.r.id" &
+      reset_stage1$module == "indicator.price_index.normalize",
+    ,
+    drop = FALSE
+  ]
+  expect_identical(normalized$action, "replace")
+  expect_identical(nrow(contract_runtime$anomalies), 0L)
 })
 
 test_that("Leontief exception outputs close against lightweight IO metadata", {
@@ -826,12 +900,7 @@ test_that("recalculation refreshes only explicitly supplied metadata cells", {
 })
 
 test_that("recalculation rejects a parent with a contracted indicator schema", {
-  skip_if_not_installed("fst")
   runtime <- native_execution_runtime
-  parent <- tempfile("wlv-parent-schema-")
-  dir.create(parent)
-  on.exit(unlink(parent, recursive = TRUE, force = TRUE), add = TRUE)
-
   sector <- array(
     seq_len(2L),
     dim = c(1L, 2L, 1L, 1L),
@@ -842,30 +911,19 @@ test_that("recalculation rejects a parent with a contracted indicator schema", {
       country = "A"
     )
   )
-  country <- array(
-    seq_len(2L),
-    dim = c(1L, 2L, 1L),
-    dimnames = list(
-      year = "2000",
-      indicator = c("kept", "removed"),
-      country = "A"
-    )
-  )
-  runtime$write_fst_array(sector, file.path(parent, "sea_sectors.fst"))
-  runtime$write_fst_array(country, file.path(parent, "sea_countries.fst"))
-
   expect_error(
-    runtime$wlv_native_parent_indicator_seeds(
-      parent,
+    runtime$wlv_native_validate_parent_indicator_schema(
+      sector,
       indicators = "kept",
-      resolved = list()
+      artifact = "sea_sectors"
     ),
     "indicator schema differs",
     fixed = TRUE
   )
 })
 
-test_that("public arrays preserve labels while omitting internal axis names", {
+test_that("public FST sidecars omit axis names without mutating arrays", {
+  skip_if_not_installed("fst")
   runtime <- native_execution_runtime
   value <- array(
     seq_len(4L),
@@ -873,7 +931,12 @@ test_that("public arrays preserve labels while omitting internal axis names", {
     dimnames = list(year = c("2000", "2001"), country = c("A", "B"))
   )
 
-  public <- runtime$wlv_native_public_array(value)
+  root <- tempfile("wlv-public-sidecar-")
+  dir.create(root)
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  path <- file.path(root, "public.fst")
+  runtime$write_fst_array(value, path, drop_axis_names = TRUE)
+  public <- runtime$read_fst_array(path)
 
   expect_identical(unname(dimnames(public)), unname(dimnames(value)))
   expect_null(names(dimnames(public)))

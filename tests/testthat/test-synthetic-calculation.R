@@ -43,10 +43,12 @@ test_that("the native fixture completes a typed calculation DAG", {
     artifacts$sea_countries[, "gross_output.s.mv", "WWW"],
     rowSums(expected_country[, fixture$labels$country, drop = FALSE])
   )
-  expect_named(
-    execution$result$diagnostics[["indicator.gross"]],
-    "_native_test_gross.csv"
+  diagnostics <- fixture$runtime$wlv_runtime_terminal_entries(
+    execution$result$store,
+    "diagnostic/indicator.gross"
   )
+  expect_length(diagnostics, 1L)
+  expect_named(diagnostics[[1L]]$value, "_native_test_gross.csv")
 })
 
 test_that("native planning is deterministic rather than row ordered", {
@@ -130,10 +132,14 @@ test_that("invalid native output is rejected before atomic publication", {
 
   caught <- tryCatch(
     fixture$runtime$wlv_run_module_plan(plan, store),
-    wlv_result_error = identity
+    error = identity
   )
-  expect_s3_class(caught, "wlv_result_error")
-  expect_match(conditionMessage(caught), "year, sector, country", fixed = TRUE)
+  expect_s3_class(caught, "wlv_module_execution_error")
+  expect_match(
+    conditionMessage(caught),
+    "A stateful value must be a numeric array with declared axes.",
+    fixed = TRUE
+  )
   expect_identical(fixture$runtime$wlv_store_catalog(store), catalog_before)
   expect_error(
     fixture$runtime$wlv_store_read(

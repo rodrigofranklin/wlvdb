@@ -44,15 +44,7 @@ if (startsWith(tolower(output_dir), root_prefix)) {
 
 bootstrap_environment <- new.env(parent = baseenv())
 sys.source(file.path(root, "R", "bootstrap.R"), envir = bootstrap_environment)
-manifest <- bootstrap_environment$wlv_runtime_definition_manifest()
-last_definition <- match("R/lib/execution.R", manifest)
-if (is.na(last_definition)) {
-  stop("The native executor is absent from the runtime manifest.", call. = FALSE)
-}
-runtime <- new.env(parent = baseenv())
-for (relative in manifest[seq_len(last_definition)]) {
-  sys.source(file.path(root, relative), envir = runtime, chdir = FALSE)
-}
+runtime <- bootstrap_environment$wlv_load_runtime(root)
 
 phase <- function(label) {
   message(format(Sys.time(), "%Y-%m-%dT%H:%M:%S"), " ", label)
@@ -127,27 +119,6 @@ native_request <- list(
   mode = "calculate",
   at_stage = 1L
 )
-
-phase("building the real resource store")
-store_data <- runtime$wlv_native_build_store(
-  plan = native_request,
-  method_record = method_record,
-  run_data = run_data,
-  registry = registry,
-  instances = instances,
-  indicators = indicators,
-  unit_definitions = units,
-  partitions = partitions
-)
-phase("compiling the real graph")
-plan <- runtime$wlv_compile_module_plan(
-  registry,
-  instances,
-  store = store_data$store,
-  operation = "calculate",
-  partitions = partitions
-)
-
 source_policy <- as.character(source_record$missingness_policy[[1L]])
 policy <- switch(
   source_policy,
@@ -161,6 +132,54 @@ scientific_profile <- runtime$wlv_native_scientific_profile(
   method,
   indicators
 )
+method_parameters <- runtime$wlv_native_method_parameters(root, method)
+hash <- runtime$wlv_runtime_snapshot_value_sha256
+compatibility <- runtime$wlv_runtime_compatibility(
+  method = method,
+  source = source,
+  runtime_generation_sha256 = runtime$.wlv_runtime_compatibility_generation(),
+  method_parameters_sha256 = hash(method_parameters$parameters),
+  method_sectors_sha256 = hash(method_parameters$sectors),
+  indicators = indicators,
+  unit_contract_id = contract_id,
+  unit_sidecar_sha256 = hash(runtime$wlv_catalog_unit_contract_sidecar(
+    catalog,
+    contract_id,
+    indicators = indicators,
+    resolved_aggregations = aggregation_registry$rows
+  )),
+  unit_definitions_sha256 = hash(units),
+  missingness_policy_id = policy$policy_id,
+  missingness_policy_sha256 = hash(policy),
+  aggregation_registry_sha256 = hash(aggregation_registry),
+  scientific_profile_sha256 = hash(scientific_profile),
+  configuration_sha256 = hash(runtime$wlv_native_configuration_descriptor(
+    configuration,
+    registry
+  ))
+)
+
+phase("building the real resource store")
+store_data <- runtime$wlv_native_build_store(
+  plan = native_request,
+  method_record = method_record,
+  run_data = run_data,
+  registry = registry,
+  instances = instances,
+  indicators = indicators,
+  unit_definitions = units,
+  partitions = partitions,
+  compatibility = compatibility
+)
+phase("compiling the real graph")
+plan <- runtime$wlv_compile_module_plan(
+  registry,
+  instances,
+  store = store_data$store,
+  operation = "calculate",
+  partitions = partitions
+)
+
 contract_runtime <- runtime$wlv_new_contract_runtime(
   method = method,
   source = source,
@@ -200,7 +219,6 @@ artifacts <- list(
     c("year", "variable", "origin", "destination")
   )
 )
-artifacts <- lapply(artifacts, runtime$wlv_native_public_array)
 indicator_metadata <- runtime$wlv_store_read(
   result$store,
   runtime$wlv_resource_ref(
@@ -224,7 +242,8 @@ phase(paste0("persisting candidate artifacts in ", output_dir))
 for (name in names(artifacts)) {
   runtime$write_fst_array(
     artifacts[[name]],
-    file.path(output_dir, paste0(name, ".fst"))
+    file.path(output_dir, paste0(name, ".fst")),
+    drop_axis_names = TRUE
   )
 }
 saveRDS(indicator_metadata, file.path(output_dir, "meta_indicators.RDS"))

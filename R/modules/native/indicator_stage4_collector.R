@@ -7,7 +7,7 @@
 # coverage of `dimensions/lists$years` and preserves all values and NA states.
 
 wlv_indicator_stage4_collector_spec <- function() {
-  wlv_module_spec(
+  wlv_native_module_spec(
   id = "indicator.stage4_collector",
   scope = "run",
   checkpoint = "after_stage_4",
@@ -73,7 +73,15 @@ wlv_indicator_stage4_collector_spec <- function() {
     for (value in partitions) {
       result[dimnames(value)[[1L]], , ] <- value
     }
-    wlv_module_result(outputs = list(value = result))
+    state <- wlv_semantic_state_merge(
+      resources = ctx$input("semantic_state__partitions"),
+      values = partitions,
+      partition_axis = "year"
+    )
+    wlv_module_result(outputs = list(
+      value = result,
+      semantic_state__value = state
+    ))
   }
 )
 }

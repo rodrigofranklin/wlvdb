@@ -102,13 +102,16 @@ test_that("stable source validators are definitions in the private runtime", {
       ),
       "wlv_run_plan"
     )
-    validator <- calculate_plan$methods$validator_function[[1L]]
-    expect_true(exists(
-      validator,
-      envir = runtime,
-      mode = "function",
-      inherits = FALSE
-    ))
+    validator_id <- calculate_plan$methods$validator_id[[1L]]
+    source_id <- calculate_plan$methods$source[[1L]]
+    expect_match(validator_id, paste0("^", source_id, "_prepared_v[0-9]+$"))
+    validator <- runtime$wlv_load_catalog_validator(
+      calculate_plan,
+      calculate_plan$methods[1L, , drop = FALSE]
+    )
+    expect_identical(validator$validator_id, validator_id)
+    expect_true(is.function(validator$validate))
+    expect_true(is.function(validator$validate_euklems))
   }
   expect_true(exists(
     "wlv_wiodr13_validate_labels",
@@ -168,6 +171,28 @@ test_that("command line entrypoint provides help without project data", {
   expect_true(any(grepl("--channel", output, fixed = TRUE)))
   expect_true(any(grepl("--allow-experimental", output, fixed = TRUE)))
   expect_true(any(grepl("--list-methods", output, fixed = TRUE)))
+})
+
+test_that("command line activates renv before its first runtime load", {
+  launcher <- readLines(
+    file.path(wlv_test_root, "scripts", "run_wlv.R"),
+    warn = FALSE,
+    encoding = "UTF-8"
+  )
+  activation <- grep(
+    'source(file.path(project_root, "renv", "activate.R")',
+    launcher,
+    fixed = TRUE
+  )
+  runtime_load <- grep(
+    "wlv_load_runtime(project_root)",
+    launcher,
+    fixed = TRUE
+  )
+
+  expect_length(activation, 1L)
+  expect_gt(length(runtime_load), 0L)
+  expect_lt(activation, min(runtime_load))
 })
 
 test_that("command line entrypoint lists the catalog in all supported formats", {

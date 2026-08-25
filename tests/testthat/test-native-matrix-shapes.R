@@ -1,6 +1,7 @@
 native_matrix_shape_environment <- new.env(parent = globalenv())
 for (native_matrix_shape_file in c(
   "R/lib/module_runtime.R",
+  "R/lib/semantic_resources.R",
   "R/lib/functions.R",
   "R/modules/native/contracts.R",
   "R/modules/native/source_modules.R",
@@ -35,7 +36,10 @@ test_that("native basket preserves the complete public output axis", {
     ),
     demands = data.frame(demand = "c41", stringsAsFactors = FALSE)
   )
-  context <- list(input = function(name) values[[name]])
+  context <- list(
+    input = function(name) values[[name]],
+    service = function(name) function(result) result
+  )
   result <- e$wlv_matrix_basket_national_spec()$run(context)$outputs$value
 
   expect_identical(dim(result), dim(source_io))
@@ -61,7 +65,8 @@ test_that("basket-zero collector extracts the inter-industry block by label", {
   values <- list(baskets = list(period = basket), lambdas = list(period = lambda))
   context <- list(
     input = function(name) values[[name]],
-    arg = function(name) if (identical(name, "base_year")) "2000" else NULL
+    arg = function(name) if (identical(name, "base_year")) "2000" else NULL,
+    service = function(name) function(result) result
   )
   result <- e$wlv_indicator_basket_zero_collector_spec()$run(context)$outputs
 
@@ -95,7 +100,8 @@ test_that("basket-zero collector derives the historical first matrix year", {
   values <- list(baskets = list(period = basket), lambdas = list(period = lambda))
   context <- list(
     input = function(name) values[[name]],
-    arg = function(name) if (identical(name, "base_year")) "first" else NULL
+    arg = function(name) if (identical(name, "base_year")) "first" else NULL,
+    service = function(name) function(result) result
   )
   result <- e$wlv_indicator_basket_zero_collector_spec()$run(context)$outputs
 

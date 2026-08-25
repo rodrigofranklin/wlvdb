@@ -75,8 +75,8 @@ wlv$get_wlv("wiodr13")
 ```
 
 Use `Rscript --vanilla scripts/run_wlv.R --list-methods` to inspect status,
-coverage, and supported operations without loading project dependencies or
-source data. Use `--help` for all command-line options, or add `--check` to
+coverage, and supported operations using the pinned project library, without
+loading source data. Use `--help` for all command-line options, or add `--check` to
 validate the environment and method without calculating.
 To rebuild and validate a source without immediately starting the calculation,
 use `--method wiodr13 --prepare-only` or `--method wiodr16 --prepare-only`.
@@ -89,14 +89,16 @@ documented in [`docs/wiodr13.md`](docs/wiodr13.md) and
 get_wlv is a function that wraps all calculations and outputs files to the results folder with all variables, and arrays with Country and Sector Socio-Economic Accounts(SEAs).
 
 
-For example, to calculate the current standard procedure with WIOD13 data, call `get_wlv("wiodr13")` after loading `R/main.R`.
+For example, calculate WIOD13 with `wlv$get_wlv("wiodr13")` from the private
+runtime returned by the bootstrap above. `R/main.R` is a definition file and
+must not be loaded directly.
 
 The function accepts the following arguments:
 
 * methods - a string or a character vector like `c("wiodr13", "wiodr16")` for the methods to be calculated. Defaults to `"wiodr13"`
 * repeat_pp - boolean to indicate if full download and preparation of source data should be performed . Defaults to FALSE
-* papern - number of the paper to eventually trigger further tables and/or graphs that compare different methods, cross-sectional and longitudinal indicators, any custom analysis to be included in the paper referred to by the same number.
-* prepaper - wether to actually trigger the preparation of such custom analysis (calls corresponding script from papers/ folder)
+* papern - native paper task to run after calculation; only paper 0 is supported
+* prepaper - whether to run the supported native paper task
 * workers - positive integer controlling PSOCK workers. The default is `1`, which runs sequentially without creating a cluster
 * channel - lowercase publication channel, optionally hierarchical, such as `stable` or `research/input-v3`. Defaults to `stable`
 * allow_experimental - boolean explicit opt-in for methods marked `experimental`. Defaults to `FALSE`; methods marked `disabled` remain blocked
@@ -112,21 +114,14 @@ The data in this folder is also formatted to keep a tractable structure from dif
 Data is also formatted to
 
 
- 2) parameters
+ 2) catalog and configuration
  
- Folder with few parameters, organized in subfolders,
-global parameters (common_ground subfolder) and general parameters for each of primary IO sources.
-For each source, eg. WIOD13:
-
-
-* _source_assumptions.csv - indicates how to deal to estimate important (and missing from source) info,currently mainly Rest of the World and China info on labour
-* _source_matrices.csv - indicates how to deal mainly to infer Kapital and Depreciation Matrices
-* _source_solutions.csv - indicates variables to be calculated and corresponding procedure for the estimate
-
-
-
- 
-These parameters are  to be used if no different specific definition is provided in any one method that uses the source
+`catalog/` declares sources, methods, capabilities, validation profiles and
+public contracts. `config/modules/` composes method, source and common native
+module instances with typed `add`, `replace` and `remove` operations.
+`config/aggregations/` declares the historical aggregation profile. CSV files
+contain identifiers and typed arguments only; executable paths, R expressions
+and semantic ordering are not configuration.
 
  3) methods
  
@@ -134,14 +129,10 @@ These parameters are  to be used if no different specific definition is provided
  
  One of the features of the World Labour Values Database is the ease to create, apply and compare different methods for estimating categories. As such, it provides subsidiary complement to theoretical discussions.
  
-The subfolders in methods refer to a specific method. Their structure is similar to parameters:
-
-
-* _method_assumptions.csv - indicates how to deal to estimate important (and missing from source) info,currently mainly Rest of the World and China info on labour
-* _method_matrices.csv - indicates how to deal mainly to infer Kapital and Depreciation Matrices
-* _method_solutions.csv - indicates variables to be calculated and corresponding procedure for the estimate
- 
- Additionaly, there is a sectors.csv file indicating which sectors should be considered productive an unproductive.
+The subfolders in `methods/` contain method metadata, parameters and sector
+classifications. Executable scientific behavior is registered as native
+function definitions under `R/modules/native/`; the compiled dependency graph,
+not CSV row position, determines execution order.
  
  
  
@@ -159,21 +150,17 @@ The subfolders in methods refer to a specific method. Their structure is similar
  
  
  5) papers
-A number would be suggested to be linked to a specific analysis for, say, a paper
-From results, one can filter some indicators, regions, and produce new calculus - for example in reference paper, we estimate all distance measures from market prices and direct prices
+
+Paper 0 is a registered native task that consumes immutable published runs.
+Paper numbers 3 and 4 are rejected during preflight because their historical
+inputs and nomenclature are no longer supported.
 
 
 
 6) R
 
-Folder with  scripts
-
-- lib
-- modules
-  - assumptions
-  - matrices
-  - reduced_matrices
-  - variables
--utils
-
-each subfolder will be structured in common and source or method specific scripts.
+The deterministic bootstrap loads function definitions from `R/lib/`,
+`R/modules/native/`, `R/preparation/` and `R/main.R` into one locked private
+namespace. Scientific modules receive declared inputs, arguments and injected
+services through an explicit context; legacy sourced executors are not part of
+the reachable runtime.

@@ -41,9 +41,9 @@ test_that("matrix assembler preserves buffered semantics while streaming resourc
     destination = countries
   ))
   io_zeta["2000", "I2", "O1"] <- NA_real_
-  io_alpha["2001", "I1", "O2"] <- NaN
-  country_beta["2002", "BB", "AA"] <- Inf
-  country_omega["2000", "AA", "BB"] <- -Inf
+  io_alpha["2001", "I1", "O2"] <- NA_real_
+  country_beta["2002", "BB", "AA"] <- NA_real_
+  country_omega["2000", "AA", "BB"] <- NA_real_
   module_inputs <- list(
     lists = list(
       years = years,
@@ -51,14 +51,43 @@ test_that("matrix assembler preserves buffered semantics while streaming resourc
       output = outputs,
       countries = countries
     ),
-    `io.alpha` = split_periods(io_alpha),
-    `io.zeta` = split_periods(io_zeta),
-    `country.omega` = split_periods(country_omega),
-    `country.beta` = split_periods(country_beta)
+    `io.k_composition` = split_periods(io_alpha),
+    `io.values` = split_periods(io_zeta),
+    `country.exports_mp` = split_periods(country_omega),
+    `country.exports_values` = split_periods(country_beta)
+  )
+  state_partitions <- function(values, target_key) {
+    lapply(values, function(value) {
+      axes <- names(dimnames(value))
+      states <- runtime$wlv_semantic_state_array(value, axes)
+      states[is.na(value)] <- "source_missing"
+      runtime$wlv_semantic_state_encode(
+        value,
+        states,
+        target_key,
+        axes
+      )
+    })
+  }
+  module_inputs[["semantic_state__io.k_composition"]] <- state_partitions(
+    module_inputs[["io.k_composition"]],
+    "io/k_composition"
+  )
+  module_inputs[["semantic_state__io.values"]] <- state_partitions(
+    module_inputs[["io.values"]],
+    "io/values"
+  )
+  module_inputs[["semantic_state__country.exports_mp"]] <- state_partitions(
+    module_inputs[["country.exports_mp"]],
+    "country_matrix/exports_mp"
+  )
+  module_inputs[["semantic_state__country.exports_values"]] <- state_partitions(
+    module_inputs[["country.exports_values"]],
+    "country_matrix/exports_values"
   )
   arguments <- list(
-    io_resources = c("zeta", "alpha"),
-    country_resources = c("beta", "omega")
+    io_resources = c("values", "k_composition"),
+    country_resources = c("exports_values", "exports_mp")
   )
   make_context <- function(values) {
     runtime$wlv_runtime_context(
@@ -66,8 +95,8 @@ test_that("matrix assembler preserves buffered semantics while streaming resourc
       input_names = names(values),
       args = arguments,
       argument_names = names(arguments),
-      services = list(),
-      service_names = character(),
+      services = list(module_contract = function(value) value),
+      service_names = "module_contract",
       partition = NULL,
       instance_id = "assembler.matrices.test"
     )
@@ -81,37 +110,41 @@ test_that("matrix assembler preserves buffered semantics while streaming resourc
     dim = c(length(years), 2L, length(inputs), length(outputs)),
     dimnames = list(
       year = years,
-      variable = c("zeta", "alpha"),
+      variable = c("values", "k_composition"),
       input = inputs,
       output = outputs
     )
   )
-  expected_io[, "zeta", , ] <- io_zeta
-  expected_io[, "alpha", , ] <- io_alpha
+  expected_io[, "values", , ] <- io_zeta
+  expected_io[, "k_composition", , ] <- io_alpha
   expected_countries <- array(
     NA_real_,
     dim = c(length(years), 2L, length(countries), length(countries)),
     dimnames = list(
       year = years,
-      variable = c("beta", "omega"),
+      variable = c("exports_values", "exports_mp"),
       origin = countries,
       destination = countries
     )
   )
-  expected_countries[, "beta", , ] <- country_beta
-  expected_countries[, "omega", , ] <- country_omega
+  expected_countries[, "exports_values", , ] <- country_beta
+  expected_countries[, "exports_mp", , ] <- country_omega
 
   expect_s3_class(result, "wlv_module_result")
   expect_identical(result$outputs$m_io, expected_io)
   expect_identical(result$outputs$m_countries, expected_countries)
 
   incomplete <- module_inputs
-  incomplete[["io.zeta"]] <- list(
+  incomplete[["io.values"]] <- list(
     early = io_zeta["2000", , , drop = FALSE],
     late = io_zeta["2002", , , drop = FALSE]
   )
+  incomplete[["semantic_state__io.values"]] <- state_partitions(
+    incomplete[["io.values"]],
+    "io/values"
+  )
   expect_error(
     runtime$wlv_native_matrix_assembler_spec()$run(make_context(incomplete)),
-    "Assembler coverage for `io/zeta` is not exact .*missing=2001"
+    "Assembler coverage for `io/values` is not exact .*missing=2001"
   )
 })

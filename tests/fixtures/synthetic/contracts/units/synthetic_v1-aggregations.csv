@@ -1,4 +1,4 @@
-indicator;level;strategy;module;numerator;denominator;weight;zero_denominator;notes
+indicator;level;strategy;module_id;numerator;denominator;weight;zero_denominator;notes
 abstract_labour.emp.s.mv;sector_to_country;sum;;;;;;
 abstract_labour.emp.s.mv;country_to_world;sum;;;;;;
 gross_output.s.us;sector_to_country;sum;;;;;;

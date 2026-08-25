@@ -11,14 +11,14 @@ wlv_native_resolved_spec_contracts <- function(registry, instance) {
       args,
       "requires",
       "wlv_resource_ref",
-      instance$instance_id
+      instance
     ),
     provides = wlv_runtime_resolve_contract_list(
       spec$provides,
       args,
       "provides",
       "wlv_resource_output",
-      instance$instance_id
+      instance
     )
   )
 }
@@ -312,6 +312,75 @@ wlv_native_dummy_value <- function(contract) {
   )
 }
 
+wlv_native_preflight_dummy_value <- function(
+    key,
+    contract,
+    seed_contracts) {
+  if (!identical(contract$role, "semantic_state")) {
+    return(wlv_native_dummy_value(contract))
+  }
+  target_key <- wlv_semantic_state_target_key(key)
+  target_contract <- seed_contracts[[target_key]]
+  if (is.null(target_contract) ||
+      !identical(target_contract$role, "value") ||
+      !isTRUE(target_contract$semantic_state)) {
+    stop(
+      sprintf(
+        "Native preflight semantic seed `%s` lacks its stateful value contract.",
+        key
+      ),
+      call. = FALSE
+    )
+  }
+  value <- wlv_native_dummy_value(target_contract)
+  wlv_semantic_capture_value_state(
+    value = value,
+    target_key = target_key,
+    axes = target_contract$axes
+  )$state
+}
+
+wlv_native_preflight_validate_semantic_seed_pairs <- function(seeds) {
+  locators <- vapply(seeds, function(seed) {
+    wlv_runtime_locator_id(seed$key, seed$partition, seed$producer)
+  }, character(1L))
+  if (anyDuplicated(locators)) {
+    stop("Native preflight produced duplicate seed locators.", call. = FALSE)
+  }
+  by_locator <- stats::setNames(seeds, locators)
+  values <- Filter(function(seed) {
+    identical(seed$contract$role, "value") && isTRUE(seed$contract$semantic_state)
+  }, seeds)
+  states <- Filter(function(seed) {
+    identical(seed$contract$role, "semantic_state")
+  }, seeds)
+  expected <- vapply(values, function(seed) {
+    wlv_runtime_locator_id(
+      wlv_semantic_state_key(seed$key),
+      seed$partition,
+      seed$producer
+    )
+  }, character(1L))
+  observed <- vapply(states, function(seed) {
+    wlv_runtime_locator_id(seed$key, seed$partition, seed$producer)
+  }, character(1L))
+  if (!setequal(expected, observed)) {
+    stop("Native preflight produced incomplete semantic seed pairs.", call. = FALSE)
+  }
+  for (index in seq_along(values)) {
+    value_seed <- values[[index]]
+    state_seed <- by_locator[[expected[[index]]]]
+    wlv_semantic_state_validate(
+      state_seed$value,
+      value = value_seed$value,
+      target_key = value_seed$key,
+      axes = value_seed$contract$axes,
+      state_key = state_seed$key
+    )
+  }
+  invisible(seeds)
+}
+
 wlv_native_preflight_seed_contracts <- function(
     source,
     mode,
@@ -331,17 +400,14 @@ wlv_native_preflight_seed_contracts <- function(
     stop("Native preflight requires unique declared output indicators.", call. = FALSE)
   }
 
-  scalar_character <- wlv_resource_contract(
-    scope = "run",
-    axes = character(),
-    value_type = "character"
-  )
   run_contract <- function(value_type) {
     wlv_resource_contract(scope = "run", value_type = value_type)
   }
   contracts <- list(
-    "request/method" = scalar_character,
-    "request/source" = scalar_character,
+    "request/method" = wlv_native_control_contract("character"),
+    "request/source" = wlv_native_control_contract("character"),
+    "configuration/missingness_policy" = wlv_native_control_contract("list"),
+    "configuration/scientific_profile" = wlv_native_control_contract("list"),
     "configuration/parameters" = run_contract("data.frame"),
     "configuration/sectors" = run_contract("data.frame"),
     "dimensions/lists" = run_contract("list"),
@@ -397,6 +463,13 @@ wlv_native_preflight_seed_contracts <- function(
           "io_period"
         )
     }
+  }
+  stateful_keys <- names(contracts)[vapply(contracts, function(contract) {
+    identical(contract$role, "value") && isTRUE(contract$semantic_state)
+  }, logical(1L))]
+  for (key in stateful_keys) {
+    contracts[[wlv_semantic_state_key(key)]] <-
+      wlv_native_semantic_state_contract(contracts[[key]])
   }
   contracts
 }
@@ -520,12 +593,17 @@ wlv_native_preflight_store <- function(
     }
     wlv_seed_resource(
       group[[1L]]$ref$key,
-      wlv_native_dummy_value(group[[1L]]$seed_contract),
+      wlv_native_preflight_dummy_value(
+        group[[1L]]$ref$key,
+        group[[1L]]$seed_contract,
+        seed_contracts
+      ),
       group[[1L]]$seed_contract,
       partition = group[[1L]]$partition,
       producer = producer
     )
   })
+  wlv_native_preflight_validate_semantic_seed_pairs(unname(seeds))
   wlv_new_resource_store(unname(seeds))
 }
 

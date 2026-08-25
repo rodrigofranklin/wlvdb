@@ -11,6 +11,37 @@ wlv_test_clone_runtime <- function(root = wlv_test_root) {
   clone
 }
 
+wlv_test_runtime_compatibility <- function(
+    runtime,
+    method = "synthetic",
+    source = "wiodr13",
+    indicators = "test",
+    unit_contract_id = "synthetic_v1",
+    missingness_policy_id = "synthetic_missingness_v1",
+    runtime_generation_token = "runtime-generation-v1",
+    method_parameters_token = "method-parameters-v1",
+    method_sectors_token = "method-sectors-v1",
+    unit_token = "unit-v1",
+    missingness_token = "missingness-v1") {
+  hash <- runtime$wlv_runtime_snapshot_value_sha256
+  runtime$wlv_runtime_compatibility(
+    method = method,
+    source = source,
+    runtime_generation_sha256 = hash(runtime_generation_token),
+    method_parameters_sha256 = hash(method_parameters_token),
+    method_sectors_sha256 = hash(method_sectors_token),
+    indicators = indicators,
+    unit_contract_id = unit_contract_id,
+    unit_sidecar_sha256 = hash(list(unit_token, "sidecar")),
+    unit_definitions_sha256 = hash(list(unit_token, "definitions")),
+    missingness_policy_id = missingness_policy_id,
+    missingness_policy_sha256 = hash(missingness_token),
+    aggregation_registry_sha256 = hash("aggregation-v1"),
+    scientific_profile_sha256 = hash("profile-v1"),
+    configuration_sha256 = hash("configuration-v1")
+  )
+}
+
 wlv_native_test_country_total <- function(value) {
   country <- apply(value, c(1L, 3L), sum)
   country <- array(
@@ -43,7 +74,7 @@ wlv_native_test_source_contract <- function(runtime, unit) {
 
 wlv_native_test_producer_spec <- function(runtime) {
   gross_contract <- wlv_native_test_source_contract(runtime, "test:gross")
-  runtime$wlv_module_spec(
+  runtime$wlv_native_module_spec(
     id = "test.gross",
     scope = "run",
     checkpoint = 4L,
@@ -119,7 +150,7 @@ wlv_native_test_producer_spec <- function(runtime) {
 
 wlv_native_test_productivity_spec <- function(runtime) {
   labour_contract <- wlv_native_test_source_contract(runtime, "test:labour")
-  runtime$wlv_module_spec(
+  runtime$wlv_native_module_spec(
     id = "test.productivity",
     scope = "run",
     checkpoint = 5L,
@@ -184,9 +215,44 @@ wlv_make_native_calculation_fixture <- function(runtime = wlv_test_load_runtime(
   )
 }
 
+wlv_native_test_control_seeds <- function(runtime, years) {
+  list(
+    runtime$wlv_seed_resource(
+      "request/method",
+      "native_test",
+      runtime$wlv_native_control_contract("character")
+    ),
+    runtime$wlv_seed_resource(
+      "request/source",
+      "synthetic",
+      runtime$wlv_native_control_contract("character")
+    ),
+    runtime$wlv_seed_resource(
+      "configuration/missingness_policy",
+      runtime$wlv_strict_missingness_policy(
+        source = "synthetic",
+        policy_id = "synthetic_v1"
+      ),
+      runtime$wlv_native_control_contract("list")
+    ),
+    runtime$wlv_seed_resource(
+      "configuration/scientific_profile",
+      wlv_test_scientific_profile(
+        runtime,
+        method = "native_test",
+        source = "synthetic",
+        years = years
+      ),
+      runtime$wlv_native_control_contract("list")
+    )
+  )
+}
+
 wlv_native_test_base_store <- function(fixture, gross = fixture$gross) {
   runtime <- fixture$runtime
-  runtime$wlv_new_resource_store(list(
+  runtime$wlv_new_resource_store(c(
+    wlv_native_test_control_seeds(runtime, fixture$labels$year),
+    list(
     runtime$wlv_seed_resource(
       "dimensions/lists",
       list(
@@ -206,7 +272,7 @@ wlv_native_test_base_store <- function(fixture, gross = fixture$gross) {
       fixture$labour,
       wlv_native_test_source_contract(runtime, "test:labour")
     )
-  ))
+  )))
 }
 
 wlv_native_test_calculation_instances <- function(
@@ -302,7 +368,56 @@ wlv_run_native_test_selective_recalculation <- function(
     dimnames(country_productivity),
     c("year", "country")
   )
-  store <- runtime$wlv_new_resource_store(list(
+  inherited <- c(
+    runtime$wlv_native_stateful_seed_pair(runtime$wlv_seed_resource(
+      runtime$wlv_native_indicator_key("gross_output.s.mv"),
+      sector_gross,
+      runtime$wlv_native_indicator_contract("gross_output.s.mv"),
+      producer = "indicator.gross"
+    ), states = runtime$wlv_semantic_state_array(
+      sector_gross,
+      c("year", "sector", "country")
+    )),
+    runtime$wlv_native_stateful_seed_pair(runtime$wlv_seed_resource(
+      runtime$wlv_native_indicator_key("gross_output.s.mv", "country"),
+      country_gross,
+      runtime$wlv_native_indicator_contract(
+        "gross_output.s.mv",
+        level = "country"
+      ),
+      producer = "indicator.gross"
+    ), states = runtime$wlv_semantic_state_array(
+      country_gross,
+      c("year", "country")
+    )),
+    runtime$wlv_native_stateful_seed_pair(runtime$wlv_seed_resource(
+      runtime$wlv_native_indicator_key("labour_productivity.r.id"),
+      sector_productivity,
+      runtime$wlv_native_indicator_contract("labour_productivity.r.id"),
+      producer = "indicator.productivity"
+    ), states = runtime$wlv_semantic_state_array(
+      sector_productivity,
+      c("year", "sector", "country")
+    )),
+    runtime$wlv_native_stateful_seed_pair(runtime$wlv_seed_resource(
+      runtime$wlv_native_indicator_key(
+        "labour_productivity.r.id",
+        "country"
+      ),
+      country_productivity,
+      runtime$wlv_native_indicator_contract(
+        "labour_productivity.r.id",
+        level = "country"
+      ),
+      producer = "indicator.productivity"
+    ), states = runtime$wlv_semantic_state_array(
+      country_productivity,
+      c("year", "country")
+    ))
+  )
+  store <- runtime$wlv_new_resource_store(c(
+    wlv_native_test_control_seeds(runtime, fixture$labels$year),
+    list(
     runtime$wlv_seed_resource(
       "dimensions/lists",
       list(
@@ -316,41 +431,8 @@ wlv_run_native_test_selective_recalculation <- function(
       "test/source/gross",
       gross,
       wlv_native_test_source_contract(runtime, "test:gross")
-    ),
-    runtime$wlv_seed_resource(
-      runtime$wlv_native_indicator_key("gross_output.s.mv"),
-      sector_gross,
-      runtime$wlv_native_indicator_contract("gross_output.s.mv"),
-      producer = "indicator.gross"
-    ),
-    runtime$wlv_seed_resource(
-      runtime$wlv_native_indicator_key("gross_output.s.mv", "country"),
-      country_gross,
-      runtime$wlv_native_indicator_contract(
-        "gross_output.s.mv",
-        level = "country"
-      ),
-      producer = "indicator.gross"
-    ),
-    runtime$wlv_seed_resource(
-      runtime$wlv_native_indicator_key("labour_productivity.r.id"),
-      sector_productivity,
-      runtime$wlv_native_indicator_contract("labour_productivity.r.id"),
-      producer = "indicator.productivity"
-    ),
-    runtime$wlv_seed_resource(
-      runtime$wlv_native_indicator_key(
-        "labour_productivity.r.id",
-        "country"
-      ),
-      country_productivity,
-      runtime$wlv_native_indicator_contract(
-        "labour_productivity.r.id",
-        level = "country"
-      ),
-      producer = "indicator.productivity"
     )
-  ))
+  ), inherited))
   instances <- list(
     runtime$wlv_module_instance(
       "recalc.gross",

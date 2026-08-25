@@ -98,6 +98,23 @@ wlv_expect_m_io_sparse_matches_detailed <- function(
   invisible(list(detailed = detailed, sparse = sparse, selected = selected))
 }
 
+test_that("chunked m_io scan preserves exact non-finite positions", {
+  runtime <- wlv_test_load_runtime()
+  value <- as.double(seq_len(10L))
+  value[c(1L, 3L, 4L, 10L)] <- c(NA_real_, NaN, Inf, -Inf)
+  probe <- new.env(parent = environment(runtime$wlv_m_io_nonfinite_positions))
+  probe$maximum <- 0L
+  probe$is.finite <- function(current) {
+    probe$maximum <- max(probe$maximum, length(current))
+    base::is.finite(current)
+  }
+  scan <- runtime$wlv_m_io_nonfinite_positions
+  environment(scan) <- probe
+  expect_identical(scan(value, chunk_values = 3L), c(1L, 3L, 4L, 10L))
+  expect_lte(probe$maximum, 3L)
+  expect_identical(scan(as.double(seq_len(10L)), chunk_values = 3L), integer())
+})
+
 test_that("sparse m_io validation matches detailed successful classifications", {
   runtime <- wlv_test_load_runtime()
   finite <- wlv_test_m_io_contract_value()
@@ -178,6 +195,111 @@ test_that("native m_io success stays on the sparse path", {
   environment(selected) <- dispatch
   expect_identical(selected(contract_runtime, value), value)
   expect_true(dispatch$called)
+})
+
+test_that("hydrated m_io states remain sparse across public and subset shapes", {
+  runtime <- wlv_test_load_runtime()
+  contract_runtime <- wlv_test_m_io_contract_runtime(runtime)
+  value <- wlv_test_m_io_contract_value()
+  value["2000", "values", "A", "A"] <- NA_real_
+  states <- array("finite", dim = dim(value), dimnames = dimnames(value))
+  states["2000", "values", "A", "A"] <- "source_missing"
+  target_key <- "artifact/m_io"
+  axes <- names(dimnames(value))
+  state <- runtime$wlv_semantic_state_encode(
+    value,
+    states,
+    target_key,
+    axes
+  )
+  target_contract <- runtime$wlv_native_artifact_array_contract("m_io", axes)
+  store <- runtime$wlv_new_resource_store(list(
+    runtime$wlv_seed_resource(target_key, value, target_contract),
+    runtime$wlv_seed_resource(
+      runtime$wlv_semantic_state_key(target_key),
+      state,
+      runtime$wlv_native_semantic_state_contract(target_contract)
+    )
+  ))
+  run_result <- new.env(parent = emptyenv())
+  run_result$store <- store
+  run_result$trace <- data.frame(
+    node_id = character(),
+    instance_id = character(),
+    module_id = character(),
+    partition = character(),
+    stringsAsFactors = FALSE
+  )
+  class(run_result) <- "wlv_run_result"
+
+  expect_invisible(runtime$wlv_native_hydrate_validation_runtime(
+    contract_runtime,
+    run_result
+  ))
+  expect_false(runtime$wlv_contract_has_registered_m_io_states(
+    contract_runtime,
+    dimnames(value)[[2L]]
+  ))
+  expect_identical(ls(contract_runtime$states, all.names = TRUE), character())
+  expect_s3_class(
+    contract_runtime$semantic_states[[target_key]],
+    "wlv_semantic_state"
+  )
+  expect_identical(nrow(contract_runtime$semantic_states[[target_key]]), 1L)
+
+  probe <- new.env(parent = environment(
+    runtime$wlv_validate_m_io_contract_sparse
+  ))
+  probe$wlv_validate_m_io_contract_detailed <- function(...) {
+    stop("detailed m_io validation invoked", call. = FALSE)
+  }
+  sparse <- runtime$wlv_validate_m_io_contract_sparse
+  environment(sparse) <- probe
+
+  expect_identical(sparse(contract_runtime, value), value)
+  public <- value
+  names(dimnames(public)) <- NULL
+  expect_identical(sparse(contract_runtime, public), public)
+  first_year <- value["2000", , , , drop = FALSE]
+  second_year <- value["2001", , , , drop = FALSE]
+  expect_identical(sparse(contract_runtime, first_year), first_year)
+  expect_identical(sparse(contract_runtime, second_year), second_year)
+
+  evaluate_failure <- function(validator, candidate) {
+    current_runtime <- wlv_test_m_io_contract_runtime(runtime)
+    runtime$wlv_contract_register_semantic_states(
+      current_runtime,
+      "m_io",
+      state,
+      value
+    )
+    error <- tryCatch(
+      {
+        runtime[[validator]](current_runtime, candidate)
+        NULL
+      },
+      error = identity
+    )
+    list(error = error, anomalies = current_runtime$anomalies)
+  }
+  compare_failure <- function(candidate) {
+    detailed <- evaluate_failure("wlv_validate_m_io_contract_detailed", candidate)
+    sparse_failure <- evaluate_failure("wlv_validate_m_io_contract_sparse", candidate)
+    expect_s3_class(detailed$error, "wlv_contract_error")
+    expect_identical(class(sparse_failure$error), class(detailed$error))
+    expect_identical(
+      conditionMessage(sparse_failure$error),
+      conditionMessage(detailed$error)
+    )
+    expect_identical(sparse_failure$error$anomalies, detailed$error$anomalies)
+    expect_identical(sparse_failure$anomalies, detailed$anomalies)
+  }
+  unexpected <- value
+  unexpected["2001", "values", "B", "B"] <- NA_real_
+  compare_failure(unexpected)
+  nonfinite <- value
+  nonfinite["2001", "transfers_values", "B", "B"] <- NaN
+  compare_failure(nonfinite)
 })
 
 test_that("sparse m_io validation reproduces detailed anomaly order and details", {

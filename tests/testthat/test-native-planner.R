@@ -6,6 +6,7 @@ for (path in c(
   "R/lib/module_config.R",
   "R/lib/native_aggregation_registry.R",
   "R/lib/module_runtime.R",
+  "R/lib/semantic_resources.R",
   "R/modules/native/contracts.R",
   "R/modules/native/source_modules.R",
   "R/modules/native/matrix_modules.R",
@@ -161,8 +162,12 @@ test_that("native preflight rejects invented seeds and incompatible seed contrac
 
 test_that("native recalculation DAGs compile at public checkpoints", {
   e <- native_planner_environment
+  catalog <- e$wlv_load_catalog(wlv_test_root)
+  methods <- e$wlv_catalog_method_table(catalog)
+  methods <- methods[methods$can_recalculate, , drop = FALSE]
+  expect_identical(nrow(methods), 12L)
   registry <- e$wlv_native_registry()
-  for (method in c("wiodr13", "wiodr16")) {
+  for (method in methods$method) {
     inputs <- wlv_test_native_planner_inputs(method)
     for (stage in c(1L, 4L, 5L)) {
       instances <- e$wlv_native_plan_instances(
@@ -217,6 +222,59 @@ test_that("native recalculation DAGs compile at public checkpoints", {
       }
     }
   }
+})
+
+test_that("graph tie-breaking and cycle discovery use radix ordering", {
+  e <- native_planner_environment
+  ids <- c("aa", "a_a", "aA", "a.a", "a-a")
+  expected <- sort(ids, method = "radix")
+  no_edges <- data.frame(
+    from = character(),
+    to = character(),
+    resource = character(),
+    stringsAsFactors = FALSE
+  )
+  original_collate <- Sys.getlocale("LC_COLLATE")
+  on.exit(
+    suppressWarnings(Sys.setlocale("LC_COLLATE", original_collate)),
+    add = TRUE
+  )
+  locale_candidates <- unique(c(
+    "C",
+    "C.UTF-8",
+    "English_United States.1252",
+    "Portuguese_Brazil.1252",
+    "en_US.UTF-8",
+    "pt_BR.UTF-8"
+  ))
+  available_locales <- character()
+  for (locale in locale_candidates) {
+    selected <- suppressWarnings(Sys.setlocale("LC_COLLATE", locale))
+    if (!is.na(selected) && nzchar(selected)) {
+      available_locales <- c(available_locales, selected)
+      expect_identical(
+        e$wlv_runtime_topological_order(ids, no_edges),
+        expected,
+        info = selected
+      )
+    }
+  }
+  expect_gt(length(unique(available_locales)), 0L)
+
+  cycle_edges <- data.frame(
+    from = c("a_a", "aA", "a.a", "a-a"),
+    to = c("aA", "a_a", "a-a", "a.a"),
+    resource = rep("probe", 4L),
+    stringsAsFactors = FALSE
+  )
+  expect_identical(
+    e$wlv_runtime_cycle_path(ids, cycle_edges),
+    c("a-a", "a.a", "a-a")
+  )
+  expect_identical(
+    e$wlv_runtime_cycle_path(rev(ids), cycle_edges[4:1, , drop = FALSE]),
+    c("a-a", "a.a", "a-a")
+  )
 })
 
 test_that("ROW ownership selects the exact go-price predecessor", {

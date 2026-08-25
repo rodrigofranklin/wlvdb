@@ -31,6 +31,7 @@ wlv_runtime_definition_manifest <- function() {
 
     # Explicit module runtime, configuration, and native module definitions.
     "R/lib/module_runtime.R",
+    "R/lib/semantic_resources.R",
     "R/lib/module_config.R",
     "R/lib/native_aggregation_registry.R",
     "R/lib/native_output_contract.R",
@@ -52,6 +53,7 @@ wlv_runtime_definition_manifest <- function() {
     "R/lib/native_registry.R",
     "R/lib/native_planner.R",
     "R/lib/native_store.R",
+    "R/lib/runtime_snapshot.R",
 
     # Native source-preparation tasks and their injected production services.
     "R/utils/preparation_downloads.R",
@@ -266,6 +268,160 @@ wlv_bootstrap_definition_sha256 <- function(paths, relative_paths) {
   stats::setNames(base::unname(hashes), relative_paths)
 }
 
+wlv_bootstrap_read_definition_bytes <- function(path, relative_path) {
+  size <- base::file.info(path)$size
+  if (
+    base::length(size) != 1L || base::is.na(size) || size < 1 ||
+      size >= base::.Machine$integer.max
+  ) {
+    base::stop(
+      base::sprintf("Runtime definition `%s` has an invalid size.", relative_path),
+      call. = FALSE
+    )
+  }
+  connection <- base::file(path, open = "rb")
+  on.exit(base::close(connection), add = TRUE)
+  value <- base::readBin(
+    connection,
+    what = "raw",
+    n = base::as.integer(size) + 1L
+  )
+  if (!base::identical(base::length(value), base::as.integer(size))) {
+    base::stop(
+      base::sprintf(
+        "Runtime definition `%s` changed while its bytes were captured.",
+        relative_path
+      ),
+      call. = FALSE
+    )
+  }
+  value
+}
+
+wlv_bootstrap_capture_definitions <- function(paths, relative_paths) {
+  if (
+    !base::is.character(paths) || !base::is.character(relative_paths) ||
+      !base::length(paths) ||
+      !base::identical(base::length(paths), base::length(relative_paths)) ||
+      base::anyNA(paths) || base::anyNA(relative_paths) ||
+      base::any(!base::file.exists(paths)) || base::anyDuplicated(relative_paths)
+  ) {
+    base::stop("Runtime byte capture received invalid files.", call. = FALSE)
+  }
+  bytes <- base::Map(
+    wlv_bootstrap_read_definition_bytes,
+    paths,
+    relative_paths
+  )
+  md5 <- base::vapply(bytes, function(value) {
+    base::as.character(openssl::md5(value))
+  }, character(1L))
+  sha256 <- base::vapply(bytes, function(value) {
+    base::as.character(openssl::sha256(value))
+  }, character(1L))
+  list(
+    bytes = stats::setNames(bytes, relative_paths),
+    md5 = stats::setNames(base::unname(md5), relative_paths),
+    sha256 = stats::setNames(base::unname(sha256), relative_paths)
+  )
+}
+
+wlv_bootstrap_definition_text <- function(bytes, relative_path) {
+  if (!base::is.raw(bytes) || !base::length(bytes)) {
+    base::stop(
+      base::sprintf("Runtime definition `%s` has no captured bytes.", relative_path),
+      call. = FALSE
+    )
+  }
+  value <- base::rawToChar(bytes)
+  value <- base::`Encoding<-`(value, "UTF-8")
+  validated <- base::iconv(
+    value,
+    from = "UTF-8",
+    to = "UTF-8",
+    sub = NA_character_
+  )
+  if (base::length(validated) != 1L || base::is.na(validated)) {
+    base::stop(
+      base::sprintf("Runtime definition `%s` is not valid UTF-8.", relative_path),
+      call. = FALSE
+    )
+  }
+  # `parse(text = ...)` does not consistently treat an embedded CR from a
+  # CRLF string as a line terminator on Windows. Keep the captured raw hashes
+  # unchanged, but evaluate the UTF-8 source with canonical LF terminators.
+  base::gsub("\r\n?", "\n", validated, perl = TRUE)
+}
+
+wlv_bootstrap_compatibility_sha256_bytes <- function(bytes, relative_path) {
+  value <- wlv_bootstrap_definition_text(bytes, relative_path)
+  base::as.character(openssl::sha256(base::charToRaw(base::enc2utf8(value))))
+}
+
+wlv_bootstrap_function_fingerprint <- function(formals, body) {
+  payload <- base::paste(
+    base::paste(base::deparse(formals, width.cutoff = 500L), collapse = "\n"),
+    base::paste(base::deparse(body, width.cutoff = 500L), collapse = "\n"),
+    sep = "\035"
+  )
+  base::as.character(openssl::sha256(base::charToRaw(base::enc2utf8(payload))))
+}
+
+wlv_bootstrap_validate_loaded_identity <- function(bytes, relative_path) {
+  expressions <- base::tryCatch(
+    base::parse(
+      text = wlv_bootstrap_definition_text(bytes, relative_path),
+      encoding = "UTF-8",
+      keep.source = FALSE
+    ),
+    error = function(error) {
+      base::stop(
+        base::sprintf(
+          "Cannot parse bootstrap identity `%s`: %s",
+          relative_path,
+          base::conditionMessage(error)
+        ),
+        call. = FALSE
+      )
+    }
+  )
+  wlv_bootstrap_validate_definitions(expressions, relative_path)
+  expected_names <- wlv_bootstrap_definition_names(expressions)
+  loaded_environment <- base::environment(wlv_load_runtime)
+  loaded_names <- base::ls(loaded_environment, all.names = TRUE)
+  if (!base::identical(
+    base::sort(expected_names, method = "radix"),
+    base::sort(loaded_names, method = "radix")
+  )) {
+    base::stop(
+      "The executed bootstrap definitions differ from the selected project root.",
+      call. = FALSE
+    )
+  }
+  expected <- stats::setNames(base::vapply(expressions, function(expression) {
+    definition <- expression[[3L]]
+    wlv_bootstrap_function_fingerprint(definition[[2L]], definition[[3L]])
+  }, character(1L)), expected_names)
+  observed <- stats::setNames(base::vapply(expected_names, function(name) {
+    value <- base::get(name, envir = loaded_environment, inherits = FALSE)
+    if (!base::is.function(value) ||
+        !base::identical(base::environment(value), loaded_environment)) {
+      return(NA_character_)
+    }
+    wlv_bootstrap_function_fingerprint(
+      base::formals(value),
+      base::body(value)
+    )
+  }, character(1L)), expected_names)
+  if (base::anyNA(observed) || !base::identical(expected, observed)) {
+    base::stop(
+      "The executed bootstrap is not structurally identical to the selected project root.",
+      call. = FALSE
+    )
+  }
+  base::invisible(observed)
+}
+
 wlv_bootstrap_definition_generation <- function(sha256) {
   if (
     !base::is.character(sha256) || !base::length(sha256) ||
@@ -297,15 +453,30 @@ wlv_load_runtime <- function(root = ".") {
   )
   inventory_paths <- base::c(bootstrap_file, files)
   inventory_relative <- base::c("R/bootstrap.R", relative)
-  inventory <- wlv_bootstrap_definition_inventory(
+  captured <- wlv_bootstrap_capture_definitions(
     inventory_paths,
     inventory_relative
   )
-  inventory_sha256 <- wlv_bootstrap_definition_sha256(
-    inventory_paths,
-    inventory_relative
+  wlv_bootstrap_validate_loaded_identity(
+    captured$bytes[["R/bootstrap.R"]],
+    "R/bootstrap.R"
   )
+  inventory <- captured$md5
+  inventory_sha256 <- captured$sha256
   inventory_generation <- wlv_bootstrap_definition_generation(inventory_sha256)
+  compatibility_sha256 <- stats::setNames(base::vapply(
+    base::seq_along(inventory_relative),
+    function(index) {
+      wlv_bootstrap_compatibility_sha256_bytes(
+        captured$bytes[[index]],
+        inventory_relative[[index]]
+      )
+    },
+    character(1L)
+  ), inventory_relative)
+  compatibility_generation <- wlv_bootstrap_definition_generation(
+    compatibility_sha256
+  )
   if (!base::identical(
     inventory,
     wlv_bootstrap_definition_inventory(inventory_paths, inventory_relative)
@@ -325,9 +496,17 @@ wlv_load_runtime <- function(root = ".") {
   # Parse every definition before evaluating any of them. A syntax or encoding
   # failure therefore cannot expose a partially initialized namespace.
   definition_origins <- character()
+  parsed_definitions <- vector("list", length(files))
   for (index in base::seq_along(files)) {
     expressions <- base::tryCatch(
-      base::parse(file = files[[index]], encoding = "UTF-8"),
+      base::parse(
+        text = wlv_bootstrap_definition_text(
+          captured$bytes[[relative[[index]]]],
+          relative[[index]]
+        ),
+        encoding = "UTF-8",
+        keep.source = FALSE
+      ),
       error = function(error) {
         base::stop(
           base::sprintf(
@@ -355,6 +534,7 @@ wlv_load_runtime <- function(root = ".") {
       )
     }
     definition_origins[names] <- relative[[index]]
+    parsed_definitions[[index]] <- expressions
   }
 
   namespace <- base::new.env(parent = base::baseenv())
@@ -373,12 +553,7 @@ wlv_load_runtime <- function(root = ".") {
 
   for (index in base::seq_along(files)) {
     base::tryCatch(
-      base::sys.source(
-        files[[index]],
-        envir = namespace,
-        chdir = FALSE,
-        keep.source = FALSE
-      ),
+      base::eval(parsed_definitions[[index]], envir = namespace),
       error = function(error) {
         base::stop(
           base::sprintf(
@@ -446,8 +621,18 @@ wlv_load_runtime <- function(root = ".") {
     envir = namespace
   )
   base::assign(
+    ".wlv_runtime_definition_compatibility_sha256",
+    wlv_bootstrap_value_accessor(compatibility_sha256),
+    envir = namespace
+  )
+  base::assign(
     ".wlv_runtime_generation",
     wlv_bootstrap_value_accessor(inventory_generation),
+    envir = namespace
+  )
+  base::assign(
+    ".wlv_runtime_compatibility_generation",
+    wlv_bootstrap_value_accessor(compatibility_generation),
     envir = namespace
   )
   bindings <- base::ls(namespace, all.names = TRUE)
@@ -471,7 +656,9 @@ wlv_load_runtime <- function(root = ".") {
     ".wlv_runtime_definition_paths",
     ".wlv_runtime_definition_md5",
     ".wlv_runtime_definition_sha256",
-    ".wlv_runtime_generation"
+    ".wlv_runtime_definition_compatibility_sha256",
+    ".wlv_runtime_generation",
+    ".wlv_runtime_compatibility_generation"
   )
   escaped <- base::setdiff(bindings, sealed_accessors)
   escaped <- escaped[!base::vapply(

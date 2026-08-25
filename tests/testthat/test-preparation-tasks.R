@@ -158,6 +158,98 @@ test_that("an injected promotion failure restores every previous artifact", {
   ), 0L)
 })
 
+test_that("staged validation fails before replacing a prepared generation", {
+  root <- tempfile("wlv-preparation-staged-validation-")
+  destination <- file.path(root, "source_data", "demo")
+  dir.create(destination, recursive = TRUE)
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  writeLines("old-a", file.path(destination, "a.txt"), useBytes = TRUE)
+  writeLines("old-b", file.path(destination, "b.txt"), useBytes = TRUE)
+  validation_called <- FALSE
+
+  expect_error(
+    preparation_task_environment$wlv_run_preparation_task(
+      spec = wlv_test_preparation_spec(),
+      root = root,
+      services = wlv_test_preparation_services(),
+      validate_staged = function(result, context) {
+        validation_called <<- TRUE
+        staged_a <- preparation_task_environment$wlv_preparation_staged_path(
+          result,
+          file.path(destination, "a.txt")
+        )
+        expect_identical(readLines(staged_a), "new-a")
+        expect_identical(
+          readLines(file.path(destination, "a.txt")),
+          "old-a"
+        )
+        expect_false(dir.exists(file.path(context$staging, ".backups")))
+        stop("injected staged validation failure", call. = FALSE)
+      }
+    ),
+    "injected staged validation failure",
+    fixed = TRUE
+  )
+  expect_true(validation_called)
+  expect_identical(readLines(file.path(destination, "a.txt")), "old-a")
+  expect_identical(readLines(file.path(destination, "b.txt")), "old-b")
+  expect_setequal(list.files(destination), c("a.txt", "b.txt"))
+  expect_false(dir.exists(file.path(root, "source_data", ".prepare-lock-demo")))
+  expect_length(list.files(
+    file.path(root, "source_data", ".preparation-staging"),
+    all.files = TRUE,
+    no.. = TRUE
+  ), 0L)
+})
+
+test_that("staged path resolution maps descendants of directory promotions", {
+  environment <- preparation_task_environment
+  root <- tempfile("wlv-preparation-staged-path-")
+  staging <- file.path(root, "source_data", ".preparation-staging", ".task-demo")
+  staged_normalized <- file.path(staging, "source_data", "demo", "normalized")
+  destination <- file.path(root, "source_data", "demo", "normalized")
+  dir.create(staged_normalized, recursive = TRUE)
+  dir.create(destination, recursive = TRUE)
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  writeLines("candidate", file.path(staged_normalized, "m_io.fst"), useBytes = TRUE)
+  writeLines("previous", file.path(destination, "m_io.fst"), useBytes = TRUE)
+  result <- environment$wlv_preparation_result(promotions = list(
+    demo.normalized = environment$wlv_preparation_promotion(
+      staged_normalized,
+      destination
+    )
+  ))
+  environment$wlv_validate_preparation_result(result, staging, root)
+
+  expect_identical(
+    environment$wlv_preparation_staged_path(
+      result,
+      file.path(destination, "m_io.fst")
+    ),
+    normalizePath(
+      file.path(staged_normalized, "m_io.fst"),
+      winslash = "/",
+      mustWork = TRUE
+    )
+  )
+  expect_identical(
+    readLines(environment$wlv_preparation_staged_path(
+      result,
+      file.path(destination, "m_io.fst")
+    )),
+    "candidate"
+  )
+  expect_identical(readLines(file.path(destination, "m_io.fst")), "previous")
+  expect_error(
+    environment$wlv_preparation_staged_path(
+      result,
+      file.path(root, "source_data", "other", "m_io.fst")
+    ),
+    "exactly one staged promotion",
+    fixed = TRUE
+  )
+})
+
 test_that("preparation contracts reject implicit capabilities and bad arguments", {
   root <- tempfile("wlv-preparation-contract-")
   dir.create(root, recursive = TRUE)
@@ -188,6 +280,16 @@ test_that("preparation contracts reject implicit capabilities and bad arguments"
       arguments = list(unknown = "x")
     ),
     "Unknown preparation argument"
+  )
+  expect_error(
+    preparation_task_environment$wlv_run_preparation_task(
+      spec = wlv_test_preparation_spec(),
+      root = root,
+      services = wlv_test_preparation_services(),
+      validate_staged = "not-a-function"
+    ),
+    "`validate_staged` must be NULL or a function",
+    fixed = TRUE
   )
 
   required_spec <- preparation_task_environment$wlv_preparation_task_spec(

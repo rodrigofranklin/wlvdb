@@ -38,7 +38,7 @@ wlv_reduced_matrix_spec <- function(
   } else {
     wlv_native_io_ref(input, "matrix")
   }
-  wlv_module_spec(
+  wlv_native_module_spec(
     id = id,
     scope = "io_period",
     checkpoint = 4L,
@@ -135,7 +135,7 @@ wlv_reduced_transfers_productive_values_spec <- function() {
 }
 
 wlv_reduced_direct_price_spec <- function(id, output, input) {
-  wlv_module_spec(
+  wlv_native_module_spec(
     id = id,
     scope = "io_period",
     checkpoint = 4L,

@@ -4,12 +4,13 @@ wlv_native_filters_contract <- function() {
   wlv_native_array_contract(
     scope = "run",
     axes = c("filter", "input", "output"),
-    missingness = "none"
+    missingness = "none",
+    role = "control"
   )
 }
 
 wlv_matrix_transformation_spec <- function() {
-  wlv_module_spec(
+  wlv_native_module_spec(
   id = "matrix.transformation",
   scope = "io_period",
   checkpoint = 3L,
@@ -29,6 +30,18 @@ wlv_matrix_transformation_spec <- function() {
     wlv_native_intermediate_output(
       "lambda",
       axes = c("year", "input")
+    )
+  ),
+  anomaly_bindings = list(
+    wlv_native_anomaly_binding(
+      "m_io",
+      "leontief_input_ratio",
+      record_module = "transformation.R"
+    ),
+    wlv_native_anomaly_binding(
+      "sea_sectors",
+      "labour_requirements",
+      record_module = "matrix.transformation"
     )
   ),
   services = "contract_runtime",
@@ -190,7 +203,7 @@ wlv_matrix_transformation_spec <- function() {
 }
 
 wlv_matrix_transfers_spec <- function() {
-  wlv_module_spec(
+  wlv_native_module_spec(
   id = "matrix.transfers",
   scope = "io_period",
   checkpoint = 3L,
@@ -254,7 +267,7 @@ wlv_matrix_transfers_spec <- function() {
 }
 
 wlv_matrix_basket_spec <- function(id, international = FALSE) {
-  wlv_module_spec(
+  wlv_native_module_spec(
     id = id,
     scope = "io_period",
     checkpoint = 3L,
@@ -333,7 +346,7 @@ wlv_matrix_basket_international_spec <- function() {
 }
 
 wlv_matrix_zero_depreciation_spec <- function(id) {
-  wlv_module_spec(
+  wlv_native_module_spec(
     id = id,
     scope = "io_period",
     checkpoint = 3L,

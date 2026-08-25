@@ -1,6 +1,7 @@
 native_indicator_environment <- new.env(parent = baseenv())
 for (path in c(
   "R/lib/module_runtime.R",
+  "R/lib/semantic_resources.R",
   "R/modules/native/contracts.R",
   "R/modules/native/source_modules.R",
   "R/modules/native/matrix_modules.R",
@@ -163,13 +164,19 @@ test_that("auxiliary indicator instances follow deterministic conventions", {
   reduction <- native_indicator_environment[[
     "wlv_indicator_complex_empe_alternative_2_spec"
   ]]()
+  reduction_instance <- native_indicator_environment$wlv_module_instance(
+    reduction$id,
+    reduction$id
+  )
+  reduction_requires <- reduction$requires(list(), reduction_instance)
+  reduction_provides <- reduction$provides(list(), reduction_instance)
   expect_true(all(vapply(
-    reduction$requires[c("hours_hs", "hours_ms", "hours_ls")],
+    reduction_requires[c("hours_hs", "hours_ms", "hours_ls")],
     function(ref) identical(ref$producer, "assumption.row"),
     logical(1L)
   )))
   expect_true(all(vapply(
-    reduction$provides[c("hours_hs", "hours_ms", "hours_ls")],
+    reduction_provides[c("hours_hs", "hours_ms", "hours_ls")],
     function(output) identical(output$predecessor$producer, "assumption.row"),
     logical(1L)
   )))
@@ -184,14 +191,20 @@ test_that("auxiliary indicator instances follow deterministic conventions", {
   )]
   expect_true(all(vapply(
     ochoa,
-    function(spec) identical(spec$services, "contract_runtime"),
+    function(spec) setequal(
+      spec$services,
+      c("contract_runtime", "module_contract")
+    ),
     logical(1L)
   )))
   petrovic <- explicit[[match(
     "indicator.complex_labour_multiplier.empe.r.un.petrovic",
     explicit_ids
   )]]
-  expect_identical(petrovic$services, "contract_runtime")
+  expect_setequal(
+    petrovic$services,
+    c("contract_runtime", "module_contract")
+  )
   reduction_source <- readLines(
     file.path(
       wlv_test_root,
@@ -249,8 +262,12 @@ test_that("indicator scopes and checkpoints expose the explicit cutover", {
   )
   expect_true(all(vapply(by_id[stage5], function(spec) {
     expected <- if (spec$id %in% direct) "sector" else c("sector", "country")
+    provides <- spec$provides(list())
+    value_outputs <- provides[vapply(provides, function(output) {
+      identical(output$ref$contract$role, "value")
+    }, logical(1L))]
     identical(spec$scope, "run") && identical(spec$checkpoint, 5L) &&
-      identical(names(spec$provides), expected)
+      identical(names(value_outputs), expected)
   }, logical(1L))))
 })
 
@@ -269,13 +286,52 @@ test_that("stage-4 collector preserves values and enforces exact year coverage",
   contract <- e$wlv_native_indicator_contract(
     "demo", scope = "io_period", level = "sector"
   )
+  semantic_seed <- function(value, partition) {
+    state <- e$wlv_semantic_capture_value_state(
+      value,
+      "sea/sector/demo",
+      contract$axes
+    )$state
+    e$wlv_seed_resource(
+      "semantic_state/sea/sector/demo",
+      state,
+      e$wlv_native_semantic_state_contract(contract),
+      partition
+    )
+  }
+  control_seeds <- list(
+    e$wlv_seed_resource(
+      "request/method", "test", e$wlv_native_control_contract("character")
+    ),
+    e$wlv_seed_resource(
+      "request/source", "wiodr13", e$wlv_native_control_contract("character")
+    ),
+    e$wlv_seed_resource(
+      "configuration/missingness_policy",
+      list(id = "test"),
+      e$wlv_native_control_contract("list")
+    ),
+    e$wlv_seed_resource(
+      "configuration/scientific_profile",
+      list(id = "test"),
+      e$wlv_native_control_contract("list")
+    )
+  )
+  first <- make_value("2000", 0)
+  second <- make_value("2001", 10)
   store <- e$wlv_new_resource_store(list(
-    e$wlv_seed_resource("sea/sector/demo", make_value("2000", 0), contract, "p1"),
-    e$wlv_seed_resource("sea/sector/demo", make_value("2001", 10), contract, "p2"),
+    e$wlv_seed_resource("sea/sector/demo", first, contract, "p1"),
+    semantic_seed(first, "p1"),
+    e$wlv_seed_resource("sea/sector/demo", second, contract, "p2"),
+    semantic_seed(second, "p2"),
     e$wlv_seed_resource(
       "dimensions/lists", lists,
       e$wlv_resource_contract(scope = "run", value_type = "list")
-    )
+    ),
+    control_seeds[[1L]],
+    control_seeds[[2L]],
+    control_seeds[[3L]],
+    control_seeds[[4L]]
   ))
   registry <- e$wlv_module_registry(list(e$wlv_indicator_stage4_collector_spec()))
   plan <- e$wlv_compile_module_plan(
@@ -301,13 +357,21 @@ test_that("stage-4 collector preserves values and enforces exact year coverage",
   expect_equal(as.numeric(value[, "s1", ]), c(1, 11))
   expect_equal(as.numeric(value[, "s2", ]), c(2, 12))
 
+  duplicate_first <- make_value("2000", 0)
+  duplicate_second <- make_value("2000", 10)
   duplicate_store <- e$wlv_new_resource_store(list(
-    e$wlv_seed_resource("sea/sector/demo", make_value("2000", 0), contract, "p1"),
-    e$wlv_seed_resource("sea/sector/demo", make_value("2000", 10), contract, "p2"),
+    e$wlv_seed_resource("sea/sector/demo", duplicate_first, contract, "p1"),
+    semantic_seed(duplicate_first, "p1"),
+    e$wlv_seed_resource("sea/sector/demo", duplicate_second, contract, "p2"),
+    semantic_seed(duplicate_second, "p2"),
     e$wlv_seed_resource(
       "dimensions/lists", lists,
       e$wlv_resource_contract(scope = "run", value_type = "list")
-    )
+    ),
+    control_seeds[[1L]],
+    control_seeds[[2L]],
+    control_seeds[[3L]],
+    control_seeds[[4L]]
   ))
   duplicate_plan <- e$wlv_compile_module_plan(
     registry,
@@ -337,7 +401,8 @@ test_that("native reduction and stage-5 formulas preserve legacy arithmetic", {
     inputs = list(hours_hs = hs, hours_ms = ms, hours_ls = ls),
     input_names = c("hours_hs", "hours_ms", "hours_ls"),
     args = list(), argument_names = character(),
-    services = list(), service_names = character(),
+    services = list(module_contract = function(result) result),
+    service_names = "module_contract",
     partition = NULL, instance_id = "alternative-2-test"
   )
   result <- e$wlv_indicator_complex_emp_alternative_2_spec()$run(ctx)
@@ -350,7 +415,8 @@ test_that("native reduction and stage-5 formulas preserve legacy arithmetic", {
     inputs = list(exports = exports, imports = imports, lists = lists),
     input_names = c("exports", "imports", "lists"),
     args = list(), argument_names = character(),
-    services = list(), service_names = character(),
+    services = list(module_contract = function(result) result),
+    service_names = "module_contract",
     partition = NULL, instance_id = "trade-balance-test"
   )
   result <- e$wlv_indicator_trade_balance_s_us_spec()$run(ctx)

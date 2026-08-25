@@ -82,6 +82,181 @@ test_that("native module contracts are typed and registries seal deterministical
   )
 })
 
+test_that("resource roles and semantic companions are part of compatibility", {
+  runtime <- module_runtime_environment
+  value <- runtime$wlv_resource_contract(
+    axes = "year",
+    value_type = "array",
+    unit = "test_unit_v1",
+    missingness = "typed_v1",
+    semantic_state = TRUE
+  )
+  state <- runtime$wlv_resource_contract(
+    value_type = "data.frame",
+    unit = "semantic_state:test_unit_v1",
+    missingness = "semantic_state_v1",
+    role = "semantic_state"
+  )
+  expect_true(value$semantic_state)
+  expect_identical(value$role, "value")
+  expect_false(state$semantic_state)
+  expect_identical(state$role, "semantic_state")
+  expect_false(runtime$wlv_runtime_contract_compatible(value, state))
+  expect_error(
+    runtime$wlv_resource_contract(
+      role = "diagnostic",
+      semantic_state = TRUE
+    ),
+    "Only value resources",
+    class = "wlv_contract_error"
+  )
+})
+
+test_that("module diagnostics are named immutable payloads", {
+  runtime <- module_runtime_environment
+  expect_error(
+    runtime$wlv_module_result(list(), diagnostics = list(1)),
+    "uniquely named list",
+    class = "wlv_result_error"
+  )
+  expect_error(
+    runtime$wlv_module_result(
+      list(),
+      diagnostics = data.frame(value = 1)
+    ),
+    "uniquely named list",
+    class = "wlv_result_error"
+  )
+  expect_s3_class(
+    runtime$wlv_module_result(
+      list(value = 1),
+      diagnostics = list(counts = list(value = 1L))
+    ),
+    "wlv_module_result"
+  )
+})
+
+test_that("dynamic contracts can resolve against explicit instance metadata", {
+  runtime <- module_runtime_environment
+  scalar <- wlv_test_scalar_contract()
+  spec <- runtime$wlv_module_spec(
+    id = "instance_contract",
+    checkpoint = 1L,
+    requires = function(args, instance) {
+      list(seed = runtime$wlv_resource_ref(
+        paste0("seed/", instance$instance_id),
+        scalar,
+        producer = ".seed"
+      ))
+    },
+    provides = function(args, instance) {
+      list(value = wlv_test_output(
+        paste0("result/", instance$instance_id),
+        scalar
+      ))
+    },
+    run = function(ctx) {
+      runtime$wlv_module_result(list(value = ctx$input("seed")))
+    }
+  )
+  registry <- runtime$wlv_module_registry(list(spec))
+  store <- runtime$wlv_new_resource_store(list(
+    runtime$wlv_seed_resource("seed/instance.one", 7, scalar)
+  ))
+  plan <- runtime$wlv_compile_module_plan(
+    registry,
+    list(runtime$wlv_module_instance("instance.one", "instance_contract")),
+    store
+  )
+  result <- runtime$wlv_run_module_plan(plan, store)
+  expect_equal(
+    runtime$wlv_store_read(
+      result$store,
+      runtime$wlv_resource_ref("result/instance.one", scalar)
+    ),
+    7
+  )
+})
+
+test_that("stateful module contracts fail preflight without exact pairs", {
+  runtime <- module_runtime_environment
+  value_contract <- runtime$wlv_resource_contract(
+    axes = "year",
+    value_type = "array",
+    missingness = "typed_v1",
+    semantic_state = TRUE
+  )
+  state_contract <- runtime$wlv_resource_contract(
+    value_type = "data.frame",
+    role = "semantic_state"
+  )
+  value_ref <- runtime$wlv_resource_ref(
+    "sea/sector/test",
+    value_contract,
+    producer = ".seed"
+  )
+  missing_input_pair <- runtime$wlv_module_spec(
+    "missing_input_pair",
+    checkpoint = 1L,
+    requires = list(value = value_ref),
+    run = function(ctx) runtime$wlv_module_result(list())
+  )
+  registry <- runtime$wlv_module_registry(list(missing_input_pair))
+  value <- array(1, dim = 1L, dimnames = list(year = "2000"))
+  store <- runtime$wlv_new_resource_store(list(
+    runtime$wlv_seed_resource("sea/sector/test", value, value_contract)
+  ))
+  expect_error(
+    runtime$wlv_compile_module_plan(
+      registry,
+      list(runtime$wlv_module_instance("missing.input", "missing_input_pair")),
+      store
+    ),
+    "without one exact semantic-state pair",
+    class = "wlv_preflight_error"
+  )
+
+  missing_output_pair <- runtime$wlv_module_spec(
+    "missing_output_pair",
+    checkpoint = 1L,
+    provides = list(value = wlv_test_output(
+      "sea/sector/test",
+      value_contract
+    )),
+    run = function(ctx) runtime$wlv_module_result(list(value = value))
+  )
+  registry <- runtime$wlv_module_registry(list(missing_output_pair))
+  expect_error(
+    runtime$wlv_compile_module_plan(
+      registry,
+      list(runtime$wlv_module_instance("missing.output", "missing_output_pair")),
+      runtime$wlv_new_resource_store()
+    ),
+    "without a semantic-state pair",
+    class = "wlv_preflight_error"
+  )
+
+  paired <- runtime$wlv_module_spec(
+    "paired",
+    checkpoint = 1L,
+    provides = list(
+      value = wlv_test_output("sea/sector/test", value_contract),
+      state = wlv_test_output("semantic_state/sea/sector/test", state_contract)
+    ),
+    run = function(ctx) runtime$wlv_module_result(list(
+      value = value,
+      state = data.frame(year = character(), state = character())
+    ))
+  )
+  registry <- runtime$wlv_module_registry(list(paired))
+  plan <- runtime$wlv_compile_module_plan(
+    registry,
+    list(runtime$wlv_module_instance("paired.one", "paired")),
+    runtime$wlv_new_resource_store()
+  )
+  expect_identical(plan$order, "paired.one")
+})
+
 test_that("the compiler derives a deterministic DAG instead of using row order", {
   runtime <- module_runtime_environment
   scalar <- wlv_test_scalar_contract()
@@ -545,6 +720,8 @@ test_that("parent resources retain their declared producer generation", {
   catalog <- runtime$wlv_store_catalog(store)
   expect_identical(catalog$producer, "original.module")
   expect_identical(catalog$action, "inherited")
+  expect_identical(catalog$role, "value")
+  expect_false(catalog$semantic_state)
   expect_identical(
     runtime$wlv_store_read(
       store,

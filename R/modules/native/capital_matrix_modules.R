@@ -424,7 +424,22 @@ wlv_native_capital_spec <- function(
     matrix.capital.wiodr16 = "wiodr16/euklems.R",
     matrix.capital.reduction_problem = "wiodr13/euklems-reduction_problem.R"
   )
-  wlv_module_spec(
+  anomaly_indicators <- switch(
+    id,
+    matrix.capital.wiodr13 = c(
+      "gross_fixed_capital_formation",
+      "value_added_disaggregation_ratio",
+      "capital_stock_allocation"
+    ),
+    matrix.capital.wiodr16 = c(
+      "gross_fixed_capital_formation",
+      "value_added_disaggregation_ratio",
+      "k_composition",
+      "euklems_capital_weight"
+    ),
+    matrix.capital.reduction_problem = "gross_fixed_capital_formation"
+  )
+  wlv_native_module_spec(
     id = id,
     scope = "io_period",
     checkpoint = 3L,
@@ -434,6 +449,13 @@ wlv_native_capital_spec <- function(
       wlv_native_io_output("k_composition", "k_composition"),
       wlv_native_io_output("k_depreciation", "k_depreciation")
     ),
+    anomaly_bindings = lapply(anomaly_indicators, function(indicator) {
+      wlv_native_anomaly_binding(
+        "m_io",
+        indicator,
+        record_module = module_label
+      )
+    }),
     services = "contract_runtime",
     run = local({
       selected_method <- method

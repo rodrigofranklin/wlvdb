@@ -12,6 +12,37 @@ wlv_runtime_abort <- function(message, class = "wlv_runtime_error") {
   stop(condition)
 }
 
+wlv_runtime_module_execution_condition <- function(error, node_id, runtime = NULL) {
+  anomalies <- NULL
+  if (is.environment(runtime) && is.data.frame(runtime$anomalies) &&
+      identical(names(runtime$anomalies), wlv_semantic_anomaly_columns()) &&
+      nrow(runtime$anomalies)) {
+    anomalies <- runtime$anomalies
+  } else if (inherits(error, "wlv_contract_error") &&
+      is.data.frame(error$anomalies) &&
+      identical(names(error$anomalies), wlv_semantic_anomaly_columns()) &&
+      nrow(error$anomalies)) {
+    anomalies <- error$anomalies
+  }
+  fields <- list(
+    message = sprintf(
+      "Module instance `%s` failed: %s",
+      node_id,
+      conditionMessage(error)
+    ),
+    call = NULL,
+    node_id = node_id,
+    cause_class = class(error)
+  )
+  classes <- c("wlv_module_execution_error", "wlv_runtime_error")
+  if (!is.null(anomalies)) {
+    row.names(anomalies) <- NULL
+    fields$anomalies <- anomalies
+    classes <- c("wlv_module_contract_error", "wlv_contract_error", classes)
+  }
+  structure(fields, class = c(classes, "error", "condition"))
+}
+
 wlv_runtime_scalar_character <- function(value, name, pattern = NULL) {
   if (
     !is.character(value) || length(value) != 1L || is.na(value) ||
@@ -99,9 +130,25 @@ wlv_resource_contract <- function(
     ),
     unit = NULL,
     missingness = NULL,
+    role = c(
+      "value", "semantic_state", "anomaly", "diagnostic", "metadata",
+      "control"
+    ),
+    semantic_state = FALSE,
     validator = NULL) {
   scope <- match.arg(scope)
   value_type <- match.arg(value_type)
+  role <- match.arg(role)
+  semantic_state <- wlv_runtime_scalar_logical(
+    semantic_state,
+    "semantic_state"
+  )
+  if (semantic_state && !identical(role, "value")) {
+    wlv_runtime_abort(
+      "Only value resources can declare a semantic-state companion.",
+      "wlv_contract_error"
+    )
+  }
   if (!is.null(axes)) {
     axes <- wlv_runtime_validate_names(axes, "axes")
   }
@@ -118,6 +165,8 @@ wlv_resource_contract <- function(
       value_type = value_type,
       unit = unit,
       missingness = missingness,
+      role = role,
+      semantic_state = semantic_state,
       validator = validator
     ),
     class = "wlv_resource_contract"
@@ -131,7 +180,10 @@ wlv_resource_contract_assert <- function(value, name = "contract") {
       "wlv_contract_error"
     )
   }
-  expected <- c("scope", "axes", "value_type", "unit", "missingness", "validator")
+  expected <- c(
+    "scope", "axes", "value_type", "unit", "missingness", "role",
+    "semantic_state", "validator"
+  )
   if (!identical(names(value), expected)) {
     wlv_runtime_abort(
       sprintf("`%s` is not a canonical resource contract.", name),
@@ -408,16 +460,22 @@ wlv_module_spec <- function(
 }
 
 wlv_module_result <- function(outputs, diagnostics = list()) {
-  if (!is.list(outputs) || is.null(names(outputs)) || any(!nzchar(names(outputs))) ||
-      anyDuplicated(names(outputs))) {
+  if (!is.list(outputs) || (length(outputs) && (
+    is.null(names(outputs)) || any(!nzchar(names(outputs))) ||
+      anyDuplicated(names(outputs))
+  ))) {
     wlv_runtime_abort(
       "`outputs` must be a uniquely named list.",
       "wlv_result_error"
     )
   }
-  if (!(is.list(diagnostics) || is.data.frame(diagnostics))) {
+  if (!is.list(diagnostics) || is.data.frame(diagnostics) ||
+      (length(diagnostics) && (
+        is.null(names(diagnostics)) || any(!nzchar(names(diagnostics))) ||
+          anyDuplicated(names(diagnostics))
+      ))) {
     wlv_runtime_abort(
-      "`diagnostics` must be a list or data frame.",
+      "`diagnostics` must be a uniquely named list.",
       "wlv_result_error"
     )
   }
@@ -802,6 +860,8 @@ wlv_store_catalog <- function(store) {
       producer = character(),
       action = character(),
       predecessor = character(),
+      role = character(),
+      semantic_state = logical(),
       stringsAsFactors = FALSE
     ))
   }
@@ -817,12 +877,23 @@ wlv_store_catalog <- function(store) {
         predecessor$partition,
         predecessor$producer
       ),
+      role = entry$contract$role,
+      semantic_state = entry$contract$semantic_state,
       stringsAsFactors = FALSE
     )
   })
   result <- do.call(rbind, rows)
   rownames(result) <- NULL
-  result[order(result$key, result$partition, result$producer), , drop = FALSE]
+  result[
+    order(
+      result$key,
+      result$partition,
+      result$producer,
+      method = "radix"
+    ),
+    ,
+    drop = FALSE
+  ]
 }
 
 wlv_runtime_entry <- function(store, locator, optional = FALSE) {
@@ -893,7 +964,7 @@ wlv_store_read <- function(store, ref) {
       ),
       function(entry) entry$partition,
       character(1L)
-    )))
+    )), method = "radix")
     values <- lapply(partitions, function(partition) {
       terminal <- wlv_runtime_terminal_entries(store, ref$key, partition)
       if (length(terminal) != 1L) {
@@ -1064,7 +1135,10 @@ wlv_runtime_instances <- function(instances) {
     character(1L)
   )
   if (anyDuplicated(node_ids)) {
-    duplicates <- unique(node_ids[duplicated(node_ids)])
+    duplicates <- sort(
+      unique(node_ids[duplicated(node_ids)]),
+      method = "radix"
+    )
     wlv_runtime_abort(
       sprintf(
         "Duplicate module instance and partition pair(s): %s.",
@@ -1189,10 +1263,23 @@ wlv_runtime_resolve_arguments <- function(spec, instance) {
   resolved
 }
 
-wlv_runtime_resolve_contract_list <- function(value, args, name, class_name, instance_id) {
+wlv_runtime_resolve_contract_list <- function(
+    value,
+    args,
+    name,
+    class_name,
+    instance) {
+  instance_id <- instance$instance_id
   if (is.function(value)) {
     value <- tryCatch(
-      value(args),
+      {
+        parameters <- names(formals(value))
+        if (length(parameters) >= 2L || "..." %in% parameters) {
+          value(args, instance)
+        } else {
+          value(args)
+        }
+      },
       error = function(error) {
         wlv_runtime_abort(
           sprintf(
@@ -1366,6 +1453,12 @@ wlv_runtime_contract_compatible <- function(required, provided) {
   ) {
     return(FALSE)
   }
+  if (!identical(required$role, provided$role)) {
+    return(FALSE)
+  }
+  if (!identical(required$semantic_state, provided$semantic_state)) {
+    return(FALSE)
+  }
   TRUE
 }
 
@@ -1374,7 +1467,144 @@ wlv_runtime_contract_same <- function(first, second) {
     identical(first$axes, second$axes) &&
     identical(first$value_type, second$value_type) &&
     identical(first$unit, second$unit) &&
-    identical(first$missingness, second$missingness)
+    identical(first$missingness, second$missingness) &&
+    identical(first$role, second$role) &&
+    identical(first$semantic_state, second$semantic_state)
+}
+
+wlv_runtime_semantic_ref_same_target <- function(value_ref, state_ref) {
+  identical(
+    state_ref$key,
+    paste0("semantic_state/", value_ref$key)
+  ) &&
+    identical(state_ref$partition, value_ref$partition) &&
+    identical(state_ref$producer, value_ref$producer) &&
+    identical(state_ref$optional, value_ref$optional) &&
+    identical(state_ref$collect, value_ref$collect)
+}
+
+wlv_runtime_validate_semantic_contract_pairs <- function(
+    requires,
+    provides,
+    instance_id) {
+  state_requires <- Filter(
+    function(ref) identical(ref$contract$role, "semantic_state"),
+    requires
+  )
+  value_requires <- Filter(
+    function(ref) isTRUE(ref$contract$semantic_state),
+    requires
+  )
+  for (ref in value_requires) {
+    matched <- vapply(
+      state_requires,
+      function(state_ref) {
+        wlv_runtime_semantic_ref_same_target(ref, state_ref)
+      },
+      logical(1L)
+    )
+    if (sum(matched) != 1L) {
+      wlv_runtime_abort(
+        sprintf(
+          "Instance `%s` requires `%s` without one exact semantic-state pair.",
+          instance_id,
+          ref$key
+        ),
+        "wlv_preflight_error"
+      )
+    }
+  }
+  for (state_ref in state_requires) {
+    matched <- vapply(
+      value_requires,
+      function(value_ref) {
+        wlv_runtime_semantic_ref_same_target(value_ref, state_ref)
+      },
+      logical(1L)
+    )
+    if (sum(matched) < 1L) {
+      wlv_runtime_abort(
+        sprintf(
+          "Instance `%s` declares orphan semantic-state input `%s`.",
+          instance_id,
+          state_ref$key
+        ),
+        "wlv_preflight_error"
+      )
+    }
+  }
+
+  state_outputs <- Filter(
+    function(output) identical(output$ref$contract$role, "semantic_state"),
+    provides
+  )
+  value_outputs <- Filter(
+    function(output) isTRUE(output$ref$contract$semantic_state),
+    provides
+  )
+  for (value_output in value_outputs) {
+    expected_key <- paste0("semantic_state/", value_output$ref$key)
+    matched <- Filter(function(state_output) {
+      identical(state_output$ref$key, expected_key) &&
+        identical(state_output$ref$partition, value_output$ref$partition)
+    }, state_outputs)
+    valid <- length(matched) == 1L
+    if (valid) {
+      state_output <- matched[[1L]]
+      valid <- identical(state_output$action, value_output$action)
+      value_predecessor <- value_output$predecessor
+      state_predecessor <- state_output$predecessor
+      valid <- valid && identical(
+        is.null(value_predecessor),
+        is.null(state_predecessor)
+      )
+      if (valid && !is.null(value_predecessor)) {
+        valid <- identical(
+          state_predecessor$key,
+          paste0("semantic_state/", value_predecessor$key)
+        ) &&
+          identical(
+            state_predecessor$partition,
+            value_predecessor$partition
+          ) &&
+          identical(
+            state_predecessor$producer,
+            value_predecessor$producer
+          )
+      }
+    }
+    if (!valid) {
+      wlv_runtime_abort(
+        sprintf(
+          paste0(
+            "Instance `%s` provides `%s` without a semantic-state pair ",
+            "using the same action and predecessor generation."
+          ),
+          instance_id,
+          value_output$ref$key
+        ),
+        "wlv_preflight_error"
+      )
+    }
+  }
+  for (state_output in state_outputs) {
+    target_key <- sub("^semantic_state/", "", state_output$ref$key)
+    matched <- Filter(function(value_output) {
+      identical(value_output$ref$key, target_key) &&
+        identical(value_output$ref$partition, state_output$ref$partition)
+    }, value_outputs)
+    if (length(matched) != 1L) {
+      wlv_runtime_abort(
+        sprintf(
+          "Instance `%s` declares orphan semantic-state output `%s`.",
+          instance_id,
+          state_output$ref$key
+        ),
+        "wlv_preflight_error"
+      )
+    }
+  }
+  invisible(TRUE)
 }
 
 wlv_runtime_checkpoint_rank <- function(checkpoint, checkpoint_order) {
@@ -1461,7 +1691,7 @@ wlv_runtime_resolve_instance <- function(registry, instance, operation, partitio
     args,
     "requires",
     "wlv_resource_ref",
-    instance$instance_id
+    instance
   )
   requires <- lapply(
     requires,
@@ -1474,13 +1704,18 @@ wlv_runtime_resolve_instance <- function(registry, instance, operation, partitio
     args,
     "provides",
     "wlv_resource_output",
-    instance$instance_id
+    instance
   )
   provides <- lapply(
     provides,
     wlv_runtime_bind_output_partition,
     spec = spec,
     instance = instance
+  )
+  wlv_runtime_validate_semantic_contract_pairs(
+    requires,
+    provides,
+    instance$instance_id
   )
   output_keys <- vapply(
     provides,
@@ -1580,6 +1815,7 @@ wlv_runtime_validate_provider_chains <- function(entries) {
     character(1L)
   )
   groups <- split(entries, group_ids)
+  groups <- groups[sort(names(groups), method = "radix")]
   terminals <- list()
   for (group in groups) {
     locator_ids <- vapply(
@@ -1589,6 +1825,9 @@ wlv_runtime_validate_provider_chains <- function(entries) {
       },
       character(1L)
     )
+    locator_order <- order(locator_ids, method = "radix")
+    locator_ids <- locator_ids[locator_order]
+    group <- group[locator_order]
     names(group) <- locator_ids
     roots <- vapply(group, function(entry) is.null(entry$predecessor), logical(1L))
     if (sum(roots) != 1L) {
@@ -1794,7 +2033,7 @@ wlv_runtime_resolve_input <- function(
 }
 
 wlv_runtime_cycle_path <- function(ids, edges) {
-  adjacency <- stats::setNames(vector("list", length(ids)), ids)
+  adjacency <- stats::setNames(rep(list(character()), length(ids)), ids)
   if (nrow(edges)) {
     for (index in seq_len(nrow(edges))) {
       adjacency[[edges$from[[index]]]] <- unique(c(
@@ -1809,7 +2048,7 @@ wlv_runtime_cycle_path <- function(ids, edges) {
   visit <- function(node) {
     state[[node]] <<- 1L
     stack <<- c(stack, node)
-    for (next_node in sort(adjacency[[node]])) {
+    for (next_node in sort(adjacency[[node]], method = "radix")) {
       if (state[[next_node]] == 0L) {
         if (visit(next_node)) {
           return(TRUE)
@@ -1824,7 +2063,7 @@ wlv_runtime_cycle_path <- function(ids, edges) {
     state[[node]] <<- 2L
     FALSE
   }
-  for (id in sort(ids)) {
+  for (id in sort(ids, method = "radix")) {
     if (state[[id]] == 0L && visit(id)) {
       break
     }
@@ -1834,7 +2073,7 @@ wlv_runtime_cycle_path <- function(ids, edges) {
 
 wlv_runtime_topological_order <- function(ids, edges) {
   indegree <- stats::setNames(integer(length(ids)), ids)
-  outgoing <- stats::setNames(vector("list", length(ids)), ids)
+  outgoing <- stats::setNames(rep(list(character()), length(ids)), ids)
   if (nrow(edges)) {
     pairs <- unique(edges[c("from", "to")])
     for (index in seq_len(nrow(pairs))) {
@@ -1844,16 +2083,19 @@ wlv_runtime_topological_order <- function(ids, edges) {
       indegree[[to]] <- indegree[[to]] + 1L
     }
   }
-  available <- sort(names(indegree)[indegree == 0L])
+  available <- sort(names(indegree)[indegree == 0L], method = "radix")
   order <- character()
   while (length(available)) {
     current <- available[[1L]]
     available <- available[-1L]
     order <- c(order, current)
-    for (next_node in sort(outgoing[[current]])) {
+    for (next_node in sort(outgoing[[current]], method = "radix")) {
       indegree[[next_node]] <- indegree[[next_node]] - 1L
       if (indegree[[next_node]] == 0L) {
-        available <- sort(unique(c(available, next_node)))
+        available <- sort(
+          unique(c(available, next_node)),
+          method = "radix"
+        )
       }
     }
   }
@@ -1891,7 +2133,10 @@ wlv_compile_module_plan <- function(
       "wlv_preflight_error"
     )
   }
-  partitions <- wlv_runtime_validate_names(partitions, "partitions")
+  partitions <- sort(
+    wlv_runtime_validate_names(partitions, "partitions"),
+    method = "radix"
+  )
   if (
     !is.numeric(checkpoint_order) || anyNA(checkpoint_order) ||
       any(!is.finite(checkpoint_order)) || any(checkpoint_order < 0) ||
@@ -1905,6 +2150,14 @@ wlv_compile_module_plan <- function(
     )
   }
   instances <- wlv_runtime_instances(instances)
+  instance_node_ids <- vapply(
+    instances,
+    function(instance) {
+      wlv_runtime_node_id(instance$instance_id, instance$partition)
+    },
+    character(1L)
+  )
+  instances <- instances[order(instance_node_ids, method = "radix")]
   resolved <- lapply(
     instances,
     wlv_runtime_resolve_instance,
@@ -1932,7 +2185,10 @@ wlv_compile_module_plan <- function(
       wlv_runtime_abort(
         sprintf(
           "The resource graph contains undeclared io partition(s): %s.",
-          paste(sort(invalid_store_partitions), collapse = ", ")
+          paste(
+            sort(invalid_store_partitions, method = "radix"),
+            collapse = ", "
+          )
         ),
         "wlv_preflight_error"
       )
@@ -2024,6 +2280,11 @@ wlv_compile_module_plan <- function(
     )
   }
   if (nrow(edges)) {
+    edges <- edges[
+      order(edges$from, edges$to, edges$resource, method = "radix"),
+      ,
+      drop = FALSE
+    ]
     rownames(edges) <- NULL
     for (index in seq_len(nrow(edges))) {
       from <- edges$from[[index]]
@@ -2187,6 +2448,52 @@ wlv_runtime_module_inputs <- function(store, module) {
   inputs
 }
 
+wlv_runtime_intrinsic_service_names <- function() {
+  c("contract_runtime", "module_contract")
+}
+
+wlv_runtime_module_services <- function(module, inputs, store, services) {
+  intrinsic <- intersect(
+    module$services,
+    wlv_runtime_intrinsic_service_names()
+  )
+  external <- setdiff(module$services, intrinsic)
+  result <- services[external]
+  if (!length(intrinsic)) {
+    return(result)
+  }
+  if (!setequal(intrinsic, wlv_runtime_intrinsic_service_names())) {
+    wlv_runtime_abort(
+      sprintf(
+        paste0(
+          "Module instance `%s` must declare both intrinsic semantic ",
+          "services together."
+        ),
+        module$node_id
+      ),
+      "wlv_runner_error"
+    )
+  }
+  runtime <- wlv_semantic_module_runtime(inputs, module)
+  result$contract_runtime <- runtime
+  result$module_contract <- local({
+    resolved_module <- module
+    module_runtime <- runtime
+    module_inputs <- inputs
+    input_store <- store
+    function(module_result) {
+      wlv_semantic_finalize_module_result(
+        resolved_module,
+        module_result,
+        module_runtime,
+        module_inputs,
+        input_store
+      )
+    }
+  })
+  result[module$services]
+}
+
 wlv_runtime_prepare_module_outputs <- function(store, module, result) {
   if (!inherits(result, "wlv_module_result")) {
     wlv_runtime_abort(
@@ -2221,13 +2528,28 @@ wlv_runtime_prepare_module_outputs <- function(store, module, result) {
       "wlv_result_error"
     )
   }
+  if (length(result$diagnostics)) {
+    wlv_runtime_abort(
+      sprintf(
+        paste0(
+          "Module instance `%s` returned lateral diagnostics; diagnostics ",
+          "must be published through a declared diagnostic resource."
+        ),
+        module$instance_id
+      ),
+      "wlv_result_error"
+    )
+  }
   prepared <- list()
   for (alias in expected) {
     output <- module$provides[[alias]]
     ref <- output$ref
     value <- result$outputs[[alias]]
     label <- wlv_runtime_locator_label(ref$key, ref$partition, module$instance_id)
-    if (identical(output$action, "patch")) {
+    if (
+      identical(output$action, "patch") &&
+        !identical(ref$contract$role, "semantic_state")
+    ) {
       predecessor <- list(
         key = output$predecessor$key,
         partition = output$predecessor$partition,
@@ -2237,7 +2559,10 @@ wlv_runtime_prepare_module_outputs <- function(store, module, result) {
       value <- wlv_runtime_apply_patch(base, value, ref$contract, label)
     } else if (inherits(value, "wlv_resource_patch")) {
       wlv_runtime_abort(
-        sprintf("Non-patch output `%s` returned a patch value.", label),
+        sprintf(
+          "Output `%s` returned a patch value that cannot be published directly.",
+          label
+        ),
         "wlv_result_error"
       )
     }
@@ -2298,6 +2623,10 @@ wlv_run_module_plan <- function(plan, store, services = list()) {
     plan$modules,
     function(module) module$services
   ), use.names = FALSE))
+  required_services <- setdiff(
+    required_services,
+    wlv_runtime_intrinsic_service_names()
+  )
   missing_services <- setdiff(required_services, names(services))
   if (length(missing_services)) {
     wlv_runtime_abort(
@@ -2307,44 +2636,52 @@ wlv_run_module_plan <- function(plan, store, services = list()) {
   }
 
   working <- wlv_runtime_fork_store(store)
-  diagnostics <- list()
   trace_rows <- list()
   for (id in plan$order) {
     module <- plan$modules[[id]]
     inputs <- wlv_runtime_module_inputs(working, module)
+    module_services <- wlv_runtime_module_services(
+      module,
+      inputs,
+      working,
+      services
+    )
     context <- wlv_runtime_context(
       inputs = inputs,
       input_names = names(module$requires),
       args = module$args,
       argument_names = module$parameter_names,
-      services = services[module$services],
+      services = module_services,
       service_names = module$services,
       partition = module$partition,
       instance_id = module$node_id
     )
-    result <- tryCatch(
-      module$run(context),
+    prepared <- tryCatch(
+      {
+        result <- module$run(context)
+        wlv_runtime_prepare_module_outputs(working, module, result)
+      },
       error = function(error) {
-        if (inherits(error, "wlv_runtime_error")) {
+        module_runtime <- module_services$contract_runtime
+        has_anomalies <- is.environment(module_runtime) &&
+          is.data.frame(module_runtime$anomalies) &&
+          nrow(module_runtime$anomalies)
+        if (inherits(error, "wlv_runtime_error") && !has_anomalies &&
+            !inherits(error, "wlv_contract_error")) {
           stop(error)
         }
-        wlv_runtime_abort(
-          sprintf(
-            "Module instance `%s` failed: %s",
-            id,
-            conditionMessage(error)
-          ),
-          "wlv_module_execution_error"
-        )
+        stop(wlv_runtime_module_execution_condition(
+          error,
+          id,
+          module_runtime
+        ))
       }
     )
-    prepared <- wlv_runtime_prepare_module_outputs(working, module, result)
     next_entries <- working$entries
     for (locator_id in names(prepared)) {
       next_entries[[locator_id]] <- prepared[[locator_id]]
     }
     working$entries <- next_entries
-    diagnostics[id] <- list(result$diagnostics)
     trace_rows[[length(trace_rows) + 1L]] <- data.frame(
       sequence = length(trace_rows) + 1L,
       node_id = id,
@@ -2373,7 +2710,6 @@ wlv_run_module_plan <- function(plan, store, services = list()) {
   }
   result <- new.env(parent = emptyenv())
   result$store <- working
-  result$diagnostics <- diagnostics
   result$trace <- trace
   class(result) <- "wlv_run_result"
   lockEnvironment(result, bindings = TRUE)

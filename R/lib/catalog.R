@@ -2,16 +2,16 @@ wlv_catalog_schemas <- function() {
   list(
   sources = c(
     "source", "status", "year_start", "year_end", "parameter_set",
-    "data_dir", "can_prepare", "preparation_task", "validator_script",
-    "validator_function", "artifact_profile", "missingness_policy",
+    "data_dir", "can_prepare", "preparation_task", "validator_id",
+    "artifact_profile", "missingness_policy",
     "unit_contract", "documentation", "limitations"
   ),
   methods = c(
     "method", "source", "code", "description", "status", "can_calculate",
-    "can_recalculate", "test", "documentation", "limitations"
+    "can_recalculate", "validation_id", "documentation", "limitations"
   ),
   artifacts = c("profile", "artifact", "kind", "sidecar", "operations"),
-  missingness = c("policy", "script", "factory", "documentation"),
+  missingness = c("policy", "documentation"),
   unit_contracts = c(
     "contract", "schema_version", "source", "units", "aggregations",
     "documentation"
@@ -22,7 +22,7 @@ wlv_catalog_schemas <- function() {
     "price_basis", "base_year", "index_base", "labour_concept", "notes"
   ),
   unit_aggregations = c(
-    "indicator", "level", "strategy", "module", "numerator",
+    "indicator", "level", "strategy", "module_id", "numerator",
     "denominator", "weight", "zero_denominator", "notes"
   )
 )
@@ -114,6 +114,15 @@ wlv_catalog_validate_ids <- function(values, column, name) {
       column,
       paste(unique(values[invalid]), collapse = ", ")
     )
+  }
+  invisible(values)
+}
+
+wlv_catalog_validate_optional_ids <- function(values, column, name) {
+  present <- nzchar(values)
+  if (any(present)) {
+    wlv_catalog_validate_ids(values[present], column, name)
+    wlv_catalog_validate_unique(values[present], column, name)
   }
   invisible(values)
 }
@@ -248,16 +257,6 @@ wlv_catalog_require_declared_files <- function(root, values, column, name) {
   invisible(values)
 }
 
-wlv_catalog_validator_is_defined <- function(path, function_name) {
-  lines <- readLines(path, warn = FALSE, encoding = "UTF-8")
-  definitions <- lines[grepl("<-\\s*function\\s*\\(", lines)]
-  if (!length(definitions)) {
-    return(FALSE)
-  }
-  left_hand_side <- trimws(sub("<-.*$", "", definitions))
-  function_name %in% left_hand_side
-}
-
 wlv_catalog_parse_operations <- function(values) {
   lapply(values, function(value) strsplit(value, "|", fixed = TRUE)[[1L]])
 }
@@ -296,10 +295,18 @@ wlv_catalog_validate_sources <- function(sources, root) {
   }
 
   wlv_catalog_validate_paths(sources$data_dir, "data_dir", name)
-  for (column in c("validator_script", "documentation")) {
-    wlv_catalog_validate_paths(sources[[column]], column, name, optional = TRUE)
-    wlv_catalog_require_declared_files(root, sources[[column]], column, name)
-  }
+  wlv_catalog_validate_paths(
+    sources$documentation,
+    "documentation",
+    name,
+    optional = TRUE
+  )
+  wlv_catalog_require_declared_files(
+    root,
+    sources$documentation,
+    "documentation",
+    name
+  )
 
   preparation_task_present <- nzchar(sources$preparation_task)
   invalid_preparation_task <- preparation_task_present & !grepl(
@@ -313,24 +320,7 @@ wlv_catalog_validate_sources <- function(sources, root) {
     )
   }
 
-  invalid_function <- nzchar(sources$validator_function) &
-    !grepl("^[A-Za-z.][A-Za-z0-9._]*$", sources$validator_function)
-  if (any(invalid_function)) {
-    wlv_catalog_stop(
-      "The sources catalog contains invalid `validator_function` names: %s.",
-      paste(unique(sources$validator_function[invalid_function]), collapse = ", ")
-    )
-  }
-  incomplete_validator <- xor(
-    nzchar(sources$validator_script),
-    nzchar(sources$validator_function)
-  )
-  if (any(incomplete_validator)) {
-    wlv_catalog_stop(
-      "The sources catalog must declare `validator_script` and `validator_function` together at row(s): %s.",
-      paste(which(incomplete_validator), collapse = ", ")
-    )
-  }
+  wlv_catalog_validate_optional_ids(sources$validator_id, "validator_id", name)
   missing_preparation_task <- sources$can_prepare & !preparation_task_present
   unexpected_preparation_task <- !sources$can_prepare & preparation_task_present
   mismatched_preparation_task <- sources$can_prepare &
@@ -413,8 +403,7 @@ wlv_catalog_validate_sources <- function(sources, root) {
   incomplete_stable <- stable & (
     !sources$can_prepare |
       !nzchar(sources$preparation_task) |
-      !nzchar(sources$validator_script) |
-      !nzchar(sources$validator_function) |
+      !nzchar(sources$validator_id) |
       !nzchar(sources$artifact_profile) |
       !nzchar(sources$missingness_policy) |
       !nzchar(sources$unit_contract) |
@@ -436,19 +425,6 @@ wlv_catalog_validate_sources <- function(sources, root) {
       "Non-stable source(s) must explain their limitations: %s.",
       paste(sources$source[undocumented_nonstable], collapse = ", ")
     )
-  }
-
-  for (index in which(nzchar(sources$validator_script))) {
-    path <- file.path(root, sources$validator_script[[index]])
-    function_name <- sources$validator_function[[index]]
-    if (!wlv_catalog_validator_is_defined(path, function_name)) {
-      wlv_catalog_stop(
-        "Validator `%s` is not defined in `%s` for source `%s`.",
-        function_name,
-        sources$validator_script[[index]],
-        sources$source[[index]]
-      )
-    }
   }
 
   sources
@@ -524,39 +500,22 @@ wlv_catalog_validate_missingness_policies <- function(policies, root) {
   name <- "missingness policies"
   wlv_catalog_validate_required(
     policies,
-    c("policy", "script", "factory", "documentation"),
+    c("policy", "documentation"),
     name
   )
   wlv_catalog_validate_ids(policies$policy, "policy", name)
   wlv_catalog_validate_unique(policies$policy, "policy", name)
-  for (column in c("script", "documentation")) {
-    wlv_catalog_validate_paths(policies[[column]], column, name)
-    wlv_catalog_require_declared_files(root, policies[[column]], column, name)
-  }
-
-  invalid_factory <- !grepl(
-    "^[A-Za-z.][A-Za-z0-9._]*$",
-    policies$factory
+  wlv_catalog_validate_paths(
+    policies$documentation,
+    "documentation",
+    name
   )
-  if (any(invalid_factory)) {
-    wlv_catalog_stop(
-      "The missingness policies catalog contains invalid `factory` names: %s.",
-      paste(unique(policies$factory[invalid_factory]), collapse = ", ")
-    )
-  }
-
-  for (index in seq_len(nrow(policies))) {
-    path <- file.path(root, policies$script[[index]])
-    factory <- policies$factory[[index]]
-    if (!wlv_catalog_validator_is_defined(path, factory)) {
-      wlv_catalog_stop(
-        "Missingness policy factory `%s` is not defined in `%s` for policy `%s`.",
-        factory,
-        policies$script[[index]],
-        policies$policy[[index]]
-      )
-    }
-  }
+  wlv_catalog_require_declared_files(
+    root,
+    policies$documentation,
+    "documentation",
+    name
+  )
 
   policies
 }
@@ -730,24 +689,36 @@ wlv_catalog_validate_unit_aggregations <- function(value, units, contract) {
     )
   }
 
-  has_module <- nzchar(value$module)
-  invalid_module <- has_module & (
-    !vapply(value$module, wlv_catalog_safe_relative_path, logical(1)) |
-      !grepl("[.]R$", value$module)
+  has_module <- nzchar(value$module_id)
+  invalid_module <- has_module & !grepl(
+    "^aggregation[.][a-z][a-z0-9_.]*$",
+    value$module_id
   )
   if (any(invalid_module)) {
     wlv_catalog_stop(
-      "The %s contains invalid `module` path(s): %s.",
+      "The %s contains invalid `module_id` identifier(s): %s.",
       name,
-      paste(unique(value$module[invalid_module]), collapse = ", ")
+      paste(unique(value$module_id[invalid_module]), collapse = ", ")
     )
   }
   formula <- value$strategy == "formula"
   if (any(formula != has_module)) {
     wlv_catalog_stop(
-      "The %s must declare `module` exactly for `formula` strategies at row(s): %s.",
+      "The %s must declare `module_id` exactly for `formula` strategies at row(s): %s.",
       name,
       paste(which(formula != has_module), collapse = ", ")
+    )
+  }
+  expected_module <- paste0("aggregation.", value$indicator)
+  mismatched_module <- formula & value$module_id != expected_module
+  if (any(mismatched_module)) {
+    wlv_catalog_stop(
+      paste0(
+        "The %s must bind every formula to its explicit native `module_id` ",
+        "at row(s): %s."
+      ),
+      name,
+      paste(which(mismatched_module), collapse = ", ")
     )
   }
 
@@ -897,20 +868,23 @@ wlv_catalog_validate_methods <- function(methods, sources, root) {
     "can_recalculate",
     name
   )
-  for (column in c("test", "documentation")) {
-    wlv_catalog_validate_paths(
-      methods[[column]],
-      column,
-      name,
-      optional = TRUE
-    )
-    wlv_catalog_require_declared_files(
-      root,
-      methods[[column]],
-      column,
-      name
-    )
-  }
+  wlv_catalog_validate_optional_ids(
+    methods$validation_id,
+    "validation_id",
+    name
+  )
+  wlv_catalog_validate_paths(
+    methods$documentation,
+    "documentation",
+    name,
+    optional = TRUE
+  )
+  wlv_catalog_require_declared_files(
+    root,
+    methods$documentation,
+    "documentation",
+    name
+  )
 
   missing_sources <- setdiff(unique(methods$source), sources$source)
   if (length(missing_sources)) {
@@ -942,15 +916,15 @@ wlv_catalog_validate_methods <- function(methods, sources, root) {
 
   stable <- methods$status == "stable"
   invalid_stable <- stable & (
-    sources$status[source_rows] != "stable" |
+      sources$status[source_rows] != "stable" |
       !methods$can_calculate |
       !methods$can_recalculate |
-      !nzchar(methods$test) |
+      !nzchar(methods$validation_id) |
       !nzchar(methods$documentation)
   )
   if (any(invalid_stable)) {
     wlv_catalog_stop(
-      "Stable method(s) require a stable source, calculate/recalculate capabilities, a test, and documentation: %s.",
+      "Stable method(s) require a stable source, calculate/recalculate capabilities, a validation ID, and documentation: %s.",
       paste(methods$method[invalid_stable], collapse = ", ")
     )
   }
@@ -967,8 +941,11 @@ wlv_catalog_validate_methods <- function(methods, sources, root) {
   if (!dir.exists(method_root)) {
     wlv_catalog_stop("Methods directory does not exist: `%s`.", method_root)
   }
-  directories <- sort(list.dirs(method_root, recursive = FALSE, full.names = FALSE))
-  registered <- sort(methods$method)
+  directories <- sort(
+    list.dirs(method_root, recursive = FALSE, full.names = FALSE),
+    method = "radix"
+  )
+  registered <- sort(methods$method, method = "radix")
   if (!identical(directories, registered)) {
     missing_from_catalog <- setdiff(directories, registered)
     missing_from_tree <- setdiff(registered, directories)
@@ -1303,6 +1280,8 @@ wlv_catalog_input_paths <- function(root) {
   directories <- file.path(root, c(
     "R",
     "catalog",
+    file.path("config", "modules"),
+    file.path("config", "aggregations"),
     file.path("config", "outputs"),
     file.path("config", "contracts"),
     file.path("contracts", "units"),
@@ -1527,7 +1506,11 @@ wlv_catalog_unit_contract_sidecar <- function(
     )
   }
   aggregations <- if (is.null(resolved_aggregations)) {
-    value$aggregations
+    catalog_columns <- aggregation_columns
+    catalog_columns[catalog_columns == "module"] <- "module_id"
+    rows <- value$aggregations[catalog_columns]
+    names(rows)[names(rows) == "module_id"] <- "module"
+    rows
   } else {
     resolved_aggregations[aggregation_columns]
   }
@@ -1583,7 +1566,7 @@ wlv_catalog_unit_contract_sidecar <- function(
     c("sector_to_country", "country_to_world")
   )
   aggregations <- aggregations[
-    order(aggregation_order, level_order),
+    order(aggregation_order, level_order, method = "radix"),
     ,
     drop = FALSE
   ]
@@ -1700,12 +1683,12 @@ wlv_catalog_method_table <- function(catalog) {
     can_prepare = sources$can_prepare,
     can_calculate = catalog$methods$can_calculate,
     can_recalculate = catalog$methods$can_recalculate,
-    test = catalog$methods$test,
+    validation_id = catalog$methods$validation_id,
     documentation = catalog$methods$documentation,
     limitations = catalog$methods$limitations,
     stringsAsFactors = FALSE
   )
-  value <- value[order(value$method), , drop = FALSE]
+  value <- value[order(value$method, method = "radix"), , drop = FALSE]
   rownames(value) <- NULL
   value
 }

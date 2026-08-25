@@ -59,7 +59,7 @@ wlv_native_public_e2e_unit_rows <- function() {
   )
 }
 
-wlv_native_public_e2e_aggregation_rows <- function() {
+wlv_native_public_e2e_aggregation_rows <- function(catalog_schema = TRUE) {
   indicators <- rep(
     c("gross_output.s.us", "gross_output.s.mv", "value.m.mv"),
     each = 2L
@@ -68,7 +68,7 @@ wlv_native_public_e2e_aggregation_rows <- function() {
     indicator = indicators,
     level = rep(c("sector_to_country", "country_to_world"), 3L),
     strategy = c(rep("sum", 4L), rep("ratio_of_sums", 2L)),
-    module = rep("", 6L),
+    module_id = rep("", 6L),
     numerator = c(rep("", 4L), rep("gross_output.s.mv", 2L)),
     denominator = c(rep("", 4L), rep("gross_output.s.us", 2L)),
     weight = rep("", 6L),
@@ -80,6 +80,9 @@ wlv_native_public_e2e_aggregation_rows <- function() {
     stringsAsFactors = FALSE,
     check.names = FALSE
   )
+  if (!isTRUE(catalog_schema)) {
+    names(value)[names(value) == "module_id"] <- "module"
+  }
   value
 }
 
@@ -117,8 +120,7 @@ wlv_native_public_e2e_write_project_contract <- function(root) {
       data_dir = "source_data/synthetic",
       can_prepare = "FALSE",
       preparation_task = "",
-      validator_script = "R/lib/synthetic_validation.R",
-      validator_function = "wlv_validate_synthetic_prepared",
+      validator_id = "synthetic_prepared_v1",
       artifact_profile = "synthetic_core",
       missingness_policy = "synthetic_v1",
       unit_contract = "synthetic_units_v1",
@@ -138,7 +140,7 @@ wlv_native_public_e2e_write_project_contract <- function(root) {
       status = "experimental",
       can_calculate = "TRUE",
       can_recalculate = "TRUE",
-      test = "",
+      validation_id = "",
       documentation = documentation,
       limitations = "Synthetic test-only method.",
       stringsAsFactors = FALSE,
@@ -170,8 +172,6 @@ wlv_native_public_e2e_write_project_contract <- function(root) {
     file.path(root, "catalog", "missingness-policies.csv"),
     data.frame(
       policy = "synthetic_v1",
-      script = "R/lib/synthetic_missingness.R",
-      factory = "wlv_synthetic_missingness_policy",
       documentation = documentation,
       stringsAsFactors = FALSE,
       check.names = FALSE
@@ -228,14 +228,6 @@ wlv_native_public_e2e_write_project_contract <- function(root) {
   )
 
   wlv_native_public_e2e_write_definition(
-    file.path(root, "R", "lib", "synthetic_validation.R"),
-    "wlv_validate_synthetic_prepared <- function(...) invisible(TRUE)"
-  )
-  wlv_native_public_e2e_write_definition(
-    file.path(root, "R", "lib", "synthetic_missingness.R"),
-    "wlv_synthetic_missingness_policy <- function(...) list(policy_id = 'synthetic_v1')"
-  )
-  wlv_native_public_e2e_write_definition(
     file.path(root, documentation),
     "# Synthetic native public API fixture"
   )
@@ -248,7 +240,7 @@ wlv_native_public_e2e_write_project_contract <- function(root) {
     file.path(root, "config", "modules", "sources", "synthetic.csv"),
     wlv_native_public_e2e_module_rows(
       c("indicator.gross_output.s.us", "matrix.synthetic"),
-      c("test.gross_us", "matrix.synthetic")
+      c("test.gross_us", "matrix.transformation")
     )
   )
   wlv_native_public_e2e_write_csv(
@@ -271,7 +263,7 @@ wlv_native_public_e2e_write_project_contract <- function(root) {
   )
   wlv_native_public_e2e_write_csv(
     file.path(root, "config", "aggregations", "synthetic_profile.csv"),
-    wlv_native_public_e2e_aggregation_rows()
+    wlv_native_public_e2e_aggregation_rows(catalog_schema = FALSE)
   )
 
   wlv_native_public_e2e_write_csv(
@@ -626,8 +618,7 @@ wlv_native_public_e2e_value_spec <- function(runtime) {
         "gross_output.s.mv",
         alias = "gross_mv",
         producer = "indicator.gross_output.s.mv"
-      ),
-      runtime$wlv_native_run_ref("dimensions/lists", "lists", "list")
+      )
     ),
     provides = runtime$wlv_native_indicator_output("value.m.mv"),
     metadata = wlv_native_public_e2e_indicator_metadata(
@@ -638,53 +629,13 @@ wlv_native_public_e2e_value_spec <- function(runtime) {
       "value"
     ),
     run = function(ctx) {
-      lists <- ctx$input("lists")
       gross_us <- ctx$input("gross_us")
       gross_mv <- ctx$input("gross_mv")
-      value <- array(
-        NA_real_,
-        dim = c(
-          length(lists$years),
-          length(lists$sectors),
-          length(lists$countries)
-        ),
-        dimnames = list(
-          year = lists$years,
-          sector = lists$sectors,
-          country = lists$countries
-        )
+      value <- runtime$wlv_native_with_named_axes(
+        gross_mv / gross_us,
+        c("year", "sector", "country")
       )
-      diagnostics <- lapply(lists$years, function(year) {
-        labour <- as.numeric(gross_mv[year, , ] / gross_us[year, , ])
-        names(labour) <- lists$input
-        gross_output <- as.numeric(gross_mv[year, , ])
-        names(gross_output) <- lists$input
-        coefficients <- matrix(
-          0,
-          nrow = length(lists$input),
-          ncol = length(lists$input),
-          dimnames = list(lists$input, lists$input)
-        )
-        solved <- runtime$wlv_solve_leontief(
-          coefficient_matrix = coefficients,
-          labour_requirements = labour,
-          gross_output = gross_output,
-          method = "native_test",
-          year = year
-        )
-        value[year, , ] <<- array(
-          solved$lambda,
-          dim = c(length(lists$sectors), length(lists$countries)),
-          dimnames = list(lists$sectors, lists$countries)
-        )
-        solved$diagnostics
-      })
-      runtime$wlv_module_result(
-        outputs = list(value = value),
-        diagnostics = list(
-          `_leontief_diagnostics.csv` = do.call(rbind, diagnostics)
-        )
-      )
+      runtime$wlv_module_result(outputs = list(value = value))
     }
   )
 }
@@ -720,8 +671,17 @@ wlv_native_public_e2e_matrix_spec <- function(runtime) {
       )
     }), recursive = FALSE)
   )
-  runtime$wlv_module_spec(
-    id = "matrix.synthetic",
+  provides <- c(
+    provides,
+    runtime$wlv_native_intermediate_output(
+      "lambda",
+      alias = "lambda",
+      axes = c("year", "input"),
+      scope = "io_period"
+    )
+  )
+  runtime$wlv_native_module_spec(
+    id = "matrix.transformation",
     scope = "io_period",
     checkpoint = 4L,
     operations = "calculate",
@@ -732,12 +692,18 @@ wlv_native_public_e2e_matrix_spec <- function(runtime) {
         alias = "gross_mv",
         producer = "indicator.gross_output.s.mv"
       ),
+      runtime$wlv_native_indicator_ref(
+        "gross_output.s.us",
+        alias = "gross_us",
+        producer = "indicator.gross_output.s.us"
+      ),
       runtime$wlv_native_run_ref("dimensions/lists", "lists", "list")
     ),
     provides = provides,
     run = function(ctx) {
       source_io <- ctx$input("source_io")
       gross_mv <- ctx$input("gross_mv")
+      gross_us <- ctx$input("gross_us")
       lists <- ctx$input("lists")
       years <- dimnames(source_io)[[1L]]
       zero_io <- array(
@@ -774,9 +740,38 @@ wlv_native_public_e2e_matrix_spec <- function(runtime) {
         stats::setNames(
           rep(list(country_zero), length(country_resources)),
           paste0("country.", country_resources)
+        ),
+        list(lambda = array(
+          1,
+          dim = c(length(years), length(lists$input)),
+          dimnames = list(year = years, input = lists$input)
+        ))
+      )
+      diagnostics <- lapply(years, function(year) {
+        labour <- as.numeric(gross_mv[year, , ] / gross_us[year, , ])
+        names(labour) <- lists$input
+        gross_output <- as.numeric(gross_mv[year, , ])
+        names(gross_output) <- lists$input
+        coefficients <- matrix(
+          0,
+          nrow = length(lists$input),
+          ncol = length(lists$input),
+          dimnames = list(lists$input, lists$input)
+        )
+        runtime$wlv_solve_leontief(
+          coefficient_matrix = coefficients,
+          labour_requirements = labour,
+          gross_output = gross_output,
+          method = "native_test",
+          year = year
+        )$diagnostics
+      })
+      runtime$wlv_module_result(
+        outputs = outputs,
+        diagnostics = list(
+          `_leontief_diagnostics.csv` = do.call(rbind, diagnostics)
         )
       )
-      runtime$wlv_module_result(outputs = outputs)
     }
   )
 }
@@ -820,8 +815,8 @@ wlv_native_public_e2e_install_runtime_seams <- function(runtime, root) {
         return(original_validator(plan, method))
       }
       list(
-        script = "R/lib/synthetic_validation.R",
-        function_name = "wlv_validate_synthetic_prepared",
+        validator_id = "synthetic_prepared_v1",
+        source = "synthetic",
         validate = function(normalized_root) {
           sectors <- runtime$wlv_native_read_semicolon(
             file.path(normalized_root, "sectors.csv")
@@ -901,6 +896,20 @@ wlv_native_public_e2e_bitwise_identical <- function(left, right) {
       wlv_native_public_e2e_raw_doubles(left),
       wlv_native_public_e2e_raw_doubles(right)
     )
+}
+
+wlv_native_public_e2e_diagnostic_hashes <- function(fixture) {
+  runtime <- fixture$runtime
+  run <- wlv_native_public_e2e_current_run(fixture)
+  names <- runtime$wlv_native_published_diagnostic_ids()
+  paths <- file.path(run$path, names)
+  present <- file.exists(paths)
+  hashes <- vapply(
+    paths[present],
+    runtime$wlv_publication_file_sha256,
+    character(1L)
+  )
+  stats::setNames(unname(hashes), names[present])
 }
 
 wlv_native_public_e2e_snapshot <- function(fixture) {

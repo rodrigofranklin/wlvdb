@@ -600,6 +600,73 @@ wlv_validate_preparation_result <- function(result, staging, root) {
   invisible(result)
 }
 
+wlv_preparation_staged_path <- function(result, destination) {
+  if (!inherits(result, "wlv_preparation_result")) {
+    wlv_preparation_abort(
+      "Staged path resolution requires a preparation result.",
+      "wlv_preparation_result_error"
+    )
+  }
+  destination <- wlv_preparation_scalar_character(destination, "destination")
+  requested <- normalizePath(
+    destination,
+    winslash = "/",
+    mustWork = FALSE
+  )
+  requested_key <- wlv_preparation_path_key(requested)
+  promotion_destinations <- vapply(
+    result$promotions,
+    `[[`,
+    character(1L),
+    "destination"
+  )
+  promotion_keys <- vapply(
+    promotion_destinations,
+    wlv_preparation_path_key,
+    character(1L)
+  )
+  matches <- requested_key == promotion_keys |
+    startsWith(requested_key, paste0(promotion_keys, "/"))
+  if (sum(matches) != 1L) {
+    wlv_preparation_abort(
+      sprintf(
+        "Prepared path `%s` must resolve through exactly one staged promotion.",
+        destination
+      ),
+      "wlv_preparation_result_error"
+    )
+  }
+
+  index <- which(matches)[[1L]]
+  promotion_destination <- normalizePath(
+    promotion_destinations[[index]],
+    winslash = "/",
+    mustWork = FALSE
+  )
+  staged_root <- result$promotions[[index]]$staged
+  staged <- if (identical(requested_key, promotion_keys[[index]])) {
+    staged_root
+  } else {
+    relative <- substring(requested, nchar(promotion_destination) + 2L)
+    file.path(staged_root, relative)
+  }
+  staged_key <- if (file.exists(staged) || dir.exists(staged)) {
+    wlv_preparation_path_key(staged, must_work = TRUE)
+  } else {
+    ""
+  }
+  staged_root_key <- wlv_preparation_path_key(staged_root, must_work = TRUE)
+  if ((!file.exists(staged) && !dir.exists(staged)) ||
+      !(identical(staged_key, staged_root_key) ||
+        startsWith(staged_key, paste0(staged_root_key, "/")))) {
+    wlv_preparation_abort(
+      sprintf("Prepared staged path `%s` is missing or unsafe.", staged),
+      "wlv_preparation_result_error"
+    )
+  }
+  normalizePath(staged, winslash = "/", mustWork = TRUE)
+}
+
 wlv_commit_preparation_result <- function(result, context) {
   promotions <- result$promotions
   names_vector <- names(promotions)
@@ -708,10 +775,17 @@ wlv_run_preparation_task <- function(
     source_record = NULL,
     services,
     arguments = list(),
-    fail_at = character()) {
+    fail_at = character(),
+    validate_staged = NULL) {
   if (!inherits(spec, "wlv_preparation_task_spec")) {
     wlv_preparation_abort(
       "`spec` must be a native preparation task specification.",
+      "wlv_preparation_contract_error"
+    )
+  }
+  if (!is.null(validate_staged) && !is.function(validate_staged)) {
+    wlv_preparation_abort(
+      "`validate_staged` must be NULL or a function.",
       "wlv_preparation_contract_error"
     )
   }
@@ -776,6 +850,9 @@ wlv_run_preparation_task <- function(
     }
   )
   wlv_validate_preparation_result(result, staging, root)
+  if (!is.null(validate_staged)) {
+    validate_staged(result, context)
+  }
   artifacts <- wlv_commit_preparation_result(result, context)
   staging_open <- FALSE
   if (dir.exists(staging)) unlink(staging, recursive = TRUE, force = TRUE)
@@ -799,7 +876,8 @@ wlv_prepare_registered_source <- function(
     source_record = NULL,
     services,
     arguments = list(),
-    fail_at = character()) {
+    fail_at = character(),
+    validate_staged = NULL) {
   spec <- wlv_resolve_preparation_task(registry, source)
   wlv_run_preparation_task(
     spec = spec,
@@ -808,6 +886,7 @@ wlv_prepare_registered_source <- function(
     source_record = source_record,
     services = services,
     arguments = arguments,
-    fail_at = fail_at
+    fail_at = fail_at,
+    validate_staged = validate_staged
   )
 }

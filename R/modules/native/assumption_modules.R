@@ -47,7 +47,7 @@ wlv_native_assumption_table_ref <- function(key, alias) {
 }
 
 wlv_assumption_china_wiodr13_spec <- function() {
-  wlv_module_spec(
+  wlv_native_module_spec(
   id = "assumption.china.wiodr13",
   scope = "run",
   checkpoint = "after_assumptions",
@@ -99,7 +99,7 @@ wlv_assumption_china_wiodr13_spec <- function() {
 }
 
 wlv_assumption_china_reduction_spec <- function() {
-  wlv_module_spec(
+  wlv_native_module_spec(
   id = "assumption.china.reduction_problem",
   scope = "run",
   checkpoint = "after_assumptions",
@@ -161,7 +161,7 @@ wlv_assumption_china_reduction_spec <- function() {
 }
 
 wlv_assumption_china_wiodr16_spec <- function() {
-  wlv_module_spec(
+  wlv_native_module_spec(
   id = "assumption.china.wiodr16",
   scope = "run",
   checkpoint = "after_assumptions",
@@ -237,7 +237,7 @@ wlv_assumption_china_wiodr16_spec <- function() {
 }
 
 wlv_assumption_row_none_spec <- function() {
-  wlv_module_spec(
+  wlv_native_module_spec(
   id = "assumption.row.none",
   scope = "run",
   checkpoint = "after_assumptions",
@@ -520,7 +520,7 @@ wlv_native_row_standard_provides <- function(args) {
 }
 
 wlv_assumption_row_standard_spec <- function() {
-  wlv_module_spec(
+  wlv_native_module_spec(
   id = "assumption.row.standard",
   scope = "run",
   checkpoint = "after_assumptions",
@@ -680,7 +680,7 @@ wlv_native_row_v09_provides <- function(args) {
 }
 
 wlv_assumption_row_v09_spec <- function() {
-  wlv_module_spec(
+  wlv_native_module_spec(
   id = "assumption.row.v09",
   scope = "run",
   checkpoint = "after_assumptions",
@@ -738,7 +738,7 @@ wlv_assumption_row_v09_spec <- function() {
 }
 
 wlv_assumption_row_reduction_spec <- function() {
-  wlv_module_spec(
+  wlv_native_module_spec(
   id = "assumption.row.reduction_problem",
   scope = "run",
   checkpoint = "after_assumptions",

@@ -867,6 +867,14 @@ wlv_run_manifest_result <- function(
       call. = FALSE
     )
   }
+  if (is.null(run_data$runtime_compatibility)) {
+    stop("Validated run data lack runtime compatibility provenance.",
+      call. = FALSE
+    )
+  }
+  runtime_compatibility <- wlv_runtime_compatibility_manifest(
+    run_data$runtime_compatibility
+  )
   anomaly_path <- file.path(staging, "_anomalies.csv")
   anomaly_count <- if (file.exists(anomaly_path)) {
     nrow(utils::read.csv2(anomaly_path, stringsAsFactors = FALSE))
@@ -892,6 +900,7 @@ wlv_run_manifest_result <- function(
       },
       packages = wlv_runtime_package_inventory(),
       inputs = input_inventory,
+      runtime_compatibility = runtime_compatibility,
       source = list(
         summary = source_provenance,
         manifest = source_manifest,
