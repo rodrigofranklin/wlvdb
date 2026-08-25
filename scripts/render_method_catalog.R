@@ -392,6 +392,9 @@ project_root <- normalizePath(
   mustWork = TRUE
 )
 
+Sys.setenv(RENV_PROJECT = project_root)
+source(file.path(project_root, "renv", "activate.R"), local = TRUE)
+
 bootstrap_environment <- new.env(parent = baseenv())
 sys.source(
   file.path(project_root, "R", "bootstrap.R"),
