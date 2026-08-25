@@ -38,12 +38,13 @@ $sourceDirectorySha256 =
 $expectedHarnessFileCount = 39L
 $expectedHarnessTotalBytes = 588671L
 $expectedHarnessInventorySha256 =
-  'dccd6a6ad16a8f050b8dae7bc76fdb84a26cac52bb0f2d16521752df8ed7dd9d'
+  '0d5b7cfd4a9085afd9b9d196d4ac487853b41948981e3436e9d87811ef473ced'
 $methods = @(
   'wiodr13', 'wiodr16', 'alternative_1', 'alternative_2', 'norow_w13',
   'ochoa_1', 'ochoa_2', 'petrovic', 'wiodr13v09', 'wiodr16v09',
   'zerodep_1', 'zerodep_2'
 )
+$localeEnvironmentNames = @('LANG', 'LC_ALL', 'LC_CTYPE')
 $utf8 = [Text.UTF8Encoding]::new($false, $true)
 
 function Get-Issue13V5Sha256([string]$Path) {
@@ -202,7 +203,7 @@ if ($LASTEXITCODE -ne 0 -or $expectedRuntimeTree -cnotmatch '^[0-9a-f]{40}$') {
 }
 if ($Purpose -ceq 'compatibility-oracle-executability-preflight') {
   if ($baselineCommit -cne
-      '0ea27ab3134a81899d8c592314d7e3adfe6b10e6') {
+      'e2f4d6dae9a6d35c966b305fabac52e489faa3e7') {
     throw 'The compatibility smoke must use the sealed V5 oracle commit.'
   }
   $parentCommit = (& git -C $repository rev-parse ($baselineCommit + '^')).Trim()
@@ -210,7 +211,7 @@ if ($Purpose -ceq 'compatibility-oracle-executability-preflight') {
     ($baselineCommit + '^{tree}')).Trim()
   if ($LASTEXITCODE -ne 0 -or $parentCommit -cne $baselineBaseCommit -or
       $runtimeTree -cne $expectedRuntimeTree -or
-      $runtimeTree -cne '5a2df18c6ca29e79aac7cdfb88a370863ae44ecd') {
+      $runtimeTree -cne '7da19c4f2913e857040ba228280f404b0e54eaab') {
     throw 'The compatibility oracle must be a direct child of cc2.'
   }
 }
@@ -244,7 +245,18 @@ $null = New-Item -ItemType Directory -Path $attemptRoot
 $started = [DateTime]::UtcNow
 $records = [Collections.Generic.List[object]]::new()
 $previousLibrary = [Environment]::GetEnvironmentVariable('R_LIBS_USER', 'Process')
+$previousLocaleEnvironment = [ordered]@{}
+foreach ($name in $localeEnvironmentNames) {
+  $previousLocaleEnvironment[$name] =
+    [Environment]::GetEnvironmentVariable($name, 'Process')
+}
 try {
+  foreach ($name in $localeEnvironmentNames) {
+    Set-Item -LiteralPath ('Env:' + $name) -Value $null
+    if ($null -ne [Environment]::GetEnvironmentVariable($name, 'Process')) {
+      throw "Cannot sanitize inherited locale variable for smoke: $name"
+    }
+  }
   [Environment]::SetEnvironmentVariable('R_LIBS_USER', $library, 'Process')
   foreach ($method in $methods) {
     $methodStarted = [DateTime]::UtcNow
@@ -426,6 +438,15 @@ try {
 } finally {
   [Environment]::SetEnvironmentVariable(
     'R_LIBS_USER', $previousLibrary, 'Process')
+  foreach ($name in $localeEnvironmentNames) {
+    Set-Item -LiteralPath ('Env:' + $name) `
+      -Value $previousLocaleEnvironment[$name]
+    if (-not [object]::Equals(
+        [Environment]::GetEnvironmentVariable($name, 'Process'),
+        $previousLocaleEnvironment[$name])) {
+      throw "Cannot restore inherited locale variable after smoke: $name"
+    }
+  }
   $null = Assert-Issue13V5SmokeHarness $runtimeRoot `
     $harnessManifestPath $repository $harnessManifestSha256
 }
@@ -448,6 +469,7 @@ $summary = [ordered]@{
   source_inventory_sha256 = $sourceInventorySha256
   harness_manifest_path = $harnessManifestPath
   harness_manifest_sha256 = $harnessManifestSha256
+  environment_removed = [object[]]$localeEnvironmentNames
   method_count = 12
   passed_count = $passedCount
   failed_count = 12 - $passedCount

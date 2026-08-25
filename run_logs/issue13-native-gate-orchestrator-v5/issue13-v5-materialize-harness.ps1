@@ -19,7 +19,7 @@ $expectedSourceInventory =
 $expectedOutputFileCount = 39L
 $expectedOutputTotalBytes = 588671L
 $expectedOutputInventory =
-  'dccd6a6ad16a8f050b8dae7bc76fdb84a26cac52bb0f2d16521752df8ed7dd9d'
+  '0d5b7cfd4a9085afd9b9d196d4ac487853b41948981e3436e9d87811ef473ced'
 $controllerFiles = @(
   'README.md',
   'issue13-v5-baseline-smoke.ps1',
@@ -315,11 +315,11 @@ $manifest = [ordered]@{
   materialized_at_utc = [DateTime]::UtcNow.ToString('o')
   baseline_commit = $baselineCommit
   baseline_policy = 'authenticated-direct-child-compatibility-oracle'
-  baseline_runtime_commit = '0ea27ab3134a81899d8c592314d7e3adfe6b10e6'
-  baseline_runtime_tree = '5a2df18c6ca29e79aac7cdfb88a370863ae44ecd'
+  baseline_runtime_commit = 'e2f4d6dae9a6d35c966b305fabac52e489faa3e7'
+  baseline_runtime_tree = '7da19c4f2913e857040ba228280f404b0e54eaab'
   baseline_overlay_sha256 =
-    '74cab32443f84b1e396ff1a7c9ace7741f1a40d9ede16c89f4d0c24556eadf10'
-  baseline_overlay_patch_id = '01431d56e809e9904451d2a11da28bc72f654b8d'
+    '9f9b878f8e557973127e6260a0f224c868a0c4e8dc2db52dd6aa3f7131f28cd9'
+  baseline_overlay_patch_id = '253ca5f1397132f94e3432264084a37395c60ec3'
   strict_negative_evidence_required = $true
   final_evidence_eligible = $true
   reuses_candidate_evidence = $false

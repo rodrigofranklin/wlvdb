@@ -23,10 +23,10 @@ if (length(runtime_commit) != 1L ||
     !grepl("^[0-9a-f]{40}$", runtime_commit)) {
   stop("The compatibility runtime commit is invalid.", call. = FALSE)
 }
-expected_runtime <- "0ea27ab3134a81899d8c592314d7e3adfe6b10e6"
+expected_runtime <- "e2f4d6dae9a6d35c966b305fabac52e489faa3e7"
 expected_patch_sha256 <-
-  "74cab32443f84b1e396ff1a7c9ace7741f1a40d9ede16c89f4d0c24556eadf10"
-expected_patch_id <- "01431d56e809e9904451d2a11da28bc72f654b8d"
+  "9f9b878f8e557973127e6260a0f224c868a0c4e8dc2db52dd6aa3f7131f28cd9"
+expected_patch_id <- "253ca5f1397132f94e3432264084a37395c60ec3"
 
 sys.source(file.path(harness_root, "issue13-lib.R"), envir = environment())
 sys.source(file.path(harness_root, "issue13-matrix.R"), envir = environment())

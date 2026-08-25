@@ -88,7 +88,10 @@ $smokeText = [IO.File]::ReadAllText(
   [Text.UTF8Encoding]::new($false, $true))
 foreach ($required in @(
     "'R.exe'", "'Rscript.exe'", "'Rterm.exe'", "'Rgui.exe'",
-    "'Rcmd.exe'", "'Rfe.exe'"
+    "'Rcmd.exe'", "'Rfe.exe'",
+    '$localeEnvironmentNames = @(''LANG'', ''LC_ALL'', ''LC_CTYPE'')',
+    'Set-Item -LiteralPath (''Env:'' + $name) -Value $null',
+    'environment_removed = [object[]]$localeEnvironmentNames'
   )) {
   if (-not $smokeText.Contains($required)) {
     throw "Baseline smoke lacks required R-process guard: $required"
@@ -101,7 +104,11 @@ $libraryText = [IO.File]::ReadAllText(
 foreach ($required in @(
     "'R.exe'", "'Rscript.exe'", "'Rterm.exe'", "'Rgui.exe'",
     "'Rcmd.exe'", "'Rfe.exe'", 'Assert-Issue13V5ReportBinding',
-    'roots must not be nested', '$process.Kill($true)'
+    'roots must not be nested', '$process.Kill($true)',
+    '$environmentRemoved = @(''LANG'', ''LC_ALL'', ''LC_CTYPE'')',
+    '$info.Environment.Remove($name)',
+    'environment_removed = [object[]]$environmentRemoved',
+    'V5 commands cannot override sanitized locale variable'
   )) {
   if (-not $libraryText.Contains($required)) {
     throw "Coordinator library lacks required safety guard: $required"
@@ -141,7 +148,7 @@ $inventory = $harnessBinding.inventory
 $expectedHarnessFileCount = 39L
 $expectedHarnessTotalBytes = 588671L
 $expectedHarnessInventorySha256 =
-  'dccd6a6ad16a8f050b8dae7bc76fdb84a26cac52bb0f2d16521752df8ed7dd9d'
+  '0d5b7cfd4a9085afd9b9d196d4ac487853b41948981e3436e9d87811ef473ced'
 if ($inventory.file_count -ne $expectedHarnessFileCount -or
     $inventory.total_bytes -ne $expectedHarnessTotalBytes -or
     $inventory.inventory_sha256 -cne $expectedHarnessInventorySha256 -or

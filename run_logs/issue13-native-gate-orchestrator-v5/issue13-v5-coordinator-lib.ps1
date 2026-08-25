@@ -6,17 +6,17 @@ $script:Issue13V5BaselineCommit =
   'cc2c86189a06676bcb9f0e05e08033d710a92509'
 $script:Issue13V5BaselineProfile = 'compatibility-oracle-cc2'
 $script:Issue13V5BaselineRuntimeCommit =
-  '0ea27ab3134a81899d8c592314d7e3adfe6b10e6'
+  'e2f4d6dae9a6d35c966b305fabac52e489faa3e7'
 $script:Issue13V5BaselineRuntimeTree =
-  '5a2df18c6ca29e79aac7cdfb88a370863ae44ecd'
+  '7da19c4f2913e857040ba228280f404b0e54eaab'
 $script:Issue13V5BaselineOverlaySha256 =
-  '74cab32443f84b1e396ff1a7c9ace7741f1a40d9ede16c89f4d0c24556eadf10'
+  '9f9b878f8e557973127e6260a0f224c868a0c4e8dc2db52dd6aa3f7131f28cd9'
 $script:Issue13V5BaselineOverlayPatchId =
-  '01431d56e809e9904451d2a11da28bc72f654b8d'
+  '253ca5f1397132f94e3432264084a37395c60ec3'
 $script:Issue13V5HarnessFileCount = 39L
 $script:Issue13V5HarnessTotalBytes = 588671L
 $script:Issue13V5HarnessInventorySha256 =
-  'dccd6a6ad16a8f050b8dae7bc76fdb84a26cac52bb0f2d16521752df8ed7dd9d'
+  '0d5b7cfd4a9085afd9b9d196d4ac487853b41948981e3436e9d87811ef473ced'
 $script:Issue13V5SourceFileCount = 84L
 $script:Issue13V5SourceDirectoryCount = 5L
 $script:Issue13V5SourceTotalBytes = 2946498269L
@@ -490,6 +490,8 @@ function Assert-Issue13V5BaselineSmokeEvidence(
   }
   $baseProperty = $summary.PSObject.Properties['baseline_base_commit']
   $runtimeProperty = $summary.PSObject.Properties['baseline_runtime_commit']
+  $removedEnvironmentProperty =
+    $summary.PSObject.Properties['environment_removed']
   $isCompatibility = $ExpectedPurpose -ceq
     'compatibility-oracle-executability-preflight'
   if ([string]$summary.schema -cne 'wlv-issue13-v5-baseline-smoke/1' -or
@@ -511,10 +513,14 @@ function Assert-Issue13V5BaselineSmokeEvidence(
     throw "Baseline smoke header is not authenticated: $summaryPath"
   }
   if ($isCompatibility) {
+    $expectedRemovedEnvironment = @('LANG', 'LC_ALL', 'LC_CTYPE')
     if ($null -eq $baseProperty -or $null -eq $runtimeProperty -or
+        $null -eq $removedEnvironmentProperty -or
         [string]$baseProperty.Value -cne $script:Issue13V5BaselineCommit -or
-        [string]$runtimeProperty.Value -cne $ExpectedRuntimeCommit) {
-      throw 'Compatibility smoke omits its base/runtime commit split.'
+        [string]$runtimeProperty.Value -cne $ExpectedRuntimeCommit -or
+        [string]::Join("`n", @($removedEnvironmentProperty.Value)) -cne
+          [string]::Join("`n", $expectedRemovedEnvironment)) {
+      throw 'Compatibility smoke omits authenticated base/runtime/locale bindings.'
     }
   } else {
     if (($null -ne $baseProperty -and
@@ -1339,11 +1345,23 @@ function Invoke-Issue13V5External(
   $info.CreateNoWindow = $true
   $info.RedirectStandardOutput = $true
   $info.RedirectStandardError = $true
+  $environmentRemoved = @('LANG', 'LC_ALL', 'LC_CTYPE')
+  foreach ($name in $environmentRemoved) {
+    if ($Environment.ContainsKey($name)) {
+      throw "V5 commands cannot override sanitized locale variable: $name"
+    }
+    $null = $info.Environment.Remove($name)
+  }
   if (-not [string]::IsNullOrWhiteSpace($WorkingDirectory)) {
     $info.WorkingDirectory = $WorkingDirectory
   }
   foreach ($name in @($Environment.Keys)) {
     $info.Environment[[string]$name] = [string]$Environment[$name]
+  }
+  foreach ($name in $environmentRemoved) {
+    if ($info.Environment.ContainsKey($name)) {
+      throw "V5 command retained a sanitized locale variable: $name"
+    }
   }
   foreach ($argument in $Arguments) {
     $info.ArgumentList.Add([string]$argument)
@@ -1372,6 +1390,7 @@ function Invoke-Issue13V5External(
     executable = ConvertTo-Issue13V5Path $Executable
     arguments = [object[]]$Arguments
     environment = [pscustomobject]$Environment
+    environment_removed = [object[]]$environmentRemoved
     working_directory = $WorkingDirectory
     started_at_utc = $started.ToString('o')
     finished_at_utc = [DateTime]::UtcNow.ToString('o')

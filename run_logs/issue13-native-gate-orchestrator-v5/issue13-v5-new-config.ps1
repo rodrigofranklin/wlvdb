@@ -27,11 +27,11 @@ $ErrorActionPreference = 'Stop'
 $baselineCommit = 'cc2c86189a06676bcb9f0e05e08033d710a92509'
 $baselineProfile = 'compatibility-oracle-cc2'
 $expectedBaselineRuntimeCommit =
-  '0ea27ab3134a81899d8c592314d7e3adfe6b10e6'
-$expectedBaselineTree = '5a2df18c6ca29e79aac7cdfb88a370863ae44ecd'
+  'e2f4d6dae9a6d35c966b305fabac52e489faa3e7'
+$expectedBaselineTree = '7da19c4f2913e857040ba228280f404b0e54eaab'
 $expectedOverlaySha256 =
-  '74cab32443f84b1e396ff1a7c9ace7741f1a40d9ede16c89f4d0c24556eadf10'
-$expectedOverlayPatchId = '01431d56e809e9904451d2a11da28bc72f654b8d'
+  '9f9b878f8e557973127e6260a0f224c868a0c4e8dc2db52dd6aa3f7131f28cd9'
+$expectedOverlayPatchId = '253ca5f1397132f94e3432264084a37395c60ec3'
 $strictSmokeSha256 =
   '973079b3cba2df2627b3dcc4dcde0899b261eff9ad1930eb31b2407d23e3dd6d'
 $strictSmokeHarnessSha256 =
@@ -39,7 +39,7 @@ $strictSmokeHarnessSha256 =
 $expectedHarnessFileCount = 39L
 $expectedHarnessTotalBytes = 588671L
 $expectedHarnessInventorySha256 =
-  'dccd6a6ad16a8f050b8dae7bc76fdb84a26cac52bb0f2d16521752df8ed7dd9d'
+  '0d5b7cfd4a9085afd9b9d196d4ac487853b41948981e3436e9d87811ef473ced'
 $methods = @(
   'wiodr13', 'wiodr16', 'alternative_1', 'alternative_2', 'norow_w13',
   'ochoa_1', 'ochoa_2', 'petrovic', 'wiodr13v09', 'wiodr16v09',

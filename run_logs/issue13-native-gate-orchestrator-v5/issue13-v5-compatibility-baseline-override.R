@@ -9,11 +9,11 @@ wlv13_v5_baseline_base_commit <-
   "cc2c86189a06676bcb9f0e05e08033d710a92509"
 wlv13_v5_compatibility_profile <- "compatibility-oracle-cc2"
 wlv13_v5_compatibility_runtime <-
-  "0ea27ab3134a81899d8c592314d7e3adfe6b10e6"
+  "e2f4d6dae9a6d35c966b305fabac52e489faa3e7"
 wlv13_v5_compatibility_patch_sha256 <-
-  "74cab32443f84b1e396ff1a7c9ace7741f1a40d9ede16c89f4d0c24556eadf10"
+  "9f9b878f8e557973127e6260a0f224c868a0c4e8dc2db52dd6aa3f7131f28cd9"
 wlv13_v5_compatibility_patch_id <-
-  "01431d56e809e9904451d2a11da28bc72f654b8d"
+  "253ca5f1397132f94e3432264084a37395c60ec3"
 
 wlv13_validate_baseline_runtime_matrix <- function(index, candidate_commit) {
   candidate_commit <- wlv13_scalar_text(
