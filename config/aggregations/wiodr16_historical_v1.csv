@@ -1,101 +1,101 @@
 indicator;level;strategy;module;numerator;denominator;weight;zero_denominator;notes
-emp.s.un;sector_to_country;sum;;;;;;
-emp.s.un;country_to_world;sum;;;;;;
-empe.s.un;sector_to_country;sum;;;;;;
-empe.s.un;country_to_world;sum;;;;;;
-hours_worked.emp.s.hr;sector_to_country;sum;;;;;;
-hours_worked.emp.s.hr;country_to_world;sum;;;;;;
-hours_worked.empe.s.hr;sector_to_country;sum;;;;;;
-hours_worked.empe.s.hr;country_to_world;sum;;;;;;
-exchange.r.us;sector_to_country;mean;;;;;;
-exchange.r.us;country_to_world;mean;;;;;;
-compensation.empe.s.us;sector_to_country;sum;;;;;;
-compensation.empe.s.us;country_to_world;sum;;;;;;
-compensation.emp.s.us;sector_to_country;sum;;;;;;
-compensation.emp.s.us;country_to_world;sum;;;;;;
-capital_stock.s.us;sector_to_country;sum;;;;;;
-capital_stock.s.us;country_to_world;sum;;;;;;
-gross_output.s.us;sector_to_country;sum;;;;;;
-gross_output.s.us;country_to_world;sum;;;;;;
-gdp.s.us;sector_to_country;sum;;;;;;
-gdp.s.us;country_to_world;sum;;;;;;
-compensation.emp.s.cu;sector_to_country;sum;;;;;;
-compensation.emp.s.cu;country_to_world;sum;;;;;;
-compensation.empe.s.cu;sector_to_country;sum;;;;;;
-compensation.empe.s.cu;country_to_world;sum;;;;;;
-profit.s.us;sector_to_country;sum;;;;;;
-profit.s.us;country_to_world;sum;;;;;;
-capital_stock.s.cu;sector_to_country;sum;;;;;;
-capital_stock.s.cu;country_to_world;sum;;;;;;
-basket_price.r.pc;sector_to_country;mean;;;;;;
-basket_price.r.pc;country_to_world;mean;;;;;;
-exchange.r.id;sector_to_country;mean;;;;;;
-exchange.r.id;country_to_world;mean;;;;;;
-basket_value.r.pc;sector_to_country;mean;;;;;;
-basket_value.r.pc;country_to_world;mean;;;;;;
-go_price.r.id;sector_to_country;mean;;;;;;
-go_price.r.id;country_to_world;mean;;;;;;
-abstract_labour.empe.s.mv;sector_to_country;sum;;;;;;
-abstract_labour.empe.s.mv;country_to_world;sum;;;;;;
-abstract_labour.emp.s.mv;sector_to_country;sum;;;;;;
-abstract_labour.emp.s.mv;country_to_world;sum;;;;;;
-complex_labour_multiplier.empe.r.un;sector_to_country;mean;;;;;;
-complex_labour_multiplier.empe.r.un;country_to_world;mean;;;;;;
-complex_labour_multiplier.emp.r.un;sector_to_country;mean;;;;;;
-complex_labour_multiplier.emp.r.un;country_to_world;mean;;;;;;
-gdp.s.mv;sector_to_country;sum;;;;;;
-gdp.s.mv;country_to_world;sum;;;;;;
-gross_output.s.mv;sector_to_country;sum;;;;;;
-gross_output.s.mv;country_to_world;sum;;;;;;
-labour_force_value.s.mv;sector_to_country;sum;;;;;;
-labour_force_value.s.mv;country_to_world;sum;;;;;;
-value.m.mv;sector_to_country;sum;;;;;;
-value.m.mv;country_to_world;sum;;;;;;
-gdp.s.du;sector_to_country;sum;;;;;;
-gdp.s.du;country_to_world;sum;;;;;;
-gross_output.s.du;sector_to_country;sum;;;;;;
-gross_output.s.du;country_to_world;sum;;;;;;
-surplus_value.empe.r.pc;sector_to_country;formula;aggregation.surplus_value.empe.r.pc;;;;;
-surplus_value.empe.r.pc;country_to_world;formula;aggregation.surplus_value.empe.r.pc;;;;;
-capital_depreciation.s.us;sector_to_country;sum;;;;;;
-capital_depreciation.s.us;country_to_world;sum;;;;;;
-labour_force_value.m.mv;sector_to_country;formula;aggregation.labour_force_value.m.mv;;;;;
-labour_force_value.m.mv;country_to_world;formula;aggregation.labour_force_value.m.mv;;;;;
-trade_transfers.s.mv;sector_to_country;sum;;;;;;
-trade_transfers.s.mv;country_to_world;sum;;;;;;
-trade_transfers.p.s.mv;sector_to_country;sum;;;;;;
-trade_transfers.p.s.mv;country_to_world;sum;;;;;;
-trade_transfers.u.s.mv;sector_to_country;sum;;;;;;
-trade_transfers.u.s.mv;country_to_world;sum;;;;;;
-abstract_labour.empe.m.mv;sector_to_country;formula;aggregation.abstract_labour.empe.m.mv;;;;;
-abstract_labour.empe.m.mv;country_to_world;formula;aggregation.abstract_labour.empe.m.mv;;;;;
-abstract_labour.emp.m.mv;sector_to_country;formula;aggregation.abstract_labour.emp.m.mv;;;;;
-abstract_labour.emp.m.mv;country_to_world;formula;aggregation.abstract_labour.emp.m.mv;;;;;
-exports.s.us;sector_to_country;sum;;;;;;
-exports.s.us;country_to_world;sum;;;;;;
-exports.s.mv;sector_to_country;sum;;;;;;
-exports.s.mv;country_to_world;sum;;;;;;
-imports.s.us;sector_to_country;sum;;;;;;
-imports.s.us;country_to_world;sum;;;;;;
-imports.s.mv;sector_to_country;sum;;;;;;
-imports.s.mv;country_to_world;sum;;;;;;
-trade_balance.s.us;sector_to_country;sum;;;;;;
-trade_balance.s.us;country_to_world;sum;;;;;;
-trade_balance.s.mv;sector_to_country;sum;;;;;;
-trade_balance.s.mv;country_to_world;sum;;;;;;
-gdp.p.s.us;sector_to_country;sum;;;;;;
-gdp.p.s.us;country_to_world;sum;;;;;;
-appropriated_profit.r.pc;sector_to_country;formula;aggregation.appropriated_profit.r.pc;;;;;
-appropriated_profit.r.pc;country_to_world;formula;aggregation.appropriated_profit.r.pc;;;;;
-trade_transfers.p.m.pc;sector_to_country;formula;aggregation.trade_transfers.p.m.pc;;;;;
-trade_transfers.p.m.pc;country_to_world;formula;aggregation.trade_transfers.p.m.pc;;;;;
-labour_force_value.emp.s.mv;sector_to_country;sum;;;;;;
-labour_force_value.emp.s.mv;country_to_world;sum;;;;;;
-labour_force_value.emp.m.mv;sector_to_country;formula;aggregation.labour_force_value.emp.m.mv;;;;;
-labour_force_value.emp.m.mv;country_to_world;formula;aggregation.labour_force_value.emp.m.mv;;;;;
-surplus_value.emp.r.pc;sector_to_country;formula;aggregation.surplus_value.emp.r.pc;;;;;
-surplus_value.emp.r.pc;country_to_world;formula;aggregation.surplus_value.emp.r.pc;;;;;
-surplus_value.emp_p.r.pc;sector_to_country;formula;aggregation.surplus_value.emp_p.r.pc;;;;;
-surplus_value.emp_p.r.pc;country_to_world;formula;aggregation.surplus_value.emp_p.r.pc;;;;;
-surplus_value.empe_p.r.pc;sector_to_country;formula;aggregation.surplus_value.empe_p.r.pc;;;;;
-surplus_value.empe_p.r.pc;country_to_world;formula;aggregation.surplus_value.empe_p.r.pc;;;;;
+emp.s.un;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+emp.s.un;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+empe.s.un;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+empe.s.un;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+hours_worked.emp.s.hr;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+hours_worked.emp.s.hr;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+hours_worked.empe.s.hr;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+hours_worked.empe.s.hr;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+exchange.r.us;sector_to_country;mean;;;;;;Experimental legacy aggregation adapter.
+exchange.r.us;country_to_world;mean;;;;;;Experimental legacy aggregation adapter.
+compensation.empe.s.us;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+compensation.empe.s.us;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+compensation.emp.s.us;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+compensation.emp.s.us;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+capital_stock.s.us;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+capital_stock.s.us;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+gross_output.s.us;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+gross_output.s.us;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+gdp.s.us;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+gdp.s.us;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+compensation.emp.s.cu;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+compensation.emp.s.cu;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+compensation.empe.s.cu;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+compensation.empe.s.cu;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+profit.s.us;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+profit.s.us;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+capital_stock.s.cu;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+capital_stock.s.cu;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+basket_price.r.pc;sector_to_country;mean;;;;;;Experimental legacy aggregation adapter.
+basket_price.r.pc;country_to_world;mean;;;;;;Experimental legacy aggregation adapter.
+exchange.r.id;sector_to_country;mean;;;;;;Experimental legacy aggregation adapter.
+exchange.r.id;country_to_world;mean;;;;;;Experimental legacy aggregation adapter.
+basket_value.r.pc;sector_to_country;mean;;;;;;Experimental legacy aggregation adapter.
+basket_value.r.pc;country_to_world;mean;;;;;;Experimental legacy aggregation adapter.
+go_price.r.id;sector_to_country;mean;;;;;;Experimental legacy aggregation adapter.
+go_price.r.id;country_to_world;mean;;;;;;Experimental legacy aggregation adapter.
+abstract_labour.empe.s.mv;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+abstract_labour.empe.s.mv;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+abstract_labour.emp.s.mv;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+abstract_labour.emp.s.mv;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+complex_labour_multiplier.empe.r.un;sector_to_country;mean;;;;;;Experimental legacy aggregation adapter.
+complex_labour_multiplier.empe.r.un;country_to_world;mean;;;;;;Experimental legacy aggregation adapter.
+complex_labour_multiplier.emp.r.un;sector_to_country;mean;;;;;;Experimental legacy aggregation adapter.
+complex_labour_multiplier.emp.r.un;country_to_world;mean;;;;;;Experimental legacy aggregation adapter.
+gdp.s.mv;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+gdp.s.mv;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+gross_output.s.mv;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+gross_output.s.mv;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+labour_force_value.s.mv;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+labour_force_value.s.mv;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+value.m.mv;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+value.m.mv;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+gdp.s.du;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+gdp.s.du;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+gross_output.s.du;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+gross_output.s.du;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+surplus_value.empe.r.pc;sector_to_country;formula;aggregation.surplus_value.empe.r.pc;;;;;Experimental legacy aggregation adapter.
+surplus_value.empe.r.pc;country_to_world;formula;aggregation.surplus_value.empe.r.pc;;;;;Experimental legacy aggregation adapter.
+capital_depreciation.s.us;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+capital_depreciation.s.us;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+labour_force_value.m.mv;sector_to_country;formula;aggregation.labour_force_value.m.mv;;;;;Experimental legacy aggregation adapter.
+labour_force_value.m.mv;country_to_world;formula;aggregation.labour_force_value.m.mv;;;;;Experimental legacy aggregation adapter.
+trade_transfers.s.mv;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+trade_transfers.s.mv;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+trade_transfers.p.s.mv;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+trade_transfers.p.s.mv;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+trade_transfers.u.s.mv;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+trade_transfers.u.s.mv;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+abstract_labour.empe.m.mv;sector_to_country;formula;aggregation.abstract_labour.empe.m.mv;;;;;Experimental legacy aggregation adapter.
+abstract_labour.empe.m.mv;country_to_world;formula;aggregation.abstract_labour.empe.m.mv;;;;;Experimental legacy aggregation adapter.
+abstract_labour.emp.m.mv;sector_to_country;formula;aggregation.abstract_labour.emp.m.mv;;;;;Experimental legacy aggregation adapter.
+abstract_labour.emp.m.mv;country_to_world;formula;aggregation.abstract_labour.emp.m.mv;;;;;Experimental legacy aggregation adapter.
+exports.s.us;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+exports.s.us;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+exports.s.mv;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+exports.s.mv;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+imports.s.us;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+imports.s.us;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+imports.s.mv;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+imports.s.mv;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+trade_balance.s.us;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+trade_balance.s.us;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+trade_balance.s.mv;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+trade_balance.s.mv;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+gdp.p.s.us;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+gdp.p.s.us;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+appropriated_profit.r.pc;sector_to_country;formula;aggregation.appropriated_profit.r.pc;;;;;Experimental legacy aggregation adapter.
+appropriated_profit.r.pc;country_to_world;formula;aggregation.appropriated_profit.r.pc;;;;;Experimental legacy aggregation adapter.
+trade_transfers.p.m.pc;sector_to_country;formula;aggregation.trade_transfers.p.m.pc;;;;;Experimental legacy aggregation adapter.
+trade_transfers.p.m.pc;country_to_world;formula;aggregation.trade_transfers.p.m.pc;;;;;Experimental legacy aggregation adapter.
+labour_force_value.emp.s.mv;sector_to_country;sum;;;;;;Experimental legacy aggregation adapter.
+labour_force_value.emp.s.mv;country_to_world;sum;;;;;;Experimental legacy aggregation adapter.
+labour_force_value.emp.m.mv;sector_to_country;formula;aggregation.labour_force_value.emp.m.mv;;;;;Experimental legacy aggregation adapter.
+labour_force_value.emp.m.mv;country_to_world;formula;aggregation.labour_force_value.emp.m.mv;;;;;Experimental legacy aggregation adapter.
+surplus_value.emp.r.pc;sector_to_country;formula;aggregation.surplus_value.emp.r.pc;;;;;Experimental legacy aggregation adapter.
+surplus_value.emp.r.pc;country_to_world;formula;aggregation.surplus_value.emp.r.pc;;;;;Experimental legacy aggregation adapter.
+surplus_value.emp_p.r.pc;sector_to_country;formula;aggregation.surplus_value.emp_p.r.pc;;;;;Experimental legacy aggregation adapter.
+surplus_value.emp_p.r.pc;country_to_world;formula;aggregation.surplus_value.emp_p.r.pc;;;;;Experimental legacy aggregation adapter.
+surplus_value.empe_p.r.pc;sector_to_country;formula;aggregation.surplus_value.empe_p.r.pc;;;;;Experimental legacy aggregation adapter.
+surplus_value.empe_p.r.pc;country_to_world;formula;aggregation.surplus_value.empe_p.r.pc;;;;;Experimental legacy aggregation adapter.

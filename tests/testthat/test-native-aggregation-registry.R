@@ -226,6 +226,11 @@ test_that("experimental registries exactly reproduce explicit historical profile
       method
     )
     expect_identical(registry$rows, expected, info = method)
+    expect_identical(
+      unique(registry$rows$notes),
+      "Experimental legacy aggregation adapter.",
+      info = method
+    )
     expect_false("legacy" %in% names(registry), info = method)
   }
 })
