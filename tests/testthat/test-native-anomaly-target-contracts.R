@@ -131,11 +131,14 @@ test_that("explicit anomaly bindings are typed and override one exact default", 
   )
 })
 
-test_that("only productive-surplus modules declare aggregate ratio bindings", {
+test_that("country surplus ratios declare their aggregate anomaly bindings", {
   runtime <- wlv_test_load_runtime()
   cases <- list(
     runtime$wlv_indicator_surplus_value_emp_p_r_pc_spec(),
-    runtime$wlv_indicator_surplus_value_empe_p_r_pc_spec()
+    runtime$wlv_indicator_surplus_value_empe_p_r_pc_spec(),
+    runtime$wlv_indicator_surplus_value_empe_hs_r_pc_spec(),
+    runtime$wlv_indicator_surplus_value_empe_ms_r_pc_spec(),
+    runtime$wlv_indicator_surplus_value_empe_ls_r_pc_spec()
   )
   for (spec in cases) {
     output <- sub("^indicator[.]", "", spec$id)
