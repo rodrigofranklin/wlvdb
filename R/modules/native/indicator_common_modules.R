@@ -795,27 +795,42 @@ wlv_indicator_trade_balance_s_mv_spec <- function() {
 }
 
 wlv_native_direct_price_spec <- function(id, base_indicator, metadata) {
+  base_is_gross_output <- identical(base_indicator, "gross_output.s.mv")
+  requirements <- c(
+    wlv_native_indicator_ref(base_indicator, "base"),
+    wlv_native_indicator_ref("gross_output.s.us", "gross_output_us")
+  )
+  if (!base_is_gross_output) {
+    requirements <- c(
+      requirements,
+      wlv_native_indicator_ref("gross_output.s.mv", "gross_output_mv")
+    )
+  }
   wlv_native_stage5_sum_spec(
     id,
-    c(
-      wlv_native_indicator_ref(base_indicator, "base"),
-      wlv_native_indicator_ref("gross_output.s.us", "gross_output_us"),
-      wlv_native_indicator_ref("gross_output.s.mv", "gross_output_mv")
-    ),
-    function(ctx) {
-      numerator <- apply(ctx$input("gross_output_us"), 1L, sum)
-      denominator <- apply(ctx$input("gross_output_mv"), 1L, sum)
-      coefficient <- wlv_safe_divide_runtime(
-        ctx$service("contract_runtime"), numerator, denominator,
-        zero = "error", artifact = "sea_sectors",
-        indicator = "direct_price_coefficient", checkpoint = "after_stage_5",
-        stage = 5L, module = id, axes = c(year = 1L)
-      )
-      ctx$input("base") * rep(
-        coefficient,
-        times = length(ctx$input("lists")$sectors) * length(ctx$input("lists")$countries)
-      )
-    },
+    requirements,
+    local({
+      denominator_alias <- if (base_is_gross_output) {
+        "base"
+      } else {
+        "gross_output_mv"
+      }
+      function(ctx) {
+        numerator <- apply(ctx$input("gross_output_us"), 1L, sum)
+        denominator <- apply(ctx$input(denominator_alias), 1L, sum)
+        coefficient <- wlv_safe_divide_runtime(
+          ctx$service("contract_runtime"), numerator, denominator,
+          zero = "error", artifact = "sea_sectors",
+          indicator = "direct_price_coefficient", checkpoint = "after_stage_5",
+          stage = 5L, module = id, axes = c(year = 1L)
+        )
+        ctx$input("base") * rep(
+          coefficient,
+          times = length(ctx$input("lists")$sectors) *
+            length(ctx$input("lists")$countries)
+        )
+      }
+    }),
     metadata,
     services = "contract_runtime"
   )
