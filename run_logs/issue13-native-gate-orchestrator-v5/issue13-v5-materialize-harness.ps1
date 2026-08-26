@@ -17,9 +17,9 @@ $baselineCommit = 'cc2c86189a06676bcb9f0e05e08033d710a92509'
 $expectedSourceInventory =
   'f42c94666cd10606176e8fe0f3f2afe9975b58c5b0b914343a267f62724d34f1'
 $expectedOutputFileCount = 39L
-$expectedOutputTotalBytes = 592426L
+$expectedOutputTotalBytes = 594386L
 $expectedOutputInventory =
-  'b38a6e60fd7b300b4da5ebbce9bc492cbf7e170e57b3b24c7d1f1e8503ecc90f'
+  '9f50c978ffc5f1f2d69d70ca8e5a7205eca39ec8441843cd5fa43b959eaf03c1'
 $controllerFiles = @(
   'README.md',
   'issue13-v5-baseline-smoke.ps1',

@@ -236,9 +236,9 @@ $harnessBinding = Assert-Issue13V5HarnessBinding $staticConfig
 $manifest = $harnessBinding.manifest
 $inventory = $harnessBinding.inventory
 $expectedHarnessFileCount = 39L
-$expectedHarnessTotalBytes = 592426L
+$expectedHarnessTotalBytes = 594386L
 $expectedHarnessInventorySha256 =
-  'b38a6e60fd7b300b4da5ebbce9bc492cbf7e170e57b3b24c7d1f1e8503ecc90f'
+  '9f50c978ffc5f1f2d69d70ca8e5a7205eca39ec8441843cd5fa43b959eaf03c1'
 if ($inventory.file_count -ne $expectedHarnessFileCount -or
     $inventory.total_bytes -ne $expectedHarnessTotalBytes -or
     $inventory.inventory_sha256 -cne $expectedHarnessInventorySha256 -or
