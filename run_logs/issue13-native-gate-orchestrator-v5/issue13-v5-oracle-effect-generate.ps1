@@ -30,7 +30,21 @@ if ([string]::IsNullOrWhiteSpace($SchemaPath)) {
 . (Join-Path $PSScriptRoot 'issue13-v5-oracle-effect-lib.ps1')
 $null = Test-Issue13OracleEffectNegativeSelfTests
 
-$proofFull = [IO.Path]::GetFullPath($OutputPath)
+$proofProtectedRoots = @(
+  $RepositoryRoot,
+  (Split-Path -Parent ([IO.Path]::GetFullPath($ComparisonHarnessManifest))),
+  $RLibrary,
+  $Rscript,
+  (Split-Path -Parent ([IO.Path]::GetFullPath($StrictSmokeSummary))),
+  (Split-Path -Parent ([IO.Path]::GetFullPath($OracleSmokeSummary))),
+  $OraclePatch,
+  $SpecPath,
+  $SchemaPath,
+  $ComparisonRoot,
+  $ReplayRoot
+)
+$proofFull = Assert-Issue13OracleEffectProofPathIsolation `
+  $OutputPath $proofProtectedRoots
 Assert-Issue13OracleEffect (-not (Test-Path -LiteralPath $proofFull)) `
   "refusing to overwrite proof output: $proofFull"
 Assert-Issue13OracleEffect (Test-Path -LiteralPath `
@@ -121,10 +135,10 @@ try {
 } catch {
   throw "Generated oracle-effect proof fails JSON Schema validation: $($_.Exception.Message)"
 }
-Assert-Issue13OracleEffect ([bool]$schemaPassed) `
+Assert-Issue13OracleEffect (Test-Issue13OracleEffectExactBoolean $schemaPassed $true) `
   'generated oracle-effect proof fails JSON Schema validation.'
-$written = Write-Issue13OracleEffectJsonOnce -Value $proof -Path $OutputPath `
-  -SchemaPath $SchemaPath
+$written = Write-Issue13OracleEffectJsonOnce -Value $proof -Path $proofFull `
+  -SchemaPath $SchemaPath -ProtectedRoots $proofProtectedRoots
 $roundtrip = Read-Issue13OracleEffectJson $written 'written oracle-effect proof'
 $writtenJson = Get-Content -Raw -LiteralPath $written
 try {
@@ -133,7 +147,7 @@ try {
 } catch {
   throw "Written oracle-effect proof fails JSON Schema validation: $($_.Exception.Message)"
 }
-Assert-Issue13OracleEffect ([bool]$writtenSchemaPassed) `
+Assert-Issue13OracleEffect (Test-Issue13OracleEffectExactBoolean $writtenSchemaPassed $true) `
   'written oracle-effect proof fails JSON Schema validation.'
 $null = Test-Issue13OracleEffectProofObject $roundtrip $evidence
 

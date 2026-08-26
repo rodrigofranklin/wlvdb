@@ -23,6 +23,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot "issue13-v5-coordinator-lib.ps1")
 
 $baselineBaseCommit = "cc2c86189a06676bcb9f0e05e08033d710a92509"
 $baselineBaseTree = "0cb1142cdadd74bf95272010f5393ebe2af79f47"
@@ -65,18 +66,16 @@ function Resolve-ExistingFile([string]$Path, [string]$Label) {
 
 function Resolve-PhysicalExistingDirectory([string]$Path, [string]$Label) {
     $resolved = Resolve-ExistingDirectory $Path $Label
-    $cursor = $resolved
-    while (-not [string]::IsNullOrWhiteSpace($cursor)) {
-        $item = Get-Item -LiteralPath $cursor -Force
-        if (($item.Attributes -band
-            [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-            throw "$Label traverses a reparse point: $($item.FullName)"
-        }
-        $parent = [System.IO.Directory]::GetParent($cursor)
-        if ($null -eq $parent) { break }
-        $cursor = $parent.FullName
-    }
+    $null = ConvertTo-Issue13V5PhysicalPath $resolved $Label
+    Assert-Issue13V5NoReparseAncestors $resolved $Label
     return $resolved.TrimEnd('\')
+}
+
+function Resolve-PhysicalExistingFile([string]$Path, [string]$Label) {
+    $resolved = Resolve-ExistingFile $Path $Label
+    $null = ConvertTo-Issue13V5PhysicalPath $resolved $Label
+    Assert-Issue13V5NoReparseAncestors $resolved $Label
+    return $resolved
 }
 
 function Get-Sha256([string]$Path) {
@@ -184,32 +183,40 @@ function Quote-Csv([string]$Value) {
     return '"' + $Value.Replace('"', '""') + '"'
 }
 
-$repository = Resolve-ExistingDirectory $RepositoryRoot "Repository root"
-$sourceData = Resolve-ExistingDirectory $BaselineSourceDataRoot "Source-data root"
-$harness = Resolve-ExistingDirectory $HarnessDir "Harness directory"
-$seedPath = (Resolve-Path -LiteralPath $SeedEvidenceIndex).Path
-$controllerDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$verifier = Resolve-ExistingFile (Join-Path $controllerDir `
+$repository = Resolve-PhysicalExistingDirectory $RepositoryRoot "Repository root"
+$sourceData = Resolve-PhysicalExistingDirectory $BaselineSourceDataRoot "Source-data root"
+$harness = Resolve-PhysicalExistingDirectory $HarnessDir "Harness directory"
+$seedPath = Resolve-PhysicalExistingFile $SeedEvidenceIndex "Seed evidence index"
+$controllerDir = Resolve-PhysicalExistingDirectory `
+    $PSScriptRoot "Controller directory"
+$verifier = Resolve-PhysicalExistingFile (Join-Path $controllerDir `
     "issue13-v5-verify-diagnostic-evidence.R") "Evidence verifier"
 $rscriptApplication = Get-Command -Name $RscriptCommand `
     -CommandType Application -ErrorAction Stop
-$rscriptPath = Resolve-ExistingFile $rscriptApplication.Source `
+$rscriptPath = Resolve-PhysicalExistingFile $rscriptApplication.Source `
     "Rscript executable"
+$systemDirectory = Resolve-PhysicalExistingDirectory `
+    ([Environment]::SystemDirectory) "Windows system directory"
+$fsutilPath = Resolve-PhysicalExistingFile `
+    (Join-Path $systemDirectory "fsutil.exe") "fsutil executable"
 $script:rscriptPath = $rscriptPath
 $script:rLibrary = Resolve-PhysicalExistingDirectory $RLibrary `
     "R library"
 $harnessRuntime = Resolve-PhysicalExistingDirectory `
     (Split-Path -Parent $harness) "Harness runtime"
 $toolPaths = @{
-    bridge_builder = Resolve-ExistingFile (Join-Path $controllerDir `
+    bridge_builder = Resolve-PhysicalExistingFile (Join-Path $controllerDir `
         "issue13-v5-build-diagnostic-bridges.R") "Bridge builder"
-    bridge_capture_script = Resolve-ExistingFile `
+    bridge_capture_script = Resolve-PhysicalExistingFile `
         $MyInvocation.MyCommand.Path "Bridge capture script"
-    compare_override = Resolve-ExistingFile (Join-Path $controllerDir `
+    compare_override = Resolve-PhysicalExistingFile (Join-Path $controllerDir `
         "issue13-v5-compare-override.R") "Comparison override"
-    diagnostics_override = Resolve-ExistingFile (Join-Path $controllerDir `
+    coordinator_library = Resolve-PhysicalExistingFile (Join-Path `
+        $controllerDir "issue13-v5-coordinator-lib.ps1") `
+        "Coordinator physical-snapshot library"
+    diagnostics_override = Resolve-PhysicalExistingFile (Join-Path $controllerDir `
         "issue13-v5-diagnostics-override.R") "Diagnostic override"
-    metadata_equivalence = Resolve-ExistingFile (Join-Path $controllerDir `
+    metadata_equivalence = Resolve-PhysicalExistingFile (Join-Path $controllerDir `
         "issue13-v5-metadata-equivalence.json") `
         "Metadata equivalence manifest"
     verifier = $verifier
@@ -222,6 +229,11 @@ $harnessRuntimeInventoryBefore = `
     Get-DirectoryInventorySha256 $harnessRuntime
 $rLibraryInventoryBefore = Get-DirectoryInventorySha256 $script:rLibrary
 $rscriptSha256 = Get-Sha256 $rscriptPath
+$fsutilSha256 = Get-Sha256 $fsutilPath
+$officialSourceInventoryBefore =
+    Assert-Issue13V5OfficialSourceDataInventory $sourceData
+$sourceDataOriginInventoryBefore =
+    [string]$officialSourceInventoryBefore.ordinal_inventory_sha256
 foreach ($source in @("wiodr13", "wiodr16")) {
     $sourceManifest = Join-Path $sourceData (
         $source + "\normalized\_source_manifest.csv"
@@ -245,10 +257,18 @@ if (Test-Path -LiteralPath $CaptureRoot) {
     throw "CaptureRoot is write-once and must not already exist."
 }
 $captureParent = Split-Path -Parent $CaptureRoot
-if (-not (Test-Path -LiteralPath $captureParent -PathType Container)) {
-    throw "CaptureRoot parent does not exist: $captureParent"
-}
+$captureParent = Resolve-PhysicalExistingDirectory `
+    $captureParent "CaptureRoot parent"
 $capture = [System.IO.Path]::GetFullPath($CaptureRoot)
+$capturePhysicalExpected = ConvertTo-Issue13V5PhysicalPath `
+    $capture "CaptureRoot"
+Assert-Issue13V5NoReparseAncestors $capture "CaptureRoot"
+foreach ($protectedRoot in @(
+    $repository, $sourceData, $harnessRuntime, $script:rLibrary
+)) {
+    Assert-Issue13V5PathsDisjoint `
+        $capture $protectedRoot "CaptureRoot/protected-root isolation"
+}
 $baselineRoot = Join-Path $capture "baseline-e2f4-runtime"
 $logsRoot = Join-Path $capture "logs"
 $outputIndex = Join-Path $capture "diagnostic-bridge-evidence.csv"
@@ -264,6 +284,12 @@ if ($seed.Count -ne $methods.Count -or
 
 New-Item -ItemType Directory -Path $capture | Out-Null
 New-Item -ItemType Directory -Path $logsRoot | Out-Null
+$capturePhysicalObserved = ConvertTo-Issue13V5PhysicalPath `
+    $capture "Created CaptureRoot"
+Assert-Issue13V5NoReparse $capture
+if ($capturePhysicalObserved -cne $capturePhysicalExpected) {
+    throw "CaptureRoot changed physical identity during creation."
+}
 $verifiedRecords = @()
 
 & git -C $repository cat-file -e ($baselineBaseCommit + "^{commit}")
@@ -286,12 +312,21 @@ if ($LASTEXITCODE -ne 0) {
 }
 Assert-CleanWorktree $baselineRoot "Fresh baseline evidence worktree"
 
-$sourceLink = Join-Path $baselineRoot "source_data"
-if (Test-Path -LiteralPath $sourceLink) {
+$sourceSnapshot = Join-Path $baselineRoot "source_data"
+if (Test-Path -LiteralPath $sourceSnapshot) {
     throw "Fresh baseline worktree unexpectedly contains source_data."
 }
-New-Item -ItemType Junction -Path $sourceLink -Target $sourceData | Out-Null
-Assert-CleanWorktree $baselineRoot "Baseline evidence worktree after source link"
+$sourceDataPhysicalBefore = Copy-Issue13V5PhysicalDirectorySnapshot `
+    $sourceData $sourceSnapshot "Bridge source-data snapshot"
+$sourceDataSnapshotInventoryBefore =
+    Get-DirectoryInventorySha256 $sourceSnapshot
+if ($sourceDataSnapshotInventoryBefore -cne
+        $sourceDataOriginInventoryBefore -or
+    [long]$sourceDataPhysicalBefore.file_count -ne 84L -or
+    [long]$sourceDataPhysicalBefore.directory_count -ne 5L) {
+    throw "Physical source-data snapshot differs from its authenticated origin."
+}
+Assert-CleanWorktree $baselineRoot "Baseline evidence worktree after source snapshot"
 
 foreach ($method in $captureMethods) {
     Assert-CleanWorktree $baselineRoot "Baseline before $method"
@@ -368,6 +403,11 @@ $harnessInventoryAfter = Get-DirectoryInventorySha256 $harness
 $harnessRuntimeInventoryAfter = `
     Get-DirectoryInventorySha256 $harnessRuntime
 $rLibraryInventoryAfter = Get-DirectoryInventorySha256 $script:rLibrary
+$sourceDataOriginInventoryAfter = Get-DirectoryInventorySha256 $sourceData
+$sourceDataSnapshotInventoryAfter =
+    Get-DirectoryInventorySha256 $sourceSnapshot
+$sourceDataPhysicalAfter = Get-Issue13V5PhysicalSnapshotProof `
+    $sourceData $sourceSnapshot "Bridge source-data snapshot"
 $sourceInventoriesAfter = @{}
 foreach ($source in @("wiodr13", "wiodr16")) {
     $sourceInventoriesAfter[$source] = Get-DirectoryInventorySha256 `
@@ -377,15 +417,36 @@ if (($toolRecordsAfter -join "`n") -cne ($toolRecordsBefore -join "`n") -or
     $harnessInventoryAfter -cne $harnessInventoryBefore -or
     $harnessRuntimeInventoryAfter -cne $harnessRuntimeInventoryBefore -or
     $rLibraryInventoryAfter -cne $rLibraryInventoryBefore -or
+    $sourceDataOriginInventoryAfter -cne
+        $sourceDataOriginInventoryBefore -or
+    $sourceDataSnapshotInventoryAfter -cne
+        $sourceDataSnapshotInventoryBefore -or
+    $sourceDataSnapshotInventoryBefore -cne
+        $sourceDataOriginInventoryBefore -or
+    [string]$sourceDataPhysicalAfter.source_physical_path -cne
+        [string]$sourceDataPhysicalBefore.source_physical_path -or
+    [string]$sourceDataPhysicalAfter.snapshot_physical_path -cne
+        [string]$sourceDataPhysicalBefore.snapshot_physical_path -or
+    [long]$sourceDataPhysicalAfter.file_count -ne
+        [long]$sourceDataPhysicalBefore.file_count -or
+    [long]$sourceDataPhysicalAfter.directory_count -ne
+        [long]$sourceDataPhysicalBefore.directory_count -or
+    [string]$sourceDataPhysicalAfter.source_physical_inventory_sha256 -cne
+        [string]$sourceDataPhysicalBefore.source_physical_inventory_sha256 -or
+    [string]$sourceDataPhysicalAfter.snapshot_physical_inventory_sha256 -cne
+        [string]$sourceDataPhysicalBefore.snapshot_physical_inventory_sha256 -or
+    [string]$sourceDataPhysicalAfter.independence_sha256 -cne
+        [string]$sourceDataPhysicalBefore.independence_sha256 -or
     $sourceInventoriesAfter['wiodr13'] -cne
         $sourceInventoriesBefore['wiodr13'] -or
     $sourceInventoriesAfter['wiodr16'] -cne
         $sourceInventoriesBefore['wiodr16'] -or
-    (Get-Sha256 $rscriptPath) -cne $rscriptSha256) {
+    (Get-Sha256 $rscriptPath) -cne $rscriptSha256 -or
+    (Get-Sha256 $fsutilPath) -cne $fsutilSha256) {
     throw "Diagnostic capture tooling changed during execution."
 }
 $captureRecord = @(
-    "schema=issue13-v5-clean-bridge-capture/1",
+    "schema=issue13-v5-clean-bridge-capture/2",
     "baseline_base_commit=$baselineBaseCommit",
     "baseline_base_tree=$baselineBaseTree",
     "baseline_runtime_commit=$baselineRuntimeCommit",
@@ -397,6 +458,8 @@ $captureRecord = @(
     "harness_runtime_inventory_after_sha256=$harnessRuntimeInventoryAfter",
     "rscript_path=$($rscriptPath.Replace('\', '/'))",
     "rscript_sha256=$rscriptSha256",
+    "fsutil_path=$($fsutilPath.Replace('\', '/'))",
+    "fsutil_sha256=$fsutilSha256",
     "r_library_path=$($script:rLibrary.Replace('\', '/'))",
     "r_library_inventory_before_sha256=$rLibraryInventoryBefore",
     "r_library_inventory_after_sha256=$rLibraryInventoryAfter",
@@ -405,6 +468,22 @@ $captureRecord = @(
     "captured_methods=$($captureMethods -join ',')",
     "verified_records=$($verifiedRecords.Count)",
     "seed_evidence_index_sha256=$((Get-FileHash -LiteralPath $seedPath -Algorithm SHA256).Hash.ToLowerInvariant())",
+    "source_data_origin_path=$($sourceData.Replace('\', '/'))",
+    "source_data_snapshot_path=$($sourceSnapshot.Replace('\', '/'))",
+    "source_data_origin_inventory_before_sha256=$sourceDataOriginInventoryBefore",
+    "source_data_origin_inventory_after_sha256=$sourceDataOriginInventoryAfter",
+    "source_data_snapshot_inventory_before_sha256=$sourceDataSnapshotInventoryBefore",
+    "source_data_snapshot_inventory_after_sha256=$sourceDataSnapshotInventoryAfter",
+    "source_data_origin_physical_path=$([string]$sourceDataPhysicalBefore.source_physical_path -replace '\\', '/')",
+    "source_data_snapshot_physical_path=$([string]$sourceDataPhysicalBefore.snapshot_physical_path -replace '\\', '/')",
+    "source_data_physical_file_count=$($sourceDataPhysicalBefore.file_count)",
+    "source_data_physical_directory_count=$($sourceDataPhysicalBefore.directory_count)",
+    "source_data_origin_physical_before_sha256=$($sourceDataPhysicalBefore.source_physical_inventory_sha256)",
+    "source_data_origin_physical_after_sha256=$($sourceDataPhysicalAfter.source_physical_inventory_sha256)",
+    "source_data_snapshot_physical_before_sha256=$($sourceDataPhysicalBefore.snapshot_physical_inventory_sha256)",
+    "source_data_snapshot_physical_after_sha256=$($sourceDataPhysicalAfter.snapshot_physical_inventory_sha256)",
+    "source_data_independence_before_sha256=$($sourceDataPhysicalBefore.independence_sha256)",
+    "source_data_independence_after_sha256=$($sourceDataPhysicalAfter.independence_sha256)",
     "source_wiodr13_manifest_sha256=$($sourceManifestHashes['wiodr13'])",
     "source_wiodr16_manifest_sha256=$($sourceManifestHashes['wiodr16'])",
     "source_wiodr13_inventory_before_sha256=$($sourceInventoriesBefore['wiodr13'])",

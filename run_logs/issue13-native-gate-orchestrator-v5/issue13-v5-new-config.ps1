@@ -89,6 +89,8 @@ function ConvertTo-Issue13V5FullPath([string]$Path, [bool]$MustExist) {
 
 function Assert-Issue13V5FreshRoot([string]$Path, [string]$Label) {
   $full = ConvertTo-Issue13V5FullPath $Path $false
+  $null = ConvertTo-Issue13V5PhysicalPath $full $Label
+  Assert-Issue13V5NoReparseAncestors $full $Label
   if ($full -match '(?i)(^|[\\/])[^\\/]*v4(?:r[0-9]+)?[^\\/]*($|[\\/])') {
     throw "$Label must not be a V4/V4R2 root: $full"
   }
@@ -158,8 +160,10 @@ $harnessManifest = Get-Content -LiteralPath $harnessManifestPath -Raw |
 if ([string]$harnessManifest.schema -cne
       'wlv-issue13-v5-harness-materialization/1' -or
     [string]$harnessManifest.generation -cne 'v5-terminal' -or
-    -not [bool]$harnessManifest.final_evidence_eligible -or
-    [bool]$harnessManifest.reuses_candidate_evidence -or
+    -not (Test-Issue13V5ExactBoolean `
+      $harnessManifest.final_evidence_eligible $true) -or
+    -not (Test-Issue13V5ExactBoolean `
+      $harnessManifest.reuses_candidate_evidence $false) -or
     [string]$harnessManifest.baseline_commit -cne $baselineCommit -or
     [string]$harnessManifest.baseline_policy -cne
       'authenticated-direct-child-compatibility-oracle' -or
@@ -171,7 +175,8 @@ if ([string]$harnessManifest.schema -cne
       $expectedOverlaySha256 -or
     [string]$harnessManifest.baseline_overlay_patch_id -cne
       $expectedOverlayPatchId -or
-    -not [bool]$harnessManifest.strict_negative_evidence_required) {
+    -not (Test-Issue13V5ExactBoolean `
+      $harnessManifest.strict_negative_evidence_required $true)) {
   throw 'The V5 harness manifest is not final-evidence eligible.'
 }
 $harnessInventory = Get-Issue13V5HarnessInventory $harnessRuntime
@@ -287,7 +292,8 @@ if ([string]$index.schema -cne 'wlv-issue13-baseline-runtime-index/1' -or
     [string]$index.profiles[0].inventory_value -cne $baselineProfile -or
     [string]$index.profiles[0].source_commit -cne $BaselineRuntimeCommit -or
     [string]$index.profiles[0].runtime_commit -cne $BaselineRuntimeCommit -or
-    [bool]$index.profiles[0].run_dirty -or
+    -not (Test-Issue13V5ExactBoolean `
+      $index.profiles[0].run_dirty $false) -or
     -not [string]::Equals(
       (ConvertTo-Issue13V5FullPath `
         ([string]$index.profiles[0].overlay_patch_path) $true),
@@ -308,11 +314,13 @@ if ([string]$index.schema -cne 'wlv-issue13-baseline-runtime-index/1' -or
 }
 if ([string]$strictSmoke.schema -cne 'wlv-issue13-v5-baseline-smoke/1' -or
     (Get-Issue13V5Sha256 $strictSmokePath) -cne $strictSmokeSha256 -or
-    [bool]$strictSmoke.final_evidence_eligible -or
+    -not (Test-Issue13V5ExactBoolean `
+      $strictSmoke.final_evidence_eligible $false) -or
     [string]$strictSmoke.purpose -cne
       'strict-cc2-executability-preflight' -or
     [string]$strictSmoke.baseline_commit -cne $baselineCommit -or
-    [bool]$strictSmoke.passed -or [string]$strictSmoke.status -cne 'failed' -or
+    -not (Test-Issue13V5ExactBoolean $strictSmoke.passed $false) -or
+    [string]$strictSmoke.status -cne 'failed' -or
     [long]$strictSmoke.passed_count -ne 5 -or
     [long]$strictSmoke.failed_count -ne 7 -or
     @($strictSmoke.records).Count -ne 12 -or
@@ -329,13 +337,14 @@ if ([string]$strictSmoke.schema -cne 'wlv-issue13-v5-baseline-smoke/1' -or
 }
 if ([string]$compatibilitySmoke.schema -cne
       'wlv-issue13-v5-baseline-smoke/1' -or
-    [bool]$compatibilitySmoke.final_evidence_eligible -or
+    -not (Test-Issue13V5ExactBoolean `
+      $compatibilitySmoke.final_evidence_eligible $false) -or
     [string]$compatibilitySmoke.purpose -cne
       'compatibility-oracle-executability-preflight' -or
     [string]$compatibilitySmoke.baseline_base_commit -cne $baselineCommit -or
     [string]$compatibilitySmoke.baseline_runtime_commit -cne
       $BaselineRuntimeCommit -or
-    -not [bool]$compatibilitySmoke.passed -or
+    -not (Test-Issue13V5ExactBoolean $compatibilitySmoke.passed $true) -or
     [string]$compatibilitySmoke.status -cne 'passed' -or
     [long]$compatibilitySmoke.passed_count -ne 12 -or
     [long]$compatibilitySmoke.failed_count -ne 0 -or
@@ -408,7 +417,7 @@ $oracleProof = Read-Issue13V5Json $oracleProofPath
 if ([string]$oracleProof.schema -cne
       'wlv-issue13-v5-oracle-effect-proof/2' -or
     [string]$oracleProof.status -cne 'passed' -or
-    -not [bool]$oracleProof.passed) {
+    -not (Test-Issue13V5ExactBoolean $oracleProof.passed $true)) {
   throw 'Oracle-effect proof is not the required passed terminal proof.'
 }
 $oraclePrimaryRoot = (Resolve-Path -LiteralPath (
@@ -419,16 +428,7 @@ if (-not (Test-Path -LiteralPath $oraclePrimaryRoot -PathType Container) -or
     -not (Test-Path -LiteralPath $oracleReplayRoot -PathType Container)) {
   throw 'Oracle-effect ComparisonRoot and ReplayRoot must be existing directories.'
 }
-$primaryPrefix = $oraclePrimaryRoot.TrimEnd('\') + '\'
-$replayPrefix = $oracleReplayRoot.TrimEnd('\') + '\'
-if ([string]::Equals($oraclePrimaryRoot, $oracleReplayRoot,
-    [StringComparison]::OrdinalIgnoreCase) -or
-    $oraclePrimaryRoot.StartsWith($replayPrefix,
-      [StringComparison]::OrdinalIgnoreCase) -or
-    $oracleReplayRoot.StartsWith($primaryPrefix,
-      [StringComparison]::OrdinalIgnoreCase)) {
-  throw 'Oracle-effect primary and replay roots must be distinct and non-nested.'
-}
+Assert-Issue13V5PathsDisjoint $oraclePrimaryRoot $oracleReplayRoot 'Oracle-effect primary/replay isolation'
 foreach ($outputRoot in @($oraclePrimaryRoot, $oracleReplayRoot)) {
   Assert-Issue13V5NoReparse $outputRoot
   foreach ($protectedRoot in @(
@@ -557,44 +557,40 @@ $oracleValidationConfig = [pscustomobject]@{
 $oracleInitialValidation = Invoke-Issue13V5OracleEffectValidation `
   $oracleValidationConfig
 $oracleEffect['initial_validation'] = $oracleInitialValidation
-$worktrees = Assert-Issue13V5FreshRoot $WorktreeRoot 'Worktree root'
-$evidence = Assert-Issue13V5FreshRoot $EvidenceRoot 'Evidence root'
-$control = Assert-Issue13V5FreshRoot $ControlRoot 'Control root'
 $outputFull = ConvertTo-Issue13V5FullPath $Output $false
+$null = ConvertTo-Issue13V5PhysicalPath $outputFull 'V5 config output'
+Assert-Issue13V5NoReparseAncestors $outputFull 'V5 config output'
 if (Test-Path -LiteralPath $outputFull) {
   throw "Refusing to overwrite the V5 gate config: $outputFull"
 }
-foreach ($rootPath in @($worktrees, $evidence, $control)) {
-  if ([string]::Equals($outputFull, $rootPath,
-      [StringComparison]::OrdinalIgnoreCase) -or
-      $outputFull.StartsWith($rootPath.TrimEnd('\') + '\',
-        [StringComparison]::OrdinalIgnoreCase) -or
-      $rootPath.StartsWith($outputFull.TrimEnd('\') + '\',
-        [StringComparison]::OrdinalIgnoreCase)) {
-    throw 'The V5 config output must be outside worktree, evidence, and control roots.'
+$configImmutableRoots = @(
+  $repository, $harnessRuntime, $source, $candidateSource, $library,
+  $rscriptFull, $oraclePrimaryRoot, $oracleReplayRoot
+)
+$null = Assert-Issue13V5ConfigPathIsolation `
+  $outputFull $configImmutableRoots
+$worktrees = Assert-Issue13V5FreshRoot $WorktreeRoot 'Worktree root'
+$evidence = Assert-Issue13V5FreshRoot $EvidenceRoot 'Evidence root'
+$control = Assert-Issue13V5FreshRoot $ControlRoot 'Control root'
+$outputRoots = @($worktrees, $evidence, $control)
+for ($left = 0; $left -lt $outputRoots.Count; $left++) {
+  for ($right = $left + 1; $right -lt $outputRoots.Count; $right++) {
+    Assert-Issue13V5PathsDisjoint $outputRoots[$left] $outputRoots[$right] 'Worktree/evidence/control isolation'
   }
-  $rootPrefix = $rootPath.TrimEnd('\') + '\'
+}
+foreach ($rootPath in $outputRoots) {
+  Assert-Issue13V5PathsDisjoint $outputFull $rootPath 'V5 config/output-root isolation'
   foreach ($oracleRoot in @($oraclePrimaryRoot, $oracleReplayRoot)) {
-    $oraclePrefix = $oracleRoot.TrimEnd('\') + '\'
-    if ([string]::Equals($rootPath, $oracleRoot,
-        [StringComparison]::OrdinalIgnoreCase) -or
-        $rootPath.StartsWith($oraclePrefix,
-          [StringComparison]::OrdinalIgnoreCase) -or
-        $oracleRoot.StartsWith($rootPrefix,
-          [StringComparison]::OrdinalIgnoreCase)) {
-      throw 'V5 output roots must not overlap oracle-effect primary or replay comparisons.'
-    }
+    Assert-Issue13V5PathsDisjoint $rootPath $oracleRoot 'V5 output/oracle-comparison isolation'
+  }
+  foreach ($protectedRoot in @(
+      $repository, $harnessRuntime, $source, $candidateSource, $library,
+      $rscriptFull)) {
+    Assert-Issue13V5PathsDisjoint $rootPath $protectedRoot 'V5 output/immutable-root isolation'
   }
 }
 foreach ($oracleRoot in @($oraclePrimaryRoot, $oracleReplayRoot)) {
-  if ([string]::Equals($outputFull, $oracleRoot,
-      [StringComparison]::OrdinalIgnoreCase) -or
-      $outputFull.StartsWith($oracleRoot.TrimEnd('\') + '\',
-        [StringComparison]::OrdinalIgnoreCase) -or
-      $oracleRoot.StartsWith($outputFull.TrimEnd('\') + '\',
-        [StringComparison]::OrdinalIgnoreCase)) {
-    throw 'The V5 config output must be outside both oracle-effect comparison roots.'
-  }
+  Assert-Issue13V5PathsDisjoint $outputFull $oracleRoot 'V5 config/oracle-comparison isolation'
 }
 
 $sciencePhases = [Collections.Generic.List[object]]::new()
@@ -890,9 +886,19 @@ if (-not (Test-Path -LiteralPath $outputParent -PathType Container)) {
   $null = New-Item -ItemType Directory -Path $outputParent
 }
 $outputParent = (Resolve-Path -LiteralPath $outputParent).Path
-$outputFull = Join-Path $outputParent ([IO.Path]::GetFileName($outputFull))
+$finalOutputFull = Join-Path $outputParent ([IO.Path]::GetFileName($outputFull))
+if (-not [string]::Equals(
+    $finalOutputFull, $outputFull, [StringComparison]::OrdinalIgnoreCase)) {
+  throw 'Resolved V5 config output changed its canonical path.'
+}
+$null = ConvertTo-Issue13V5PhysicalPath `
+  $finalOutputFull 'Resolved V5 config output'
+Assert-Issue13V5NoReparseAncestors `
+  $finalOutputFull 'Resolved V5 config output'
+$null = Assert-Issue13V5ConfigPathIsolation `
+  $finalOutputFull $configImmutableRoots
 $temporary = Join-Path $outputParent (
-  '.' + [IO.Path]::GetFileName($outputFull) + '-' +
+  '.' + [IO.Path]::GetFileName($finalOutputFull) + '-' +
     [Guid]::NewGuid().ToString('N') + '.tmp'
 )
 $payload = ($config | ConvertTo-Json -Depth 100) + "`n"
@@ -925,23 +931,31 @@ if ([string]$roundtrip.generation -cne 'v5' -or
       [string]$oracleEffect.r_library.inventory_sha256 -or
     [long]$roundtrip.oracle_effect.comparison_execution_count -ne 10L -or
     [long]$roundtrip.oracle_effect.approved_run_inventory_count -ne 17L -or
-    [bool]$roundtrip.oracle_effect.final_evidence_eligible -or
-    -not [bool]$roundtrip.oracle_effect.required_by_final_gate) {
+    -not (Test-Issue13V5ExactBoolean `
+      $roundtrip.oracle_effect.final_evidence_eligible $false) -or
+    -not (Test-Issue13V5ExactBoolean `
+      $roundtrip.oracle_effect.required_by_final_gate $true)) {
   throw 'V5 config JSON round trip changed the contract.'
 }
-if (Test-Path -LiteralPath $outputFull) {
+$null = ConvertTo-Issue13V5PhysicalPath `
+  $finalOutputFull 'Final V5 config output'
+Assert-Issue13V5NoReparseAncestors `
+  $finalOutputFull 'Final V5 config output'
+$null = Assert-Issue13V5ConfigPathIsolation `
+  $finalOutputFull $configImmutableRoots
+if (Test-Path -LiteralPath $finalOutputFull) {
   throw 'The V5 config target appeared during generation.'
 }
-Move-Item -LiteralPath $temporary -Destination $outputFull
-$installed = [IO.File]::ReadAllText($outputFull, $utf8)
+Move-Item -LiteralPath $temporary -Destination $finalOutputFull
+$installed = [IO.File]::ReadAllText($finalOutputFull, $utf8)
 if (-not [string]::Equals($installed, $payload, [StringComparison]::Ordinal)) {
   throw 'Installed V5 config differs from its verified UTF-8 payload.'
 }
 
 [pscustomobject][ordered]@{
   status = 'created'
-  config_path = (Resolve-Path -LiteralPath $outputFull).Path
-  config_sha256 = Get-Issue13V5Sha256 $outputFull
+  config_path = (Resolve-Path -LiteralPath $finalOutputFull).Path
+  config_sha256 = Get-Issue13V5Sha256 $finalOutputFull
   baseline_commit = $baselineCommit
   baseline_runtime_commit = $BaselineRuntimeCommit
   candidate_commit = $CandidateCommit

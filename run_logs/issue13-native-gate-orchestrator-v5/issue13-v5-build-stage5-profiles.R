@@ -79,6 +79,274 @@ wlv13_v5d_directory_inventory_sha256 <- function(root) {
   wlv13_v5d_sha256_text(paste(records, collapse = "\n"))
 }
 
+wlv13_v5d_fsutil_call <- function(fsutil_path, operation, path) {
+  if (!identical(.Platform$OS.type, "windows") ||
+      length(fsutil_path) != 1L || !file.exists(fsutil_path) ||
+      length(operation) != 2L || length(path) != 1L || !nzchar(path)) {
+    stop("Physical snapshot inspection requires sealed Windows fsutil.",
+      call. = FALSE
+    )
+  }
+  output <- suppressWarnings(system2(
+    fsutil_path,
+    c(operation, shQuote(path, type = "cmd")),
+    stdout = TRUE, stderr = TRUE
+  ))
+  status <- attr(output, "status", exact = TRUE)
+  if (is.null(status)) status <- 0L
+  list(status = as.integer(status), output = enc2utf8(output))
+}
+
+wlv13_v5d_fsutil_file_id <- function(fsutil_path, path) {
+  result <- wlv13_v5d_fsutil_call(
+    fsutil_path, c("file", "queryfileid"), path
+  )
+  matches <- regmatches(result$output, gregexpr(
+    "0x[0-9A-Fa-f]{32}", result$output, perl = TRUE
+  ))
+  values <- unique(tolower(substring(
+    unlist(matches, use.names = FALSE), 3L
+  )))
+  if (result$status != 0L || length(values) != 1L ||
+      !grepl("^[0-9a-f]{32}$", values[[1L]])) {
+    stop("fsutil did not return one exact 128-bit file ID.",
+      call. = FALSE
+    )
+  }
+  values[[1L]]
+}
+
+wlv13_v5d_fsutil_assert_not_reparse <- function(fsutil_path, path) {
+  result <- wlv13_v5d_fsutil_call(
+    fsutil_path, c("reparsepoint", "query"), path
+  )
+  if (result$status != 1L) {
+    stop("Physical snapshot contains or ambiguously traverses a reparse point.",
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
+wlv13_v5d_fsutil_link_count <- function(fsutil_path, path) {
+  result <- wlv13_v5d_fsutil_call(
+    fsutil_path, c("hardlink", "list"), path
+  )
+  links <- trimws(result$output)
+  links <- links[nzchar(links)]
+  if (result$status != 0L || !length(links) ||
+      any(!startsWith(links, "\\"))) {
+    stop("fsutil did not return an exact hard-link inventory.",
+      call. = FALSE
+    )
+  }
+  as.integer(length(links))
+}
+
+wlv13_v5d_recorded_windows_path <- function(path, physical = FALSE) {
+  if (length(path) != 1L || !nzchar(path)) {
+    stop("Recorded physical snapshot path is empty.", call. = FALSE)
+  }
+  value <- gsub("/", "\\", path, fixed = TRUE)
+  pattern <- if (physical) {
+    "^\\\\\\\\\\?\\\\Volume\\{[0-9A-Fa-f-]+\\}\\\\"
+  } else {
+    "^[A-Za-z]:\\\\"
+  }
+  if (!grepl(pattern, value, perl = TRUE)) {
+    stop("Recorded physical snapshot path is not absolute and local.",
+      call. = FALSE
+    )
+  }
+  value
+}
+
+wlv13_v5d_physical_volume <- function(path) {
+  value <- wlv13_v5d_recorded_windows_path(path, physical = TRUE)
+  match <- regexpr(
+    "^\\\\\\\\\\?\\\\Volume\\{[0-9A-Fa-f-]+\\}\\\\",
+    value, perl = TRUE
+  )
+  if (match[[1L]] != 1L) {
+    stop("Recorded physical path lacks an exact Volume-GUID prefix.",
+      call. = FALSE
+    )
+  }
+  regmatches(value, match)
+}
+
+wlv13_v5d_physical_path_matches_lexical <- function(
+    lexical_path, physical_path, volume) {
+  lexical <- wlv13_v5d_recorded_windows_path(lexical_path)
+  physical <- wlv13_v5d_recorded_windows_path(
+    physical_path, physical = TRUE
+  )
+  if (!identical(wlv13_v5d_physical_volume(volume), volume)) {
+    stop("Expected physical volume is not canonical.", call. = FALSE)
+  }
+  expected <- paste0(volume, substring(lexical, 4L))
+  identical(tolower(physical), tolower(expected))
+}
+
+wlv13_v5d_physical_tree <- function(
+    lexical_root, physical_root, fsutil_path) {
+  lexical_root <- wlv13_v5d_recorded_windows_path(lexical_root)
+  physical_root <- wlv13_v5d_recorded_windows_path(
+    physical_root, physical = TRUE
+  )
+  physical_slash <- tolower(gsub("\\", "/", physical_root, fixed = TRUE))
+  volume_match <- regexec(
+    "^(//\\?/volume\\{[^}]+\\}/)", physical_slash, perl = TRUE
+  )
+  volume_parts <- regmatches(physical_slash, volume_match)[[1L]]
+  if (length(volume_parts) != 2L || !dir.exists(lexical_root) ||
+      !dir.exists(physical_root)) {
+    stop("Physical snapshot roots are missing or lack a Volume-GUID path.",
+      call. = FALSE
+    )
+  }
+  volume <- volume_parts[[2L]]
+  queue <- list(list(
+    relative = ".", lexical = lexical_root, physical = physical_root
+  ))
+  records <- list()
+  while (length(queue)) {
+    current <- queue[[1L]]
+    queue <- queue[-1L]
+    wlv13_v5d_fsutil_assert_not_reparse(fsutil_path, current$lexical)
+    wlv13_v5d_fsutil_assert_not_reparse(fsutil_path, current$physical)
+    lexical_id <- wlv13_v5d_fsutil_file_id(fsutil_path, current$lexical)
+    physical_id <- wlv13_v5d_fsutil_file_id(fsutil_path, current$physical)
+    if (!identical(lexical_id, physical_id)) {
+      stop("Lexical and Volume-GUID paths identify different items.",
+        call. = FALSE
+      )
+    }
+    information <- file.info(current$lexical)
+    physical_information <- file.info(current$physical)
+    lexical_is_directory <- information$isdir[[1L]]
+    physical_is_directory <- physical_information$isdir[[1L]]
+    if (nrow(information) != 1L || nrow(physical_information) != 1L ||
+        anyNA(c(lexical_is_directory, physical_is_directory)) ||
+        !identical(lexical_is_directory, physical_is_directory)) {
+      stop("Physical snapshot item type is invalid.", call. = FALSE)
+    }
+    if (isTRUE(lexical_is_directory)) {
+      line <- paste("D", current$relative, volume, lexical_id, sep = "|")
+      children <- sort(list.files(
+        current$lexical, all.files = TRUE, full.names = FALSE,
+        no.. = TRUE
+      ), method = "radix")
+      for (child in children) {
+        relative <- if (identical(current$relative, ".")) {
+          child
+        } else {
+          paste(current$relative, child, sep = "/")
+        }
+        queue[[length(queue) + 1L]] <- list(
+          relative = relative,
+          lexical = file.path(current$lexical, child),
+          physical = file.path(current$physical, child, fsep = "\\")
+        )
+      }
+      link_count <- NA_integer_
+    } else {
+      link_count <- wlv13_v5d_fsutil_link_count(
+        fsutil_path, current$lexical
+      )
+      physical_link_count <- wlv13_v5d_fsutil_link_count(
+        fsutil_path, current$physical
+      )
+      if (!identical(link_count, physical_link_count)) {
+        stop("Lexical and Volume-GUID hard-link counts differ.",
+          call. = FALSE
+        )
+      }
+      line <- paste(
+        "F", current$relative, volume, lexical_id, link_count, sep = "|"
+      )
+    }
+    records[[length(records) + 1L]] <- list(
+      relative = current$relative,
+      is_directory = isTRUE(lexical_is_directory),
+      file_id = lexical_id,
+      link_count = link_count,
+      line = line
+    )
+  }
+  order_index <- order(vapply(
+    records, function(record) record$relative, character(1L)
+  ), method = "radix")
+  records <- records[order_index]
+  lines <- vapply(records, function(record) record$line, character(1L))
+  list(
+    volume = volume,
+    records = records,
+    file_count = sum(!vapply(
+      records, function(record) record$is_directory, logical(1L)
+    )),
+    directory_count = sum(vapply(
+      records, function(record) record$is_directory, logical(1L)
+    )) - 1L,
+    physical_inventory_sha256 =
+      wlv13_v5d_sha256_text(paste(lines, collapse = "\n"))
+  )
+}
+
+wlv13_v5d_physical_snapshot_attest <- function(
+    source_path, snapshot_path, source_physical_path,
+    snapshot_physical_path, fsutil_path,
+    expected_file_count = 84L, expected_directory_count = 5L) {
+  source <- wlv13_v5d_physical_tree(
+    source_path, source_physical_path, fsutil_path
+  )
+  snapshot <- wlv13_v5d_physical_tree(
+    snapshot_path, snapshot_physical_path, fsutil_path
+  )
+  source_keys <- vapply(source$records, function(record) {
+    paste(record$relative, record$is_directory, sep = "|")
+  }, character(1L))
+  snapshot_keys <- vapply(snapshot$records, function(record) {
+    paste(record$relative, record$is_directory, sep = "|")
+  }, character(1L))
+  if (!identical(source$volume, snapshot$volume) ||
+      !identical(source_keys, snapshot_keys) ||
+      source$file_count != expected_file_count ||
+      source$directory_count != expected_directory_count ||
+      snapshot$file_count != expected_file_count ||
+      snapshot$directory_count != expected_directory_count) {
+    stop("Physical source and snapshot topology differs.", call. = FALSE)
+  }
+  independence <- vapply(seq_along(source$records), function(index) {
+    source_record <- source$records[[index]]
+    snapshot_record <- snapshot$records[[index]]
+    if (identical(source_record$file_id, snapshot_record$file_id)) {
+      stop("Snapshot reuses a source physical item.", call. = FALSE)
+    }
+    if (!snapshot_record$is_directory &&
+        snapshot_record$link_count != 1L) {
+      stop("Snapshot file has an external hard link.", call. = FALSE)
+    }
+    paste(
+      source_record$relative,
+      if (source_record$is_directory) "directory" else "file",
+      paste0(source$volume, ":", source_record$file_id),
+      paste0(snapshot$volume, ":", snapshot_record$file_id),
+      sep = "|"
+    )
+  }, character(1L))
+  list(
+    file_count = source$file_count,
+    directory_count = source$directory_count,
+    source_physical_inventory_sha256 =
+      source$physical_inventory_sha256,
+    snapshot_physical_inventory_sha256 =
+      snapshot$physical_inventory_sha256,
+    independence_sha256 =
+      wlv13_v5d_sha256_text(paste(independence, collapse = "\n"))
+  )
+}
+
 wlv13_v5d_capture_external_inventories <- function(
     bridge_capture_path, harness_dir) {
   bridge_capture_path <- normalizePath(
@@ -96,6 +364,44 @@ wlv13_v5d_capture_external_inventories <- function(
   harness_runtime_path <- normalizePath(wlv13_v5d_capture_field(
     bridge_lines, "harness_runtime_path"
   ), winslash = "/", mustWork = TRUE)
+  windows_registry <- suppressWarnings(utils::readRegistry(
+    "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+    hive = "HLM", maxdepth = 1L
+  ))
+  registry_system_root <- windows_registry[["SystemRoot"]]
+  if (!is.character(registry_system_root) ||
+      length(registry_system_root) != 1L ||
+      !grepl("^[A-Za-z]:[/\\\\]", registry_system_root)) {
+    stop("Windows registry lacks a canonical system-root identity.",
+      call. = FALSE
+    )
+  }
+  system_root <- normalizePath(
+    registry_system_root, winslash = "/", mustWork = TRUE
+  )
+  fsutil_path <- normalizePath(file.path(
+    system_root, "System32", "fsutil.exe"
+  ), winslash = "/", mustWork = TRUE)
+  recorded_fsutil_path <- normalizePath(wlv13_v5d_capture_field(
+    bridge_lines, "fsutil_path"
+  ), winslash = "/", mustWork = TRUE)
+  if (!identical(tolower(recorded_fsutil_path), tolower(fsutil_path))) {
+    stop("Capture record does not name canonical System32 fsutil.",
+      call. = FALSE
+    )
+  }
+  source_data_origin_record_path <- wlv13_v5d_capture_field(
+    bridge_lines, "source_data_origin_path"
+  )
+  source_data_snapshot_record_path <- wlv13_v5d_capture_field(
+    bridge_lines, "source_data_snapshot_path"
+  )
+  source_data_origin_path <- normalizePath(
+    source_data_origin_record_path, winslash = "/", mustWork = TRUE
+  )
+  source_data_snapshot_path <- normalizePath(
+    source_data_snapshot_record_path, winslash = "/", mustWork = TRUE
+  )
   list(
     harness_path = harness_dir,
     harness_inventory_sha256 =
@@ -105,14 +411,43 @@ wlv13_v5d_capture_external_inventories <- function(
       wlv13_v5d_directory_inventory_sha256(harness_runtime_path),
     r_library_path = r_library_path,
     r_library_inventory_sha256 =
-      wlv13_v5d_directory_inventory_sha256(r_library_path)
+      wlv13_v5d_directory_inventory_sha256(r_library_path),
+    fsutil_path = fsutil_path,
+    fsutil_sha256 = wlv13_sha256_file(fsutil_path),
+    source_data_origin_path = source_data_origin_path,
+    source_data_origin_record_path = source_data_origin_record_path,
+    source_data_origin_inventory_sha256 =
+      wlv13_v5d_directory_inventory_sha256(source_data_origin_path),
+    source_data_snapshot_path = source_data_snapshot_path,
+    source_data_snapshot_record_path = source_data_snapshot_record_path,
+    source_data_snapshot_inventory_sha256 =
+      wlv13_v5d_directory_inventory_sha256(source_data_snapshot_path),
+    source_data_origin_physical_path = wlv13_v5d_capture_field(
+      bridge_lines, "source_data_origin_physical_path"
+    ),
+    source_data_snapshot_physical_path = wlv13_v5d_capture_field(
+      bridge_lines, "source_data_snapshot_physical_path"
+    )
   )
 }
 
 wlv13_v5d_validate_stage5_capture <- function(
     bridge_capture_path, bridge_index_path, bridge_manifest_path,
     stage_capture_path, stage_index_path, evidence, harness_dir,
-    external_inventories) {
+    external_inventories, verify_live = TRUE) {
+  if (!identical(verify_live, TRUE) && !identical(verify_live, FALSE)) {
+    stop("Capture live-validation mode is invalid.", call. = FALSE)
+  }
+  requested_verify_live <- verify_live
+  lockBinding("requested_verify_live", environment())
+  official_source_inventory_sha256 <-
+    "6c5e3c5583f431899658197484c4ebba3b1b1ee58b21b11f88fb1665084fbc4a"
+  lockBinding("official_source_inventory_sha256", environment())
+  live_checks <- stats::setNames(integer(6L), c(
+    "bridge_physical", "stage_bridge_physical",
+    "stage_snapshot_physical", "source_origin_content",
+    "bridge_snapshot_content", "stage_snapshot_content"
+  ))
   paths <- vapply(list(
     bridge_capture_path, bridge_index_path, bridge_manifest_path,
     stage_capture_path, stage_index_path
@@ -126,16 +461,28 @@ wlv13_v5d_validate_stage5_capture <- function(
   inventory_names <- c(
     "harness_path", "harness_inventory_sha256", "harness_runtime_path",
     "harness_runtime_inventory_sha256", "r_library_path",
-    "r_library_inventory_sha256"
+    "r_library_inventory_sha256", "fsutil_path", "fsutil_sha256",
+    "source_data_origin_path", "source_data_origin_record_path",
+    "source_data_origin_inventory_sha256", "source_data_snapshot_path",
+    "source_data_snapshot_record_path",
+    "source_data_snapshot_inventory_sha256",
+    "source_data_origin_physical_path",
+    "source_data_snapshot_physical_path"
   )
   if (!is.list(external_inventories) ||
       !identical(names(external_inventories), inventory_names) ||
+      !identical(
+        external_inventories$source_data_origin_inventory_sha256,
+        official_source_inventory_sha256
+      ) ||
       !identical(external_inventories$harness_path, harness_dir) ||
       !identical(external_inventories$harness_runtime_path,
         dirname(harness_dir)) ||
       any(!grepl("^[0-9a-f]{64}$", unlist(external_inventories[c(
         "harness_inventory_sha256", "harness_runtime_inventory_sha256",
-        "r_library_inventory_sha256"
+        "r_library_inventory_sha256", "fsutil_sha256",
+        "source_data_origin_inventory_sha256",
+        "source_data_snapshot_inventory_sha256"
       )], use.names = FALSE)))) {
     stop("Capture external inventory cache is invalid.", call. = FALSE)
   }
@@ -148,11 +495,27 @@ wlv13_v5d_validate_stage5_capture <- function(
     "harness_path", "harness_inventory_sha256", "harness_runtime_path",
     "harness_runtime_inventory_before_sha256",
     "harness_runtime_inventory_after_sha256", "rscript_path",
-    "rscript_sha256", "r_library_path",
+    "rscript_sha256", "fsutil_path", "fsutil_sha256", "r_library_path",
     "r_library_inventory_before_sha256",
     "r_library_inventory_after_sha256", "tool_records", "baseline_worktree",
     "captured_methods", "verified_records",
-    "seed_evidence_index_sha256", "source_wiodr13_manifest_sha256",
+    "seed_evidence_index_sha256", "source_data_origin_path",
+    "source_data_snapshot_path",
+    "source_data_origin_inventory_before_sha256",
+    "source_data_origin_inventory_after_sha256",
+    "source_data_snapshot_inventory_before_sha256",
+    "source_data_snapshot_inventory_after_sha256",
+    "source_data_origin_physical_path",
+    "source_data_snapshot_physical_path",
+    "source_data_physical_file_count",
+    "source_data_physical_directory_count",
+    "source_data_origin_physical_before_sha256",
+    "source_data_origin_physical_after_sha256",
+    "source_data_snapshot_physical_before_sha256",
+    "source_data_snapshot_physical_after_sha256",
+    "source_data_independence_before_sha256",
+    "source_data_independence_after_sha256",
+    "source_wiodr13_manifest_sha256",
     "source_wiodr16_manifest_sha256",
     "source_wiodr13_inventory_before_sha256",
     "source_wiodr13_inventory_after_sha256",
@@ -179,7 +542,7 @@ wlv13_v5d_validate_stage5_capture <- function(
       "alternative_1", "alternative_2", "norow_w13", "ochoa_1",
       "ochoa_2", "petrovic", "wiodr13v09"
     ), collapse = ","),
-    verified_records = "7", tool_records = "6"
+    verified_records = "7", tool_records = "7"
   )
   bridge_fixed_valid <- all(vapply(names(bridge_fixed), function(key) {
     identical(wlv13_v5d_capture_field(bridge_lines, key),
@@ -187,6 +550,9 @@ wlv13_v5d_validate_stage5_capture <- function(
   }, logical(1L)))
   bridge_rscript_path <- normalizePath(wlv13_v5d_capture_field(
     bridge_lines, "rscript_path"
+  ), winslash = "/", mustWork = TRUE)
+  bridge_fsutil_path <- normalizePath(wlv13_v5d_capture_field(
+    bridge_lines, "fsutil_path"
   ), winslash = "/", mustWork = TRUE)
   bridge_r_library_path <- normalizePath(wlv13_v5d_capture_field(
     bridge_lines, "r_library_path"
@@ -214,6 +580,126 @@ wlv13_v5d_validate_stage5_capture <- function(
   ), function(key) {
     wlv13_v5d_capture_field(bridge_lines, key)
   }, character(1L))
+  bridge_source_origin_record_path <- wlv13_v5d_capture_field(
+    bridge_lines, "source_data_origin_path"
+  )
+  bridge_source_snapshot_record_path <- wlv13_v5d_capture_field(
+    bridge_lines, "source_data_snapshot_path"
+  )
+  bridge_source_origin_path <- normalizePath(
+    bridge_source_origin_record_path, winslash = "/", mustWork = TRUE
+  )
+  bridge_source_snapshot_path <- normalizePath(
+    bridge_source_snapshot_record_path, winslash = "/", mustWork = TRUE
+  )
+  bridge_source_data_hashes <- vapply(c(
+    "source_data_origin_inventory_before_sha256",
+    "source_data_origin_inventory_after_sha256",
+    "source_data_snapshot_inventory_before_sha256",
+    "source_data_snapshot_inventory_after_sha256"
+  ), function(key) {
+    wlv13_v5d_capture_field(bridge_lines, key)
+  }, character(1L))
+  bridge_worktree <- normalizePath(wlv13_v5d_capture_field(
+    bridge_lines, "baseline_worktree"
+  ), winslash = "/", mustWork = TRUE)
+  bridge_source_origin_physical_path <- wlv13_v5d_recorded_windows_path(
+    wlv13_v5d_capture_field(
+      bridge_lines, "source_data_origin_physical_path"
+    ), physical = TRUE
+  )
+  bridge_source_snapshot_physical_path <- wlv13_v5d_recorded_windows_path(
+    wlv13_v5d_capture_field(
+      bridge_lines, "source_data_snapshot_physical_path"
+    ), physical = TRUE
+  )
+  bridge_physical_volume <- wlv13_v5d_physical_volume(
+    bridge_source_origin_physical_path
+  )
+  bridge_physical_hashes <- vapply(c(
+    "source_data_origin_physical_before_sha256",
+    "source_data_origin_physical_after_sha256",
+    "source_data_snapshot_physical_before_sha256",
+    "source_data_snapshot_physical_after_sha256",
+    "source_data_independence_before_sha256",
+    "source_data_independence_after_sha256"
+  ), function(key) {
+    wlv13_v5d_capture_field(bridge_lines, key)
+  }, character(1L))
+  bridge_fsutil_bound <-
+    identical(tolower(bridge_fsutil_path),
+      tolower(external_inventories$fsutil_path)) &&
+    identical(wlv13_v5d_capture_field(
+      bridge_lines, "fsutil_sha256"
+    ), external_inventories$fsutil_sha256) &&
+    identical(wlv13_sha256_file(bridge_fsutil_path),
+      external_inventories$fsutil_sha256)
+  if (!bridge_fsutil_bound) {
+    stop("Bridge capture fsutil is not independently authenticated.",
+      call. = FALSE
+    )
+  }
+  bridge_live_physical <- if (requested_verify_live) {
+    value <- wlv13_v5d_physical_snapshot_attest(
+      bridge_source_origin_record_path,
+      bridge_source_snapshot_record_path,
+      bridge_source_origin_physical_path,
+      bridge_source_snapshot_physical_path,
+      bridge_fsutil_path
+    )
+    live_checks[["bridge_physical"]] <-
+      live_checks[["bridge_physical"]] + 1L
+    value
+  } else {
+    NULL
+  }
+  bridge_physical_valid <-
+    identical(
+      wlv13_v5d_physical_volume(bridge_source_snapshot_physical_path),
+      bridge_physical_volume
+    ) && wlv13_v5d_physical_path_matches_lexical(
+      bridge_source_origin_record_path,
+      bridge_source_origin_physical_path,
+      bridge_physical_volume
+    ) && wlv13_v5d_physical_path_matches_lexical(
+      bridge_source_snapshot_record_path,
+      bridge_source_snapshot_physical_path,
+      bridge_physical_volume
+    ) &&
+    identical(
+      bridge_source_origin_physical_path,
+      wlv13_v5d_recorded_windows_path(
+        external_inventories$source_data_origin_physical_path,
+        physical = TRUE
+      )
+    ) && identical(
+      bridge_source_snapshot_physical_path,
+      wlv13_v5d_recorded_windows_path(
+        external_inventories$source_data_snapshot_physical_path,
+        physical = TRUE
+      )
+    ) && identical(wlv13_v5d_capture_field(
+      bridge_lines, "source_data_physical_file_count"
+    ), "84") && identical(wlv13_v5d_capture_field(
+      bridge_lines, "source_data_physical_directory_count"
+    ), "5") && all(grepl("^[0-9a-f]{64}$", bridge_physical_hashes)) &&
+    identical(bridge_physical_hashes[[1L]], bridge_physical_hashes[[2L]]) &&
+    identical(bridge_physical_hashes[[3L]], bridge_physical_hashes[[4L]]) &&
+    identical(bridge_physical_hashes[[5L]], bridge_physical_hashes[[6L]]) &&
+    (!requested_verify_live || (
+      identical(bridge_live_physical$file_count, 84L) &&
+      identical(bridge_live_physical$directory_count, 5L) &&
+      identical(
+        bridge_live_physical$source_physical_inventory_sha256,
+        bridge_physical_hashes[[1L]]
+      ) && identical(
+        bridge_live_physical$snapshot_physical_inventory_sha256,
+        bridge_physical_hashes[[3L]]
+      ) && identical(
+        bridge_live_physical$independence_sha256,
+        bridge_physical_hashes[[5L]]
+      )
+    ))
   bridge_tooling_valid <-
     identical(wlv13_v5d_capture_field(
       bridge_lines, "harness_path"
@@ -229,22 +715,44 @@ wlv13_v5d_validate_stage5_capture <- function(
     identical(wlv13_v5d_capture_field(
       bridge_lines, "rscript_sha256"
     ), wlv13_sha256_file(bridge_rscript_path)) &&
+    identical(bridge_fsutil_path, external_inventories$fsutil_path) &&
+    identical(wlv13_v5d_capture_field(
+      bridge_lines, "fsutil_sha256"
+    ), external_inventories$fsutil_sha256) &&
+    identical(wlv13_v5d_capture_field(
+      bridge_lines, "fsutil_sha256"
+    ), wlv13_sha256_file(bridge_fsutil_path)) &&
     identical(bridge_r_library_path,
       external_inventories$r_library_path) &&
     all(grepl("^[0-9a-f]{64}$", bridge_r_library_hashes)) &&
     all(bridge_r_library_hashes ==
       external_inventories$r_library_inventory_sha256) &&
+    identical(bridge_source_origin_path,
+      external_inventories$source_data_origin_path) &&
+    identical(bridge_source_snapshot_path,
+      external_inventories$source_data_snapshot_path) &&
+    identical(bridge_source_snapshot_path, normalizePath(file.path(
+      bridge_worktree, "source_data"
+    ), winslash = "/", mustWork = TRUE)) &&
+    !identical(bridge_source_origin_path, bridge_source_snapshot_path) &&
+    all(grepl("^[0-9a-f]{64}$", bridge_source_data_hashes)) &&
+    all(bridge_source_data_hashes == bridge_source_data_hashes[[1L]]) &&
+    identical(bridge_source_data_hashes[[1L]],
+      external_inventories$source_data_origin_inventory_sha256) &&
+    identical(bridge_source_data_hashes[[3L]],
+      external_inventories$source_data_snapshot_inventory_sha256) &&
     all(grepl("^[0-9a-f]{64}$", bridge_source_inventory_hashes)) &&
     identical(bridge_source_inventory_hashes[[1L]],
       bridge_source_inventory_hashes[[2L]]) &&
     identical(bridge_source_inventory_hashes[[3L]],
       bridge_source_inventory_hashes[[4L]])
-  if (length(bridge_lines) != length(bridge_header) + 6L + 7L ||
+  if (length(bridge_lines) != length(bridge_header) + 7L + 7L ||
       !identical(bridge_keys, bridge_header) ||
       !identical(bridge_lines[[1L]],
-        "schema=issue13-v5-clean-bridge-capture/1") ||
+        "schema=issue13-v5-clean-bridge-capture/2") ||
       !bridge_fixed_valid || !bridge_tooling_valid ||
-      length(bridge_tool_lines) != 6L || length(bridge_records) != 7L ||
+      !bridge_physical_valid ||
+      length(bridge_tool_lines) != 7L || length(bridge_records) != 7L ||
       !identical(wlv13_v5d_capture_field(
         bridge_lines, "evidence_index_sha256"
       ), wlv13_sha256_file(bridge_index_path)) ||
@@ -263,12 +771,14 @@ wlv13_v5d_validate_stage5_capture <- function(
   })
   bridge_tool_names <- c(
     "bridge_builder", "bridge_capture_script", "compare_override",
-    "diagnostics_override", "metadata_equivalence", "verifier"
+    "coordinator_library", "diagnostics_override", "metadata_equivalence",
+    "verifier"
   )
   bridge_tool_files <- stats::setNames(c(
     "issue13-v5-build-diagnostic-bridges.R",
     "issue13-v5-capture-clean-bridge-evidence.ps1",
     "issue13-v5-compare-override.R",
+    "issue13-v5-coordinator-lib.ps1",
     "issue13-v5-diagnostics-override.R",
     "issue13-v5-metadata-equivalence.json",
     "issue13-v5-verify-diagnostic-evidence.R"
@@ -327,21 +837,41 @@ wlv13_v5d_validate_stage5_capture <- function(
     "harness_inventory_sha256", "harness_runtime_path",
     "harness_runtime_inventory_before_sha256",
     "harness_runtime_inventory_after_sha256", "rscript_path", "rscript_sha256",
-    "r_library_path", "r_library_inventory_before_sha256",
+    "fsutil_path", "fsutil_sha256", "r_library_path",
+    "r_library_inventory_before_sha256",
     "r_library_inventory_after_sha256", "methods", "stages",
     "bridge_capture_record_sha256",
     "bridge_evidence_index_sha256", "bridge_manifest_sha256",
     "stage5_evidence_index_sha256",
+    "source_data_origin_path",
+    "source_data_origin_inventory_before_sha256",
+    "source_data_origin_inventory_after_sha256",
+    "bridge_source_data_snapshot_path",
+    "bridge_source_data_snapshot_inventory_before_sha256",
+    "bridge_source_data_snapshot_inventory_after_sha256",
+    "source_data_origin_physical_path",
+    "source_data_physical_file_count",
+    "source_data_physical_directory_count",
+    "source_data_origin_physical_before_sha256",
+    "source_data_origin_physical_after_sha256",
+    "bridge_source_data_snapshot_physical_path",
+    "bridge_source_data_snapshot_physical_before_sha256",
+    "bridge_source_data_snapshot_physical_after_sha256",
+    "bridge_source_data_independence_before_sha256",
+    "bridge_source_data_independence_after_sha256",
     "source_wiodr13_inventory_before_sha256",
     "source_wiodr13_inventory_after_sha256",
     "source_wiodr16_inventory_before_sha256",
     "source_wiodr16_inventory_after_sha256", "recipe_records",
     "reference_records", "seed_records", "target_records",
-    "worktree_records"
+    "worktree_records", "source_snapshot_records"
   )
   stage_keys <- sub("=.*$", "", stage_lines[seq_along(stage_header)])
   recipe_lines <- grep("^recipe_record;", stage_lines, value = TRUE)
   worktree_lines <- grep("^worktree_record;", stage_lines, value = TRUE)
+  source_snapshot_lines <- grep(
+    "^source_snapshot_record;", stage_lines, value = TRUE
+  )
   reference_lines <- grep(
     "^evidence_record;role=baseline_reference;", stage_lines, value = TRUE
   )
@@ -359,9 +889,9 @@ wlv13_v5d_validate_stage5_capture <- function(
     baseline_runtime_tree = "7da19c4f2913e857040ba228280f404b0e54eaab",
     methods = paste(wlv13_v5d_methods, collapse = ","),
     stages = "1,4,5",
-    recipe_records = "9", reference_records = "12",
+    recipe_records = "10", reference_records = "12",
     seed_records = "36", target_records = "36",
-    worktree_records = "6"
+    worktree_records = "6", source_snapshot_records = "6"
   )
   fixed_valid <- all(vapply(names(fixed_values), function(key) {
     identical(wlv13_v5d_capture_field(stage_lines, key),
@@ -394,8 +924,74 @@ wlv13_v5d_validate_stage5_capture <- function(
       bridge_source_inventory_hashes[[1L]]) &&
     identical(inventory_hashes[[3L]],
       bridge_source_inventory_hashes[[3L]])
+  stage_source_origin_record_path <- wlv13_v5d_capture_field(
+    stage_lines, "source_data_origin_path"
+  )
+  stage_source_origin_path <- normalizePath(
+    stage_source_origin_record_path, winslash = "/", mustWork = TRUE
+  )
+  stage_bridge_source_snapshot_record_path <- wlv13_v5d_capture_field(
+    stage_lines, "bridge_source_data_snapshot_path"
+  )
+  stage_bridge_source_snapshot_path <- normalizePath(
+    stage_bridge_source_snapshot_record_path,
+    winslash = "/", mustWork = TRUE
+  )
+  stage_source_data_hashes <- vapply(c(
+    "source_data_origin_inventory_before_sha256",
+    "source_data_origin_inventory_after_sha256",
+    "bridge_source_data_snapshot_inventory_before_sha256",
+    "bridge_source_data_snapshot_inventory_after_sha256"
+  ), function(key) {
+    wlv13_v5d_capture_field(stage_lines, key)
+  }, character(1L))
+  stage_live_source_content_valid <- if (requested_verify_live) {
+    live_origin_hash <- wlv13_v5d_directory_inventory_sha256(
+      stage_source_origin_path
+    )
+    live_checks[["source_origin_content"]] <-
+      live_checks[["source_origin_content"]] + 1L
+    live_bridge_hash <- wlv13_v5d_directory_inventory_sha256(
+      stage_bridge_source_snapshot_path
+    )
+    live_checks[["bridge_snapshot_content"]] <-
+      live_checks[["bridge_snapshot_content"]] + 1L
+    identical(
+      live_origin_hash,
+      external_inventories$source_data_origin_inventory_sha256
+    ) && identical(
+      live_bridge_hash,
+      external_inventories$source_data_snapshot_inventory_sha256
+    )
+  } else {
+    TRUE
+  }
+  source_data_valid <-
+    identical(stage_source_origin_record_path,
+      bridge_source_origin_record_path) &&
+    identical(stage_bridge_source_snapshot_record_path,
+      bridge_source_snapshot_record_path) &&
+    identical(stage_source_origin_path, bridge_source_origin_path) &&
+    identical(stage_source_origin_path,
+      external_inventories$source_data_origin_path) &&
+    identical(stage_bridge_source_snapshot_path,
+      bridge_source_snapshot_path) &&
+    identical(stage_bridge_source_snapshot_path,
+      external_inventories$source_data_snapshot_path) &&
+    !identical(stage_source_origin_path,
+      stage_bridge_source_snapshot_path) &&
+    all(grepl(sha, stage_source_data_hashes)) &&
+    all(stage_source_data_hashes == stage_source_data_hashes[[1L]]) &&
+    identical(stage_source_data_hashes[[1L]],
+      external_inventories$source_data_origin_inventory_sha256) &&
+    identical(stage_source_data_hashes[[3L]],
+      external_inventories$source_data_snapshot_inventory_sha256) &&
+    stage_live_source_content_valid
   stage_rscript_path <- normalizePath(wlv13_v5d_capture_field(
     stage_lines, "rscript_path"
+  ), winslash = "/", mustWork = TRUE)
+  stage_fsutil_path <- normalizePath(wlv13_v5d_capture_field(
+    stage_lines, "fsutil_path"
   ), winslash = "/", mustWork = TRUE)
   stage_r_library_path <- normalizePath(wlv13_v5d_capture_field(
     stage_lines, "r_library_path"
@@ -415,6 +1011,99 @@ wlv13_v5d_validate_stage5_capture <- function(
   ), function(key) {
     wlv13_v5d_capture_field(stage_lines, key)
   }, character(1L))
+  stage_source_origin_physical_path <- wlv13_v5d_recorded_windows_path(
+    wlv13_v5d_capture_field(
+      stage_lines, "source_data_origin_physical_path"
+    ), physical = TRUE
+  )
+  stage_bridge_source_snapshot_physical_path <-
+    wlv13_v5d_recorded_windows_path(wlv13_v5d_capture_field(
+      stage_lines, "bridge_source_data_snapshot_physical_path"
+    ), physical = TRUE)
+  stage_bridge_physical_hashes <- vapply(c(
+    "source_data_origin_physical_before_sha256",
+    "source_data_origin_physical_after_sha256",
+    "bridge_source_data_snapshot_physical_before_sha256",
+    "bridge_source_data_snapshot_physical_after_sha256",
+    "bridge_source_data_independence_before_sha256",
+    "bridge_source_data_independence_after_sha256"
+  ), function(key) {
+    wlv13_v5d_capture_field(stage_lines, key)
+  }, character(1L))
+  stage_fsutil_bound <-
+    identical(tolower(stage_fsutil_path),
+      tolower(external_inventories$fsutil_path)) &&
+    identical(tolower(stage_fsutil_path), tolower(bridge_fsutil_path)) &&
+    identical(wlv13_v5d_capture_field(
+      stage_lines, "fsutil_sha256"
+    ), external_inventories$fsutil_sha256) &&
+    identical(wlv13_sha256_file(stage_fsutil_path),
+      external_inventories$fsutil_sha256)
+  if (!stage_fsutil_bound) {
+    stop("Stage capture fsutil is not independently authenticated.",
+      call. = FALSE
+    )
+  }
+  stage_live_bridge_physical <- if (requested_verify_live) {
+    value <- wlv13_v5d_physical_snapshot_attest(
+      stage_source_origin_record_path,
+      stage_bridge_source_snapshot_record_path,
+      stage_source_origin_physical_path,
+      stage_bridge_source_snapshot_physical_path,
+      stage_fsutil_path
+    )
+    live_checks[["stage_bridge_physical"]] <-
+      live_checks[["stage_bridge_physical"]] + 1L
+    value
+  } else {
+    NULL
+  }
+  stage_bridge_physical_valid <-
+    identical(wlv13_v5d_physical_volume(
+      stage_source_origin_physical_path
+    ), bridge_physical_volume) &&
+    identical(wlv13_v5d_physical_volume(
+      stage_bridge_source_snapshot_physical_path
+    ), bridge_physical_volume) &&
+    wlv13_v5d_physical_path_matches_lexical(
+      stage_source_origin_record_path,
+      stage_source_origin_physical_path,
+      bridge_physical_volume
+    ) && wlv13_v5d_physical_path_matches_lexical(
+      stage_bridge_source_snapshot_record_path,
+      stage_bridge_source_snapshot_physical_path,
+      bridge_physical_volume
+    ) &&
+    identical(stage_source_origin_physical_path,
+      bridge_source_origin_physical_path) &&
+    identical(stage_bridge_source_snapshot_physical_path,
+      bridge_source_snapshot_physical_path) &&
+    identical(wlv13_v5d_capture_field(
+      stage_lines, "source_data_physical_file_count"
+    ), "84") && identical(wlv13_v5d_capture_field(
+      stage_lines, "source_data_physical_directory_count"
+    ), "5") && all(grepl(sha, stage_bridge_physical_hashes)) &&
+    identical(stage_bridge_physical_hashes, bridge_physical_hashes) &&
+    identical(stage_bridge_physical_hashes[[1L]],
+      stage_bridge_physical_hashes[[2L]]) &&
+    identical(stage_bridge_physical_hashes[[3L]],
+      stage_bridge_physical_hashes[[4L]]) &&
+    identical(stage_bridge_physical_hashes[[5L]],
+      stage_bridge_physical_hashes[[6L]]) &&
+    (!requested_verify_live || (
+      identical(stage_live_bridge_physical$file_count, 84L) &&
+      identical(stage_live_bridge_physical$directory_count, 5L) &&
+      identical(
+        stage_live_bridge_physical$source_physical_inventory_sha256,
+        stage_bridge_physical_hashes[[1L]]
+      ) && identical(
+        stage_live_bridge_physical$snapshot_physical_inventory_sha256,
+        stage_bridge_physical_hashes[[3L]]
+      ) && identical(
+        stage_live_bridge_physical$independence_sha256,
+        stage_bridge_physical_hashes[[5L]]
+      )
+    ))
   tooling_valid <- identical(wlv13_v5d_capture_field(
       stage_lines, "harness_path"
     ), harness_dir) &&
@@ -438,6 +1127,17 @@ wlv13_v5d_validate_stage5_capture <- function(
     identical(wlv13_v5d_capture_field(
       stage_lines, "rscript_sha256"
     ), wlv13_v5d_capture_field(bridge_lines, "rscript_sha256")) &&
+    identical(stage_fsutil_path, external_inventories$fsutil_path) &&
+    identical(stage_fsutil_path, bridge_fsutil_path) &&
+    identical(wlv13_v5d_capture_field(
+      stage_lines, "fsutil_sha256"
+    ), external_inventories$fsutil_sha256) &&
+    identical(wlv13_v5d_capture_field(
+      stage_lines, "fsutil_sha256"
+    ), wlv13_sha256_file(stage_fsutil_path)) &&
+    identical(wlv13_v5d_capture_field(
+      stage_lines, "fsutil_sha256"
+    ), wlv13_v5d_capture_field(bridge_lines, "fsutil_sha256")) &&
     identical(stage_r_library_path,
       external_inventories$r_library_path) &&
     identical(stage_r_library_path, bridge_r_library_path) &&
@@ -446,12 +1146,14 @@ wlv13_v5d_validate_stage5_capture <- function(
       external_inventories$r_library_inventory_sha256) &&
     identical(stage_r_library_hashes, bridge_r_library_hashes)
   if (length(stage_lines) !=
-        length(stage_header) + 9L + 6L + 12L + 36L + 36L ||
+        length(stage_header) + 10L + 6L + 6L + 12L + 36L + 36L ||
       !identical(stage_keys, stage_header) ||
       !identical(stage_lines[[1L]],
-        "schema=issue13-v5-clean-stage5-capture/1") ||
-      !fixed_valid || !hash_valid || !inventory_valid || !tooling_valid ||
-      length(recipe_lines) != 9L || length(worktree_lines) != 6L ||
+        "schema=issue13-v5-clean-stage5-capture/2") ||
+      !fixed_valid || !hash_valid || !inventory_valid || !source_data_valid ||
+      !stage_bridge_physical_valid || !tooling_valid ||
+      length(recipe_lines) != 10L || length(worktree_lines) != 6L ||
+      length(source_snapshot_lines) != 6L ||
       length(reference_lines) != 12L || length(seed_lines) != 36L ||
       length(target_lines) != 36L) {
     stop("The stage-five capture record is not exhaustive.", call. = FALSE)
@@ -463,13 +1165,15 @@ wlv13_v5d_validate_stage5_capture <- function(
   })
   recipe_names <- c(
     "bridge_builder", "bridge_capture_script", "compare_override",
-    "diagnostics_override", "launcher", "metadata_equivalence", "stage5_builder",
-    "stage5_capture_script", "verifier"
+    "coordinator_library", "diagnostics_override", "launcher",
+    "metadata_equivalence", "stage5_builder", "stage5_capture_script",
+    "verifier"
   )
   recipe_files <- stats::setNames(c(
     "issue13-v5-build-diagnostic-bridges.R",
     "issue13-v5-capture-clean-bridge-evidence.ps1",
     "issue13-v5-compare-override.R",
+    "issue13-v5-coordinator-lib.ps1",
     "issue13-v5-diagnostics-override.R",
     "issue13-v5-run-stage5-evidence.R",
     "issue13-v5-metadata-equivalence.json",
@@ -497,6 +1201,17 @@ wlv13_v5d_validate_stage5_capture <- function(
       c("key", "path", "commit", "tree", "git_status_sha256")
     )
   })
+  source_snapshots <- lapply(source_snapshot_lines, function(line) {
+    wlv13_v5d_capture_semicolon_record(
+      line, "source_snapshot_record",
+      c(
+        "key", "path", "physical_path", "file_count", "directory_count",
+        "inventory_before_sha256", "inventory_after_sha256",
+        "physical_before_sha256", "physical_after_sha256",
+        "independence_before_sha256", "independence_after_sha256"
+      )
+    )
+  })
   expected_worktree_keys <- sort(as.vector(outer(
     as.character(c(1L, 4L, 5L)), c(
       "cc2c86189a06676bcb9f0e05e08033d710a92509",
@@ -505,7 +1220,7 @@ wlv13_v5d_validate_stage5_capture <- function(
   )), method = "radix")
   empty_sha256 <- wlv13_v5d_sha256_text("")
   if (!identical(
-      sort(vapply(worktrees, `[[`, character(1L), "key"), method = "radix"),
+      vapply(worktrees, `[[`, character(1L), "key"),
       expected_worktree_keys
     ) || !identical(
       sort(unique(evidence$baseline_target_project_root), method = "radix"),
@@ -528,6 +1243,103 @@ wlv13_v5d_validate_stage5_capture <- function(
         !identical(record$git_status_sha256, empty_sha256)
     }, logical(1L)))) {
     stop("Stage-five capture worktree inventory is incomplete.",
+      call. = FALSE
+    )
+  }
+  worktree_paths <- stats::setNames(
+    vapply(worktrees, function(record) record$path, character(1L)),
+    vapply(worktrees, function(record) record$key, character(1L))
+  )
+  source_snapshot_keys <- vapply(
+    source_snapshots, function(record) record$key, character(1L)
+  )
+  source_snapshot_physical_paths <- vapply(
+    source_snapshots, function(record) {
+      wlv13_v5d_recorded_windows_path(record$physical_path, physical = TRUE)
+    }, character(1L)
+  )
+  if (!identical(source_snapshot_keys, expected_worktree_keys) ||
+      anyDuplicated(tolower(source_snapshot_physical_paths)) ||
+      any(vapply(source_snapshots, function(record) {
+        record_path_raw <- record$path
+        record_path <- normalizePath(
+          record_path_raw, winslash = "/", mustWork = TRUE
+        )
+        expected_path <- normalizePath(file.path(
+          worktree_paths[[record$key]], "source_data"
+        ), winslash = "/", mustWork = TRUE)
+        record_physical_path <- wlv13_v5d_recorded_windows_path(
+          record$physical_path, physical = TRUE
+        )
+        live_physical <- if (requested_verify_live) {
+          value <- wlv13_v5d_physical_snapshot_attest(
+            stage_source_origin_record_path, record_path_raw,
+            stage_source_origin_physical_path, record_physical_path,
+            stage_fsutil_path
+          )
+          live_checks[["stage_snapshot_physical"]] <<-
+            live_checks[["stage_snapshot_physical"]] + 1L
+          value
+        } else {
+          NULL
+        }
+        live_inventory_valid <- if (requested_verify_live) {
+          value <- identical(
+            wlv13_v5d_directory_inventory_sha256(record_path),
+            record$inventory_before_sha256
+          )
+          live_checks[["stage_snapshot_content"]] <<-
+            live_checks[["stage_snapshot_content"]] + 1L
+          value
+        } else {
+          TRUE
+        }
+        !identical(record_path, expected_path) ||
+          identical(record_path, stage_source_origin_path) ||
+          identical(record_path, stage_bridge_source_snapshot_path) ||
+          !identical(wlv13_v5d_physical_volume(record_physical_path),
+            bridge_physical_volume) ||
+          !wlv13_v5d_physical_path_matches_lexical(
+            record_path_raw, record_physical_path, bridge_physical_volume
+          ) ||
+          identical(tolower(record_physical_path),
+            tolower(stage_source_origin_physical_path)) ||
+          identical(tolower(record_physical_path),
+            tolower(stage_bridge_source_snapshot_physical_path)) ||
+          !identical(record$file_count, "84") ||
+          !identical(record$directory_count, "5") ||
+          !grepl(sha, record$inventory_before_sha256) ||
+          !identical(
+            record$inventory_before_sha256,
+            record$inventory_after_sha256
+          ) ||
+          !identical(
+            record$inventory_before_sha256,
+            stage_source_data_hashes[[1L]]
+          ) ||
+          !grepl(sha, record$physical_before_sha256) ||
+          !identical(record$physical_before_sha256,
+            record$physical_after_sha256) ||
+          !grepl(sha, record$independence_before_sha256) ||
+          !identical(record$independence_before_sha256,
+            record$independence_after_sha256) ||
+          !live_inventory_valid ||
+          (requested_verify_live && (
+            !identical(live_physical$file_count, 84L) ||
+            !identical(live_physical$directory_count, 5L) ||
+            !identical(
+              live_physical$source_physical_inventory_sha256,
+              stage_bridge_physical_hashes[[1L]]
+            ) || !identical(
+              live_physical$snapshot_physical_inventory_sha256,
+              record$physical_before_sha256
+            ) || !identical(
+              live_physical$independence_sha256,
+              record$independence_before_sha256
+            )
+          ))
+      }, logical(1L)))) {
+    stop("Stage-five source-data snapshots are not physical exact copies.",
       call. = FALSE
     )
   }
@@ -730,7 +1542,162 @@ wlv13_v5d_validate_stage5_capture <- function(
       call. = FALSE
     )
   }
+  expected_live_checks <- if (requested_verify_live) {
+    stats::setNames(c(1L, 1L, 6L, 1L, 1L, 6L), names(live_checks))
+  } else {
+    stats::setNames(integer(6L), names(live_checks))
+  }
+  if (!identical(live_checks, expected_live_checks)) {
+    stop("Stage-five capture live-check canary is incomplete.",
+      call. = FALSE
+    )
+  }
   wlv13_sha256_file(stage_capture_path)
+}
+
+wlv13_v5d_live_validation_structure_selftest <- function() {
+  calls_in <- function(expression) {
+    value <- list()
+    visit <- function(node) {
+      if (is.call(node)) {
+        value[[length(value) + 1L]] <<- node
+        children <- as.list(node)[-1L]
+      } else if (is.expression(node) || is.pairlist(node) || is.list(node)) {
+        children <- as.list(node)
+      } else {
+        return(invisible(NULL))
+      }
+      invisible(lapply(children, visit))
+      invisible(NULL)
+    }
+    visit(expression)
+    value
+  }
+  call_head <- function(call) {
+    if (is.call(call) && is.symbol(call[[1L]])) {
+      as.character(call[[1L]])
+    } else {
+      ""
+    }
+  }
+  assertions <- 0L
+  assert <- function(value, message) {
+    if (!isTRUE(value)) stop(message, call. = FALSE)
+    assertions <<- assertions + 1L
+    invisible(NULL)
+  }
+  validator <- wlv13_v5d_validate_stage5_capture
+  validator_calls <- calls_in(body(validator))
+  validator_heads <- vapply(validator_calls, call_head, character(1L))
+  assert(identical(formals(validator)$verify_live, TRUE),
+    "Capture validator live-mode default changed."
+  )
+  assignment_base <- function(lhs) {
+    while (is.call(lhs) && call_head(lhs) %in% c("[", "[[", "$", "@")) {
+      lhs <- lhs[[2L]]
+    }
+    if (is.symbol(lhs)) as.character(lhs) else ""
+  }
+  assignments <- validator_calls[validator_heads %in% c("<-", "<<-", "=")]
+  requested_assignments <- Filter(function(call) {
+    assignment_base(call[[2L]]) %in%
+      c("verify_live", "requested_verify_live")
+  }, assignments)
+  official_assignments <- Filter(function(call) {
+    identical(assignment_base(call[[2L]]),
+      "official_source_inventory_sha256")
+  }, assignments)
+  validator_body <- body(validator)
+  lock_probe <- new.env(parent = emptyenv())
+  lock_probe$requested_verify_live <- TRUE
+  lockBinding("requested_verify_live", lock_probe)
+  lock_rejects_subassignment <- tryCatch({
+    lock_probe$requested_verify_live[] <- FALSE
+    FALSE
+  }, error = function(error) TRUE)
+  assert(length(requested_assignments) == 1L &&
+      identical(as.character(requested_assignments[[1L]][[2L]]),
+        "requested_verify_live") &&
+      identical(requested_assignments[[1L]][[3L]], as.name("verify_live")) &&
+      identical(validator_body[[3L]],
+        quote(requested_verify_live <- verify_live)) &&
+      identical(validator_body[[4L]],
+        quote(lockBinding("requested_verify_live", environment()))) &&
+      length(official_assignments) == 1L &&
+      identical(validator_body[[5L]], quote(
+        official_source_inventory_sha256 <-
+          "6c5e3c5583f431899658197484c4ebba3b1b1ee58b21b11f88fb1665084fbc4a"
+      )) && identical(validator_body[[6L]], quote(
+        lockBinding("official_source_inventory_sha256", environment())
+      )) &&
+      identical(assignment_base(quote(requested_verify_live[])),
+        "requested_verify_live") &&
+      identical(assignment_base(quote(
+        official_source_inventory_sha256[]
+      )), "official_source_inventory_sha256") &&
+      isTRUE(lock_rejects_subassignment),
+    "Capture validator live-mode assignment is not singular and immutable."
+  )
+  dynamic_assignments <- validator_calls[validator_heads %in% c(
+    "assign", "delayedAssign", "makeActiveBinding", "unlockBinding"
+  )]
+  assert(!any(vapply(dynamic_assignments, function(call) {
+    length(call) >= 2L && is.character(call[[2L]]) &&
+      call[[2L]] %in% c(
+        "verify_live", "requested_verify_live",
+        "official_source_inventory_sha256"
+      )
+  }, logical(1L))),
+  "Capture validator dynamically assigns its live-mode canary."
+  )
+  live_if_calls <- Filter(function(call) {
+    identical(call_head(call), "if") && length(call) >= 3L &&
+      identical(call[[2L]], as.name("requested_verify_live"))
+  }, validator_calls)
+  verify_if_calls <- Filter(function(call) {
+    identical(call_head(call), "if") && length(call) >= 3L &&
+      identical(call[[2L]], as.name("verify_live"))
+  }, validator_calls)
+  assert(length(live_if_calls) == 6L && length(verify_if_calls) == 0L,
+    "Capture validator live branches changed."
+  )
+  verify_symbols <- 0L
+  count_verify_symbols <- function(node) {
+    if (is.symbol(node) && identical(as.character(node), "verify_live")) {
+      verify_symbols <<- verify_symbols + 1L
+    }
+    if (is.call(node) || is.expression(node) || is.pairlist(node) ||
+        is.list(node)) {
+      invisible(lapply(as.list(node), count_verify_symbols))
+    }
+    invisible(NULL)
+  }
+  count_verify_symbols(body(validator))
+  assert(identical(verify_symbols, 3L),
+    "Capture validator uses its mutable formal outside the frozen prologue."
+  )
+  assert(sum(validator_heads == "wlv13_v5d_physical_snapshot_attest") == 3L &&
+      sum(validator_heads == "wlv13_v5d_directory_inventory_sha256") == 3L,
+    "Capture validator live proof call sites changed."
+  )
+  main_calls <- calls_in(body(wlv13_v5d_stage5_generator_main))
+  main_validator_calls <- main_calls[vapply(main_calls, function(call) {
+    identical(call_head(call), "wlv13_v5d_validate_stage5_capture")
+  }, logical(1L))]
+  mutation_calls <- calls_in(body(wlv13_v5d_stage5_capture_mutation_selftest))
+  mutation_validator_calls <- mutation_calls[vapply(mutation_calls,
+    function(call) {
+      identical(call_head(call), "wlv13_v5d_validate_stage5_capture")
+    }, logical(1L)
+  )]
+  assert(length(main_validator_calls) == 2L &&
+      all(vapply(main_validator_calls, function(call) {
+        identical(call[["verify_live"]], TRUE)
+      }, logical(1L))) && length(mutation_validator_calls) == 1L &&
+      identical(mutation_validator_calls[[1L]][["verify_live"]], FALSE),
+    "Capture validator call sites do not freeze live versus mutation modes."
+  )
+  assertions
 }
 
 wlv13_v5d_stage5_capture_mutation_selftest <- function(
@@ -742,7 +1709,9 @@ wlv13_v5d_stage5_capture_mutation_selftest <- function(
     failed <- tryCatch({
       force(expression)
       FALSE
-    }, error = function(error) TRUE)
+    }, error = function(error) {
+      inherits(error, "wlv13_v5d_capture_mutation_rejection")
+    })
     if (!failed) {
       stop(sprintf("Stage-five capture mutation passed: %s.", label),
         call. = FALSE
@@ -751,17 +1720,41 @@ wlv13_v5d_stage5_capture_mutation_selftest <- function(
     assertions <<- assertions + 1L
   }
   original <- readLines(stage_capture_path, warn = FALSE, encoding = "UTF-8")
+  capture_directory <- normalizePath(
+    dirname(stage_capture_path), winslash = "/", mustWork = TRUE
+  )
+  mutation_directory <- normalizePath(
+    tempdir(), winslash = "/", mustWork = TRUE
+  )
+  capture_prefix <- paste0(tolower(capture_directory), "/")
+  if (identical(tolower(mutation_directory), tolower(capture_directory)) ||
+      startsWith(tolower(mutation_directory), capture_prefix)) {
+    stop("Mutation self-test temporary directory overlaps the capture root.",
+      call. = FALSE
+    )
+  }
   temporary <- tempfile(
     pattern = "issue13-v5d-mutated-capture-",
-    tmpdir = dirname(stage_capture_path), fileext = ".txt"
+    tmpdir = mutation_directory, fileext = ".txt"
   )
   on.exit(unlink(temporary, force = TRUE), add = TRUE)
   validate_mutation <- function(lines, mutated_evidence = evidence) {
     writeLines(lines, temporary, sep = "\n", useBytes = TRUE)
-    wlv13_v5d_validate_stage5_capture(
-      bridge_capture_path, bridge_index_path, bridge_manifest_path,
-      temporary, stage_index_path, mutated_evidence, harness_dir,
-      external_inventories
+    tryCatch(
+      wlv13_v5d_validate_stage5_capture(
+        bridge_capture_path, bridge_index_path, bridge_manifest_path,
+        temporary, stage_index_path, mutated_evidence, harness_dir,
+        external_inventories, verify_live = FALSE
+      ),
+      error = function(error) {
+        rejection <- simpleError(
+          conditionMessage(error), call = conditionCall(error)
+        )
+        class(rejection) <- c(
+          "wlv13_v5d_capture_mutation_rejection", class(rejection)
+        )
+        stop(rejection)
+      }
     )
   }
   line_index <- function(pattern) {
@@ -792,6 +1785,11 @@ wlv13_v5d_stage5_capture_mutation_selftest <- function(
   mutation[[1L]] <- "schema=issue13-v5-clean-stage5-capture/forged"
   expect_error(validate_mutation(mutation), "schema")
   mutation <- original
+  mutation[1:2] <- mutation[2:1]
+  expect_error(validate_mutation(mutation), "stage header order")
+  mutation <- append(original, original[[1L]], after = 1L)
+  expect_error(validate_mutation(mutation), "duplicate stage header")
+  mutation <- original
   index <- line_index("^bridge_manifest_sha256=")
   mutation[[index]] <- paste0("bridge_manifest_sha256=", mutate_hash(
     sub("^[^=]*=", "", mutation[[index]])
@@ -805,6 +1803,62 @@ wlv13_v5d_stage5_capture_mutation_selftest <- function(
     )
   )
   expect_error(validate_mutation(mutation), "source inventory after")
+  mutation <- original
+  index <- line_index("^source_data_origin_path=")
+  mutation[[index]] <- paste0(mutation[[index]], "0")
+  expect_error(validate_mutation(mutation), "source origin path")
+  mutation <- original
+  index <- line_index("^source_data_origin_physical_path=")
+  mutation[[index]] <- paste0(mutation[[index]], "0")
+  expect_error(validate_mutation(mutation), "source origin physical path")
+  mutation <- original
+  index <- line_index("^source_data_origin_inventory_after_sha256=")
+  mutation[[index]] <- paste0(
+    "source_data_origin_inventory_after_sha256=", mutate_hash(
+      sub("^[^=]*=", "", mutation[[index]])
+    )
+  )
+  expect_error(validate_mutation(mutation), "source origin hash")
+  mutation <- original
+  index <- line_index("^source_data_origin_physical_after_sha256=")
+  mutation[[index]] <- paste0(
+    "source_data_origin_physical_after_sha256=", mutate_hash(
+      sub("^[^=]*=", "", mutation[[index]])
+    )
+  )
+  expect_error(validate_mutation(mutation), "source origin physical hash")
+  mutation <- original
+  index <- line_index("^bridge_source_data_snapshot_path=")
+  mutation[[index]] <- paste0(mutation[[index]], "0")
+  expect_error(validate_mutation(mutation), "bridge source snapshot path")
+  mutation <- original
+  index <- line_index("^bridge_source_data_snapshot_physical_path=")
+  mutation[[index]] <- paste0(mutation[[index]], "0")
+  expect_error(validate_mutation(mutation),
+    "bridge source snapshot physical path"
+  )
+  mutation <- original
+  index <- line_index(
+    "^bridge_source_data_snapshot_inventory_after_sha256="
+  )
+  mutation[[index]] <- paste0(
+    "bridge_source_data_snapshot_inventory_after_sha256=", mutate_hash(
+      sub("^[^=]*=", "", mutation[[index]])
+    )
+  )
+  expect_error(validate_mutation(mutation), "bridge source snapshot hash")
+  mutation <- original
+  index <- line_index(
+    "^bridge_source_data_snapshot_physical_after_sha256="
+  )
+  mutation[[index]] <- paste0(
+    "bridge_source_data_snapshot_physical_after_sha256=", mutate_hash(
+      sub("^[^=]*=", "", mutation[[index]])
+    )
+  )
+  expect_error(validate_mutation(mutation),
+    "bridge source snapshot physical hash"
+  )
   mutation <- original
   index <- line_index("^harness_inventory_sha256=")
   mutation[[index]] <- paste0("harness_inventory_sha256=", mutate_hash(
@@ -830,6 +1884,17 @@ wlv13_v5d_stage5_capture_mutation_selftest <- function(
   ))
   expect_error(validate_mutation(mutation), "Rscript hash")
   mutation <- original
+  forged_executable <- normalizePath(file.path(
+    dirname(external_inventories$fsutil_path), "cmd.exe"
+  ), winslash = "/", mustWork = TRUE)
+  path_index <- line_index("^fsutil_path=")
+  hash_index <- line_index("^fsutil_sha256=")
+  mutation[[path_index]] <- paste0("fsutil_path=", forged_executable)
+  mutation[[hash_index]] <- paste0(
+    "fsutil_sha256=", wlv13_sha256_file(forged_executable)
+  )
+  expect_error(validate_mutation(mutation), "coherent fsutil executable")
+  mutation <- original
   index <- line_index("^r_library_path=")
   mutation[[index]] <- paste0(mutation[[index]], "0")
   expect_error(validate_mutation(mutation), "R library path")
@@ -846,6 +1911,40 @@ wlv13_v5d_stage5_capture_mutation_selftest <- function(
     original, recipe_index, "sha256"
   )), "recipe hash")
   expect_error(validate_mutation(original[-recipe_index]), "missing recipe")
+  worktree_indexes <- grep("^worktree_record;", original)
+  mutation <- original
+  mutation[worktree_indexes[1:2]] <- mutation[rev(worktree_indexes[1:2])]
+  expect_error(validate_mutation(mutation), "worktree order")
+  source_snapshot_indexes <- grep("^source_snapshot_record;", original)
+  expect_error(validate_mutation(mutate_field(
+    original, source_snapshot_indexes[[1L]], "path"
+  )), "source snapshot path")
+  expect_error(validate_mutation(mutate_field(
+    original, source_snapshot_indexes[[1L]], "inventory_before_sha256"
+  )), "source snapshot inventory before")
+  expect_error(validate_mutation(mutate_field(
+    original, source_snapshot_indexes[[1L]], "inventory_after_sha256"
+  )), "source snapshot hash")
+  expect_error(validate_mutation(mutate_field(
+    original, source_snapshot_indexes[[1L]], "physical_path"
+  )), "source snapshot physical path")
+  expect_error(validate_mutation(mutate_field(
+    original, source_snapshot_indexes[[1L]], "physical_after_sha256"
+  )), "source snapshot physical hash")
+  expect_error(validate_mutation(mutate_field(
+    original, source_snapshot_indexes[[1L]], "physical_before_sha256"
+  )), "source snapshot physical before")
+  expect_error(validate_mutation(mutate_field(
+    original, source_snapshot_indexes[[1L]], "independence_after_sha256"
+  )), "source snapshot independence after")
+  expect_error(
+    validate_mutation(original[-source_snapshot_indexes[[1L]]]),
+    "missing source snapshot"
+  )
+  mutation <- original
+  mutation[source_snapshot_indexes[1:2]] <-
+    mutation[rev(source_snapshot_indexes[1:2])]
+  expect_error(validate_mutation(mutation), "source snapshot order")
   reference_indexes <- grep(
     "^evidence_record;role=baseline_reference;", original
   )
@@ -1182,6 +2281,13 @@ wlv13_v5d_stage5_generator_main <- function(arguments = commandArgs(TRUE)) {
       "<new-output.csv>"
     ), call. = FALSE)
   }
+  live_structure_assertions <-
+    wlv13_v5d_live_validation_structure_selftest()
+  if (!identical(live_structure_assertions, 7L)) {
+    stop("Capture live-validation structure self-test is incomplete.",
+      call. = FALSE
+    )
+  }
   harness_dir <- normalizePath(arguments[[1L]], winslash = "/",
     mustWork = TRUE
   )
@@ -1233,15 +2339,27 @@ wlv13_v5d_stage5_generator_main <- function(arguments = commandArgs(TRUE)) {
   capture_record_sha256 <- wlv13_v5d_validate_stage5_capture(
     bridge_capture_path, bridge_index_path, bridge_path,
     stage_capture_path, evidence_path, evidence, harness_dir,
-    external_inventories
+    external_inventories, verify_live = TRUE
   )
   capture_assertions <- wlv13_v5d_stage5_capture_mutation_selftest(
     bridge_capture_path, bridge_index_path, bridge_path,
     stage_capture_path, evidence_path, evidence, harness_dir,
     external_inventories
   )
-  if (!identical(capture_assertions, 25L)) {
+  if (!identical(capture_assertions, 46L)) {
     stop("Stage-five capture mutation self-test is incomplete.",
+      call. = FALSE
+    )
+  }
+  confirmed_capture_record_sha256 <- wlv13_v5d_validate_stage5_capture(
+    bridge_capture_path, bridge_index_path, bridge_path,
+    stage_capture_path, evidence_path, evidence, harness_dir,
+    external_inventories, verify_live = TRUE
+  )
+  if (!identical(
+      confirmed_capture_record_sha256, capture_record_sha256
+    )) {
+    stop("Stage-five capture changed across its two live validations.",
       call. = FALSE
     )
   }
@@ -1250,8 +2368,10 @@ wlv13_v5d_stage5_generator_main <- function(arguments = commandArgs(TRUE)) {
     arguments[[8L]]
   )
   cat(sprintf(
-    "generated_rows=%d profiles_sha256=%s capture_assertions=%d\n",
-    nrow(value), wlv13_sha256_file(arguments[[8L]]), capture_assertions
+    paste0("generated_rows=%d profiles_sha256=%s capture_assertions=%d ",
+      "live_structure_assertions=%d\n"),
+    nrow(value), wlv13_sha256_file(arguments[[8L]]), capture_assertions,
+    live_structure_assertions
   ))
   invisible(value)
 }

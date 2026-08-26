@@ -19,12 +19,31 @@ $script:Issue13V5HarnessFileCount = 39L
 $script:Issue13V5HarnessTotalBytes = 594386L
 $script:Issue13V5HarnessInventorySha256 =
   '9f50c978ffc5f1f2d69d70ca8e5a7205eca39ec8441843cd5fa43b959eaf03c1'
-$script:Issue13V5SourceFileCount = 84L
-$script:Issue13V5SourceDirectoryCount = 5L
-$script:Issue13V5SourceTotalBytes = 2946498269L
-$script:Issue13V5SourceInventorySha256 =
+function Set-Issue13V5ScriptConstant(
+  [Parameter(Mandatory)][string]$Name,
+  [Parameter(Mandatory)][object]$Value
+) {
+  $existing = Get-Variable -Name $Name -Scope Script `
+    -ErrorAction SilentlyContinue
+  if ($null -eq $existing) {
+    New-Variable -Name $Name -Scope Script -Option Constant -Value $Value
+    return
+  }
+  if ($existing.Options -ne
+      [Management.Automation.ScopedItemOptions]::Constant -or
+      -not [object]::Equals($existing.Value, $Value)) {
+    throw "Script constant is already bound differently: $Name"
+  }
+}
+
+Set-Issue13V5ScriptConstant Issue13V5SourceFileCount 84L
+Set-Issue13V5ScriptConstant Issue13V5SourceDirectoryCount 5L
+Set-Issue13V5ScriptConstant Issue13V5SourceTotalBytes 2946498269L
+Set-Issue13V5ScriptConstant Issue13V5SourceInventorySha256 `
   'c593624ebfa75fb350b8b6528c1d5b6535d71bfe672c7eb61729c1b02f784e26'
-$script:Issue13V5SourceDirectorySha256 =
+Set-Issue13V5ScriptConstant Issue13V5SourceOrdinalInventorySha256 `
+  '6c5e3c5583f431899658197484c4ebba3b1b1ee58b21b11f88fb1665084fbc4a'
+Set-Issue13V5ScriptConstant Issue13V5SourceDirectorySha256 `
   '8b3a622a748f2489fe8cfd2a8273ec98ad4c372b2378d587a5ee2e3c5c916640'
 $script:Issue13V5CandidateSourceFileCount = 76L
 $script:Issue13V5CandidateSourceDirectoryCount = 6L
@@ -148,13 +167,221 @@ function ConvertTo-Issue13V5Path([string]$Path) {
   [IO.Path]::GetFullPath($Path).TrimEnd('\')
 }
 
+function Test-Issue13V5ExactBoolean {
+  param(
+    [Parameter(Mandatory = $true)][AllowNull()][object]$Value,
+    [Parameter(Mandatory = $true)][AllowNull()][object]$Expected
+  )
+  ($Value -is [bool]) -and ($Expected -is [bool]) -and
+    ([bool]$Value -eq [bool]$Expected)
+}
+
+if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT -and
+    -not ('Issue13V5.CoordinatorNativePath' -as [type])) {
+  Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
+
+namespace Issue13V5 {
+  public static class CoordinatorNativePath {
+    private const uint ShareAll = 0x00000007;
+    private const uint OpenExisting = 3;
+    private const uint BackupSemantics = 0x02000000;
+    private const uint VolumeNameGuid = 0x00000001;
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFile(
+      string fileName, uint desiredAccess, uint shareMode,
+      IntPtr securityAttributes, uint creationDisposition,
+      uint flagsAndAttributes, IntPtr templateFile);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetFinalPathNameByHandle(
+      SafeFileHandle file, StringBuilder path, uint pathLength, uint flags);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint QueryDosDevice(
+      string deviceName, StringBuilder targetPath, int maximumLength);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ByHandleFileInformation {
+      public uint FileAttributes;
+      public System.Runtime.InteropServices.ComTypes.FILETIME CreationTime;
+      public System.Runtime.InteropServices.ComTypes.FILETIME LastAccessTime;
+      public System.Runtime.InteropServices.ComTypes.FILETIME LastWriteTime;
+      public uint VolumeSerialNumber;
+      public uint FileSizeHigh;
+      public uint FileSizeLow;
+      public uint NumberOfLinks;
+      public uint FileIndexHigh;
+      public uint FileIndexLow;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetFileInformationByHandle(
+      SafeFileHandle file, out ByHandleFileInformation information);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FileIdInformation {
+      public ulong VolumeSerialNumber;
+      [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
+      public byte[] FileId;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetFileInformationByHandleEx(
+      SafeFileHandle file, int informationClass,
+      out FileIdInformation information, uint bufferSize);
+
+    public static string Resolve(string path) {
+      using (SafeFileHandle handle = CreateFile(
+        path, 0, ShareAll, IntPtr.Zero, OpenExisting,
+        BackupSemantics, IntPtr.Zero)) {
+        if (handle.IsInvalid) {
+          throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+        uint capacity = 512;
+        while (true) {
+          StringBuilder buffer = new StringBuilder((int)capacity);
+          uint length = GetFinalPathNameByHandle(
+            handle, buffer, capacity, VolumeNameGuid);
+          if (length == 0) {
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+          }
+          if (length < capacity) {
+            return buffer.ToString();
+          }
+          capacity = length + 1;
+        }
+      }
+    }
+
+    public static string DriveTarget(string driveName) {
+      int capacity = 512;
+      while (true) {
+        StringBuilder buffer = new StringBuilder(capacity);
+        uint length = QueryDosDevice(driveName, buffer, capacity);
+        if (length != 0) {
+          return buffer.ToString();
+        }
+        int error = Marshal.GetLastWin32Error();
+        if (error != 122) {
+          throw new Win32Exception(error);
+        }
+        capacity *= 2;
+      }
+    }
+
+    public static string Identity(string path) {
+      using (SafeFileHandle handle = CreateFile(
+        path, 0, ShareAll, IntPtr.Zero, OpenExisting,
+        BackupSemantics, IntPtr.Zero)) {
+        if (handle.IsInvalid) {
+          throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+        ByHandleFileInformation information;
+        if (!GetFileInformationByHandle(handle, out information)) {
+          throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+        FileIdInformation fileId;
+        uint fileIdSize = (uint)Marshal.SizeOf(typeof(FileIdInformation));
+        if (!GetFileInformationByHandleEx(
+          handle, 18, out fileId, fileIdSize)) {
+          throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+        Array.Reverse(fileId.FileId);
+        string fileIdHex = BitConverter.ToString(fileId.FileId).
+          Replace("-", "").ToLowerInvariant();
+        return fileId.VolumeSerialNumber.ToString("x16") + ":" +
+          fileIdHex + ":" +
+          information.NumberOfLinks.ToString();
+      }
+    }
+  }
+}
+'@
+}
+
+function Test-Issue13V5ForbiddenDriveTarget([string]$Target) {
+  $Target.StartsWith('\??\', [StringComparison]::OrdinalIgnoreCase) -or
+    $Target.StartsWith('\Device\Mup',
+      [StringComparison]::OrdinalIgnoreCase) -or
+    $Target.StartsWith('\Device\LanmanRedirector',
+      [StringComparison]::OrdinalIgnoreCase) -or
+    $Target.StartsWith('\Device\WebDavRedirector',
+      [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Assert-Issue13V5LocalDriveAliasFree(
+  [string]$Path,
+  [string]$Label
+) {
+  $full = ConvertTo-Issue13V5Path $Path
+  if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+    return $full
+  }
+  $root = [IO.Path]::GetPathRoot($full)
+  if ([string]::IsNullOrWhiteSpace($root) -or
+      $root -cnotmatch '^[A-Za-z]:\\$') {
+    throw "$Label must use a local drive-letter path: $full"
+  }
+  $drive = [IO.DriveInfo]::new($root)
+  if (-not $drive.IsReady -or $drive.DriveType -ne [IO.DriveType]::Fixed) {
+    throw "$Label must use a ready fixed local drive: $full"
+  }
+  $target = [Issue13V5.CoordinatorNativePath]::DriveTarget(
+    $root.Substring(0, 2))
+  if (Test-Issue13V5ForbiddenDriveTarget $target) {
+    throw "$Label must not use a SUBST or mapped-drive alias: $full"
+  }
+  $full
+}
+
+function ConvertTo-Issue13V5PhysicalPath(
+  [string]$Path,
+  [string]$Label
+) {
+  $full = Assert-Issue13V5LocalDriveAliasFree $Path $Label
+  if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+    return $full.TrimEnd([IO.Path]::DirectorySeparatorChar)
+  }
+  $missing = [Collections.Generic.List[string]]::new()
+  $cursor = $full
+  while (-not (Test-Path -LiteralPath $cursor)) {
+    $leaf = [IO.Path]::GetFileName($cursor)
+    if ([string]::IsNullOrWhiteSpace($leaf)) {
+      throw "Cannot canonicalize $Label path: $full"
+    }
+    $missing.Add($leaf)
+    $parent = [IO.Directory]::GetParent($cursor)
+    if ($null -eq $parent) {
+      throw "Cannot find an existing ancestor for $Label path: $full"
+    }
+    $cursor = $parent.FullName
+  }
+  $canonical = [Issue13V5.CoordinatorNativePath]::Resolve($cursor).
+    TrimEnd('\')
+  for ($index = $missing.Count - 1; $index -ge 0; $index--) {
+    $canonical = $canonical + '\' + $missing[$index]
+  }
+  $canonical.TrimEnd('\')
+}
+
 function Test-Issue13V5PathContained([string]$Child, [string]$Parent) {
-  $childFull = ConvertTo-Issue13V5Path $Child
-  $parentFull = ConvertTo-Issue13V5Path $Parent
+  $childFull = ConvertTo-Issue13V5PhysicalPath $Child 'child'
+  $parentFull = ConvertTo-Issue13V5PhysicalPath $Parent 'parent'
+  $comparison = if (
+    [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
+  ) { [StringComparison]::OrdinalIgnoreCase } else {
+    [StringComparison]::Ordinal
+  }
   if ([string]::Equals($childFull, $parentFull,
-      [StringComparison]::OrdinalIgnoreCase)) { return $true }
-  $childFull.StartsWith($parentFull + '\',
-    [StringComparison]::OrdinalIgnoreCase)
+      $comparison)) { return $true }
+  $separator = [IO.Path]::DirectorySeparatorChar
+  $childFull.StartsWith($parentFull + $separator, $comparison)
 }
 
 function Assert-Issue13V5PathsDisjoint(
@@ -166,6 +393,24 @@ function Assert-Issue13V5PathsDisjoint(
       (Test-Issue13V5PathContained $Right $Left)) {
     throw "$Label paths overlap: $Left ; $Right"
   }
+}
+
+function Assert-Issue13V5ConfigPathIsolation(
+  [string]$ConfigPath,
+  [string[]]$ImmutableRoots
+) {
+  if ([string]::IsNullOrWhiteSpace($ConfigPath) -or
+      $ImmutableRoots.Count -eq 0) {
+    throw 'V5 config-path isolation inputs are incomplete.'
+  }
+  foreach ($immutableRoot in $ImmutableRoots) {
+    if ([string]::IsNullOrWhiteSpace($immutableRoot)) {
+      throw 'V5 config-path isolation contains an empty immutable root.'
+    }
+    Assert-Issue13V5PathsDisjoint $ConfigPath $immutableRoot `
+      'V5 config/immutable-root isolation'
+  }
+  $true
 }
 
 function Assert-Issue13V5NoReparseAncestors(
@@ -247,6 +492,209 @@ function Get-Issue13V5TextSha256([string]$Text) {
   [Convert]::ToHexString(
     [Security.Cryptography.SHA256]::HashData($bytes)
   ).ToLowerInvariant()
+}
+
+function Get-Issue13V5PhysicalItemIdentity(
+  [string]$Path,
+  [string]$Label
+) {
+  if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+    throw "$Label physical identity requires Windows."
+  }
+  $full = (Resolve-Path -LiteralPath $Path).Path
+  $physical = ConvertTo-Issue13V5PhysicalPath $full $Label
+  $identity = [Issue13V5.CoordinatorNativePath]::Identity($full)
+  $parts = [string[]]$identity.Split(':')
+  if ($parts.Count -ne 3 -or $parts[0] -cnotmatch '^[0-9a-f]{16}$' -or
+      $parts[1] -cnotmatch '^[0-9a-f]{32}$' -or
+      $parts[2] -cnotmatch '^[0-9]+$') {
+    throw "$Label returned an invalid physical identity."
+  }
+  [pscustomobject][ordered]@{
+    physical_path = $physical
+    identity = $identity
+    item_id = $parts[0] + ':' + $parts[1]
+    volume_serial = $parts[0]
+    file_id = $parts[1]
+    link_count = [uint64]$parts[2]
+  }
+}
+
+function Get-Issue13V5PhysicalSnapshotProof(
+  [string]$Source,
+  [string]$Snapshot,
+  [string]$Label
+) {
+  if (-not (Test-Path -LiteralPath $Source -PathType Container) -or
+      -not (Test-Path -LiteralPath $Snapshot -PathType Container)) {
+    throw "$Label source and snapshot must be existing directories."
+  }
+  $sourceRoot = (Resolve-Path -LiteralPath $Source).Path.TrimEnd('\')
+  $snapshotRoot = (Resolve-Path -LiteralPath $Snapshot).Path.TrimEnd('\')
+  $sourcePhysical = ConvertTo-Issue13V5PhysicalPath `
+    $sourceRoot "$Label source"
+  $snapshotPhysical = ConvertTo-Issue13V5PhysicalPath `
+    $snapshotRoot "$Label snapshot"
+  Assert-Issue13V5NoReparse $sourceRoot
+  Assert-Issue13V5NoReparse $snapshotRoot
+  Assert-Issue13V5PathsDisjoint $sourceRoot $snapshotRoot $Label
+  $volumePattern = '^(\\\\\?\\Volume\{[^}]+\}\\)'
+  $sourceVolume = [regex]::Match($sourcePhysical, $volumePattern)
+  $snapshotVolume = [regex]::Match($snapshotPhysical, $volumePattern)
+  if (-not $sourceVolume.Success -or -not $snapshotVolume.Success -or
+      $sourceVolume.Groups[1].Value -cne
+        $snapshotVolume.Groups[1].Value) {
+    throw "$Label source and snapshot must share one fixed physical volume."
+  }
+  $physicalVolume = $sourceVolume.Groups[1].Value.Replace('\', '/').
+    ToLowerInvariant()
+
+  $sourceItems = @((Get-Item -LiteralPath $sourceRoot -Force)) +
+    @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -Force)
+  $snapshotItems = @((Get-Item -LiteralPath $snapshotRoot -Force)) +
+    @(Get-ChildItem -LiteralPath $snapshotRoot -Recurse -Force)
+  $sourceMap = @{}
+  foreach ($item in $sourceItems) {
+    $relative = if ($item.FullName -ceq $sourceRoot) {
+      '.'
+    } else {
+      $item.FullName.Substring($sourceRoot.Length).TrimStart('\').
+        Replace('\', '/')
+    }
+    if ($sourceMap.ContainsKey($relative)) {
+      throw "$Label source has a duplicate physical path: $relative"
+    }
+    $sourceMap[$relative] = $item
+  }
+  $snapshotMap = @{}
+  foreach ($item in $snapshotItems) {
+    $relative = if ($item.FullName -ceq $snapshotRoot) {
+      '.'
+    } else {
+      $item.FullName.Substring($snapshotRoot.Length).TrimStart('\').
+        Replace('\', '/')
+    }
+    if ($snapshotMap.ContainsKey($relative)) {
+      throw "$Label snapshot has a duplicate physical path: $relative"
+    }
+    $snapshotMap[$relative] = $item
+  }
+  $sourceNames = [string[]]@($sourceMap.Keys)
+  $snapshotNames = [string[]]@($snapshotMap.Keys)
+  [Array]::Sort($sourceNames, [StringComparer]::Ordinal)
+  [Array]::Sort($snapshotNames, [StringComparer]::Ordinal)
+  if ([string]::Join("`n", $sourceNames) -cne
+      [string]::Join("`n", $snapshotNames)) {
+    throw "$Label source and snapshot paths differ."
+  }
+
+  $sourceRecords = [Collections.Generic.List[string]]::new()
+  $snapshotRecords = [Collections.Generic.List[string]]::new()
+  $independenceRecords = [Collections.Generic.List[string]]::new()
+  $fileCount = 0L
+  $directoryCount = 0L
+  foreach ($relative in $sourceNames) {
+    $sourceItem = $sourceMap[$relative]
+    $snapshotItem = $snapshotMap[$relative]
+    $sourceIsDirectory = Test-Issue13V5ExactBoolean `
+      $sourceItem.PSIsContainer $true
+    $snapshotIsDirectory = Test-Issue13V5ExactBoolean `
+      $snapshotItem.PSIsContainer $true
+    if ($sourceIsDirectory -ne $snapshotIsDirectory) {
+      throw "$Label item type differs: $relative"
+    }
+    $sourceIdentity = Get-Issue13V5PhysicalItemIdentity `
+      $sourceItem.FullName "$Label source item"
+    $snapshotIdentity = Get-Issue13V5PhysicalItemIdentity `
+      $snapshotItem.FullName "$Label snapshot item"
+    if ($sourceIdentity.item_id -ceq $snapshotIdentity.item_id) {
+      throw "$Label snapshot reuses the source physical item: $relative"
+    }
+    $kind = if ($sourceIsDirectory) { 'directory' } else { 'file' }
+    if ($relative -cne '.') {
+      if ($sourceIsDirectory) {
+        $directoryCount++
+      } else {
+        $fileCount++
+        if ($snapshotIdentity.link_count -ne 1L) {
+          throw "$Label snapshot file has external hard links: $relative"
+        }
+      }
+    }
+    $recordPrefix = if ($sourceIsDirectory) { 'D|' } else { 'F|' }
+    $sourceRecord = $recordPrefix + $relative + '|' + $physicalVolume +
+      '|' + $sourceIdentity.file_id
+    $snapshotRecord = $recordPrefix + $relative + '|' + $physicalVolume +
+      '|' + $snapshotIdentity.file_id
+    if (-not $sourceIsDirectory) {
+      $sourceRecord += '|' + [string]$sourceIdentity.link_count
+      $snapshotRecord += '|' + [string]$snapshotIdentity.link_count
+    }
+    $sourceRecords.Add($sourceRecord)
+    $snapshotRecords.Add($snapshotRecord)
+    $independenceRecords.Add(
+      $relative + '|' + $kind + '|' + $physicalVolume + ':' +
+        $sourceIdentity.file_id + '|' + $physicalVolume + ':' +
+        $snapshotIdentity.file_id
+    )
+  }
+  [pscustomobject][ordered]@{
+    source_physical_path = $sourcePhysical
+    snapshot_physical_path = $snapshotPhysical
+    file_count = [long]$fileCount
+    directory_count = [long]$directoryCount
+    source_physical_inventory_sha256 = Get-Issue13V5TextSha256 `
+      ([string]::Join("`n", $sourceRecords.ToArray()))
+    snapshot_physical_inventory_sha256 = Get-Issue13V5TextSha256 `
+      ([string]::Join("`n", $snapshotRecords.ToArray()))
+    independence_sha256 = Get-Issue13V5TextSha256 `
+      ([string]::Join("`n", $independenceRecords.ToArray()))
+  }
+}
+
+function Copy-Issue13V5PhysicalDirectorySnapshot(
+  [string]$Source,
+  [string]$Destination,
+  [string]$Label
+) {
+  if (-not (Test-Path -LiteralPath $Source -PathType Container)) {
+    throw "$Label source does not exist: $Source"
+  }
+  if (Test-Path -LiteralPath $Destination) {
+    throw "$Label destination already exists: $Destination"
+  }
+  $sourceRoot = (Resolve-Path -LiteralPath $Source).Path.TrimEnd('\')
+  $destinationRoot = ConvertTo-Issue13V5Path $Destination
+  $destinationParent = Split-Path -Parent $destinationRoot
+  if (-not (Test-Path -LiteralPath $destinationParent -PathType Container)) {
+    throw "$Label destination parent does not exist: $destinationParent"
+  }
+  $null = ConvertTo-Issue13V5PhysicalPath $sourceRoot "$Label source"
+  $null = ConvertTo-Issue13V5PhysicalPath `
+    $destinationRoot "$Label destination"
+  Assert-Issue13V5NoReparse $sourceRoot
+  Assert-Issue13V5NoReparseAncestors `
+    $destinationRoot "$Label destination"
+  Assert-Issue13V5PathsDisjoint $sourceRoot $destinationRoot $Label
+  $sourceItems = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -Force)
+  $null = [IO.Directory]::CreateDirectory($destinationRoot)
+  foreach ($directory in @($sourceItems | Where-Object {
+      $_.PSIsContainer
+    } | Sort-Object @{ Expression = { $_.FullName.Length } }, FullName)) {
+    $relative = $directory.FullName.Substring($sourceRoot.Length).
+      TrimStart('\')
+    $null = [IO.Directory]::CreateDirectory(
+      (Join-Path $destinationRoot $relative))
+  }
+  foreach ($file in @($sourceItems | Where-Object {
+      -not $_.PSIsContainer
+    } | Sort-Object FullName)) {
+    $relative = $file.FullName.Substring($sourceRoot.Length).TrimStart('\')
+    [IO.File]::Copy(
+      $file.FullName, (Join-Path $destinationRoot $relative), $false)
+  }
+  Get-Issue13V5PhysicalSnapshotProof `
+    $sourceRoot $destinationRoot $Label
 }
 
 function Read-Issue13V5Json([string]$Path) {
@@ -348,6 +796,32 @@ function Get-Issue13V5TreeInventory([string]$Root) {
     directory_records = [object[]]$directoryNames
     records = [object[]]$records.ToArray()
   }
+}
+
+function Assert-Issue13V5OfficialSourceDataInventory([string]$Root) {
+  $inventory = Get-Issue13V5TreeInventory $Root
+  $ordinalLines = [string[]]@($inventory.records | ForEach-Object {
+    [string]$_.relative_path + '|' + [string]$_.size_bytes + '|' +
+      [string]$_.sha256
+  })
+  [Array]::Sort($ordinalLines, [StringComparer]::Ordinal)
+  $ordinalInventorySha256 = Get-Issue13V5TextSha256 (
+    [string]::Join("`n", $ordinalLines))
+  if ([long]$inventory.file_count -ne $script:Issue13V5SourceFileCount -or
+      [long]$inventory.directory_count -ne
+        $script:Issue13V5SourceDirectoryCount -or
+      [int64]$inventory.total_bytes -ne $script:Issue13V5SourceTotalBytes -or
+      [string]$inventory.inventory_sha256 -cne
+        $script:Issue13V5SourceInventorySha256 -or
+      $ordinalInventorySha256 -cne
+        $script:Issue13V5SourceOrdinalInventorySha256 -or
+      [string]$inventory.directory_list_sha256 -cne
+        $script:Issue13V5SourceDirectorySha256) {
+    throw "Official source_data inventory differs: $Root"
+  }
+  $inventory | Add-Member -NotePropertyName ordinal_inventory_sha256 `
+    -NotePropertyValue $ordinalInventorySha256
+  $inventory
 }
 
 function Get-Issue13V5OracleEffectToolRecords {
@@ -686,15 +1160,20 @@ function Assert-Issue13V5OracleEffectBindings([object]$Config) {
       'root', 'harness_root', 'file_count', 'total_bytes', 'inventory_sha256'
     ) 'Oracle-effect installed harness inventory binding'
   if ([string]$oracle.schema -cne 'wlv-issue13-v5-oracle-effect-binding/2' -or
-      [string]$oracle.status -cne 'passed' -or -not [bool]$oracle.passed -or
-      [bool]$oracle.final_evidence_eligible -or
-      -not [bool]$oracle.required_by_final_gate -or
+      [string]$oracle.status -cne 'passed' -or
+      -not (Test-Issue13V5ExactBoolean $oracle.passed $true) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $oracle.final_evidence_eligible $false) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $oracle.required_by_final_gate $true) -or
       [long]$oracle.strict_common_method_count -ne 5L -or
       [long]$oracle.comparison_execution_count -ne 10L -or
       [long]$oracle.approved_run_inventory_count -ne 17L -or
       [long]$oracle.recovered_method_count -ne 7L -or
-      -not [bool]$oracle.oracle_effect_closed -or
-      [bool]$oracle.final_v5_gate_substituted -or
+      -not (Test-Issue13V5ExactBoolean `
+        $oracle.oracle_effect_closed $true) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $oracle.final_v5_gate_substituted $false) -or
       [string]$oracle.authorized_patch_sha256 -cne
         $script:Issue13V5BaselineOverlaySha256 -or
       [string]$oracle.authorized_patch_id -cne
@@ -722,15 +1201,8 @@ function Assert-Issue13V5OracleEffectBindings([object]$Config) {
         'wlv-issue13-v5-oracle-effect-proof/2' -or
       (Get-Issue13V5Sha256 $oracleSmokePath) -cne
         [string]$oracle.oracle_smoke.sha256 -or
-      [bool]$oracle.oracle_smoke.final_evidence_eligible -or
-      [string]::Equals(
-        (ConvertTo-Issue13V5Path $primaryRoot),
-        (ConvertTo-Issue13V5Path $replayRoot),
-        [StringComparison]::OrdinalIgnoreCase) -or
-      $primaryRoot.StartsWith($replayRoot.TrimEnd('\') + '\',
-        [StringComparison]::OrdinalIgnoreCase) -or
-      $replayRoot.StartsWith($primaryRoot.TrimEnd('\') + '\',
-        [StringComparison]::OrdinalIgnoreCase) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $oracle.oracle_smoke.final_evidence_eligible $false) -or
       -not [string]::Equals(
         (ConvertTo-Issue13V5Path $comparisonHarness),
         (ConvertTo-Issue13V5Path ([string]$Config.harness_manifest_path)),
@@ -744,8 +1216,10 @@ function Assert-Issue13V5OracleEffectBindings([object]$Config) {
       [string]$oracle.comparison_harness.source_controller_commit_sha256 -cne
         [string]$Config.candidate_commit -or
       [string]$oracle.comparison_harness.generation -cne 'v5-terminal' -or
-      -not [bool]$oracle.comparison_harness.final_evidence_eligible -or
-      [bool]$oracle.comparison_harness.reuses_candidate_evidence -or
+      -not (Test-Issue13V5ExactBoolean `
+        $oracle.comparison_harness.final_evidence_eligible $true) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $oracle.comparison_harness.reuses_candidate_evidence $false) -or
       -not [string]::Equals(
         (ConvertTo-Issue13V5Path $rscriptPath),
         (ConvertTo-Issue13V5Path ([string]$Config.rscript)),
@@ -809,7 +1283,7 @@ function Assert-Issue13V5OracleEffectBindings([object]$Config) {
   }
   foreach ($package in $loadedPackages) {
     $packagePath = (Resolve-Path -LiteralPath ([string]$package.path)).Path
-    if ([bool]$package.required -and
+    if ((Test-Issue13V5ExactBoolean $package.required $true) -and
         -not (Test-Issue13V5PathContained $packagePath $rLibraryPath)) {
       throw "Required R package escaped RLibrary: $($package.name)"
     }
@@ -870,7 +1344,7 @@ function Assert-Issue13V5OracleEffectBindings([object]$Config) {
       'rscript', 'r_library'
     ) 'Oracle-effect R runtime snapshot'
   }
-  if (-not [bool]$runtimeImmutability.immutable -or
+  if (-not (Test-Issue13V5ExactBoolean $runtimeImmutability.immutable $true) -or
       ($runtimeImmutability.before | ConvertTo-Json -Depth 30 -Compress) -cne
         ($runtimeImmutability.after | ConvertTo-Json -Depth 30 -Compress)) {
     throw 'Oracle-effect R runtime before/after inventory is not immutable.'
@@ -929,23 +1403,22 @@ function Assert-Issue13V5OracleEffectBindings([object]$Config) {
   ) 'Oracle-effect conclusion'
   if ([string]$proof.schema -cne
         'wlv-issue13-v5-oracle-effect-proof/2' -or
-      [string]$proof.status -cne 'passed' -or -not [bool]$proof.passed -or
-      [bool]$proof.final_evidence_eligible -or
+      [string]$proof.status -cne 'passed' -or
+      -not (Test-Issue13V5ExactBoolean $proof.passed $true) -or
+      -not (Test-Issue13V5ExactBoolean $proof.final_evidence_eligible $false) -or
       [string]$proof.purpose -cne
         'closed-authorized-oracle-effect-cc2-to-e2f' -or
-      -not [bool]$proof.conclusion.authorized_patch_authenticated -or
-      -not [bool]$proof.conclusion.terminal_harness_authenticated -or
+      -not (Test-Issue13V5ExactBoolean $proof.conclusion.authorized_patch_authenticated $true) -or
+      -not (Test-Issue13V5ExactBoolean $proof.conclusion.terminal_harness_authenticated $true) -or
       [long]$proof.conclusion.strict_common_method_count -ne 5L -or
-      -not [bool]$proof.conclusion.
-        strict_common_primary_and_replay_passed -or
+      -not (Test-Issue13V5ExactBoolean $proof.conclusion.strict_common_primary_and_replay_passed $true) -or
       [long]$proof.conclusion.approved_run_count -ne 17L -or
-      -not [bool]$proof.conclusion.approved_runs_immutable -or
+      -not (Test-Issue13V5ExactBoolean $proof.conclusion.approved_runs_immutable $true) -or
       [long]$proof.conclusion.recovered_method_count -ne 7L -or
-      -not [bool]$proof.conclusion.recovered_methods_passed -or
-      -not [bool]$proof.conclusion.
-        recovered_coordinate_and_diagnostic_contracts_passed -or
-      -not [bool]$proof.conclusion.oracle_effect_closed -or
-      [bool]$proof.conclusion.final_v5_gate_substituted) {
+      -not (Test-Issue13V5ExactBoolean $proof.conclusion.recovered_methods_passed $true) -or
+      -not (Test-Issue13V5ExactBoolean $proof.conclusion.recovered_coordinate_and_diagnostic_contracts_passed $true) -or
+      -not (Test-Issue13V5ExactBoolean $proof.conclusion.oracle_effect_closed $true) -or
+      -not (Test-Issue13V5ExactBoolean $proof.conclusion.final_v5_gate_substituted $false)) {
     throw 'Oracle-effect proof envelope or conclusion changed.'
   }
   if (-not [string]::Equals(
@@ -1020,7 +1493,7 @@ function Assert-Issue13V5OracleEffectBindings([object]$Config) {
         (ConvertTo-Issue13V5Path ([string]$workflow.replay_root)),
         (ConvertTo-Issue13V5Path $replayRoot),
         [StringComparison]::OrdinalIgnoreCase) -or
-      -not [bool]$workflow.generator_created_both_roots -or
+      -not (Test-Issue13V5ExactBoolean $workflow.generator_created_both_roots $true) -or
       [string]::Join("`n", @($workflow.methods)) -cne
         [string]::Join("`n", $commonMethods) -or
       @($workflow.commands).Count -ne 10 -or
@@ -1052,12 +1525,14 @@ function Assert-Issue13V5OracleEffectBindings([object]$Config) {
       @($workflow.comparisons | Where-Object {
         [string]$_.comparison_mode -cne 'strict' -or
         @($_.files).Count -ne 4 -or
-        @($_.files | Where-Object { -not [bool]$_.normalized_identical }).Count `
+        @($_.files | Where-Object {
+          -not (Test-Issue13V5ExactBoolean $_.normalized_identical $true)
+        }).Count `
           -ne 0
       }).Count -ne 0 -or
       @($proof.evidence.approved_run_immutability).Count -ne 17 -or
       @($proof.evidence.approved_run_immutability | Where-Object {
-        -not [bool]$_.immutable
+        -not (Test-Issue13V5ExactBoolean $_.immutable $true)
       }).Count -ne 0 -or
       @($proof.evidence.recovered_methods).Count -ne 7) {
     throw 'Oracle-effect primary/replay, 10-execution, 17-run, or 5+7 binding changed.'
@@ -1128,8 +1603,8 @@ function Assert-Issue13V5OracleEffectBindings([object]$Config) {
       [string]$proofHarness.source_controller_commit_sha256 -cne
         [string]$Config.candidate_commit -or
       [string]$proofHarness.generation -cne 'v5-terminal' -or
-      -not [bool]$proofHarness.final_evidence_eligible -or
-      [bool]$proofHarness.reuses_candidate_evidence -or
+      -not (Test-Issue13V5ExactBoolean $proofHarness.final_evidence_eligible $true) -or
+      -not (Test-Issue13V5ExactBoolean $proofHarness.reuses_candidate_evidence $false) -or
       -not [string]::Equals(
         (ConvertTo-Issue13V5Path ([string]$proofHarness.manifest_path)),
         (ConvertTo-Issue13V5Path $comparisonHarness),
@@ -1254,7 +1729,8 @@ function Invoke-Issue13V5OracleEffectValidation([object]$Config) {
   ) 'Oracle-effect validator result'
   if ([string]$result.schema -cne
         'wlv-issue13-v5-oracle-effect-validation/2' -or
-      [string]$result.status -cne 'passed' -or -not [bool]$result.passed -or
+      [string]$result.status -cne 'passed' -or
+      -not (Test-Issue13V5ExactBoolean $result.passed $true) -or
       (Get-Issue13V5Sha256 ([string]$result.proof_path)) -cne
         [string]$result.proof_sha256 -or
       [string]$result.proof_sha256 -cne [string]$oracle.proof.sha256 -or
@@ -1266,8 +1742,8 @@ function Invoke-Issue13V5OracleEffectValidation([object]$Config) {
         [string]$oracle.comparison_harness.source_controller.inventory_sha256 -or
       [string]$result.r_runtime_inventory_sha256 -cne
         [string]$oracle.r_library.inventory_sha256 -or
-      -not [bool]$result.oracle_effect_closed -or
-      [bool]$result.final_v5_gate_substituted) {
+      -not (Test-Issue13V5ExactBoolean $result.oracle_effect_closed $true) -or
+      -not (Test-Issue13V5ExactBoolean $result.final_v5_gate_substituted $false)) {
     throw 'Oracle-effect validator returned a forged or incomplete result.'
   }
   $after = Assert-Issue13V5OracleEffectBindings $Config
@@ -1366,8 +1842,8 @@ function Assert-Issue13V5OracleEffectControlRecord(
         [string]$Config.oracle_effect.comparisons.inventory.inventory_sha256 -or
       [long]$State.oracle_effect.strict_common_method_count -ne 5L -or
       [long]$State.oracle_effect.recovered_method_count -ne 7L -or
-      [bool]$State.oracle_effect.final_evidence_eligible -or
-      -not [bool]$State.oracle_effect.required_by_final_gate) {
+      -not (Test-Issue13V5ExactBoolean $State.oracle_effect.final_evidence_eligible $false) -or
+      -not (Test-Issue13V5ExactBoolean $State.oracle_effect.required_by_final_gate $true)) {
     throw 'Oracle-effect state/control binding is missing or changed.'
   }
   $record = Read-Issue13V5Json $expectedPath
@@ -1398,9 +1874,10 @@ function Assert-Issue13V5OracleEffectControlRecord(
   ) 'Oracle-effect validation command'
   if ([string]$record.schema -cne
         'wlv-issue13-v5-oracle-effect-control/2' -or
-      [string]$record.status -cne 'passed' -or -not [bool]$record.passed -or
-      [bool]$record.final_evidence_eligible -or
-      -not [bool]$record.required_by_final_gate -or
+      [string]$record.status -cne 'passed' -or
+      -not (Test-Issue13V5ExactBoolean $record.passed $true) -or
+      -not (Test-Issue13V5ExactBoolean $record.final_evidence_eligible $false) -or
+      -not (Test-Issue13V5ExactBoolean $record.required_by_final_gate $true) -or
       [string]$record.config_sha256 -cne [string]$State.config_sha256 -or
       [string]$record.baseline_commit -cne
         [string]$Config.baseline_commit -or
@@ -1470,9 +1947,9 @@ function Assert-Issue13V5OracleEffectControlRecord(
       [string]$record.validation.schema -cne
         'wlv-issue13-v5-oracle-effect-validation-record/2' -or
       [string]$record.validation.status -cne 'passed' -or
-      -not [bool]$record.validation.passed -or
-      [bool]$record.validation.final_evidence_eligible -or
-      -not [bool]$record.validation.required_by_final_gate -or
+      -not (Test-Issue13V5ExactBoolean $record.validation.passed $true) -or
+      -not (Test-Issue13V5ExactBoolean $record.validation.final_evidence_eligible $false) -or
+      -not (Test-Issue13V5ExactBoolean $record.validation.required_by_final_gate $true) -or
       [long]$record.validation.strict_common_comparison_count -ne 5L -or
       [long]$record.validation.comparison_execution_count -ne 10L -or
       [long]$record.validation.approved_run_inventory_count -ne 17L -or
@@ -1482,8 +1959,8 @@ function Assert-Issue13V5OracleEffectControlRecord(
           inventory_sha256 -or
       [string]$record.validation.r_runtime_inventory_sha256 -cne
         [string]$Config.oracle_effect.r_library.inventory_sha256 -or
-      -not [bool]$record.validation.oracle_effect_closed -or
-      [bool]$record.validation.final_v5_gate_substituted -or
+      -not (Test-Issue13V5ExactBoolean $record.validation.oracle_effect_closed $true) -or
+      -not (Test-Issue13V5ExactBoolean $record.validation.final_v5_gate_substituted $false) -or
       [string]$record.validation.proof_sha256 -cne
         [string]$Config.oracle_effect.proof.sha256 -or
       [string]$record.validation.primary_comparison_inventory_sha256 -cne
@@ -1785,48 +2262,51 @@ function Assert-Issue13V5SourceInventory(
   $inventory
 }
 
-function Get-Issue13V5FileId([string]$Path) {
-  $output = @(& fsutil.exe file queryFileID $Path 2>&1)
-  if ($LASTEXITCODE -ne 0 -or $output.Count -ne 1) {
-    throw "Cannot query physical file ID: $Path"
-  }
-  ([string]$output[0]).Trim()
-}
-
-function Get-Issue13V5HardlinkPaths([string]$Path) {
-  $resolved = (Resolve-Path -LiteralPath $Path).Path
-  $drive = [IO.Path]::GetPathRoot($resolved).TrimEnd('\')
-  $output = @(& fsutil.exe hardlink list $resolved 2>&1)
-  if ($LASTEXITCODE -ne 0 -or $output.Count -eq 0) {
-    throw "Cannot enumerate physical links: $resolved"
-  }
-  @($output | ForEach-Object {
-    $value = ([string]$_).Trim()
-    if ($value.StartsWith('\')) { $value = $drive + $value }
-    ConvertTo-Issue13V5Path $value
-  })
-}
-
 function Assert-Issue13V5PhysicalCopy(
   [string]$SourceRoot,
   [string]$DestinationRoot,
   [object]$Inventory
 ) {
-  foreach ($record in @($Inventory.records)) {
+  $sourceRoot = (Resolve-Path -LiteralPath $SourceRoot).Path.TrimEnd('\')
+  $destinationRoot = (Resolve-Path -LiteralPath $DestinationRoot).Path.
+    TrimEnd('\')
+  $null = ConvertTo-Issue13V5PhysicalPath `
+    $sourceRoot 'Physical-copy source root'
+  $null = ConvertTo-Issue13V5PhysicalPath `
+    $destinationRoot 'Physical-copy destination root'
+  Assert-Issue13V5NoReparse $sourceRoot
+  Assert-Issue13V5NoReparse $destinationRoot
+  Assert-Issue13V5PathsDisjoint `
+    $sourceRoot $destinationRoot 'Physical-copy roots'
+  $records = @($Inventory.records)
+  if ($records.Count -ne [long]$Inventory.file_count -or
+      $records.Count -eq 0) {
+    throw 'Physical-copy inventory has invalid file coverage.'
+  }
+  $seen = [Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::Ordinal)
+  foreach ($record in $records) {
     $relative = [string]$record.relative_path
-    $source = Join-Path $SourceRoot $relative.Replace('/', '\')
-    $destination = Join-Path $DestinationRoot $relative.Replace('/', '\')
-    if ([string]::Equals(
-        (Get-Issue13V5FileId $source),
-        (Get-Issue13V5FileId $destination),
-        [StringComparison]::OrdinalIgnoreCase)) {
+    if ([string]::IsNullOrWhiteSpace($relative) -or
+        [IO.Path]::IsPathRooted($relative) -or
+        $relative -match '(^|[/\\])[.][.]($|[/\\])' -or
+        -not $seen.Add($relative)) {
+      throw "Physical-copy inventory path is invalid: $relative"
+    }
+    $source = Join-Path $sourceRoot $relative.Replace('/', '\')
+    $destination = Join-Path $destinationRoot $relative.Replace('/', '\')
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $destination -PathType Leaf)) {
+      throw "Physical-copy file is missing: $relative"
+    }
+    $sourceIdentity = Get-Issue13V5PhysicalItemIdentity `
+      $source "Physical-copy source file $relative"
+    $destinationIdentity = Get-Issue13V5PhysicalItemIdentity `
+      $destination "Physical-copy destination file $relative"
+    if ($sourceIdentity.item_id -ceq $destinationIdentity.item_id) {
       throw "Source and destination share a physical file: $relative"
     }
-    $links = @(Get-Issue13V5HardlinkPaths $destination)
-    if ($links.Count -ne 1 -or
-        -not [string]::Equals($links[0],
-          (ConvertTo-Issue13V5Path $destination),
-          [StringComparison]::OrdinalIgnoreCase)) {
+    if ($destinationIdentity.link_count -ne 1L) {
       throw "Destination has an external hardlink: $relative"
     }
   }
@@ -1906,9 +2386,12 @@ function Assert-Issue13V5HarnessBinding([object]$Config) {
         $script:Issue13V5BaselineOverlaySha256 -or
       [string]$manifest.baseline_overlay_patch_id -cne
         $script:Issue13V5BaselineOverlayPatchId -or
-      -not [bool]$manifest.strict_negative_evidence_required -or
-      -not [bool]$manifest.final_evidence_eligible -or
-      [bool]$manifest.reuses_candidate_evidence -or
+      -not (Test-Issue13V5ExactBoolean `
+        $manifest.strict_negative_evidence_required $true) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $manifest.final_evidence_eligible $true) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $manifest.reuses_candidate_evidence $false) -or
       [long]$manifest.output_tooling.file_count -ne
         $script:Issue13V5HarnessFileCount -or
       [long]$manifest.output_tooling.total_bytes -ne
@@ -2008,6 +2491,53 @@ function Assert-Issue13V5BaselineSmokeEvidence(
     throw "Baseline smoke summary seal changed: $summaryPath"
   }
   $summary = Read-Issue13V5Json $summaryPath
+  foreach ($field in @(
+      'rscript_path', 'rscript_physical_path', 'rscript_item_id',
+      'rscript_link_count', 'rscript_sha256')) {
+    if ($summary.PSObject.Properties.Name -cnotcontains $field) {
+      throw "Baseline smoke omits its authenticated Rscript binding: $field"
+    }
+  }
+  $oracleRscript = $Config.oracle_effect.rscript
+  $null = Assert-Issue13V5ExactPropertyNames $oracleRscript @(
+    'path', 'sha256', 'size_bytes'
+  ) 'Oracle-effect Rscript binding'
+  $configuredRscript = (Resolve-Path -LiteralPath (
+    [string]$Config.rscript)).Path
+  $null = Assert-Issue13V5NoReparseAncestors `
+    $configuredRscript 'Baseline smoke Rscript executable'
+  $configuredRscriptIdentity = Get-Issue13V5PhysicalItemIdentity `
+    $configuredRscript 'Baseline smoke Rscript executable'
+  $configuredRscriptSha256 = Get-Issue13V5Sha256 $configuredRscript
+  if (-not ($summary.rscript_path -is [string]) -or
+      -not ($summary.rscript_physical_path -is [string]) -or
+      -not ($summary.rscript_item_id -is [string]) -or
+      -not ($summary.rscript_link_count -is [long]) -or
+      -not ($summary.rscript_sha256 -is [string]) -or
+      [IO.Path]::GetFileName($configuredRscript) -cne 'Rscript.exe' -or
+      [uint64]$configuredRscriptIdentity.link_count -ne 1UL -or
+      [long]$summary.rscript_link_count -ne 1L -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path ([string]$summary.rscript_path)),
+        (ConvertTo-Issue13V5Path $configuredRscript),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path ([string]$oracleRscript.path)),
+        (ConvertTo-Issue13V5Path $configuredRscript),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      -not [string]::Equals(
+        [string]$summary.rscript_physical_path,
+        [string]$configuredRscriptIdentity.physical_path,
+        [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$summary.rscript_item_id -cne
+        [string]$configuredRscriptIdentity.item_id -or
+      [string]$summary.rscript_sha256 -cne $configuredRscriptSha256 -or
+      [string]$oracleRscript.sha256 -cne $configuredRscriptSha256 -or
+      -not ($oracleRscript.size_bytes -is [long]) -or
+      [long]$oracleRscript.size_bytes -ne
+        [long](Get-Item -LiteralPath $configuredRscript).Length) {
+    throw 'Baseline smoke Rscript binding is stale, aliased, or forged.'
+  }
   $failedMethods = [string[]]@($ExpectedFailedMethods)
   $expectedPassedCount = 12L - [long]$failedMethods.Count
   $expectedStatus = if ($ExpectedPassed) { 'passed' } else { 'failed' }
@@ -2023,11 +2553,13 @@ function Assert-Issue13V5BaselineSmokeEvidence(
   $isCompatibility = $ExpectedPurpose -ceq
     'compatibility-oracle-executability-preflight'
   if ([string]$summary.schema -cne 'wlv-issue13-v5-baseline-smoke/1' -or
-      [bool]$summary.final_evidence_eligible -or
+      -not (Test-Issue13V5ExactBoolean `
+        $summary.final_evidence_eligible $false) -or
       [string]$summary.purpose -cne $ExpectedPurpose -or
       [string]$summary.baseline_commit -cne $script:Issue13V5BaselineCommit -or
       [string]$summary.status -cne $expectedStatus -or
-      [bool]$summary.passed -ne $ExpectedPassed -or
+      -not (Test-Issue13V5ExactBoolean `
+        $summary.passed $ExpectedPassed) -or
       [long]$summary.method_count -ne 12L -or
       [long]$summary.passed_count -ne $expectedPassedCount -or
       [long]$summary.failed_count -ne [long]$failedMethods.Count -or
@@ -2108,7 +2640,7 @@ function Assert-Issue13V5BaselineSmokeEvidence(
     if ([string]$result.schema -cne 'wlv-issue13-scenario-result/1' -or
         [string]$result.scenario_id -cne $scenarioId -or
         [string]$result.status -cne $recordStatus -or
-        [bool]$result.passed -ne $shouldPass -or
+        -not (Test-Issue13V5ExactBoolean $result.passed $shouldPass) -or
         [string]$result.kind -cne 'calculate' -or
         [string]$result.expected_commit -cne $ExpectedRuntimeCommit -or
         [string]$result.observed_commit -cne $ExpectedRuntimeCommit -or
@@ -2117,9 +2649,10 @@ function Assert-Issue13V5BaselineSmokeEvidence(
         [string]$metrics.schema -cne 'wlv-issue13-process-metrics/2' -or
         [string]$metrics.scenario_id -cne $scenarioId -or
         [string]$metrics.status -cne $recordStatus -or
-        [bool]$metrics.passed -ne $shouldPass -or
-        -not [bool]$metrics.cluster_closed -or
-        -not [bool]$metrics.worker_count_matched -or
+        -not (Test-Issue13V5ExactBoolean $metrics.passed $shouldPass) -or
+        -not (Test-Issue13V5ExactBoolean $metrics.cluster_closed $true) -or
+        -not (Test-Issue13V5ExactBoolean `
+          $metrics.worker_count_matched $true) -or
         [long]$metrics.expected_worker_processes -ne 0L -or
         [long]$metrics.max_concurrent_worker_processes -ne 0L -or
         @($metrics.lingering_pids).Count -ne 0) {
@@ -2166,6 +2699,21 @@ function Assert-Issue13V5BaselineSmokeEvidence(
         [string]::IsNullOrWhiteSpace([string]$record.detail)) {
       throw "Sealed strict-smoke failure record changed: $method"
     }
+  }
+  $null = Assert-Issue13V5NoReparseAncestors `
+    $configuredRscript 'Baseline smoke Rscript executable'
+  $currentRscriptIdentity = Get-Issue13V5PhysicalItemIdentity `
+    $configuredRscript 'Baseline smoke Rscript executable'
+  if ([uint64]$currentRscriptIdentity.link_count -ne 1UL -or
+      [string]$currentRscriptIdentity.item_id -cne
+        [string]$configuredRscriptIdentity.item_id -or
+      -not [string]::Equals(
+        [string]$currentRscriptIdentity.physical_path,
+        [string]$configuredRscriptIdentity.physical_path,
+        [StringComparison]::OrdinalIgnoreCase) -or
+      (Get-Issue13V5Sha256 $configuredRscript) -cne
+        $configuredRscriptSha256) {
+    throw 'Baseline smoke Rscript binding changed during validation.'
   }
   $summary
 }
@@ -2264,19 +2812,30 @@ function Get-Issue13V5ExpectedEvidenceIds {
 function Assert-Issue13V5Config([string]$ConfigPath) {
   $path = (Resolve-Path -LiteralPath $ConfigPath).Path
   $config = Read-Issue13V5Json $path
-  $legacyPaths = @(Get-Issue13V5ConfiguredPaths $config | Where-Object {
+  $configuredPaths = @(Get-Issue13V5ConfiguredPaths $config)
+  $legacyPaths = @($configuredPaths | Where-Object {
     Test-Issue13V5LegacyPath $_
   })
   if ($legacyPaths.Count -ne 0) {
     throw 'V5 config contains a forbidden V4/V4R2 path.'
   }
+  $null = ConvertTo-Issue13V5PhysicalPath $path 'V5 config file'
+  foreach ($configuredPath in $configuredPaths) {
+    $null = ConvertTo-Issue13V5PhysicalPath $configuredPath 'V5 configured path'
+    Assert-Issue13V5NoReparseAncestors $configuredPath 'V5 configured path'
+  }
   if ([string]$config.schema -cne 'wlv-issue13-native-gate-config/3' -or
       [string]$config.generation -cne 'v5' -or
-      -not [bool]$config.final_evidence_eligible -or
-      [bool]$config.reuse_policy.v4_evidence_allowed -or
-      [bool]$config.reuse_policy.candidate_evidence_reuse_allowed -or
-      [bool]$config.reuse_policy.imported_scenario_evidence_allowed -or
-      -not [bool]$config.reuse_policy.fresh_roots_required -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.final_evidence_eligible $true) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.reuse_policy.v4_evidence_allowed $false) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.reuse_policy.candidate_evidence_reuse_allowed $false) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.reuse_policy.imported_scenario_evidence_allowed $false) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.reuse_policy.fresh_roots_required $true) -or
       [string]$config.baseline_commit -cne $script:Issue13V5BaselineCommit -or
       [string]$config.baseline_base_commit -cne
         $script:Issue13V5BaselineCommit -or
@@ -2381,7 +2940,8 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
       [string]::Join("`n", @($preparationProfile.artifacts)) -cne
         "_unit_contract.csv`n_source_manifest.csv" -or
       [long]$preparationProfile.profile_count -ne 2L -or
-      -not [bool]$preparationProfile.all_rows_fields_and_order_exact -or
+      -not (Test-Issue13V5ExactBoolean `
+        $preparationProfile.all_rows_fields_and_order_exact $true) -or
       @($preparationProfile.architecture_projection).Count -ne 0 -or
       [string]$preparationProfile.source_unit_contract_bridge -cne
         'exhaustive-source-unit-contract-bridge') {
@@ -2399,16 +2959,25 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
   }
   if ([string]$config.comparison.numerical_tolerance -cne
         'contract-only-no-new-tolerance' -or
-      -not [bool]$config.comparison.compare_dimensions -or
-      -not [bool]$config.comparison.compare_dimnames -or
-      -not [bool]$config.comparison.compare_finite_values -or
-      -not [bool]$config.comparison.distinguish_na_nan_posinf_neginf -or
-      -not [bool]$config.comparison.compare_semantic_states -or
-      -not [bool]$config.comparison.compare_metadata_and_contracts -or
-      -not [bool]$config.comparison.compare_method_matrices -or
-      -not [bool]$config.comparison.
-        compare_diagnostics_as_duplicate_preserving_multisets -or
-      -not [bool]$config.comparison.compare_unselected_cells -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.comparison.compare_dimensions $true) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.comparison.compare_dimnames $true) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.comparison.compare_finite_values $true) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.comparison.distinguish_na_nan_posinf_neginf $true) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.comparison.compare_semantic_states $true) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.comparison.compare_metadata_and_contracts $true) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.comparison.compare_method_matrices $true) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.comparison.compare_diagnostics_as_duplicate_preserving_multisets `
+        $true) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.comparison.compare_unselected_cells $true) -or
       [string]::Join("`n", @($config.comparison.ignore_only)) -cne
         "timestamps`npaths`nrun_id`nresult_id`n" +
           'provenance-dependent-container-bytes' -or
@@ -2423,17 +2992,22 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
         536870912L -or
       [string]::Join("`n", @($config.performance.workers2_methods)) -cne
         "wiodr13`nwiodr16" -or
-      -not [bool]$config.performance.require_cluster_closed -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.performance.require_cluster_closed $true) -or
       [string]::Join("`n", @($config.preparation.sources)) -cne
         "wiodr13`nwiodr16`neuklems" -or
-      -not [bool]$config.preparation.same_official_cache_inventory -or
-      -not [bool]$config.preparation.bitwise_arrays -or
-      -not [bool]$config.preparation.require_atomic_promotion -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.preparation.same_official_cache_inventory $true) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.preparation.bitwise_arrays $true) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.preparation.require_atomic_promotion $true) -or
       [string]::Join("`n", @($config.paper0.methods)) -cne
         "ochoa_1`nochoa_2" -or
       [string]::Join("`n", @($config.paper0.unsupported_papers)) -cne
         "3`n4" -or
-      -not [bool]$config.paper0.workbook_semantic_comparison) {
+      -not (Test-Issue13V5ExactBoolean `
+        $config.paper0.workbook_semantic_comparison $true)) {
     throw 'V5 performance, preparation, or paper policy changed.'
   }
   if ([string]$config.report.required_path -cne
@@ -2471,18 +3045,8 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
   }
   $roots = @('worktree_root', 'evidence_root', 'control_root') |
     ForEach-Object { ConvertTo-Issue13V5Path ([string]$config.$_) }
-  if (@($roots | Sort-Object -Unique).Count -ne 3) {
-    throw 'Worktree, evidence, and control roots must be distinct.'
-  }
   foreach ($root in $roots) {
-    if ([string]::Equals($path, $root,
-        [StringComparison]::OrdinalIgnoreCase) -or
-        $path.StartsWith($root.TrimEnd('\') + '\',
-          [StringComparison]::OrdinalIgnoreCase) -or
-        $root.StartsWith($path.TrimEnd('\') + '\',
-          [StringComparison]::OrdinalIgnoreCase)) {
-      throw 'V5 config file must be outside worktree, evidence, and control roots.'
-    }
+    Assert-Issue13V5PathsDisjoint $path $root 'V5 config/output-root isolation'
   }
   $oracleComparisonRoots = @(
     (ConvertTo-Issue13V5Path (
@@ -2491,46 +3055,29 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
       [string]$config.oracle_effect.comparisons.replay.root))
   )
   foreach ($oracleComparisonRoot in $oracleComparisonRoots) {
-    if ([string]::Equals($path, $oracleComparisonRoot,
-        [StringComparison]::OrdinalIgnoreCase) -or
-        $path.StartsWith($oracleComparisonRoot.TrimEnd('\') + '\',
-          [StringComparison]::OrdinalIgnoreCase) -or
-        $oracleComparisonRoot.StartsWith($path.TrimEnd('\') + '\',
-          [StringComparison]::OrdinalIgnoreCase)) {
-      throw 'V5 config file must be outside both oracle-effect comparison roots.'
-    }
+    Assert-Issue13V5PathsDisjoint $path $oracleComparisonRoot 'V5 config/oracle-comparison isolation'
   }
   for ($left = 0; $left -lt $roots.Count; $left++) {
-    for ($right = 0; $right -lt $roots.Count; $right++) {
-      if ($left -eq $right) { continue }
-      $ancestor = $roots[$left].TrimEnd('\') + '\'
-      if ($roots[$right].StartsWith(
-          $ancestor, [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Worktree, evidence, and control roots must not be nested.'
-      }
+    for ($right = $left + 1; $right -lt $roots.Count; $right++) {
+      Assert-Issue13V5PathsDisjoint $roots[$left] $roots[$right] 'Worktree/evidence/control isolation'
     }
   }
-  foreach ($immutable in @(
+  $immutableRoots = @(
       (ConvertTo-Issue13V5Path ([string]$config.repository_root))
       (ConvertTo-Issue13V5Path ([string]$config.source_origin))
       (ConvertTo-Issue13V5Path ([string]$config.candidate_source_origin))
       (ConvertTo-Issue13V5Path ([string]$config.harness_runtime_root))
+      (ConvertTo-Issue13V5Path ([string]$config.r_library))
+      (ConvertTo-Issue13V5Path ([string]$config.rscript))
       (ConvertTo-Issue13V5Path (
         [string]$config.oracle_effect.comparisons.primary.root))
       (ConvertTo-Issue13V5Path (
         [string]$config.oracle_effect.comparisons.replay.root))
-    )) {
+  )
+  $null = Assert-Issue13V5ConfigPathIsolation $path $immutableRoots
+  foreach ($immutable in $immutableRoots) {
     foreach ($root in $roots) {
-      $immutablePrefix = $immutable.TrimEnd('\') + '\'
-      $rootPrefix = $root.TrimEnd('\') + '\'
-      if ([string]::Equals($root, $immutable,
-          [StringComparison]::OrdinalIgnoreCase) -or
-          $root.StartsWith($immutablePrefix,
-            [StringComparison]::OrdinalIgnoreCase) -or
-          $immutable.StartsWith($rootPrefix,
-            [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'V5 output roots must not overlap repository, sources, harness, or oracle comparisons.'
-      }
+      Assert-Issue13V5PathsDisjoint $root $immutable 'V5 output/immutable-root isolation'
     }
   }
   if (@($config.allowed_r_processes).Count -ne 1 -or
@@ -2564,10 +3111,12 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
         '973079b3cba2df2627b3dcc4dcde0899b261eff9ad1930eb31b2407d23e3dd6d' -or
       [long]$config.strict_baseline_smoke.passed_count -ne 5 -or
       [long]$config.strict_baseline_smoke.failed_count -ne 7 -or
-      [bool]$config.strict_baseline_smoke.final_evidence_eligible -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.strict_baseline_smoke.final_evidence_eligible $false) -or
       [long]$config.compatibility_baseline_smoke.passed_count -ne 12 -or
       [long]$config.compatibility_baseline_smoke.failed_count -ne 0 -or
-      [bool]$config.compatibility_baseline_smoke.final_evidence_eligible -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.compatibility_baseline_smoke.final_evidence_eligible $false) -or
       [string]$config.baseline_overlay.sha256 -cne
         $script:Issue13V5BaselineOverlaySha256 -or
       [string]$config.baseline_overlay.patch_id -cne
@@ -2637,7 +3186,8 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
         [string]$config.baseline_runtime_commit -or
       [string]$index.profiles[0].runtime_commit -cne
         [string]$config.baseline_runtime_commit -or
-      [bool]$index.profiles[0].run_dirty -or
+      -not (Test-Issue13V5ExactBoolean `
+        $index.profiles[0].run_dirty $false) -or
       -not [string]::Equals(
         (ConvertTo-Issue13V5Path `
           ([string]$index.profiles[0].overlay_patch_path)),
@@ -3608,15 +4158,18 @@ function Assert-Issue13V5ScenarioEvidence(
   $metrics = Read-Issue13V5Json $metricsPath
   if ([string]$result.schema -cne 'wlv-issue13-scenario-result/1' -or
       [string]$result.scenario_id -cne $ScenarioId -or
-      -not [bool]$result.passed -or [string]$result.status -cne 'passed' -or
+      -not (Test-Issue13V5ExactBoolean $result.passed $true) -or
+      [string]$result.status -cne 'passed' -or
       [string]$result.observed_commit -cne $Commit -or
       [string]$metrics.schema -cne 'wlv-issue13-process-metrics/2' -or
       [string]$metrics.scenario_id -cne $ScenarioId -or
-      -not [bool]$metrics.passed -or -not [bool]$metrics.cluster_closed -or
+      -not (Test-Issue13V5ExactBoolean $metrics.passed $true) -or
+      -not (Test-Issue13V5ExactBoolean $metrics.cluster_closed $true) -or
       @($metrics.lingering_pids).Count -ne 0 -or
       [long]$metrics.expected_worker_processes -ne $ExpectedWorkers -or
       [long]$metrics.max_concurrent_worker_processes -ne $ExpectedWorkers -or
-      -not [bool]$metrics.worker_count_matched) {
+      -not (Test-Issue13V5ExactBoolean `
+        $metrics.worker_count_matched $true)) {
     throw "Scenario or process evidence is invalid: $ScenarioId"
   }
   foreach ($binding in @(

@@ -113,10 +113,12 @@ if ($performance.Count -ne 76 -or
     $checks.Count -le 0 -or
     $checks.Count -ne [long]$aggregate.check_count -or
     @($checks | Where-Object { [string]$_.passed -cne 'TRUE' }).Count -ne 0 -or
-    -not $preparationPassed -or -not [bool]$paperComparison.passed -or
-    [bool]$strictSmoke.passed -or [long]$strictSmoke.passed_count -ne 5 -or
+    -not $preparationPassed -or
+    -not (Test-Issue13V5ExactBoolean $paperComparison.passed $true) -or
+    -not (Test-Issue13V5ExactBoolean $strictSmoke.passed $false) -or
+    [long]$strictSmoke.passed_count -ne 5 -or
     [long]$strictSmoke.failed_count -ne 7 -or
-    -not [bool]$compatibilitySmoke.passed -or
+    -not (Test-Issue13V5ExactBoolean $compatibilitySmoke.passed $true) -or
     [long]$compatibilitySmoke.passed_count -ne 12 -or
     [long]$compatibilitySmoke.failed_count -ne 0) {
   throw 'Passed aggregate tables or paper comparison are inconsistent.'
@@ -156,7 +158,7 @@ if ($commandRecords.Count -le 0 -or
     @($commandRecords | Where-Object {
       [string]$_.schema -cne 'wlv-issue13-v5-command/1' -or
       [long]$_.exit_code -notin @([long[]]$_.expected_exit_codes) -or
-      [bool]$_.timed_out -or
+      -not (Test-Issue13V5ExactBoolean $_.timed_out $false) -or
       [string]$_.stdout_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
       [string]$_.stderr_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
       (Get-Issue13V5Sha256 ([string]$_.stdout_path)) -cne
@@ -188,20 +190,21 @@ if ([string]$oracleEffectProof.schema -cne
     $oracleCommon.Count -ne 5 -or $oracleCommands.Count -ne 10 -or
     $oracleApprovedRuns.Count -ne 17 -or $oracleRecovered.Count -ne 7 -or
     @($oracleCommon.method | Sort-Object -Unique).Count -ne 5 -or
-    @($oracleApprovedRuns | Where-Object { -not [bool]$_.immutable }).Count `
+    @($oracleApprovedRuns | Where-Object {
+      -not (Test-Issue13V5ExactBoolean $_.immutable $true)
+    }).Count `
       -ne 0 -or
     @($oracleRecovered.method | Sort-Object -Unique).Count -ne 7 -or
-    -not [bool]$oracleWorkflow.generator_created_both_roots -or
-    -not [bool]$oracleEffectProof.conclusion.
-      strict_common_primary_and_replay_passed -or
+    -not (Test-Issue13V5ExactBoolean $oracleWorkflow.generator_created_both_roots $true) -or
+    -not (Test-Issue13V5ExactBoolean $oracleEffectProof.conclusion.strict_common_primary_and_replay_passed $true) -or
     [long]$oracleEffectProof.conclusion.approved_run_count -ne 17L -or
-    -not [bool]$oracleEffectProof.conclusion.approved_runs_immutable -or
+    -not (Test-Issue13V5ExactBoolean $oracleEffectProof.conclusion.approved_runs_immutable $true) -or
     [string]$oracleTerminalHarness.generation -cne 'v5-terminal' -or
     [string]$oracleTerminalHarness.expected_candidate_commit -cne
       [string]$config.candidate_commit -or
-    [bool]$oracleEffectProof.final_evidence_eligible -or
-    -not [bool]$oracleEffectProof.conclusion.oracle_effect_closed -or
-    [bool]$oracleEffectProof.conclusion.final_v5_gate_substituted) {
+    -not (Test-Issue13V5ExactBoolean $oracleEffectProof.final_evidence_eligible $false) -or
+    -not (Test-Issue13V5ExactBoolean $oracleEffectProof.conclusion.oracle_effect_closed $true) -or
+    -not (Test-Issue13V5ExactBoolean $oracleEffectProof.conclusion.final_v5_gate_substituted $false)) {
   throw 'Oracle-effect proof does not contain the exact closed 5+7 partition.'
 }
 $oracleControllerRecords = @($oracleSourceController.records)
@@ -243,7 +246,9 @@ $expectedOraclePackages = [string[]]@('fst', 'jsonlite', 'openssl') |
   Sort-Object
 $oracleLoadedPackages = @($oracleRLibrary.loaded_packages)
 $oracleLoadedRequiredPackages = [string[]]@(
-  $oracleLoadedPackages | Where-Object { [bool]$_.required } |
+  $oracleLoadedPackages | Where-Object {
+    Test-Issue13V5ExactBoolean $_.required $true
+  } |
     ForEach-Object { [string]$_.name } | Sort-Object)
 if ([string]$oracleRLibrary.path -cne [string]$config.r_library -or
     [string]$oracleRLibrary.environment_variable -cne 'R_LIBS_USER' -or
@@ -285,7 +290,7 @@ $oracleRuntimeBeforeJson = $oracleRuntimeImmutability.before |
   ConvertTo-Json -Depth 50 -Compress
 $oracleRuntimeAfterJson = $oracleRuntimeImmutability.after |
   ConvertTo-Json -Depth 50 -Compress
-if (-not [bool]$oracleRuntimeImmutability.immutable -or
+if (-not (Test-Issue13V5ExactBoolean $oracleRuntimeImmutability.immutable $true) -or
     $oracleRuntimeBeforeJson -cne $oracleRuntimeAfterJson -or
     ($oracleRuntimeImmutability.before.r_library |
       ConvertTo-Json -Depth 30 -Compress) -cne
@@ -323,8 +328,8 @@ $preparationEquivalencePath = ConvertTo-Issue13V5Path (
 $preparationEquivalenceSha = Get-Issue13V5Sha256 $preparationEquivalencePath
 if ($preparationEquivalenceSha -cne
       [string]$preparationEquivalenceBinding.sha256 -or
-    -not [bool]$preparationEquivalenceBinding.
-      all_rows_fields_and_order_exact -or
+    -not (Test-Issue13V5ExactBoolean `
+      $preparationEquivalenceBinding.all_rows_fields_and_order_exact $true) -or
     @($preparationEquivalenceBinding.architecture_projection).Count -ne 0 -or
     [string]$preparationEquivalenceBinding.source_unit_contract_bridge -cne
       'exhaustive-source-unit-contract-bridge') {
@@ -356,31 +361,36 @@ foreach ($sourceName in @('wiodr13', 'wiodr16')) {
   $sealedArmComparisons = @($sealedTableComparisons | ForEach-Object {
     @($_.baseline, $_.candidate)
   })
-  if (-not [bool]$sourceComparison.passed -or
-      -not [bool]$sourceComparison.
-        manifest_tables_equivalence_profile_exact -or
-      -not [bool]$baselineManifest.passed -or
-      -not [bool]$candidateManifest.passed -or
-      -not [bool]$manifestComparison.passed -or
+  if (-not (Test-Issue13V5ExactBoolean $sourceComparison.passed $true) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $sourceComparison.manifest_tables_equivalence_profile_exact $true) -or
+      -not (Test-Issue13V5ExactBoolean $baselineManifest.passed $true) -or
+      -not (Test-Issue13V5ExactBoolean $candidateManifest.passed $true) -or
+      -not (Test-Issue13V5ExactBoolean $manifestComparison.passed $true) -or
       [string]$manifestComparison.comparison_mode -cne
         'sealed-exhaustive-source-manifest-equivalence' -or
-      -not [bool]$unitComparison.passed -or
+      -not (Test-Issue13V5ExactBoolean $unitComparison.passed $true) -or
       [string]$unitComparison.comparison_mode -cne
         'sealed-exhaustive-unit-contract-equivalence' -or
-      -not [bool]$unitBridge.passed -or
+      -not (Test-Issue13V5ExactBoolean $unitBridge.passed $true) -or
       [string]$unitBridge.comparison_mode -cne
         'exhaustive-source-unit-contract-bridge' -or
       [string]$unitBridge.source -cne $sourceName -or
-      -not [bool]$unitBridge.all_columns_compared -or
-      -not [bool]$unitBridge.exact_order_after_bridge -or
+      -not (Test-Issue13V5ExactBoolean `
+        $unitBridge.all_columns_compared $true) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $unitBridge.exact_order_after_bridge $true) -or
       [long]$unitBridge.aggregation_note_bridge_rows -ne 0L -or
-      [bool]$manifestComparison.raw_semantic_equal -or
-      [bool]$unitComparison.raw_semantic_equal -or
+      -not (Test-Issue13V5ExactBoolean `
+        $manifestComparison.raw_semantic_equal $false) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $unitComparison.raw_semantic_equal $false) -or
       @($sealedTableComparisons | Where-Object {
         [string]$_.profile_sha256 -cne $preparationEquivalenceSha
       }).Count -ne 0 -or
       @($sealedArmComparisons | Where-Object {
-        -not [bool]$_.passed -or -not [bool]$_.exact_table -or
+        -not (Test-Issue13V5ExactBoolean $_.passed $true) -or
+        -not (Test-Issue13V5ExactBoolean $_.exact_table $true) -or
         [long]$_.rows -le 0L -or @($_.columns).Count -le 0 -or
         [string]$_.file_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
         [string]$_.table_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
@@ -392,15 +402,22 @@ foreach ($sourceName in @('wiodr13', 'wiodr16')) {
   }
   if ($arrayComparisons.Count -ne 2 -or
       @($arrayComparisons | Where-Object {
-        -not [bool]$_.passed -or
-        -not [bool]$_.dimension_names_identical -or
-        -not [bool]$_.fst_column_schema_identical -or
-        -not [bool]$_.bitwise_values_identical -or
+        -not (Test-Issue13V5ExactBoolean $_.passed $true) -or
+        -not (Test-Issue13V5ExactBoolean `
+          $_.dimension_names_identical $true) -or
+        -not (Test-Issue13V5ExactBoolean `
+          $_.fst_column_schema_identical $true) -or
+        -not (Test-Issue13V5ExactBoolean `
+          $_.bitwise_values_identical $true) -or
         [long]$_.compared_values -ne [long]$_.flattened_values -or
-        -not [bool]$_.baseline_internal_hash_ok -or
-        -not [bool]$_.candidate_internal_hash_ok -or
-        -not [bool]$_.sidecar_architecture_valid -or
-        [bool]$_.sidecars_semantically_identical -or
+        -not (Test-Issue13V5ExactBoolean `
+          $_.baseline_internal_hash_ok $true) -or
+        -not (Test-Issue13V5ExactBoolean `
+          $_.candidate_internal_hash_ok $true) -or
+        -not (Test-Issue13V5ExactBoolean `
+          $_.sidecar_architecture_valid $true) -or
+        -not (Test-Issue13V5ExactBoolean `
+          $_.sidecars_semantically_identical $false) -or
         [string]$_.baseline_sidecar_format -cne 'legacy-positional' -or
         [string]$_.candidate_sidecar_format -cne 'versioned-v1' -or
         [string]$_.baseline_sha256 -cne [string]$_.candidate_sha256 -or
@@ -449,7 +466,7 @@ $euklemsArtifacts = @(
   $preparation.euklems.artifacts.PSObject.Properties | ForEach-Object {
     $_.Value
   })
-if (-not [bool]$preparation.euklems.passed -or
+if (-not (Test-Issue13V5ExactBoolean $preparation.euklems.passed $true) -or
     [long]$preparation.euklems.artifact_count -ne 42L -or
     $euklemsArtifacts.Count -ne 42 -or
     [string]::Join(',', @($preparation.euklems.expected_years)) -cne
@@ -457,7 +474,7 @@ if (-not [bool]$preparation.euklems.passed -or
     [string]::Join(',', @($preparation.euklems.expected_series)) -cne
       'ekk,ekdeprate' -or
     @($euklemsArtifacts | Where-Object {
-      -not [bool]$_.passed -or
+      -not (Test-Issue13V5ExactBoolean $_.passed $true) -or
       [string]$_.baseline_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
       [string]$_.candidate_sha256 -cnotmatch '^[0-9a-f]{64}$'
     }).Count -ne 0) {
@@ -512,7 +529,8 @@ $oracleCommonLines = @($oracleCommon | Sort-Object method | ForEach-Object {
       [string]$comparisonFile[0].replay_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
       [string]$comparisonFile[0].normalized_sha256 -cnotmatch
         '^[0-9a-f]{64}$' -or
-      -not [bool]$comparisonFile[0].normalized_identical) {
+      -not (Test-Issue13V5ExactBoolean `
+        $comparisonFile[0].normalized_identical $true)) {
     throw "Oracle-effect common comparison file is missing: $($_.method)"
   }
   '- `' + [string]$_.method + '`: strict primary/replay `passed`; ' +

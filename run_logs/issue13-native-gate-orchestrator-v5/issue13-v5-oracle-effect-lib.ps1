@@ -50,12 +50,21 @@ $script:Issue13OracleEffectControllerFiles = @(
 
 function Assert-Issue13OracleEffect {
   param(
-    [Parameter(Mandatory = $true)][bool]$Condition,
+    [Parameter(Mandatory = $true)][AllowNull()][object]$Condition,
     [Parameter(Mandatory = $true)][string]$Message
   )
-  if (-not $Condition) {
+  if (-not (Test-Issue13OracleEffectExactBoolean $Condition $true)) {
     throw "Issue #13 oracle-effect proof rejected: $Message"
   }
+}
+
+function Test-Issue13OracleEffectExactBoolean {
+  param(
+    [Parameter(Mandatory = $true)][AllowNull()][object]$Value,
+    [Parameter(Mandatory = $true)][AllowNull()][object]$Expected
+  )
+  ($Value -is [bool]) -and ($Expected -is [bool]) -and
+    ([bool]$Value -eq [bool]$Expected)
 }
 
 function Resolve-Issue13OracleEffectFile {
@@ -100,6 +109,133 @@ function Get-Issue13OracleEffectUtf8Sha256 {
   }
 }
 
+if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT -and
+    -not ('Issue13V5.OracleEffectNativePath' -as [type])) {
+  Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
+
+namespace Issue13V5 {
+  public static class OracleEffectNativePath {
+    private const uint ShareAll = 0x00000007;
+    private const uint OpenExisting = 3;
+    private const uint BackupSemantics = 0x02000000;
+    private const uint VolumeNameGuid = 0x00000001;
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFile(
+      string fileName, uint desiredAccess, uint shareMode,
+      IntPtr securityAttributes, uint creationDisposition,
+      uint flagsAndAttributes, IntPtr templateFile);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetFinalPathNameByHandle(
+      SafeFileHandle file, StringBuilder path, uint pathLength, uint flags);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint QueryDosDevice(
+      string deviceName, StringBuilder targetPath, int maximumLength);
+
+    public static string Resolve(string path) {
+      using (SafeFileHandle handle = CreateFile(
+        path, 0, ShareAll, IntPtr.Zero, OpenExisting,
+        BackupSemantics, IntPtr.Zero)) {
+        if (handle.IsInvalid) {
+          throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+        uint capacity = 512;
+        while (true) {
+          StringBuilder buffer = new StringBuilder((int)capacity);
+          uint length = GetFinalPathNameByHandle(
+            handle, buffer, capacity, VolumeNameGuid);
+          if (length == 0) {
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+          }
+          if (length < capacity) {
+            return buffer.ToString();
+          }
+          capacity = length + 1;
+        }
+      }
+    }
+
+    public static string DriveTarget(string driveName) {
+      int capacity = 512;
+      while (true) {
+        StringBuilder buffer = new StringBuilder(capacity);
+        uint length = QueryDosDevice(driveName, buffer, capacity);
+        if (length != 0) {
+          return buffer.ToString();
+        }
+        int error = Marshal.GetLastWin32Error();
+        if (error != 122) {
+          throw new Win32Exception(error);
+        }
+        capacity *= 2;
+      }
+    }
+  }
+}
+'@
+}
+
+function Test-Issue13OracleEffectForbiddenDriveTarget {
+  param([Parameter(Mandatory = $true)][string]$Target)
+  $Target.StartsWith('\??\', [StringComparison]::OrdinalIgnoreCase) -or
+    $Target.StartsWith('\Device\Mup',
+      [StringComparison]::OrdinalIgnoreCase) -or
+    $Target.StartsWith('\Device\LanmanRedirector',
+      [StringComparison]::OrdinalIgnoreCase) -or
+    $Target.StartsWith('\Device\WebDavRedirector',
+      [StringComparison]::OrdinalIgnoreCase)
+}
+
+function ConvertTo-Issue13OracleEffectPhysicalPath {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $full = [IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+  if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+    return $full
+  }
+  $root = [IO.Path]::GetPathRoot($full)
+  Assert-Issue13OracleEffect (
+    -not [string]::IsNullOrWhiteSpace($root) -and
+    $root -cmatch '^[A-Za-z]:\\$'
+  ) "$Label must use a local drive-letter path: $full"
+  $drive = [IO.DriveInfo]::new($root)
+  Assert-Issue13OracleEffect (
+    $drive.IsReady -and $drive.DriveType -eq [IO.DriveType]::Fixed
+  ) "$Label must use a ready fixed local drive: $full"
+  $target = [Issue13V5.OracleEffectNativePath]::DriveTarget(
+    $root.Substring(0, 2))
+  Assert-Issue13OracleEffect (
+    -not (Test-Issue13OracleEffectForbiddenDriveTarget $target)
+  ) "$Label must not use a SUBST or mapped-drive alias: $full"
+  $missing = [Collections.Generic.List[string]]::new()
+  $cursor = $full
+  while (-not (Test-Path -LiteralPath $cursor)) {
+    $leaf = [IO.Path]::GetFileName($cursor)
+    Assert-Issue13OracleEffect (
+      -not [string]::IsNullOrWhiteSpace($leaf)
+    ) "Cannot canonicalize $Label path: $full"
+    $missing.Add($leaf)
+    $parent = [IO.Directory]::GetParent($cursor)
+    Assert-Issue13OracleEffect ($null -ne $parent) "Cannot find an existing ancestor for $Label path: $full"
+    $cursor = $parent.FullName
+  }
+  $canonical = [Issue13V5.OracleEffectNativePath]::Resolve($cursor).
+    TrimEnd('\')
+  for ($index = $missing.Count - 1; $index -ge 0; $index--) {
+    $canonical = $canonical + '\' + $missing[$index]
+  }
+  $canonical.TrimEnd('\')
+}
+
 function Test-Issue13OracleEffectPathEqual {
   param(
     [Parameter(Mandatory = $true)][string]$Left,
@@ -110,11 +246,9 @@ function Test-Issue13OracleEffectPathEqual {
   } else {
     [StringComparison]::Ordinal
   }
-  [string]::Equals(
-    ([IO.Path]::GetFullPath($Left)).TrimEnd('\', '/'),
-    ([IO.Path]::GetFullPath($Right)).TrimEnd('\', '/'),
-    $comparison
-  )
+  $leftPhysical = ConvertTo-Issue13OracleEffectPhysicalPath $Left 'left'
+  $rightPhysical = ConvertTo-Issue13OracleEffectPhysicalPath $Right 'right'
+  [string]::Equals($leftPhysical, $rightPhysical, $comparison)
 }
 
 function Test-Issue13OracleEffectPathContained {
@@ -122,12 +256,12 @@ function Test-Issue13OracleEffectPathContained {
     [Parameter(Mandatory = $true)][string]$Child,
     [Parameter(Mandatory = $true)][string]$Parent
   )
-  $childFull = [IO.Path]::GetFullPath($Child).TrimEnd('\', '/')
-  $parentFull = [IO.Path]::GetFullPath($Parent).TrimEnd('\', '/')
-  if (Test-Issue13OracleEffectPathEqual $childFull $parentFull) { return $true }
+  $childFull = ConvertTo-Issue13OracleEffectPhysicalPath $Child 'child'
+  $parentFull = ConvertTo-Issue13OracleEffectPhysicalPath $Parent 'parent'
   $comparison = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
     [StringComparison]::OrdinalIgnoreCase
   } else { [StringComparison]::Ordinal }
+  if ([string]::Equals($childFull, $parentFull, $comparison)) { return $true }
   $separator = [IO.Path]::DirectorySeparatorChar
   $childFull.StartsWith($parentFull + $separator, $comparison)
 }
@@ -142,6 +276,35 @@ function Assert-Issue13OracleEffectPathsDisjoint {
     -not (Test-Issue13OracleEffectPathContained $Left $Right) -and
     -not (Test-Issue13OracleEffectPathContained $Right $Left)
   ) "$Label paths overlap: $Left ; $Right"
+}
+
+function Assert-Issue13OracleEffectProofPathIsolation {
+  param(
+    [Parameter(Mandatory = $true)][string]$ProofPath,
+    [Parameter(Mandatory = $true)][string[]]$ProtectedRoots
+  )
+  $full = [IO.Path]::GetFullPath($ProofPath)
+  $parent = Split-Path -Parent $full
+  Assert-Issue13OracleEffect (
+    Test-Path -LiteralPath $parent -PathType Container
+  ) "proof output parent does not exist: $parent"
+  Assert-Issue13OracleEffectNoReparseAncestors $parent 'proof output parent'
+  $null = ConvertTo-Issue13OracleEffectPhysicalPath `
+    $full 'oracle-effect proof path'
+  Assert-Issue13OracleEffect ($ProtectedRoots.Count -gt 0) `
+    'proof protected roots are empty.'
+  foreach ($protectedRoot in $ProtectedRoots) {
+    Assert-Issue13OracleEffect (
+      -not [string]::IsNullOrWhiteSpace($protectedRoot)
+    ) 'proof protected roots contain an empty path.'
+    Assert-Issue13OracleEffectNoReparseAncestors `
+      $protectedRoot 'proof protected root'
+    $null = ConvertTo-Issue13OracleEffectPhysicalPath `
+      $protectedRoot 'proof protected root'
+    Assert-Issue13OracleEffectPathsDisjoint $full $protectedRoot `
+      'oracle-effect proof/protected-root isolation'
+  }
+  $full
 }
 
 function Test-Issue13OracleEffectReparseAttribute {
@@ -160,6 +323,11 @@ function Assert-Issue13OracleEffectNoReparseAncestors {
   } else {
     Split-Path -Parent $full
   }
+  $comparison = if (
+    [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
+  ) { [StringComparison]::OrdinalIgnoreCase } else {
+    [StringComparison]::Ordinal
+  }
   while (-not [string]::IsNullOrWhiteSpace($current)) {
     if (Test-Path -LiteralPath $current) {
       $item = Get-Item -LiteralPath $current -Force
@@ -169,7 +337,7 @@ function Assert-Issue13OracleEffectNoReparseAncestors {
     }
     $parent = Split-Path -Parent $current
     if ([string]::IsNullOrWhiteSpace($parent) -or
-        (Test-Issue13OracleEffectPathEqual $parent $current)) { break }
+        [string]::Equals($parent, $current, $comparison)) { break }
     $current = $parent
   }
 }
@@ -226,7 +394,9 @@ function Test-Issue13OracleEffectJsonSchemaFile {
   } catch {
     throw "Issue #13 oracle-effect proof rejected: $Label fails JSON Schema validation: $($_.Exception.Message)"
   }
-  Assert-Issue13OracleEffect ([bool]$valid) `
+  Assert-Issue13OracleEffect (
+    Test-Issue13OracleEffectExactBoolean $valid $true
+  ) `
     "$Label fails JSON Schema validation."
   $true
 }
@@ -787,7 +957,9 @@ function Test-Issue13OracleEffectSpec {
   Assert-Issue13OracleEffect ($Spec.proof_schema_sha256 -ceq `
       '71060076271205ba0134c1f6ccd38f379ca354810996be7c1c40ed1cf15005b4') `
     'proof schema hash differs.'
-  Assert-Issue13OracleEffect (-not [bool]$Spec.final_evidence_eligible) `
+  Assert-Issue13OracleEffect (
+    Test-Issue13OracleEffectExactBoolean $Spec.final_evidence_eligible $false
+  ) `
     'the auxiliary oracle proof must not claim final-gate eligibility.'
   Assert-Issue13OracleEffect ($Spec.oracle.base_commit -ceq $expectedBase) `
     'base commit is not cc2c861.'
@@ -1141,7 +1313,9 @@ function Get-Issue13OracleEffectScenario {
   $document = Read-Issue13OracleEffectJson $resolved "$Label scenario result"
   Assert-Issue13OracleEffect ($document.schema -ceq 'wlv-issue13-scenario-result/1') `
     "$Label scenario schema differs."
-  Assert-Issue13OracleEffect ([bool]$document.passed -eq $ExpectedPassed) `
+  Assert-Issue13OracleEffect (
+    Test-Issue13OracleEffectExactBoolean $document.passed $ExpectedPassed
+  ) `
     "$Label scenario passed flag differs."
   Assert-Issue13OracleEffect ($document.status -ceq $(if ($ExpectedPassed) {'passed'} else {'failed'})) `
     "$Label scenario status differs."
@@ -1358,8 +1532,10 @@ function Get-Issue13OracleEffectRunOutput {
   Assert-Issue13OracleEffect ($manifest.output_contract.id -ceq 'wlvpanel-output' -and `
       $manifest.output_contract.version -ceq '1.0.0') `
     "$Label output contract differs."
-  Assert-Issue13OracleEffect ([bool]$manifest.result.provenance.complete -and `
-      -not [bool]$manifest.result.provenance.git.dirty -and `
+  Assert-Issue13OracleEffect ((Test-Issue13OracleEffectExactBoolean `
+        $manifest.result.provenance.complete $true) -and `
+      (Test-Issue13OracleEffectExactBoolean `
+        $manifest.result.provenance.git.dirty $false) -and `
       $manifest.result.provenance.git.commit -ceq $ExpectedCommit) `
     "$Label provenance is incomplete, dirty, or bound to another commit."
   $physical = Get-Issue13OracleEffectRunInventory $root $manifestPath $manifest `
@@ -1720,8 +1896,10 @@ function Test-Issue13OracleEffectHarnessManifest {
   Assert-Issue13OracleEffect ($manifest.schema -ceq 'wlv-issue13-v5-harness-materialization/1' -and `
       $manifest.status -ceq 'materialized' -and `
       $manifest.generation -ceq 'v5-terminal' -and `
-      [bool]$manifest.final_evidence_eligible -and `
-      -not [bool]$manifest.reuses_candidate_evidence) `
+      (Test-Issue13OracleEffectExactBoolean `
+        $manifest.final_evidence_eligible $true) -and `
+      (Test-Issue13OracleEffectExactBoolean `
+        $manifest.reuses_candidate_evidence $false)) `
     'comparison harness manifest identity differs.'
   Assert-Issue13OracleEffectExactProperties $manifest.source_controller @(
     'commit_sha256', 'file_count', 'records'
@@ -1877,8 +2055,10 @@ function Get-Issue13OracleEffectInputContext {
   Assert-Issue13OracleEffect ($strict.schema -ceq `
       $spec.evidence_pins.strict_smoke.schema -and `
       $strict.purpose -ceq $spec.evidence_pins.strict_smoke.purpose -and `
-      $strict.status -ceq 'failed' -and -not [bool]$strict.passed -and `
-      -not [bool]$strict.final_evidence_eligible -and `
+      $strict.status -ceq 'failed' -and `
+      (Test-Issue13OracleEffectExactBoolean $strict.passed $false) -and `
+      (Test-Issue13OracleEffectExactBoolean `
+        $strict.final_evidence_eligible $false) -and `
       $strict.baseline_commit -ceq $spec.oracle.base_commit -and `
       $strict.source_inventory_sha256 -ceq `
         $spec.evidence_pins.source_inventory_sha256 -and `
@@ -1890,8 +2070,10 @@ function Get-Issue13OracleEffectInputContext {
   Assert-Issue13OracleEffect ($oracle.schema -ceq `
       $spec.evidence_pins.oracle_smoke.schema -and `
       $oracle.purpose -ceq $spec.evidence_pins.oracle_smoke.purpose -and `
-      $oracle.status -ceq 'passed' -and [bool]$oracle.passed -and `
-      -not [bool]$oracle.final_evidence_eligible -and `
+      $oracle.status -ceq 'passed' -and `
+      (Test-Issue13OracleEffectExactBoolean $oracle.passed $true) -and `
+      (Test-Issue13OracleEffectExactBoolean `
+        $oracle.final_evidence_eligible $false) -and `
       $oracle.baseline_commit -ceq $spec.oracle.base_commit -and `
       $oracle.baseline_base_commit -ceq $spec.oracle.base_commit -and `
       $oracle.baseline_runtime_commit -ceq $spec.oracle.runtime_commit -and `
@@ -2248,10 +2430,12 @@ function Test-Issue13OracleEffectSingleComparison {
   Assert-Issue13OracleEffect ($document.schema -ceq `
       $Spec.comparison_contract.schema -and `
       $document.scenario_id -ceq "oracle-effect/common/$method" -and `
-      $document.status -ceq 'passed' -and [bool]$document.passed -and `
+      $document.status -ceq 'passed' -and `
+      (Test-Issue13OracleEffectExactBoolean $document.passed $true) -and `
       $document.comparison_mode -ceq 'strict') `
     "$Phase/$method comparison identity or status differs."
-  Assert-Issue13OracleEffect ([bool]$document.identity.passed -and `
+  Assert-Issue13OracleEffect ((Test-Issue13OracleEffectExactBoolean `
+        $document.identity.passed $true) -and `
       $document.identity.candidate_method -ceq $method -and `
       $document.identity.baseline_method -ceq $method -and `
       $document.identity.candidate_output_contract.id -ceq 'wlvpanel-output' -and `
@@ -2287,7 +2471,9 @@ function Test-Issue13OracleEffectSingleComparison {
   $artifacts = @($document.artifacts)
   Assert-Issue13OracleEffect ($artifacts.Count -gt 0 -and `
       [int]$document.artifact_count -eq $artifacts.Count -and `
-      (@($artifacts | Where-Object { -not [bool]$_.passed }).Count -eq 0)) `
+      (@($artifacts | Where-Object {
+        -not (Test-Issue13OracleEffectExactBoolean $_.passed $true)
+      }).Count -eq 0)) `
     "$Phase/$method has a failed or inconsistent artifact summary."
   $transitions = @($document.transitions)
   foreach ($transition in $transitions) {
@@ -2382,7 +2568,7 @@ function Test-Issue13OracleEffectComparisonPair {
         normalization = $normalization
         normalized_sha256 = $normalizedSha
         normalized_identical = $true
-        raw_byte_identical = [bool]($left.sha256 -ceq $right.sha256 -and `
+        raw_byte_identical = ($left.sha256 -ceq $right.sha256 -and `
           [int64]$left.size_bytes -eq [int64]$right.size_bytes)
       }
     }
@@ -2670,9 +2856,11 @@ function Write-Issue13OracleEffectJsonOnce {
   param(
     [Parameter(Mandatory = $true)][object]$Value,
     [Parameter(Mandatory = $true)][string]$Path,
-    [Parameter(Mandatory = $true)][string]$SchemaPath
+    [Parameter(Mandatory = $true)][string]$SchemaPath,
+    [Parameter(Mandatory = $true)][string[]]$ProtectedRoots
   )
-  $full = [IO.Path]::GetFullPath($Path)
+  $full = Assert-Issue13OracleEffectProofPathIsolation `
+    $Path $ProtectedRoots
   $parent = Split-Path -Parent $full
   Assert-Issue13OracleEffect (Test-Path -LiteralPath $parent -PathType Container) `
     "proof output parent does not exist: $parent"
@@ -2687,6 +2875,8 @@ function Write-Issue13OracleEffectJsonOnce {
     $null = Read-Issue13OracleEffectJson $temporary 'staged oracle-effect proof'
     $null = Test-Issue13OracleEffectJsonSchemaFile $temporary $SchemaPath `
       'staged oracle-effect proof'
+    $null = Assert-Issue13OracleEffectProofPathIsolation `
+      $full $ProtectedRoots
     Assert-Issue13OracleEffect (-not (Test-Path -LiteralPath $full)) `
       "proof output appeared during staging: $full"
     [IO.File]::Move($temporary, $full)
@@ -2708,8 +2898,10 @@ function Test-Issue13OracleEffectProofObject {
     'generated_at_utc', 'evidence', 'conclusion'
   ) 'proof top-level properties'
   Assert-Issue13OracleEffect ($Proof.schema -ceq 'wlv-issue13-v5-oracle-effect-proof/2' -and `
-      $Proof.status -ceq 'passed' -and [bool]$Proof.passed -and `
-      -not [bool]$Proof.final_evidence_eligible -and `
+      $Proof.status -ceq 'passed' -and `
+      (Test-Issue13OracleEffectExactBoolean $Proof.passed $true) -and `
+      (Test-Issue13OracleEffectExactBoolean `
+        $Proof.final_evidence_eligible $false) -and `
       $Proof.purpose -ceq 'closed-authorized-oracle-effect-cc2-to-e2f') `
     'proof envelope differs.'
   $timestamp = [DateTime]::MinValue
@@ -2732,17 +2924,26 @@ function Test-Issue13OracleEffectProofObject {
     'recovered_coordinate_and_diagnostic_contracts_passed',
     'oracle_effect_closed', 'final_v5_gate_substituted'
   ) 'proof conclusion properties'
-  Assert-Issue13OracleEffect ([bool]$conclusion.authorized_patch_authenticated -and `
-      [bool]$conclusion.terminal_harness_authenticated -and `
+  Assert-Issue13OracleEffect ((Test-Issue13OracleEffectExactBoolean `
+        $conclusion.authorized_patch_authenticated $true) -and `
+      (Test-Issue13OracleEffectExactBoolean `
+        $conclusion.terminal_harness_authenticated $true) -and `
       [int]$conclusion.strict_common_method_count -eq 5 -and `
-      [bool]$conclusion.strict_common_primary_and_replay_passed -and `
+      (Test-Issue13OracleEffectExactBoolean `
+        $conclusion.strict_common_primary_and_replay_passed $true) -and `
       [int]$conclusion.approved_run_count -eq 17 -and `
-      [bool]$conclusion.approved_runs_immutable -and `
+      (Test-Issue13OracleEffectExactBoolean `
+        $conclusion.approved_runs_immutable $true) -and `
       [int]$conclusion.recovered_method_count -eq 7 -and `
-      [bool]$conclusion.recovered_methods_passed -and `
-      [bool]$conclusion.recovered_coordinate_and_diagnostic_contracts_passed -and `
-      [bool]$conclusion.oracle_effect_closed -and `
-      -not [bool]$conclusion.final_v5_gate_substituted) `
+      (Test-Issue13OracleEffectExactBoolean `
+        $conclusion.recovered_methods_passed $true) -and `
+      (Test-Issue13OracleEffectExactBoolean `
+        $conclusion.recovered_coordinate_and_diagnostic_contracts_passed `
+        $true) -and `
+      (Test-Issue13OracleEffectExactBoolean `
+        $conclusion.oracle_effect_closed $true) -and `
+      (Test-Issue13OracleEffectExactBoolean `
+        $conclusion.final_v5_gate_substituted $false)) `
     'proof conclusion differs.'
   $true
 }

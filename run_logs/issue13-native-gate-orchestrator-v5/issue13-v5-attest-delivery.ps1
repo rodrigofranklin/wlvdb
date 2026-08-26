@@ -87,34 +87,9 @@ function Get-Issue13V5DeliveryByteSha256([byte[]]$Bytes) {
   ).ToLowerInvariant()
 }
 
-function Test-Issue13V5DeliveryPathWithin(
-  [string]$Path,
-  [string]$Root
-) {
-  $candidate = [IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
-  $container = [IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
-  if ([string]::Equals($candidate, $container,
-      [StringComparison]::OrdinalIgnoreCase)) {
-    return $true
-  }
-  $prefix = $container + [IO.Path]::DirectorySeparatorChar
-  $candidate.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)
-}
-
-function Assert-Issue13V5DeliveryNoReparseAncestors([string]$Path) {
-  $current = Get-Item -LiteralPath $Path -Force
-  while ($null -ne $current) {
-    if (($current.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-      throw "Attestation destination uses a reparse point: $($current.FullName)"
-    }
-    $current = $current.Parent
-  }
-}
-
 function Resolve-Issue13V5DeliveryOutput(
   [string]$Path,
-  [string]$Repository,
-  [string]$ControlRoot
+  [string[]]$ProtectedRoots
 ) {
   $full = ConvertTo-Issue13V5Path $Path
   if ([IO.Path]::GetExtension($full) -cne '.json') {
@@ -128,11 +103,24 @@ function Resolve-Issue13V5DeliveryOutput(
     throw 'Delivery attestation parent directory must already exist.'
   }
   $resolvedParent = (Resolve-Path -LiteralPath $parent).Path
-  Assert-Issue13V5DeliveryNoReparseAncestors $resolvedParent
+  Assert-Issue13V5NoReparseAncestors `
+    $resolvedParent 'Delivery attestation parent'
+  $null = ConvertTo-Issue13V5PhysicalPath `
+    $resolvedParent 'Delivery attestation parent'
   $resolved = Join-Path $resolvedParent ([IO.Path]::GetFileName($full))
-  if ((Test-Issue13V5DeliveryPathWithin $resolved $Repository) -or
-      (Test-Issue13V5DeliveryPathWithin $resolved $ControlRoot)) {
-    throw 'Delivery attestation must be outside repository and control roots.'
+  if ($ProtectedRoots.Count -eq 0) {
+    throw 'Delivery attestation protected roots are empty.'
+  }
+  foreach ($protectedRoot in $ProtectedRoots) {
+    if ([string]::IsNullOrWhiteSpace($protectedRoot)) {
+      throw 'Delivery attestation contains an empty protected root.'
+    }
+    Assert-Issue13V5NoReparseAncestors `
+      $protectedRoot 'Delivery attestation protected root'
+    $null = ConvertTo-Issue13V5PhysicalPath `
+      $protectedRoot 'Delivery attestation protected root'
+    Assert-Issue13V5PathsDisjoint $resolved $protectedRoot `
+      'Delivery attestation/protected-root isolation'
   }
   $resolved
 }
@@ -335,8 +323,21 @@ function Invoke-Issue13V5DeliveryAttestation(
   $null = Assert-Issue13V5FinalBindings $config $state
 
   $repository = (Resolve-Path -LiteralPath $config.repository_root).Path
-  $controlRoot = (Resolve-Path -LiteralPath $config.control_root).Path
-  $outputPath = Resolve-Issue13V5DeliveryOutput $Output $repository $controlRoot
+  $deliveryProtectedRoots = @(
+    [string]$config.repository_root,
+    [string]$config.worktree_root,
+    [string]$config.evidence_root,
+    [string]$config.control_root,
+    [string]$config.harness_runtime_root,
+    [string]$config.source_origin,
+    [string]$config.candidate_source_origin,
+    [string]$config.r_library,
+    [string]$config.rscript,
+    [string]$config.oracle_effect.comparisons.primary.root,
+    [string]$config.oracle_effect.comparisons.replay.root
+  )
+  $outputPath = Resolve-Issue13V5DeliveryOutput `
+    $Output $deliveryProtectedRoots
   $stateSha256 = Get-Issue13V5Sha256 $providedStatePath
   $reportSha256 = [string]$state.report.sha256
   $snapshot = Get-Issue13V5DeliverySnapshot $repository `
@@ -359,7 +360,7 @@ function Invoke-Issue13V5DeliveryAttestation(
       root = $repository
       validated_code_tree = [string]$snapshot.validated_code_tree
       delivery_tree = [string]$snapshot.delivery_tree
-      tracked_tree_clean = [bool]$snapshot.tracked_tree_clean
+      tracked_tree_clean = $snapshot.tracked_tree_clean
     }
     config = [ordered]@{
       path = [string]$binding.path
@@ -399,12 +400,15 @@ function Invoke-Issue13V5DeliveryAttestation(
     throw 'Config or state changed before delivery attestation was written.'
   }
 
-  $attestationSha256 = Write-Issue13V5Json $attestation $outputPath
+  $attestationSha256 = Write-Issue13V5Json $attestation `
+    (Resolve-Issue13V5DeliveryOutput `
+      $outputPath $deliveryProtectedRoots)
   $roundtrip = Read-Issue13V5Json $outputPath
   if ([string]$roundtrip.schema -cne
         'wlv-issue13-v5-delivery-attestation/1' -or
       [string]$roundtrip.status -cne 'passed' -or
-      -not [bool]$roundtrip.immutable_write_once -or
+      -not (Test-Issue13V5ExactBoolean `
+        $roundtrip.immutable_write_once $true) -or
       [string]$roundtrip.validated_code_commit -cne
         [string]$snapshot.validated_code_commit -or
       [string]$roundtrip.delivery_commit -cne

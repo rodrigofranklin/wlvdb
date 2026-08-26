@@ -483,7 +483,8 @@ function Ensure-Issue13V5PrepFaultPlan(
         @($plan.records).Count -ne 12 -or
         [string]$audit.schema -cne
           'wlv-issue13-prep-fault-plan-audit/2' -or
-        -not [bool]$audit.passed -or [string]$audit.status -cne 'passed' -or
+        -not (Test-Issue13V5ExactBoolean $audit.passed $true) -or
+        [string]$audit.status -cne 'passed' -or
         [string]$audit.plan_sha256 -cne (Get-Issue13V5Sha256 $planPath)) {
       throw 'Preparation/fault plan or independent audit failed.'
     }
@@ -758,15 +759,18 @@ function Invoke-Issue13V5Comparison(
         [string]$expectedCandidate.manifest_sha256 -or
       [string]$document.baseline.manifest_sha256 -cne
         [string]$expectedBaseline.manifest_sha256 -or
-      (-not $AllowDifference -and -not [bool]$document.passed)) {
+      -not ((Test-Issue13V5ExactBoolean $document.passed $true) -or
+        (Test-Issue13V5ExactBoolean $document.passed $false)) -or
+      (-not $AllowDifference -and
+        -not (Test-Issue13V5ExactBoolean $document.passed $true))) {
     throw "Comparison result is invalid: $Id"
   }
   [pscustomobject][ordered]@{
     id = $Id
     directory = (Resolve-Path -LiteralPath $output).Path
     comparison_sha256 = Get-Issue13V5Sha256 $documentPath
-    passed = [bool]$document.passed
-    allow_difference = [bool]$AllowDifference
+    passed = $document.passed
+    allow_difference = $AllowDifference.IsPresent
   }
 }
 
@@ -1015,8 +1019,10 @@ function Invoke-Issue13V5FaultWorkflowNext(
     ) 'fault/import-inputs' 10800 -ConfirmExecuteR:$ConfirmExecuteR
     $reportPath = Join-Path $output 'fault-input-import.json'
     $report = Read-Issue13V5Json $reportPath
-    if ([string]$report.status -cne 'passed' -or -not [bool]$report.passed -or
-        -not [bool]$report.source_stores_unchanged) {
+    if ([string]$report.status -cne 'passed' -or
+        -not (Test-Issue13V5ExactBoolean $report.passed $true) -or
+        -not (Test-Issue13V5ExactBoolean `
+          $report.source_stores_unchanged $true)) {
       throw 'Fault-input import failed authentication.'
     }
     $workflow.import_status = 'passed'
@@ -1068,7 +1074,8 @@ function Invoke-Issue13V5FaultWorkflowNext(
     foreach ($record in @($seedPlan.records)) {
       $evidence = [string]$record.evidence_directory
       $metrics = Read-Issue13V5Json (Join-Path $evidence 'process-metrics.json')
-      if (-not [bool]$metrics.passed -or -not [bool]$metrics.cluster_closed -or
+      if (-not (Test-Issue13V5ExactBoolean $metrics.passed $true) -or
+          -not (Test-Issue13V5ExactBoolean $metrics.cluster_closed $true) -or
           @($metrics.lingering_pids).Count -ne 0) {
         throw "Fault channel seed telemetry failed: $($record.scenario_id)"
       }
@@ -1144,7 +1151,8 @@ function Invoke-Issue13V5FaultWorkflowNext(
       -ConfirmExecuteR:$ConfirmExecuteR
     $reportPath = Join-Path $output 'prep-fault-aggregate.json'
     $report = Read-Issue13V5Json $reportPath
-    if ([string]$report.status -cne 'passed' -or -not [bool]$report.passed -or
+    if ([string]$report.status -cne 'passed' -or
+        -not (Test-Issue13V5ExactBoolean $report.passed $true) -or
         [long]$report.summary.fault_gates_passed -ne 10 -or
         [long]$report.summary.rollback_gates_passed -ne 10 -or
         [long]$report.summary.visible_partial_releases -ne 0 -or
@@ -1226,7 +1234,8 @@ function Invoke-Issue13V5Aggregate(
   $reportPath = Join-Path $output 'aggregate.json'
   $report = Read-Issue13V5Json $reportPath
   if ([string]$report.schema -cne 'wlv-issue13-evidence-aggregate/1' -or
-      [string]$report.status -cne 'passed' -or -not [bool]$report.passed -or
+      [string]$report.status -cne 'passed' -or
+      -not (Test-Issue13V5ExactBoolean $report.passed $true) -or
       [long]$report.failed_check_count -ne 0 -or
       [long]$report.matrix.scenario_count -ne 162 -or
       [long]$report.matrix.comparison_count -ne 202 -or

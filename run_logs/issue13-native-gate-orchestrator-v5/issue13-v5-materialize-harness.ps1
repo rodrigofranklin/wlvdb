@@ -94,6 +94,26 @@ namespace Issue13V5 {
     private static extern uint GetFinalPathNameByHandle(
       SafeFileHandle file, StringBuilder path, uint pathLength, uint flags);
 
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint QueryDosDevice(
+      string deviceName, StringBuilder targetPath, int maxLength);
+
+    public static string DriveTarget(string drive) {
+      int capacity = 512;
+      while (true) {
+        StringBuilder buffer = new StringBuilder(capacity);
+        uint length = QueryDosDevice(drive, buffer, capacity);
+        if (length != 0) {
+          return buffer.ToString();
+        }
+        int error = Marshal.GetLastWin32Error();
+        if (error != 122) {
+          throw new Win32Exception(error);
+        }
+        capacity *= 2;
+      }
+    }
+
     public static string Resolve(string path) {
       using (SafeFileHandle handle = CreateFile(
         path, 0, ShareAll, IntPtr.Zero, OpenExisting,
@@ -121,8 +141,34 @@ namespace Issue13V5 {
 '@
 }
 
-function ConvertTo-Issue13V5CanonicalPath([string]$Path) {
+function Assert-Issue13V5AliasFreeLocalPath(
+  [string]$Path,
+  [string]$Label
+) {
   $full = ConvertTo-Issue13V5FullPath $Path
+  $root = [IO.Path]::GetPathRoot($full)
+  if ($root -cnotmatch '^[A-Za-z]:\\$') {
+    throw "$Label must use a local drive-letter path."
+  }
+  $drive = [IO.DriveInfo]::new($root)
+  if ($drive.DriveType -ne [IO.DriveType]::Fixed) {
+    throw "$Label must use a fixed local drive."
+  }
+  $target = [Issue13V5.NativePath]::DriveTarget($root.Substring(0, 2))
+  if ($target.StartsWith('\??\', [StringComparison]::OrdinalIgnoreCase) -or
+      $target.StartsWith('\Device\Mup\',
+        [StringComparison]::OrdinalIgnoreCase) -or
+      $target.StartsWith('\Device\LanmanRedirector\',
+        [StringComparison]::OrdinalIgnoreCase) -or
+      $target.StartsWith('\Device\WebDavRedirector\',
+        [StringComparison]::OrdinalIgnoreCase)) {
+    throw "$Label uses a substituted or mapped drive."
+  }
+  $full
+}
+
+function ConvertTo-Issue13V5CanonicalPath([string]$Path) {
+  $full = Assert-Issue13V5AliasFreeLocalPath $Path 'V5 canonical path'
   if (-not $IsWindows) { return $full.TrimEnd([IO.Path]::DirectorySeparatorChar) }
   $missing = [Collections.Generic.List[string]]::new()
   $cursor = $full
@@ -392,6 +438,7 @@ if ([string]::IsNullOrWhiteSpace($SourceRuntimeRoot)) {
     'issue13-evidence-runtime-v4'
 }
 $repository = (& git -C $PSScriptRoot rev-parse --show-toplevel 2>$null).Trim()
+$repository = Assert-Issue13V5AliasFreeLocalPath $repository 'V5 repository'
 $repository = Assert-Issue13V5NoReparseAncestors $repository 'V5 repository'
 $head = (& git -C $repository rev-parse HEAD 2>$null).Trim()
 $trackedStatus = @(& git -C $repository status '--porcelain=v1' `
@@ -404,11 +451,14 @@ $controllerPins = @(Get-Issue13V5ControllerPins $repository $CandidateCommit)
 if ($controllerPins.Count -ne $controllerFiles.Count) {
   throw 'V5 controller pin coverage differs from its closed inventory.'
 }
+$SourceRuntimeRoot = Assert-Issue13V5AliasFreeLocalPath `
+  $SourceRuntimeRoot 'Canonical V4 tooling source'
 $null = Assert-Issue13V5NoReparseAncestors $SourceRuntimeRoot `
   'Canonical V4 tooling source'
 $source = Assert-Issue13V5TreeHasNoReparsePoints `
   (Resolve-Path -LiteralPath $SourceRuntimeRoot).Path `
   'Canonical V4 tooling source'
+$Destination = Assert-Issue13V5AliasFreeLocalPath $Destination 'V5 destination'
 $destinationFull = Assert-Issue13V5NoReparseAncestors $Destination `
   'V5 destination'
 $sourceFull = ConvertTo-Issue13V5FullPath $source

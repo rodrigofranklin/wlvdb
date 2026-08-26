@@ -30,14 +30,28 @@ if ([string]::IsNullOrWhiteSpace($SchemaPath)) {
 . (Join-Path $PSScriptRoot 'issue13-v5-oracle-effect-lib.ps1')
 $null = Test-Issue13OracleEffectNegativeSelfTests
 
-$resolvedProof = Resolve-Issue13OracleEffectFile $ProofPath 'oracle-effect proof'
+$proofProtectedRoots = @(
+  $RepositoryRoot,
+  (Split-Path -Parent ([IO.Path]::GetFullPath($ComparisonHarnessManifest))),
+  $RLibrary,
+  $Rscript,
+  (Split-Path -Parent ([IO.Path]::GetFullPath($StrictSmokeSummary))),
+  (Split-Path -Parent ([IO.Path]::GetFullPath($OracleSmokeSummary))),
+  $OraclePatch,
+  $SpecPath,
+  $SchemaPath,
+  $ComparisonRoot,
+  $ReplayRoot
+)
+$resolvedProof = Assert-Issue13OracleEffectProofPathIsolation `
+  $ProofPath $proofProtectedRoots
 $proofJson = Get-Content -Raw -LiteralPath $resolvedProof
 try {
   $schemaPassed = $proofJson | Test-Json -SchemaFile $SchemaPath -ErrorAction Stop
 } catch {
   throw "Oracle-effect proof fails JSON Schema validation: $($_.Exception.Message)"
 }
-Assert-Issue13OracleEffect ([bool]$schemaPassed) `
+Assert-Issue13OracleEffect (Test-Issue13OracleEffectExactBoolean $schemaPassed $true) `
   'oracle-effect proof fails JSON Schema validation.'
 
 $evidence = Get-Issue13OracleEffectEvidence `

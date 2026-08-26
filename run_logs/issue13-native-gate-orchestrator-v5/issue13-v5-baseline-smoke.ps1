@@ -173,6 +173,26 @@ function Test-Issue13V5BaselineSmokePhysicalOverlap(
       [StringComparison]::OrdinalIgnoreCase)
 }
 
+function Assert-Issue13V5BaselineSmokeRscriptSeal(
+  [string]$Path,
+  [object]$ExpectedIdentity,
+  [string]$ExpectedSha256
+) {
+  $null = Assert-Issue13V5NoReparseAncestors $Path 'Rscript executable'
+  $current = Get-Issue13V5PhysicalItemIdentity $Path 'Rscript executable'
+  if ([uint64]$ExpectedIdentity.link_count -ne 1UL -or
+      [uint64]$current.link_count -ne 1UL -or
+      [string]$current.item_id -cne [string]$ExpectedIdentity.item_id -or
+      -not [string]::Equals(
+        [string]$current.physical_path,
+        [string]$ExpectedIdentity.physical_path,
+        [StringComparison]::OrdinalIgnoreCase) -or
+      (Get-Issue13V5Sha256 $Path) -cne $ExpectedSha256) {
+    throw 'Rscript executable changed after its physical seal.'
+  }
+  $current
+}
+
 $baselineBaseCommit = 'cc2c86189a06676bcb9f0e05e08033d710a92509'
 $baselineCommit = $BaselineRuntimeCommit
 $sourceInventorySha256 =
@@ -327,6 +347,7 @@ $null = Assert-Issue13V5NoReparseAncestors $SourceOrigin 'Source origin'
 $null = Assert-Issue13V5NoReparseAncestors $HarnessRuntimeRoot `
   'Harness runtime root'
 $null = Assert-Issue13V5NoReparseAncestors $RLibrary 'R library'
+$null = Assert-Issue13V5NoReparseAncestors $Rscript 'Rscript executable'
 $null = Assert-Issue13V5NoReparseAncestors $SmokeRoot 'Smoke root'
 
 $repository = (Resolve-Path -LiteralPath $RepositoryRoot).Path
@@ -335,6 +356,12 @@ $runtimeRoot = (Resolve-Path -LiteralPath $HarnessRuntimeRoot).Path
 $harness = Join-Path $runtimeRoot 'issue13-evidence-harness'
 $harnessManifestPath = Join-Path $runtimeRoot 'v5-harness-manifest.json'
 $rscriptFull = (Resolve-Path -LiteralPath $Rscript).Path
+$rscriptIdentity = Get-Issue13V5PhysicalItemIdentity `
+  $rscriptFull 'Rscript executable'
+if ([uint64]$rscriptIdentity.link_count -ne 1UL) {
+  throw 'Rscript executable must have exactly one physical link.'
+}
+$rscriptSha256 = Get-Issue13V5Sha256 $rscriptFull
 $library = (Resolve-Path -LiteralPath $RLibrary).Path
 $smoke = [IO.Path]::GetFullPath($SmokeRoot)
 if (-not (Test-Path -LiteralPath $harness -PathType Container) -or
@@ -372,6 +399,11 @@ $protectedPhysicalPaths = @(
     label = 'harness manifest'
     path = ConvertTo-Issue13V5BaselineSmokePhysicalPath $harnessManifestPath `
       'Harness manifest'
+  },
+  [pscustomobject]@{
+    label = 'Rscript executable'
+    path = ConvertTo-Issue13V5BaselineSmokePhysicalPath `
+      $rscriptFull 'Rscript executable'
   },
   [pscustomobject]@{
     label = 'R library'
@@ -518,19 +550,28 @@ try {
       $null = New-Item -ItemType Directory -Path $methodSpecs
       $channel = 'issue13-v5-smoke-b-' + $method.Replace('_', '-')
       $builder = Join-Path $harness 'issue13-build-calculate-bundle.R'
-      & $rscriptFull --vanilla $builder `
-        --arm baseline `
-        --method $method `
-        --workers 1 `
-        --project-root $project `
-        --runtime-commit $baselineCommit `
-        --channel $channel `
-        --output $methodSpecs `
-        --evidence-root $methodEvidence `
-        --rscript $rscriptFull `
-        --r-library $library `
-        --timeout-seconds 14400 | Out-Null
-      if ($LASTEXITCODE -ne 0) {
+      $null = Assert-Issue13V5BaselineSmokeRscriptSeal `
+        $rscriptFull $rscriptIdentity $rscriptSha256
+      $builderExitCode = $null
+      try {
+        & $rscriptFull --vanilla $builder `
+          --arm baseline `
+          --method $method `
+          --workers 1 `
+          --project-root $project `
+          --runtime-commit $baselineCommit `
+          --channel $channel `
+          --output $methodSpecs `
+          --evidence-root $methodEvidence `
+          --rscript $rscriptFull `
+          --r-library $library `
+          --timeout-seconds 14400 | Out-Null
+        $builderExitCode = $LASTEXITCODE
+      } finally {
+        $null = Assert-Issue13V5BaselineSmokeRscriptSeal `
+          $rscriptFull $rscriptIdentity $rscriptSha256
+      }
+      if ($builderExitCode -ne 0) {
         throw "Cannot build baseline smoke bundle for $method."
       }
       $null = Assert-Issue13V5SmokeHarness $runtimeRoot `
@@ -539,9 +580,17 @@ try {
         Join-Path $methodSpecs 'bundle.json') -Raw |
         ConvertFrom-Json -DateKind String
       $monitor = Join-Path $harness 'issue13-monitor.ps1'
-      & $monitor -SpecPath ([string]$bundle.process_spec) `
-        -EvidenceDir ([string]$bundle.scenario_evidence) | Out-Null
-      $monitorExitCode = $LASTEXITCODE
+      $null = Assert-Issue13V5BaselineSmokeRscriptSeal `
+        $rscriptFull $rscriptIdentity $rscriptSha256
+      $monitorExitCode = $null
+      try {
+        & $monitor -SpecPath ([string]$bundle.process_spec) `
+          -EvidenceDir ([string]$bundle.scenario_evidence) | Out-Null
+        $monitorExitCode = $LASTEXITCODE
+      } finally {
+        $null = Assert-Issue13V5BaselineSmokeRscriptSeal `
+          $rscriptFull $rscriptIdentity $rscriptSha256
+      }
       $null = Assert-Issue13V5SmokeHarness $runtimeRoot `
         $harnessManifestPath $repository $harnessManifestSha256
       if ($monitorExitCode -ne 0) {
@@ -555,7 +604,7 @@ try {
         ConvertFrom-Json -DateKind String
       if ([string]$result.schema -cne 'wlv-issue13-scenario-result/1' -or
           [string]$result.scenario_id -cne $scenarioId -or
-          -not [bool]$result.passed -or
+          -not (Test-Issue13V5ExactBoolean $result.passed $true) -or
           [string]$result.status -cne 'passed' -or
           [string]$result.expected_commit -cne $baselineCommit -or
           [string]$result.observed_commit -cne $baselineCommit -or
@@ -564,10 +613,12 @@ try {
           [long]$result.request.workers -ne 1L -or
           [string]$metrics.schema -cne 'wlv-issue13-process-metrics/2' -or
           [string]$metrics.scenario_id -cne $scenarioId -or
-          -not [bool]$metrics.passed -or
+          -not (Test-Issue13V5ExactBoolean $metrics.passed $true) -or
           [string]$metrics.status -cne 'passed' -or
-          -not [bool]$metrics.cluster_closed -or
-          -not [bool]$metrics.worker_count_matched -or
+          -not (Test-Issue13V5ExactBoolean `
+            $metrics.cluster_closed $true) -or
+          -not (Test-Issue13V5ExactBoolean `
+            $metrics.worker_count_matched $true) -or
           [int]$metrics.expected_worker_processes -ne 0 -or
           [int]$metrics.max_concurrent_worker_processes -ne 0 -or
           @($metrics.lingering_pids).Count -ne 0) {
@@ -647,9 +698,13 @@ try {
   }
   $null = Assert-Issue13V5SmokeHarness $runtimeRoot `
     $harnessManifestPath $repository $harnessManifestSha256
+  $null = Assert-Issue13V5BaselineSmokeRscriptSeal `
+    $rscriptFull $rscriptIdentity $rscriptSha256
 }
 
 Assert-Issue13V5NoConcurrentR
+$null = Assert-Issue13V5BaselineSmokeRscriptSeal `
+  $rscriptFull $rscriptIdentity $rscriptSha256
 $null = Assert-Issue13V5SmokeHarness $runtimeRoot `
   $harnessManifestPath $repository $harnessManifestSha256
 $passedCount = @($records | Where-Object status -ceq 'passed').Count
@@ -665,6 +720,11 @@ $summary = [ordered]@{
   started_at_utc = $started.ToString('o')
   finished_at_utc = [DateTime]::UtcNow.ToString('o')
   source_inventory_sha256 = $sourceInventorySha256
+  rscript_path = $rscriptFull
+  rscript_physical_path = [string]$rscriptIdentity.physical_path
+  rscript_item_id = [string]$rscriptIdentity.item_id
+  rscript_link_count = [uint64]$rscriptIdentity.link_count
+  rscript_sha256 = $rscriptSha256
   harness_manifest_path = $harnessManifestPath
   harness_manifest_sha256 = $harnessManifestSha256
   environment_removed = [object[]]$localeEnvironmentNames
