@@ -46,6 +46,130 @@ test_that("bound FST slices preserve multidimensional column-major order", {
   )
 })
 
+test_that("runtime snapshot hashes semantic states independently of ALTREP", {
+  runtime <- runtime_snapshot_environment
+  years <- as.character(1995:2009)
+  value <- array(
+    NA_real_,
+    dim = c(length(years), 1L, 1L),
+    dimnames = list(year = years, sector = "S1", country = "AAA")
+  )
+  rows <- data.frame(
+    year = years,
+    sector = rep("S1", length(years)),
+    country = rep("AAA", length(years)),
+    state = rep("source_missing", length(years)),
+    stringsAsFactors = FALSE
+  )
+  terminal <- runtime$wlv_semantic_new_state_resource(
+    rows,
+    "sea/sector/test",
+    c("year", "sector", "country")
+  )
+  panel_state <- runtime$wlv_native_lift_semantic_states(
+    list(terminal),
+    "test",
+    "indicator",
+    "artifact/sea_sectors",
+    c("year", "indicator", "sector", "country")
+  )
+  slice <- runtime$wlv_runtime_snapshot_panel_state_slice(
+    panel_state,
+    "sea_sectors",
+    "test",
+    value
+  )
+
+  expect_identical(slice, terminal)
+  expect_identical(
+    runtime$wlv_runtime_snapshot_value_sha256(slice),
+    runtime$wlv_runtime_snapshot_value_sha256(terminal)
+  )
+  expect_identical(
+    runtime$wlv_runtime_snapshot_binding_sha256(
+      "panel-test",
+      paste0(rep("a", 64L), collapse = ""),
+      slice
+    ),
+    runtime$wlv_runtime_snapshot_binding_sha256(
+      "panel-test",
+      paste0(rep("a", 64L), collapse = ""),
+      terminal
+    )
+  )
+
+  materialized_years <- character(length(years))
+  materialized_years[] <- years
+  expect_identical(years, materialized_years)
+  expect_identical(
+    runtime$wlv_runtime_snapshot_value_sha256(years),
+    runtime$wlv_runtime_snapshot_value_sha256(materialized_years)
+  )
+  ordinary_payload <- list(
+    parameters = data.frame(
+      name = "workers",
+      value = "1",
+      stringsAsFactors = FALSE
+    ),
+    policy = list(id = "strict")
+  )
+  expect_identical(
+    runtime$wlv_runtime_snapshot_value_sha256(ordinary_payload),
+    runtime$wlv_publication_sha256_raw(
+      serialize(ordinary_payload, NULL, version = 3L)
+    )
+  )
+  deferred_array <- array(
+    as.double(seq_along(years)),
+    dim = c(length(years), 1L),
+    dimnames = list(year = years, input = "AAA.S1")
+  )
+  materialized_array <- array(
+    as.double(seq_along(years)),
+    dim = c(length(years), 1L),
+    dimnames = list(year = materialized_years, input = "AAA.S1")
+  )
+  expect_identical(deferred_array, materialized_array)
+  expect_identical(
+    runtime$wlv_runtime_snapshot_value_sha256(deferred_array),
+    runtime$wlv_runtime_snapshot_value_sha256(materialized_array)
+  )
+  expect_identical(
+    runtime$wlv_runtime_snapshot_axes_sha256(
+      deferred_array,
+      c("year", "input")
+    ),
+    runtime$wlv_runtime_snapshot_axes_sha256(
+      materialized_array,
+      c("year", "input")
+    )
+  )
+
+  deferred_numeric <- as.double(seq_len(1024L))
+  materialized_numeric <- numeric(length(deferred_numeric))
+  materialized_numeric[] <- deferred_numeric
+  expect_identical(deferred_numeric, materialized_numeric)
+  expect_identical(
+    runtime$wlv_runtime_snapshot_numeric_chunk_sha256(deferred_numeric),
+    runtime$wlv_runtime_snapshot_numeric_chunk_sha256(materialized_numeric)
+  )
+
+  filtered_empty <- runtime$wlv_semantic_new_state_resource(
+    rows[FALSE, , drop = FALSE],
+    "sea/sector/test",
+    c("year", "sector", "country")
+  )
+  canonical_empty <- runtime$wlv_semantic_empty_state(
+    "sea/sector/test",
+    c("year", "sector", "country")
+  )
+  expect_identical(filtered_empty, canonical_empty)
+  expect_identical(
+    runtime$wlv_runtime_snapshot_value_sha256(filtered_empty),
+    runtime$wlv_runtime_snapshot_value_sha256(canonical_empty)
+  )
+})
+
 wlv_test_runtime_snapshot_fixture <- function() {
   runtime <- runtime_snapshot_environment
   partition <- "2000-2000"

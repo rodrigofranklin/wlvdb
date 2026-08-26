@@ -108,6 +108,28 @@ wlv_runtime_snapshot_scalar <- function(value, name) {
   value
 }
 
+wlv_runtime_snapshot_materialize_character <- function(value) {
+  if (!is.character(value)) {
+    stop("Runtime snapshot character data is invalid.", call. = FALSE)
+  }
+  materialized <- character(length(value))
+  if (length(value)) {
+    materialized[] <- enc2utf8(value)
+  }
+  materialized
+}
+
+wlv_runtime_snapshot_materialize_labels <- function(labels) {
+  if (!is.list(labels) || any(!vapply(labels, is.character, logical(1L)))) {
+    stop("Runtime snapshot axis labels are invalid.", call. = FALSE)
+  }
+  result <- lapply(labels, wlv_runtime_snapshot_materialize_character)
+  if (!is.null(names(labels))) {
+    names(result) <- wlv_runtime_snapshot_materialize_character(names(labels))
+  }
+  result
+}
+
 wlv_runtime_snapshot_contract <- function(key) {
   if (!is.character(key) || length(key) != 1L || is.na(key)) {
     stop("A runtime-snapshot resource key is invalid.", call. = FALSE)
@@ -260,6 +282,7 @@ wlv_runtime_snapshot_axis_labels_sha256 <- function(labels, axes) {
       call. = FALSE
     )
   }
+  labels <- wlv_runtime_snapshot_materialize_labels(labels)
   wlv_publication_sha256_raw(serialize(labels, NULL, version = 3L))
 }
 
@@ -414,7 +437,11 @@ wlv_runtime_snapshot_numeric_chunk_sha256 <- function(value) {
   if (!is.numeric(value) || is.object(value) || !is.null(attributes(value))) {
     stop("A runtime snapshot numeric hash chunk is invalid.", call. = FALSE)
   }
-  wlv_publication_sha256_raw(serialize(value, NULL, version = 3L))
+  materialized <- numeric(length(value))
+  if (length(value)) {
+    materialized[] <- value
+  }
+  wlv_publication_sha256_raw(serialize(materialized, NULL, version = 3L))
 }
 
 wlv_runtime_snapshot_array_sha256_from_chunks <- function(
@@ -430,6 +457,7 @@ wlv_runtime_snapshot_array_sha256_from_chunks <- function(
       any(!grepl("^[0-9a-f]{64}$", chunk_sha256))) {
     stop("Runtime snapshot array hash components are invalid.", call. = FALSE)
   }
+  labels <- wlv_runtime_snapshot_materialize_labels(labels)
   payload <- list(
     version = "wlv-array-value/1.0.0",
     dimensions = as.integer(dimensions),
@@ -464,19 +492,33 @@ wlv_runtime_snapshot_array_sha256 <- function(value) {
   )
 }
 
+wlv_runtime_snapshot_canonical_state <- function(value) {
+  wlv_semantic_state_validate(value)
+  axes <- wlv_runtime_snapshot_materialize_character(
+    attr(value, "axes", exact = TRUE)
+  )
+  target_key <- wlv_runtime_snapshot_materialize_character(
+    attr(value, "target_key", exact = TRUE)
+  )[[1L]]
+  rows <- wlv_semantic_plain_data_frame(value, c(axes, "state"))
+  rows[] <- lapply(rows, wlv_runtime_snapshot_materialize_character)
+  wlv_semantic_new_state_resource(
+    rows,
+    target_key,
+    axes
+  )
+}
+
 wlv_runtime_snapshot_value_sha256 <- function(value) {
   if (inherits(value, "wlv_semantic_state")) {
-    wlv_semantic_state_validate(value)
-    axes <- attr(value, "axes", exact = TRUE)
-    value <- wlv_semantic_new_state_resource(
-      wlv_semantic_plain_data_frame(value, c(axes, "state")),
-      attr(value, "target_key", exact = TRUE),
-      axes
-    )
+    value <- wlv_runtime_snapshot_canonical_state(value)
   }
   if (is.numeric(value) && is.array(value) && !is.null(dimnames(value)) &&
       !any(vapply(dimnames(value), is.null, logical(1L)))) {
     return(wlv_runtime_snapshot_array_sha256(value))
+  }
+  if (is.character(value) && is.null(attributes(value))) {
+    value <- wlv_runtime_snapshot_materialize_character(value)
   }
   wlv_publication_sha256_raw(serialize(value, NULL, version = 3L))
 }
@@ -842,7 +884,7 @@ wlv_runtime_snapshot_binding_sha256 <- function(
     artifact_sha256,
     state,
     provenance = NULL) {
-  wlv_semantic_state_validate(state)
+  state <- wlv_runtime_snapshot_canonical_state(state)
   payload <- list(
     id = id,
     artifact_sha256 = artifact_sha256,
