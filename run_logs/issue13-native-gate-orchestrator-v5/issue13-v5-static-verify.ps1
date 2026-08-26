@@ -108,11 +108,70 @@ foreach ($required in @(
     '$environmentRemoved = @(''LANG'', ''LC_ALL'', ''LC_CTYPE'')',
     '$info.Environment.Remove($name)',
     'environment_removed = [object[]]$environmentRemoved',
-    'V5 commands cannot override sanitized locale variable'
+    'V5 commands cannot override sanitized locale variable',
+    'Get-Issue13V5ConfiguredPaths', 'Test-Issue13V5LegacyPath'
   )) {
   if (-not $libraryText.Contains($required)) {
     throw "Coordinator library lacks required safety guard: $required"
   }
+}
+
+$legacyPathCases = @(
+  [pscustomobject]@{ path = 'D:\root\v4\child'; expected = $true },
+  [pscustomobject]@{ path = 'D:\root\V4R12-candidate'; expected = $true },
+  [pscustomobject]@{ path = '/tmp/final-v4r2/run'; expected = $true },
+  [pscustomobject]@{ path = 'D:\root\v5c4'; expected = $false },
+  [pscustomobject]@{
+    path = 'docs/validation/issue-13.md'
+    expected = $false
+  }
+)
+foreach ($case in $legacyPathCases) {
+  if ((Test-Issue13V5LegacyPath ([string]$case.path)) -ne
+      [bool]$case.expected) {
+    throw "Legacy path matcher failed its static case: $($case.path)"
+  }
+}
+
+$pathProjectionConfig = [pscustomobject]@{
+  reuse_policy = [pscustomobject]@{ v4_evidence_allowed = $false }
+  repository_root = 'D:\root\v4\repo'
+  harness_runtime_root = 'D:\root\v5-runtime'
+  harness_root = 'D:\root\v5-runtime\harness'
+  harness_manifest_path = 'D:\root\v5-runtime\manifest.json'
+  worktree_root = 'D:\root\v5-worktrees'
+  evidence_root = 'D:\root\v5-evidence'
+  control_root = 'D:\root\v5-control'
+  source_origin = 'D:\root\sources'
+  rscript = 'D:\R\Rscript.exe'
+  r_library = 'D:\R\library'
+  baseline_runtime_index = 'D:\root\v5-index.json'
+  baseline_overlay = [pscustomobject]@{ path = 'D:\root\v5.patch' }
+  strict_baseline_smoke = [pscustomobject]@{
+    path = 'D:\root\v5-strict.json'
+  }
+  compatibility_baseline_smoke = [pscustomobject]@{
+    path = 'D:\root\v5-compat.json'
+  }
+  report = [pscustomobject]@{
+    required_path = 'docs/validation/issue-13.md'
+  }
+  methods = @([pscustomobject]@{
+    baseline = 'D:\root\v5-baseline'
+    candidate = 'D:\root\V4R12-candidate'
+  })
+  supplemental_roots = [pscustomobject]@{
+    candidate_fault = '/tmp/final-v4r2/run'
+    baseline_paper0 = '/tmp/v5-paper0'
+  }
+}
+$projectedPaths = @(Get-Issue13V5ConfiguredPaths $pathProjectionConfig)
+$projectedLegacyPaths = @($projectedPaths | Where-Object {
+  Test-Issue13V5LegacyPath $_
+})
+if ($projectedPaths.Count -ne 19 -or
+    $projectedLegacyPaths.Count -ne 3) {
+  throw 'Configured path projection failed its static cases.'
 }
 
 $compareText = [IO.File]::ReadAllText(

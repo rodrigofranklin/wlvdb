@@ -101,6 +101,38 @@ function ConvertTo-Issue13V5Path([string]$Path) {
   [IO.Path]::GetFullPath($Path).TrimEnd('\')
 }
 
+function Get-Issue13V5ConfiguredPaths([object]$Config) {
+  $paths = [Collections.Generic.List[string]]::new()
+  foreach ($name in @(
+      'repository_root', 'harness_runtime_root', 'harness_root',
+      'harness_manifest_path', 'worktree_root', 'evidence_root',
+      'control_root', 'source_origin', 'rscript', 'r_library',
+      'baseline_runtime_index'
+    )) {
+    $paths.Add([string]$Config.$name)
+  }
+  foreach ($value in @(
+      $Config.baseline_overlay.path,
+      $Config.strict_baseline_smoke.path,
+      $Config.compatibility_baseline_smoke.path,
+      $Config.report.required_path
+    )) {
+    $paths.Add([string]$value)
+  }
+  foreach ($method in @($Config.methods)) {
+    $paths.Add([string]$method.baseline)
+    $paths.Add([string]$method.candidate)
+  }
+  foreach ($property in @($Config.supplemental_roots.PSObject.Properties)) {
+    $paths.Add([string]$property.Value)
+  }
+  [string[]]$paths.ToArray()
+}
+
+function Test-Issue13V5LegacyPath([string]$Path) {
+  $Path -match '(?i)(^|[\\/])[^\\/]*v4(?:r[0-9]+)?[^\\/]*($|[\\/])'
+}
+
 function Get-Issue13V5Sha256([string]$Path) {
   if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
     throw "File does not exist: $Path"
@@ -736,9 +768,10 @@ function Get-Issue13V5ExpectedEvidenceIds {
 function Assert-Issue13V5Config([string]$ConfigPath) {
   $path = (Resolve-Path -LiteralPath $ConfigPath).Path
   $config = Read-Issue13V5Json $path
-  $allText = [IO.File]::ReadAllText($path,
-    [Text.UTF8Encoding]::new($false, $true))
-  if ($allText -match '(?i)(^|[\\/])[^\\/]*v4(?:r[0-9]+)?[^\\/]*($|[\\/])') {
+  $legacyPaths = @(Get-Issue13V5ConfiguredPaths $config | Where-Object {
+    Test-Issue13V5LegacyPath $_
+  })
+  if ($legacyPaths.Count -ne 0) {
     throw 'V5 config contains a forbidden V4/V4R2 path.'
   }
   if ([string]$config.schema -cne 'wlv-issue13-native-gate-config/2' -or
@@ -884,7 +917,7 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
   }
   foreach ($rootName in @('worktree_root', 'evidence_root', 'control_root')) {
     $root = ConvertTo-Issue13V5Path ([string]$config.$rootName)
-    if ($root -match '(?i)(^|[\\/])[^\\/]*v4(?:r[0-9]+)?[^\\/]*($|[\\/])') {
+    if (Test-Issue13V5LegacyPath $root) {
       throw "Forbidden legacy root: $root"
     }
   }

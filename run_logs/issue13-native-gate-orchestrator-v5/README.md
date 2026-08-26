@@ -68,7 +68,7 @@ explicitamente de todo `ProcessStartInfo`. Cada resumo compatível e registro de
 comando autentica a lista em `environment_removed`, evitando queda silenciosa
 para locale C/codepage 0 e corrupção de metadados UTF-8.
 
-## Materialização V5C3
+## Materialização V5C4
 
 Depois de commitado o tooling, materialize uma cópia nova:
 
@@ -76,7 +76,7 @@ Depois de commitado o tooling, materialize uma cópia nova:
 $candidate = (git rev-parse HEAD).Trim()
 ./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-materialize-harness.ps1 `
   -CandidateCommit $candidate `
-  -Destination D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5c3 `
+  -Destination D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5c4 `
   -ConfirmMaterialize
 ```
 
@@ -92,8 +92,8 @@ Gere o índice do oráculo compatível:
 ```powershell
 Rscript --vanilla `
   ./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-build-baseline-index.R `
-  D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5c3\issue13-evidence-harness `
-  D:\Trabalho\Code\wlvdb-issue13-native-final-index-v5c3\baseline-runtime-index.json `
+  D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5c4\issue13-evidence-harness `
+  D:\Trabalho\Code\wlvdb-issue13-native-final-index-v5c4\baseline-runtime-index.json `
   e2f4d6dae9a6d35c966b305fabac52e489faa3e7 `
   D:\Trabalho\Code\wlvdb-issue13-v5-baseline-oracle-v2-e2f4d6dae9a6-canonical.patch
 ```
@@ -102,8 +102,8 @@ Execute o preflight descartável do oráculo antes do gate longo:
 
 ```powershell
 ./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-baseline-smoke.ps1 `
-  -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5c3 `
-  -SmokeRoot D:\Trabalho\Code\wlvdb-issue13-v5-compat-smoke-002 `
+  -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5c4 `
+  -SmokeRoot D:\Trabalho\Code\wlvdb-issue13-v5-compat-smoke-003 `
   -BaselineRuntimeCommit e2f4d6dae9a6d35c966b305fabac52e489faa3e7 `
   -Purpose compatibility-oracle-executability-preflight `
   -ConfirmCreateWorktrees `
@@ -123,26 +123,26 @@ Com o candidato já commitado e limpo, gere a configuração selada:
 $candidate = (git rev-parse HEAD).Trim()
 ./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-new-config.ps1 `
   -CandidateCommit $candidate `
-  -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5c3 `
-  -BaselineRuntimeIndex D:\Trabalho\Code\wlvdb-issue13-native-final-index-v5c3\baseline-runtime-index.json `
+  -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5c4 `
+  -BaselineRuntimeIndex D:\Trabalho\Code\wlvdb-issue13-native-final-index-v5c4\baseline-runtime-index.json `
   -BaselineRuntimeCommit e2f4d6dae9a6d35c966b305fabac52e489faa3e7 `
   -BaselineOverlayPatch D:\Trabalho\Code\wlvdb-issue13-v5-baseline-oracle-v2-e2f4d6dae9a6-canonical.patch `
   -StrictBaselineSmokeSummary D:\Trabalho\Code\wlvdb-issue13-v5-cc2-smoke-003\baseline-smoke-summary.json `
-  -CompatibilityBaselineSmokeSummary D:\Trabalho\Code\wlvdb-issue13-v5-compat-smoke-002\baseline-smoke-summary.json `
-  -WorktreeRoot D:\Trabalho\Code\wlvdb-issue13-native-worktrees-v5c3 `
-  -EvidenceRoot D:\Trabalho\Code\wlvdb-issue13-native-final-evidence-v5c3 `
-  -ControlRoot D:\Trabalho\Code\wlvdb-issue13-native-final-control-v5c3 `
-  -Output D:\Trabalho\Code\wlvdb-issue13-native-final-config-v5c3\gate-config.json
+  -CompatibilityBaselineSmokeSummary D:\Trabalho\Code\wlvdb-issue13-v5-compat-smoke-003\baseline-smoke-summary.json `
+  -WorktreeRoot D:\Trabalho\Code\wlvdb-issue13-native-worktrees-v5c4 `
+  -EvidenceRoot D:\Trabalho\Code\wlvdb-issue13-native-final-evidence-v5c4 `
+  -ControlRoot D:\Trabalho\Code\wlvdb-issue13-native-final-control-v5c4 `
+  -Output D:\Trabalho\Code\wlvdb-issue13-native-final-config-v5c4\gate-config.json
 ```
 
 ## Validação, execução e monitoramento
 
 ```powershell
-$config = 'D:\Trabalho\Code\wlvdb-issue13-native-final-config-v5c3\gate-config.json'
+$config = 'D:\Trabalho\Code\wlvdb-issue13-native-final-config-v5c4\gate-config.json'
 
 ./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-static-verify.ps1 `
   -CandidateCommit $candidate `
-  -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5c3
+  -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5c4
 
 ./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-coordinator.ps1 `
   -Action ValidateConfig -ConfigPath $config
@@ -173,7 +173,7 @@ Para executar todo o restante, sem escrever o relatório prematuramente:
 
 `Status` não toma o lock de execução e pode ser chamado durante `RunAll`. O
 estado retomável fica em
-`D:\Trabalho\Code\wlvdb-issue13-native-final-control-v5c3\gate-state.json`.
+`D:\Trabalho\Code\wlvdb-issue13-native-final-control-v5c4\gate-state.json`.
 
 ## Retomada
 
@@ -185,7 +185,7 @@ reautentica qualquer saída terminal já completa.
 Não edite `gate-state.json`, não apague evidência e não reutilize raízes. Uma
 saída parcial que já ocupou um destino write-once é terminal. Nesse caso,
 preserve-a para diagnóstico e gere nova configuração com outro sufixo, por
-exemplo `v5c4`.
+exemplo `v5c5`.
 
 `Initialize` só pode ser executado uma vez. `PrepareWorktrees` retoma apenas os
 registros já salvos como completos; um worktree criado sem registro de estado é
