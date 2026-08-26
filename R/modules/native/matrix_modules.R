@@ -191,11 +191,28 @@ wlv_matrix_transformation_spec <- function() {
     leontief_diagnostics <- do.call(rbind, diagnostic_rows)
     row.names(leontief_diagnostics) <- NULL
 
+    # The Leontief solve creates a new resource.  Rebuild it from its numeric
+    # payload so the three-dimensional state attached to direct labour before
+    # the solve cannot leak into the year-by-input result.
+    lambda <- array(
+      as.numeric(lambda),
+      dim = c(year_count, input_count),
+      dimnames = list(year = lists$years, input = lists$input)
+    )
+    lambda_state <- wlv_semantic_state_encode(
+      lambda,
+      wlv_semantic_state_array(lambda, c("year", "input")),
+      "intermediate/lambda",
+      c("year", "input")
+    )
     values <- m_io_source * rep(lambda, times = nums$output)
     values <- wlv_native_with_named_axes(values, c("year", "input", "output"))
-    lambda <- wlv_native_with_named_axes(lambda, c("year", "input"))
     wlv_module_result(
-      outputs = list(value = values, lambda = lambda),
+      outputs = list(
+        value = values,
+        lambda = lambda,
+        semantic_state__lambda = lambda_state
+      ),
       diagnostics = list(`_leontief_diagnostics.csv` = leontief_diagnostics)
     )
   }
