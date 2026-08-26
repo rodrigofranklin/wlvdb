@@ -275,6 +275,8 @@ foreach ($required in @(
     'manifest_tables_architecture_projected_equal',
     'architecture-projected-source-manifest',
     'architecture-projected-unit-contract',
+    'value$size_bytes[unit_row] <- "<architecture-projected>"',
+    'value$sha256[unit_row] <- "<architecture-projected>"',
     'wlv-issue13-preparation-rule-matrix/2'
   )) {
   if (-not $materializedPreparationCompare.Contains($required)) {
@@ -295,8 +297,10 @@ $contractRule = @($preparationMode.rules | Where-Object {
 })
 if ([string]$ruleMatrix.schema -cne
       'wlv-issue13-preparation-rule-matrix/2' -or
-    [string]$preparationMode.candidate -cne $CandidateCommit -or
-    [string]$faultMode.candidate -cne $CandidateCommit -or
+    [string]$preparationMode.candidate -cne
+      'candidate-runtime-pinned-by-v5-config' -or
+    [string]$faultMode.candidate -cne
+      'candidate-runtime-pinned-by-v5-config' -or
     @($preparationMode.ignored_artifacts).Count -ne 0 -or
     [string]$preparationMode.numeric_tolerance -cne 'none-bitwise' -or
     $manifestRule.Count -ne 1 -or $contractRule.Count -ne 1 -or

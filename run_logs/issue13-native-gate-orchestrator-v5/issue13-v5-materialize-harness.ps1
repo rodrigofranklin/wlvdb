@@ -429,9 +429,17 @@ $preparationManifestSource = @'
 '@.TrimEnd("`r", "`n")
 $preparationManifestReplacement = @'
   manifest_projection <- function(value) {
-    value <- value[value$artifact != "_unit_contract.csv", setdiff(
+    value <- value[, setdiff(
       names(value), c("source_generation_id", "contract_sha256")
     ), drop = FALSE]
+    unit_row <- value$artifact == "_unit_contract.csv"
+    if (sum(unit_row) != 1L) {
+      stop("Source manifest must contain exactly one unit-contract row.",
+        call. = FALSE
+      )
+    }
+    value$size_bytes[unit_row] <- "<architecture-projected>"
+    value$sha256[unit_row] <- "<architecture-projected>"
     row.names(value) <- NULL
     value
   }
@@ -481,8 +489,9 @@ if ([string]$ruleMatrix.schema -cne
 }
 $ruleMatrix.schema = 'wlv-issue13-preparation-rule-matrix/2'
 $ruleMatrix.comparison_modes.preparation_cross_engine.candidate =
-  $CandidateCommit
-$ruleMatrix.comparison_modes.fault_within_engine.candidate = $CandidateCommit
+  'candidate-runtime-pinned-by-v5-config'
+$ruleMatrix.comparison_modes.fault_within_engine.candidate =
+  'candidate-runtime-pinned-by-v5-config'
 $manifestRule = @(
   $ruleMatrix.comparison_modes.preparation_cross_engine.rules |
     Where-Object { [string]$_.id -ceq 'source-manifests' }

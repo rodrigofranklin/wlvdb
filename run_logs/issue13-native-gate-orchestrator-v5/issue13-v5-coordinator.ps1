@@ -220,12 +220,12 @@ function Assert-Issue13V5WorktreeSetup(
 ) {
   $git = Assert-Issue13V5GitWorktree $Record.root $Record.commit
   if ($Fresh) {
-    foreach ($forbidden in @('results', 'results\.staging',
-        'source_data\.preparation-staging')) {
+    foreach ($forbidden in @('results')) {
       if (Test-Path -LiteralPath (Join-Path $Record.root $forbidden)) {
         throw "Fresh V5 worktree contains transaction/output state: $($Record.id)"
       }
     }
+    $null = Assert-Issue13V5NoTransactionResidue $Record.root
   }
   $source = $null
   if ([string]$Record.kind -ceq 'fault') {
