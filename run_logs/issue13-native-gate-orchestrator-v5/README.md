@@ -107,8 +107,8 @@ $candidate = (git rev-parse HEAD).Trim()
 ```
 
 A materialização é recusada se qualquer um dos 11 blobs diferir do candidato.
-O output deve ter exatamente 39 arquivos, 591470 bytes, inventário SHA-256
-`d8bfacb36402944796baacc4dfa5df168bb8ff667a7ccc28bc94b46afdfc3ea0`,
+O output deve ter exatamente 39 arquivos, 592426 bytes, inventário SHA-256
+`b38a6e60fd7b300b4da5ebbce9bc492cbf7e170e57b3b24c7d1f1e8503ecc90f`,
 um único diretório plano `issue13-evidence-harness` e nenhum subdiretório
 oculto. O manifesto não é aceito como autoridade para esses valores: todos os
 validadores repetem a conferência contra o selo incorporado.
