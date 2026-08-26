@@ -18,7 +18,10 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$HarnessDir,
 
-    [string]$RscriptCommand = "Rscript"
+    [string]$RscriptCommand = "Rscript",
+
+    [string]$RLibrary =
+        "D:\Trabalho\Code\wlvdb\renv\library\windows\R-4.6\x86_64-w64-mingw32"
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,6 +51,13 @@ $stageColumns = @(
     "baseline_reference_run_root", "baseline_target_project_root",
     "baseline_target_parent_run_root", "baseline_target_run_root"
 )
+$script:rClearedEnvironment = @(
+    "LANG", "LC_ALL", "LC_CTYPE",
+    "R_ARCH", "R_DEFAULT_PACKAGES", "R_ENVIRON", "R_ENVIRON_USER",
+    "R_HOME", "R_LIBS", "R_LIBS_SITE", "R_PROFILE", "R_PROFILE_USER",
+    "R_STARTUP_DEBUG", "RENV_CONFIG_AUTOLOADER_ENABLED",
+    "RENV_PATHS_LIBRARY", "RENV_PATHS_ROOT"
+)
 
 function Resolve-ExistingDirectory([string]$Path, [string]$Label) {
     if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
@@ -61,6 +71,22 @@ function Resolve-ExistingFile([string]$Path, [string]$Label) {
         throw "$Label does not exist: $Path"
     }
     return (Resolve-Path -LiteralPath $Path).Path
+}
+
+function Resolve-PhysicalExistingDirectory([string]$Path, [string]$Label) {
+    $resolved = Resolve-ExistingDirectory $Path $Label
+    $cursor = $resolved
+    while (-not [string]::IsNullOrWhiteSpace($cursor)) {
+        $item = Get-Item -LiteralPath $cursor -Force
+        if (($item.Attributes -band
+            [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "$Label traverses a reparse point: $($item.FullName)"
+        }
+        $parent = [System.IO.Directory]::GetParent($cursor)
+        if ($null -eq $parent) { break }
+        $cursor = $parent.FullName
+    }
+    return $resolved.TrimEnd('\')
 }
 
 function Get-Sha256([string]$Path) {
@@ -98,6 +124,40 @@ function Get-DirectoryInventorySha256([string]$Root) {
     [System.Array]::Sort($records, [System.StringComparer]::Ordinal)
     $recordText = $records -join "`n"
     return (Get-TextSha256 $recordText)
+}
+
+function Invoke-SealedRscript([string[]]$Arguments) {
+    $names = @($script:rClearedEnvironment + @("R_LIBS_USER", "TZ"))
+    $previous = [ordered]@{}
+    foreach ($name in $names) {
+        $previous[$name] = [Environment]::GetEnvironmentVariable(
+            $name, [EnvironmentVariableTarget]::Process
+        )
+    }
+    try {
+        foreach ($name in $names) {
+            [Environment]::SetEnvironmentVariable(
+                $name, $null, [EnvironmentVariableTarget]::Process
+            )
+        }
+        [Environment]::SetEnvironmentVariable(
+            "R_LIBS_USER", $script:rLibrary,
+            [EnvironmentVariableTarget]::Process
+        )
+        [Environment]::SetEnvironmentVariable(
+            "TZ", "UTC", [EnvironmentVariableTarget]::Process
+        )
+        $output = @(& $script:rscriptPath @Arguments 2>&1)
+        $script:rscriptExitCode = $LASTEXITCODE
+        return $output
+    } finally {
+        foreach ($entry in $previous.GetEnumerator()) {
+            [Environment]::SetEnvironmentVariable(
+                [string]$entry.Key, $entry.Value,
+                [EnvironmentVariableTarget]::Process
+            )
+        }
+    }
 }
 
 function Assert-GitValue(
@@ -166,12 +226,15 @@ function Invoke-EvidenceVerifier(
     [string]$Stage = "-",
     [string]$LogPath
 ) {
-    $output = @(& $script:rscriptPath --vanilla $script:verifier `
-        $script:harness $script:controllerDir $ProjectRoot $RunRoot $Method `
-        $Mode $ParentRunId $Stage 2>&1)
+    $arguments = @(
+        "--vanilla", $script:verifier, $script:harness,
+        $script:controllerDir, $ProjectRoot, $RunRoot, $Method, $Mode,
+        $ParentRunId, $Stage
+    )
+    $output = @(Invoke-SealedRscript $arguments)
     $output | Set-Content -LiteralPath $LogPath -Encoding utf8
     $records = @($output | Where-Object { $_ -cmatch '^evidence_record;' })
-    if ($LASTEXITCODE -ne 0 -or $records.Count -ne 1) {
+    if ($script:rscriptExitCode -ne 0 -or $records.Count -ne 1) {
         throw "Evidence verification failed for $Method/$Mode. See $LogPath"
     }
     return [pscustomobject]@{
@@ -263,8 +326,11 @@ $rscriptApplication = Get-Command -Name $RscriptCommand `
     -CommandType Application -ErrorAction Stop
 $script:rscriptPath = Resolve-ExistingFile $rscriptApplication.Source `
     "Rscript executable"
+$script:rLibrary = Resolve-PhysicalExistingDirectory $RLibrary `
+    "R library"
 $rscriptSha256 = Get-Sha256 $script:rscriptPath
 $harnessInventoryBefore = Get-DirectoryInventorySha256 $script:harness
+$rLibraryInventoryBefore = Get-DirectoryInventorySha256 $script:rLibrary
 $bridgeManifestPath = Resolve-ExistingFile $BridgeManifest "Bridge manifest"
 $script:controllerDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:verifier = Resolve-ExistingFile (Join-Path $script:controllerDir `
@@ -308,6 +374,14 @@ if ($bridgeRecordLines[0] -cne "schema=issue13-v5-clean-bridge-capture/1" -or
         $script:rscriptPath.Replace('\', '/') -or
     (Get-CaptureValue $bridgeRecordLines "rscript_sha256") -cne
         $rscriptSha256 -or
+    (Get-CaptureValue $bridgeRecordLines "r_library_path") -cne
+        $script:rLibrary.Replace('\', '/') -or
+    (Get-CaptureValue $bridgeRecordLines `
+        "r_library_inventory_before_sha256") -cne
+        $rLibraryInventoryBefore -or
+    (Get-CaptureValue $bridgeRecordLines `
+        "r_library_inventory_after_sha256") -cne
+        $rLibraryInventoryBefore -or
     (Get-CaptureValue $bridgeRecordLines "evidence_index_sha256") -cne
         (Get-Sha256 $bridgeIndexPath)) {
     throw "Bridge capture record is not bound to its evidence index."
@@ -505,10 +579,13 @@ foreach ($method in $methods) {
         )
         $channel = "issue13-v5d-stage-" + $stage + "-" +
             $method.Replace("_", "-")
-        $runOutput = @(& $script:rscriptPath --vanilla $launcher $worktree `
-            $method $reference.Fields.run_id ([string]$stage) $channel 2>&1)
+        $runArguments = @(
+            "--vanilla", $launcher, $worktree, $method,
+            $reference.Fields.run_id, ([string]$stage), $channel
+        )
+        $runOutput = @(Invoke-SealedRscript $runArguments)
         $runOutput | Set-Content -LiteralPath $runLog -Encoding utf8
-        if ($LASTEXITCODE -ne 0) {
+        if ($script:rscriptExitCode -ne 0) {
             throw "Stage-$stage recalculation failed for $method. See $runLog"
         }
         $aliasRecords = @($runOutput | Where-Object {
@@ -595,7 +672,9 @@ foreach ($source in @("wiodr13", "wiodr16")) {
     }
 }
 $harnessInventoryAfter = Get-DirectoryInventorySha256 $script:harness
+$rLibraryInventoryAfter = Get-DirectoryInventorySha256 $script:rLibrary
 if ($harnessInventoryAfter -cne $harnessInventoryBefore -or
+    $rLibraryInventoryAfter -cne $rLibraryInventoryBefore -or
     (Get-Sha256 $script:rscriptPath) -cne $rscriptSha256) {
     throw "Stage-five capture tooling changed during execution."
 }
@@ -612,6 +691,9 @@ $captureRecord = @(
     "harness_inventory_sha256=$harnessInventoryBefore",
     "rscript_path=$($script:rscriptPath.Replace('\', '/'))",
     "rscript_sha256=$rscriptSha256",
+    "r_library_path=$($script:rLibrary.Replace('\', '/'))",
+    "r_library_inventory_before_sha256=$rLibraryInventoryBefore",
+    "r_library_inventory_after_sha256=$rLibraryInventoryAfter",
     "methods=$($methods -join ',')",
     "stages=$($stages -join ',')",
     "bridge_capture_record_sha256=$(Get-Sha256 $bridgeRecordPath)",
