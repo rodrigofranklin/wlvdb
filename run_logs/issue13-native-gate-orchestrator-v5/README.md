@@ -81,6 +81,10 @@ candidato recusou corretamente a geração normalizada baseline porque seu
 contrato nativo substitui paths de agregação por `module_id`. A tentativa
 write-once impede retomada/reuso. A V5C5 usa origens normalizadas separadas por
 braço, sem afrouxar `wlv_verify_source_manifest()` e sem restaurar paths legados.
+Na comparação entre arquiteturas, são projetados somente os campos declarados
+do contrato/agregação e os bytes dos sidecars FST. Estes últimos só passam após
+provar dimensões, dimnames, payload bit a bit, hash interno e a transição
+autenticada `legacy-positional` → `versioned-v1`.
 
 Origem candidata autenticada:
 
@@ -103,8 +107,8 @@ $candidate = (git rev-parse HEAD).Trim()
 ```
 
 A materialização é recusada se qualquer um dos 11 blobs diferir do candidato.
-O output deve ter exatamente 39 arquivos, 588671 bytes, inventário SHA-256
-`0d5b7cfd4a9085afd9b9d196d4ac487853b41948981e3436e9d87811ef473ced`,
+O output deve ter exatamente 39 arquivos, 591470 bytes, inventário SHA-256
+`d8bfacb36402944796baacc4dfa5df168bb8ff667a7ccc28bc94b46afdfc3ea0`,
 um único diretório plano `issue13-evidence-harness` e nenhum subdiretório
 oculto. O manifesto não é aceito como autoridade para esses valores: todos os
 validadores repetem a conferência contra o selo incorporado.

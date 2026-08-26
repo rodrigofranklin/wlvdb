@@ -135,6 +135,10 @@ foreach ($sourceName in @('wiodr13', 'wiodr16')) {
     [string]$_.arm -ceq 'candidate' -and
       [string]$_.source -ceq $sourceName
   })
+  $arrayComparisons = @(
+    $sourceComparison.arrays.PSObject.Properties | ForEach-Object {
+      $_.Value
+    })
   if (-not [bool]$sourceComparison.passed -or
       -not [bool]$sourceComparison.
         manifest_tables_architecture_projected_equal -or
@@ -143,11 +147,37 @@ foreach ($sourceName in @('wiodr13', 'wiodr16')) {
       -not [bool]$manifestComparison.passed -or
       [string]$manifestComparison.comparison_mode -cne
         'architecture-projected-source-manifest' -or
+      [string]::Join("`n", @($manifestComparison.projected_fields)) -cne
+        "source_generation_id`ncontract_sha256`n" +
+          "_unit_contract.csv:size_bytes`n_unit_contract.csv:sha256`n" +
+          "m_io.fst.meta:size_bytes`nm_io.fst.meta:sha256`n" +
+          "sea.fst.meta:size_bytes`nsea.fst.meta:sha256" -or
       -not [bool]$unitComparison.passed -or
       [string]$unitComparison.comparison_mode -cne
         'architecture-projected-unit-contract' -or
+      [string]::Join("`n", @($unitComparison.projected_fields)) -cne
+        "module`naggregation_notes" -or
       $baselineBinding.Count -ne 1 -or $candidateBinding.Count -ne 1) {
     throw "Preparation source projection is invalid: $sourceName"
+  }
+  if ($arrayComparisons.Count -ne 2 -or
+      @($arrayComparisons | Where-Object {
+        -not [bool]$_.passed -or
+        -not [bool]$_.dimension_names_identical -or
+        -not [bool]$_.fst_column_schema_identical -or
+        -not [bool]$_.bitwise_values_identical -or
+        [long]$_.compared_values -ne [long]$_.flattened_values -or
+        -not [bool]$_.baseline_internal_hash_ok -or
+        -not [bool]$_.candidate_internal_hash_ok -or
+        -not [bool]$_.sidecar_architecture_valid -or
+        [bool]$_.sidecars_semantically_identical -or
+        [string]$_.baseline_sidecar_format -cne 'legacy-positional' -or
+        [string]$_.candidate_sidecar_format -cne 'versioned-v1' -or
+        [string]$_.baseline_sha256 -cne [string]$_.candidate_sha256 -or
+        [string]$_.baseline_sidecar_sha256 -ceq
+          [string]$_.candidate_sidecar_sha256
+      }).Count -ne 0) {
+    throw "Prepared FST sidecar architecture is invalid: $sourceName"
   }
   foreach ($record in @(
       @($baselineManifest, $baselineBinding[0]),
@@ -178,7 +208,8 @@ foreach ($sourceName in @('wiodr13', 'wiodr16')) {
       [string]$candidateManifest.source_generation_id + '`, contrato `' +
       [string]$candidateManifest.contract_sha256 + '`, manifest `' +
       [string]$candidateBinding[0].manifest_sha256 +
-      '`. Artefatos científicos idênticos após a projeção arquitetural selada.'
+      '`. Artefatos científicos idênticos após a projeção arquitetural ' +
+      'selada; sidecars FST `legacy-positional` → `versioned-v1` validados.'
   )
 }
 $euklemsArtifacts = @(
@@ -332,7 +363,10 @@ $([string]::Join("`n", $commandLines))
 - As fontes normalizadas têm manifests/contratos próprios por braço. A projeção
   de preparação remove somente `module`, `aggregation_notes`,
   `source_generation_id`, `contract_sha256` e tamanho/hash da linha
-  `_unit_contract.csv`; todos os demais artefatos e campos permanecem estritos.
+  `_unit_contract.csv` e dos sidecars `m_io.fst.meta`/`sea.fst.meta`. Os
+  sidecars são aceitos somente após validar a transição autenticada
+  `legacy-positional` → `versioned-v1`, dimensões, dimnames, hash interno e o
+  array bit a bit; todos os demais artefatos e campos permanecem estritos.
 - `_nonfinite_resolution_diagnostics.csv` é candidato-only conforme contrato.
 - Não foi introduzida tolerância numérica nova.
 $([string]::Join("`n", $oracleLines))
@@ -345,7 +379,8 @@ $([string]::Join("`n", $oracleLines))
 - As gerações normalizadas baseline e candidata foram autenticadas
   separadamente antes da execução científica.
 - Arrays normativos foram comparados bit a bit, preservando `NA`, `NaN`,
-  infinitos e zero assinado.
+  infinitos e zero assinado; a extensão versionada dos sidecars candidatos foi
+  validada contra os payloads FST.
 - Promoção atômica e ausência de staging/locks foram verificadas.
 
 ## paper0_results

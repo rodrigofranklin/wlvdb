@@ -38,9 +38,9 @@ $strictSmokeSha256 =
 $strictSmokeHarnessSha256 =
   'a17a187621cdd4aff6f24efd6bf43ffbf9336de0a19189dfc7f5a82758a92c23'
 $expectedHarnessFileCount = 39L
-$expectedHarnessTotalBytes = 588671L
+$expectedHarnessTotalBytes = 591470L
 $expectedHarnessInventorySha256 =
-  '0d5b7cfd4a9085afd9b9d196d4ac487853b41948981e3436e9d87811ef473ced'
+  'd8bfacb36402944796baacc4dfa5df168bb8ff667a7ccc28bc94b46afdfc3ea0'
 $methods = @(
   'wiodr13', 'wiodr16', 'alternative_1', 'alternative_2', 'norow_w13',
   'ochoa_1', 'ochoa_2', 'petrovic', 'wiodr13v09', 'wiodr16v09',
@@ -638,7 +638,9 @@ $config = [ordered]@{
     preparation_architecture_projection = @(
       'module', 'aggregation_notes', 'source_generation_id',
       'contract_sha256', '_unit_contract.csv:size_bytes',
-      '_unit_contract.csv:sha256'
+      '_unit_contract.csv:sha256', 'm_io.fst.meta:size_bytes',
+      'm_io.fst.meta:sha256', 'sea.fst.meta:size_bytes',
+      'sea.fst.meta:sha256'
     )
   }
   performance = [ordered]@{

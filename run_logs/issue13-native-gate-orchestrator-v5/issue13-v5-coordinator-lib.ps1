@@ -14,9 +14,9 @@ $script:Issue13V5BaselineOverlaySha256 =
 $script:Issue13V5BaselineOverlayPatchId =
   '253ca5f1397132f94e3432264084a37395c60ec3'
 $script:Issue13V5HarnessFileCount = 39L
-$script:Issue13V5HarnessTotalBytes = 588671L
+$script:Issue13V5HarnessTotalBytes = 591470L
 $script:Issue13V5HarnessInventorySha256 =
-  '0d5b7cfd4a9085afd9b9d196d4ac487853b41948981e3436e9d87811ef473ced'
+  'd8bfacb36402944796baacc4dfa5df168bb8ff667a7ccc28bc94b46afdfc3ea0'
 $script:Issue13V5SourceFileCount = 84L
 $script:Issue13V5SourceDirectoryCount = 5L
 $script:Issue13V5SourceTotalBytes = 2946498269L
@@ -1083,7 +1083,9 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
         $config.comparison.preparation_architecture_projection)) -cne
         "module`naggregation_notes`nsource_generation_id`n" +
           "contract_sha256`n_unit_contract.csv:size_bytes`n" +
-          '_unit_contract.csv:sha256') {
+          "_unit_contract.csv:sha256`nm_io.fst.meta:size_bytes`n" +
+          "m_io.fst.meta:sha256`nsea.fst.meta:size_bytes`n" +
+          'sea.fst.meta:sha256') {
     throw 'V5 scientific comparison policy changed.'
   }
   if ([double]$config.performance.candidate_time_ratio_maximum -ne 1.2 -or

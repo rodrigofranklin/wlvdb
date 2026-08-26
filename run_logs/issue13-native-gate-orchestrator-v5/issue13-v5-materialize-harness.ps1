@@ -17,9 +17,9 @@ $baselineCommit = 'cc2c86189a06676bcb9f0e05e08033d710a92509'
 $expectedSourceInventory =
   'f42c94666cd10606176e8fe0f3f2afe9975b58c5b0b914343a267f62724d34f1'
 $expectedOutputFileCount = 39L
-$expectedOutputTotalBytes = 588671L
+$expectedOutputTotalBytes = 591470L
 $expectedOutputInventory =
-  '0d5b7cfd4a9085afd9b9d196d4ac487853b41948981e3436e9d87811ef473ced'
+  'd8bfacb36402944796baacc4dfa5df168bb8ff667a7ccc28bc94b46afdfc3ea0'
 $controllerFiles = @(
   'README.md',
   'issue13-v5-baseline-smoke.ps1',
@@ -367,6 +367,39 @@ foreach ($name in @('issue13-compare.R', 'issue13-compare-results.R')) {
 }
 
 $preparationCompare = Join-Path $staging 'issue13-preparation-compare.R'
+$preparationLibrary = Join-Path $staging 'issue13-prep-paper-lib.R'
+$sidecarPassSource = @'
+  passed <- shape_passed && values_passed && left_internal_hash_ok &&
+    right_internal_hash_ok
+'@.TrimEnd("`r", "`n")
+$sidecarPassReplacement = @'
+  sidecar_architecture_valid <- isTRUE(left_contract$legacy) &&
+    !isTRUE(right_contract$legacy) &&
+    is.null(left_contract$schema_version) &&
+    identical(right_contract$schema_version, "1") &&
+    is.null(left_contract$fst_sha256) &&
+    identical(right_contract$fst_sha256, right_sha)
+  passed <- shape_passed && values_passed && left_internal_hash_ok &&
+    right_internal_hash_ok && sidecar_architecture_valid
+'@.TrimEnd("`r", "`n")
+Add-Issue13V5ExactSource $preparationLibrary `
+  $sidecarPassSource $sidecarPassReplacement
+$sidecarReportSource = @'
+    baseline_internal_hash_ok = left_internal_hash_ok,
+    candidate_internal_hash_ok = right_internal_hash_ok,
+    sidecars_semantically_identical = identical(
+'@.TrimEnd("`r", "`n")
+$sidecarReportReplacement = @'
+    baseline_internal_hash_ok = left_internal_hash_ok,
+    candidate_internal_hash_ok = right_internal_hash_ok,
+    baseline_sidecar_format = "legacy-positional",
+    candidate_sidecar_format = "versioned-v1",
+    sidecar_architecture_valid = sidecar_architecture_valid,
+    sidecars_semantically_identical = identical(
+'@.TrimEnd("`r", "`n")
+Add-Issue13V5ExactSource $preparationLibrary `
+  $sidecarReportSource $sidecarReportReplacement
+
 $preparationCsvSource = @'
   csv_names <- c(
     "_normalization_contract.csv",
@@ -432,14 +465,20 @@ $preparationManifestReplacement = @'
     value <- value[, setdiff(
       names(value), c("source_generation_id", "contract_sha256")
     ), drop = FALSE]
-    unit_row <- value$artifact == "_unit_contract.csv"
-    if (sum(unit_row) != 1L) {
-      stop("Source manifest must contain exactly one unit-contract row.",
+    projected_artifacts <- c(
+      "_unit_contract.csv", "m_io.fst.meta", "sea.fst.meta"
+    )
+    projected_rows <- value$artifact %in% projected_artifacts
+    if (!identical(
+        sort(value$artifact[projected_rows], method = "radix"),
+        sort(projected_artifacts, method = "radix")
+      )) {
+      stop("Source manifest lacks an architecture-projected artifact row.",
         call. = FALSE
       )
     }
-    value$size_bytes[unit_row] <- "<architecture-projected>"
-    value$sha256[unit_row] <- "<architecture-projected>"
+    value$size_bytes[projected_rows] <- "<architecture-projected>"
+    value$sha256[projected_rows] <- "<architecture-projected>"
     row.names(value) <- NULL
     value
   }
@@ -456,7 +495,9 @@ $preparationManifestReplacement = @'
     comparison_mode = "architecture-projected-source-manifest",
     projected_fields = as.list(c(
       "source_generation_id", "contract_sha256",
-      "_unit_contract.csv:size_bytes", "_unit_contract.csv:sha256"
+      "_unit_contract.csv:size_bytes", "_unit_contract.csv:sha256",
+      "m_io.fst.meta:size_bytes", "m_io.fst.meta:sha256",
+      "sea.fst.meta:size_bytes", "sea.fst.meta:sha256"
     ))
   )
   passed <- isTRUE(baseline_manifest$passed) &&
@@ -504,9 +545,18 @@ if ($manifestRule.Count -ne 1 -or $contractRule.Count -ne 1) {
   throw 'Preparation architecture rules are absent or ambiguous.'
 }
 $manifestRule[0].comparison =
-  'each arm has exact schema and authenticated artifacts; cross-engine projection removes source_generation_id, contract_sha256, and the _unit_contract.csv row size/hash'
+  'each arm has exact schema and authenticated artifacts; cross-engine projection removes source_generation_id, contract_sha256, and only size/hash for _unit_contract.csv plus the two semantically validated FST sidecars'
 $contractRule[0].comparison =
   'exact schema, ordering, labels, and UTF-8 content; only module and aggregation_notes are projected from _unit_contract.csv across engines'
+$arrayRule = @(
+  $ruleMatrix.comparison_modes.preparation_cross_engine.rules |
+    Where-Object { [string]$_.id -ceq 'normalized-arrays' }
+)
+if ($arrayRule.Count -ne 1) {
+  throw 'Preparation normalized-array rule is absent or ambiguous.'
+}
+$arrayRule[0].comparison =
+  'exact dimensions, dimnames, FST schema/types/rows, bitwise double values, and internal hashes; baseline legacy sidecars must correspond to authenticated candidate versioned-v1 sidecars'
 $ruleMatrixPayload = ($ruleMatrix | ConvertTo-Json -Depth 20) + "`n"
 Set-Issue13V5Utf8Text $ruleMatrixPath $ruleMatrixPayload
 
@@ -525,7 +575,8 @@ its complete cryptographic and semantic binding.
 
 Baseline and candidate normalized sources are authenticated independently.
 Their scientific arrays remain bitwise comparable; only source-generation and
-aggregation-routing metadata are projected across the architectural cut.
+aggregation-routing metadata plus authenticated FST-sidecar representation are
+projected across the architectural cut.
 '@
 Set-Issue13V5Utf8Text $readme $readmeValue
 

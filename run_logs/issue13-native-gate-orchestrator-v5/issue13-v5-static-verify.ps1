@@ -236,9 +236,9 @@ $harnessBinding = Assert-Issue13V5HarnessBinding $staticConfig
 $manifest = $harnessBinding.manifest
 $inventory = $harnessBinding.inventory
 $expectedHarnessFileCount = 39L
-$expectedHarnessTotalBytes = 588671L
+$expectedHarnessTotalBytes = 591470L
 $expectedHarnessInventorySha256 =
-  '0d5b7cfd4a9085afd9b9d196d4ac487853b41948981e3436e9d87811ef473ced'
+  'd8bfacb36402944796baacc4dfa5df168bb8ff667a7ccc28bc94b46afdfc3ea0'
 if ($inventory.file_count -ne $expectedHarnessFileCount -or
     $inventory.total_bytes -ne $expectedHarnessTotalBytes -or
     $inventory.inventory_sha256 -cne $expectedHarnessInventorySha256 -or
@@ -262,6 +262,9 @@ $materializedCompare = [IO.File]::ReadAllText(
 $materializedPreparationCompare = [IO.File]::ReadAllText(
   (Join-Path $runtime 'issue13-preparation-compare.R'),
   [Text.UTF8Encoding]::new($false, $true))
+$materializedPreparationLibrary = [IO.File]::ReadAllText(
+  (Join-Path $runtime 'issue13-prep-paper-lib.R'),
+  [Text.UTF8Encoding]::new($false, $true))
 foreach ($required in @(
     'cross_engine_source_v1',
     'cross_engine_source && (!identical(candidate$kind, "source")',
@@ -275,12 +278,24 @@ foreach ($required in @(
     'manifest_tables_architecture_projected_equal',
     'architecture-projected-source-manifest',
     'architecture-projected-unit-contract',
-    'value$size_bytes[unit_row] <- "<architecture-projected>"',
-    'value$sha256[unit_row] <- "<architecture-projected>"',
+    '"_unit_contract.csv", "m_io.fst.meta", "sea.fst.meta"',
+    'value$size_bytes[projected_rows] <- "<architecture-projected>"',
+    'value$sha256[projected_rows] <- "<architecture-projected>"',
     'wlv-issue13-preparation-rule-matrix/2'
   )) {
   if (-not $materializedPreparationCompare.Contains($required)) {
     throw "Materialized preparation runtime lacks projection: $required"
+  }
+}
+foreach ($required in @(
+    'sidecar_architecture_valid <- isTRUE(left_contract$legacy)',
+    'identical(right_contract$schema_version, "1")',
+    'identical(right_contract$fst_sha256, right_sha)',
+    'baseline_sidecar_format = "legacy-positional"',
+    'candidate_sidecar_format = "versioned-v1"'
+  )) {
+  if (-not $materializedPreparationLibrary.Contains($required)) {
+    throw "Materialized preparation library lacks sidecar gate: $required"
   }
 }
 $ruleMatrixPath = Join-Path $runtime 'issue13-preparation-rule-matrix.json'
@@ -295,6 +310,9 @@ $manifestRule = @($preparationMode.rules | Where-Object {
 $contractRule = @($preparationMode.rules | Where-Object {
   [string]$_.id -ceq 'contracts-and-labels'
 })
+$arrayRule = @($preparationMode.rules | Where-Object {
+  [string]$_.id -ceq 'normalized-arrays'
+})
 if ([string]$ruleMatrix.schema -cne
       'wlv-issue13-preparation-rule-matrix/2' -or
     [string]$preparationMode.candidate -cne
@@ -304,10 +322,13 @@ if ([string]$ruleMatrix.schema -cne
     @($preparationMode.ignored_artifacts).Count -ne 0 -or
     [string]$preparationMode.numeric_tolerance -cne 'none-bitwise' -or
     $manifestRule.Count -ne 1 -or $contractRule.Count -ne 1 -or
+    $arrayRule.Count -ne 1 -or
     -not ([string]$manifestRule[0].comparison).Contains(
       'source_generation_id, contract_sha256') -or
     -not ([string]$contractRule[0].comparison).Contains(
-      'module and aggregation_notes')) {
+      'module and aggregation_notes') -or
+    -not ([string]$arrayRule[0].comparison).Contains(
+      'candidate versioned-v1 sidecars')) {
   throw 'Materialized preparation rule matrix is not the sealed V5 projection.'
 }
 
