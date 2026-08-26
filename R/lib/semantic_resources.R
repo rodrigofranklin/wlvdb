@@ -1373,25 +1373,8 @@ wlv_semantic_finalize_module_result <- function(
     )
     axes <- target_ref$contract$axes
     explicit_state <- finalized[[state_alias]]
-    if (!is.null(explicit_state)) {
-      if (inherits(explicit_state, "wlv_semantic_state")) {
-        wlv_semantic_state_validate(
-          explicit_state,
-          value = materialized,
-          target_key = target_key,
-          axes = axes,
-          state_key = state_ref$key
-        )
-        state <- explicit_state
-      } else {
-        state <- wlv_semantic_state_encode(
-          materialized,
-          explicit_state,
-          target_key,
-          axes
-        )
-      }
-    } else {
+    state_candidate <- explicit_state
+    if (is.null(state_candidate)) {
       explicit_runtime_state <- attr(
         materialized,
         "wlv_state",
@@ -1413,24 +1396,28 @@ wlv_semantic_finalize_module_result <- function(
       } else {
         explicit_runtime_state
       }
-      state <- tryCatch(
-        wlv_semantic_capture_value_state(
-          materialized,
-          target_key,
-          axes,
-          runtime = NULL,
-          states = derived_state
-        )$state,
-        error = function(error) {
-          wlv_semantic_abort(sprintf(
-            "State finalization for `%s` failed: %s",
-            target_key,
-            conditionMessage(error)
-          ))
-        }
-      )
+      state_candidate <- derived_state
     }
-    finalized[[state_alias]] <- state
+    bundle <- tryCatch(
+      wlv_semantic_capture_value_state(
+        materialized,
+        target_key,
+        axes,
+        runtime = NULL,
+        states = state_candidate
+      ),
+      error = function(error) {
+        wlv_semantic_abort(sprintf(
+          "State finalization for `%s` failed: %s",
+          target_key,
+          conditionMessage(error)
+        ))
+      }
+    )
+    if (!identical(target_output$action, "patch")) {
+      finalized[[target_alias]] <- bundle$value
+    }
+    finalized[[state_alias]] <- bundle$state
   }
   value_state_aliases <- names(output_refs)[vapply(output_refs, function(ref) {
     isTRUE(ref$contract$semantic_state)
