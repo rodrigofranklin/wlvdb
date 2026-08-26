@@ -19,7 +19,7 @@ $bootstrapSourceSha256 = @{
   'issue13-v5-capture-clean-stage5-evidence.ps1' =
     '4A204A46A351D9273A64C989911F577D3D47DFE97B9CCBD55274EEACFC048CA4'
   'issue13-v5-coordinator-lib.ps1' =
-    '82C949DAA92B694FD4804F77325620545F57CFD65AB2109FF4040485EC4F791A'
+    '95B2DF1E2F1C74AD00379FDECA57ED3739E525C49C77D2F54B72F2845640A4A5'
   'issue13-v5-coordinator.ps1' =
     'B5A22EE893EDB63EBE5280643ED02A21320754F64C138DBBEB7E351AA46C7521'
   'issue13-v5-materialize-harness.ps1' =
@@ -452,7 +452,7 @@ foreach ($required in @(
     'identical(live_structure_assertions, 7L)',
     'requested_verify_live <- verify_live',
     'lockBinding("requested_verify_live", environment())',
-    '6c5e3c5583f431899658197484c4ebba3b1b1ee58b21b11f88fb1665084fbc4a',
+    'd7fc0ba48bed304cf3975f2189ee975b14c16522443b28379d26329ea661b97a',
     'lockBinding("official_source_inventory_sha256", environment())',
     'stats::setNames(c(1L, 1L, 6L, 1L, 1L, 6L)',
     'live_structure_assertions=%d',
@@ -1097,7 +1097,7 @@ $issue13ExpectedAstSurfaces = @{
   }
   'issue13-v5-coordinator-lib.ps1' = @{
     command_count = 819
-    command_sha256 = '3837E027BC8E9B8A7CB063AD35561EB1906ABAE3C2E239D5E8334959E19612AD'
+    command_sha256 = '9850A5F70B67F85783D25DB52B45646CDDC0D8857864ACF7900F75DDC240BB7F'
     redirection_count = 19
     redirection_sha256 = 'BBCDC766E66B39B17B6D1D8BFD22A123CE24090CEF3E5204E542D73FB1B9DDF8'
   }
@@ -1155,7 +1155,7 @@ $issue13ExpectedControllerSourceSha256 = @{
   'issue13-v5-baseline-smoke.ps1' = '039795827BFBECC53EBAEFE80C9543804CF020C5F3CC59DA5771C253B52258A8'
   'issue13-v5-capture-clean-bridge-evidence.ps1' = '07681896F30BE95E806D2BB8693C185AEDAAA7C0C5B35CC07CBF52722E58EF98'
   'issue13-v5-capture-clean-stage5-evidence.ps1' = '4A204A46A351D9273A64C989911F577D3D47DFE97B9CCBD55274EEACFC048CA4'
-  'issue13-v5-coordinator-lib.ps1' = '82C949DAA92B694FD4804F77325620545F57CFD65AB2109FF4040485EC4F791A'
+  'issue13-v5-coordinator-lib.ps1' = '95B2DF1E2F1C74AD00379FDECA57ED3739E525C49C77D2F54B72F2845640A4A5'
   'issue13-v5-coordinator.ps1' = 'B5A22EE893EDB63EBE5280643ED02A21320754F64C138DBBEB7E351AA46C7521'
   'issue13-v5-materialize-harness.ps1' = 'FF4655D96832B395710AB2C11F75777F39C4B86F920C4C41CD83FDA8912E4BCE'
   'issue13-v5-new-config.ps1' = 'D69192FF0BDC5EC64E1ECBA4669B52E12F4CE16B82175E323EB16FFCCBD87950'
@@ -1163,7 +1163,7 @@ $issue13ExpectedControllerSourceSha256 = @{
   'issue13-v5-oracle-effect-lib.ps1' = '395D7E43178857014B952D36E0DB0DF7DBD204905E2F21E22177B7FB14237213'
   'issue13-v5-oracle-effect-validate.ps1' = '2E70D8D7B2AB4150403D8C17CE5B4C7F32FC35C8E2823709C841DA8F1D93108A'
   'issue13-v5-render-report.ps1' = '92B228A7F9099F114807A6683C62D84BBA1A62AEF42553B4625850C4477C5D68'
-  'issue13-v5-static-verify.ps1' = 'C4907403892FBE596DFCBE10842425DDC653558F024F50687F71348E434F89C9'
+  'issue13-v5-static-verify.ps1' = '94CF84AE0A48E5D8C02A08156DFA2E164A544194EC5FD2EBE585C22BC6E9D6C8'
 }
 $issue13ExpectedDotSourceSignatures = @{
   'issue13-v5-attest-delivery.ps1' = @(
@@ -1622,7 +1622,7 @@ $expectedOfficialSourceConstantSignatures = @(
   "Set-Issue13V5ScriptConstant Issue13V5SourceDirectorySha256 '8b3a622a748f2489fe8cfd2a8273ec98ad4c372b2378d587a5ee2e3c5c916640'",
   'Set-Issue13V5ScriptConstant Issue13V5SourceFileCount 84L',
   "Set-Issue13V5ScriptConstant Issue13V5SourceInventorySha256 'c593624ebfa75fb350b8b6528c1d5b6535d71bfe672c7eb61729c1b02f784e26'",
-  "Set-Issue13V5ScriptConstant Issue13V5SourceOrdinalInventorySha256 '6c5e3c5583f431899658197484c4ebba3b1b1ee58b21b11f88fb1665084fbc4a'",
+  "Set-Issue13V5ScriptConstant Issue13V5SourceOrdinalInventorySha256 'd7fc0ba48bed304cf3975f2189ee975b14c16522443b28379d26329ea661b97a'",
   'Set-Issue13V5ScriptConstant Issue13V5SourceTotalBytes 2946498269L'
 )
 $expectedOfficialSourceConstantHelper = @'
@@ -1717,7 +1717,7 @@ $officialSourceRuntimePins = [ordered]@{
   Issue13V5SourceInventorySha256 =
     'c593624ebfa75fb350b8b6528c1d5b6535d71bfe672c7eb61729c1b02f784e26'
   Issue13V5SourceOrdinalInventorySha256 =
-    '6c5e3c5583f431899658197484c4ebba3b1b1ee58b21b11f88fb1665084fbc4a'
+    'd7fc0ba48bed304cf3975f2189ee975b14c16522443b28379d26329ea661b97a'
   Issue13V5SourceDirectorySha256 =
     '8b3a622a748f2489fe8cfd2a8273ec98ad4c372b2378d587a5ee2e3c5c916640'
 }

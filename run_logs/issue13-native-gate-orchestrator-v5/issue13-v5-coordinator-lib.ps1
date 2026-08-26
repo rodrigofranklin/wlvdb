@@ -42,7 +42,7 @@ Set-Issue13V5ScriptConstant Issue13V5SourceTotalBytes 2946498269L
 Set-Issue13V5ScriptConstant Issue13V5SourceInventorySha256 `
   'c593624ebfa75fb350b8b6528c1d5b6535d71bfe672c7eb61729c1b02f784e26'
 Set-Issue13V5ScriptConstant Issue13V5SourceOrdinalInventorySha256 `
-  '6c5e3c5583f431899658197484c4ebba3b1b1ee58b21b11f88fb1665084fbc4a'
+  'd7fc0ba48bed304cf3975f2189ee975b14c16522443b28379d26329ea661b97a'
 Set-Issue13V5ScriptConstant Issue13V5SourceDirectorySha256 `
   '8b3a622a748f2489fe8cfd2a8273ec98ad4c372b2378d587a5ee2e3c5c916640'
 $script:Issue13V5CandidateSourceFileCount = 76L

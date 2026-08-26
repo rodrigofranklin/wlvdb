@@ -441,7 +441,7 @@ wlv13_v5d_validate_stage5_capture <- function(
   requested_verify_live <- verify_live
   lockBinding("requested_verify_live", environment())
   official_source_inventory_sha256 <-
-    "6c5e3c5583f431899658197484c4ebba3b1b1ee58b21b11f88fb1665084fbc4a"
+    "d7fc0ba48bed304cf3975f2189ee975b14c16522443b28379d26329ea661b97a"
   lockBinding("official_source_inventory_sha256", environment())
   live_checks <- stats::setNames(integer(6L), c(
     "bridge_physical", "stage_bridge_physical",
@@ -1626,7 +1626,7 @@ wlv13_v5d_live_validation_structure_selftest <- function() {
       length(official_assignments) == 1L &&
       identical(validator_body[[5L]], quote(
         official_source_inventory_sha256 <-
-          "6c5e3c5583f431899658197484c4ebba3b1b1ee58b21b11f88fb1665084fbc4a"
+          "d7fc0ba48bed304cf3975f2189ee975b14c16522443b28379d26329ea661b97a"
       )) && identical(validator_body[[6L]], quote(
         lockBinding("official_source_inventory_sha256", environment())
       )) &&
