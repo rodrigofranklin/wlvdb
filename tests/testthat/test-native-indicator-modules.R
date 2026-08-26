@@ -63,6 +63,142 @@ test_that("every configured native indicator module has a co-located spec", {
   )))
 })
 
+test_that("source indicators project the selected variable's sparse states", {
+  runtime <- native_indicator_environment
+  source <- array(
+    seq_len(12L),
+    dim = c(1L, 3L, 2L, 2L),
+    dimnames = list(
+      year = "2000",
+      variable = c("EMP", "COMP", "FINITE"),
+      sector = c("S1", "S2"),
+      country = c("AAA", "BBB")
+    )
+  )
+  source["2000", "EMP", "S1", "AAA"] <- NA_real_
+  source["2000", "COMP", "S2", "BBB"] <- NA_real_
+  source_states <- array(
+    "finite",
+    dim = dim(source),
+    dimnames = dimnames(source)
+  )
+  source_states["2000", "EMP", "S1", "AAA"] <- "source_missing"
+  source_states["2000", "COMP", "S2", "BBB"] <- "not_applicable"
+  source_contract <- runtime$wlv_native_source_sea_contract()
+  state <- runtime$wlv_semantic_state_encode(
+    source,
+    source_states,
+    "source/sea",
+    source_contract$axes
+  )
+  control_seeds <- list(
+    runtime$wlv_seed_resource(
+      "request/method", "test", runtime$wlv_native_control_contract("character")
+    ),
+    runtime$wlv_seed_resource(
+      "request/source", "wiodr13",
+      runtime$wlv_native_control_contract("character")
+    ),
+    runtime$wlv_seed_resource(
+      "configuration/missingness_policy",
+      list(id = "test"),
+      runtime$wlv_native_control_contract("list")
+    ),
+    runtime$wlv_seed_resource(
+      "configuration/scientific_profile",
+      list(id = "test"),
+      runtime$wlv_native_control_contract("list")
+    )
+  )
+  store <- runtime$wlv_new_resource_store(c(
+    list(
+      runtime$wlv_seed_resource("source/sea", source, source_contract),
+      runtime$wlv_seed_resource(
+        "semantic_state/source/sea",
+        state,
+        runtime$wlv_native_semantic_state_contract(source_contract)
+      )
+    ),
+    control_seeds
+  ))
+  instance <- runtime$wlv_module_instance(
+    "source_indicator.EMP.test",
+    "source_indicator",
+    args = list(indicator = "EMP.test", source_variable = "EMP")
+  )
+  finite_instance <- runtime$wlv_module_instance(
+    "source_indicator.FINITE.test",
+    "source_indicator",
+    args = list(indicator = "FINITE.test", source_variable = "FINITE")
+  )
+  plan <- runtime$wlv_compile_module_plan(
+    runtime$wlv_module_registry(list(runtime$wlv_source_indicator_spec())),
+    list(instance, finite_instance),
+    store
+  )
+  result <- runtime$wlv_run_module_plan(plan, store)
+  value_contract <- runtime$wlv_native_indicator_contract("EMP.test")
+  value <- runtime$wlv_store_read(
+    result$store,
+    runtime$wlv_resource_ref(
+      "sea/sector/EMP.test",
+      value_contract,
+      producer = instance$instance_id
+    )
+  )
+  projected <- runtime$wlv_store_read(
+    result$store,
+    runtime$wlv_resource_ref(
+      "semantic_state/sea/sector/EMP.test",
+      runtime$wlv_native_semantic_state_contract(value_contract),
+      producer = instance$instance_id
+    )
+  )
+  finite_contract <- runtime$wlv_native_indicator_contract("FINITE.test")
+  finite_state <- runtime$wlv_store_read(
+    result$store,
+    runtime$wlv_resource_ref(
+      "semantic_state/sea/sector/FINITE.test",
+      runtime$wlv_native_semantic_state_contract(finite_contract),
+      producer = finite_instance$instance_id
+    )
+  )
+
+  expected <- array(
+    source[, "EMP", , , drop = FALSE],
+    dim = dim(source)[c(1L, 3L, 4L)],
+    dimnames = dimnames(source)[c(1L, 3L, 4L)]
+  )
+  expect_identical(value, expected)
+  expect_identical(names(projected), c("year", "sector", "country", "state"))
+  expect_identical(nrow(projected), 1L)
+  expect_identical(projected$year, "2000")
+  expect_identical(projected$sector, "S1")
+  expect_identical(projected$country, "AAA")
+  expect_identical(projected$state, "source_missing")
+  expect_identical(
+    attr(projected, "target_key", exact = TRUE),
+    "sea/sector/EMP.test"
+  )
+  expect_identical(
+    attr(projected, "axes", exact = TRUE),
+    c("year", "sector", "country")
+  )
+  expect_silent(runtime$wlv_semantic_state_validate(
+    projected,
+    value = value,
+    target_key = "sea/sector/EMP.test",
+    axes = value_contract$axes,
+    state_key = "semantic_state/sea/sector/EMP.test"
+  ))
+  expect_s3_class(finite_state, "wlv_semantic_state")
+  expect_identical(nrow(finite_state), 0L)
+  expect_identical(
+    attr(finite_state, "target_key", exact = TRUE),
+    "sea/sector/FINITE.test"
+  )
+})
+
 test_that("auxiliary indicator instances follow deterministic conventions", {
   config_environment <- new.env(parent = baseenv())
   sys.source(
