@@ -28,7 +28,10 @@ if ($CoolingSeconds -lt 0 -or $CoolingSeconds -gt 300) {
   throw 'CoolingSeconds must be between zero and 300.'
 }
 
-function New-Issue13V5State([object]$Binding) {
+function New-Issue13V5State(
+  [object]$Binding,
+  [object]$OracleControlBinding
+) {
   $config = $Binding.config
   $phases = [Collections.Generic.List[object]]::new()
   $ordinal = 0L
@@ -53,6 +56,8 @@ function New-Issue13V5State([object]$Binding) {
       candidate_metrics_sha256 = $null
       comparison_status = 'planned'
       comparisons = [object[]]@()
+      pair_result_path = $null
+      pair_result_sha256 = $null
       performance = $null
       completed_at_utc = $null
     })
@@ -81,6 +86,8 @@ function New-Issue13V5State([object]$Binding) {
       candidate_metrics_sha256 = $null
       comparison_status = 'planned'
       comparisons = [object[]]@()
+      pair_result_path = $null
+      pair_result_sha256 = $null
       performance = $null
       completed_at_utc = $null
     })
@@ -109,6 +116,18 @@ function New-Issue13V5State([object]$Binding) {
     baseline_runtime_commit = [string]$config.baseline_runtime_commit
     candidate_commit = [string]$config.candidate_commit
     coordinator_pins = [object[]](Get-Issue13V5CoordinatorPins $config)
+    oracle_effect = [ordered]@{
+      status = 'authenticated'
+      control_record_path = [string]$OracleControlBinding.path
+      control_record_sha256 = [string]$OracleControlBinding.sha256
+      proof_sha256 = [string]$config.oracle_effect.proof.sha256
+      comparison_inventory_sha256 =
+        [string]$config.oracle_effect.comparisons.inventory.inventory_sha256
+      strict_common_method_count = 5L
+      recovered_method_count = 7L
+      final_evidence_eligible = $false
+      required_by_final_gate = $true
+    }
     initialized_at_utc = [DateTime]::UtcNow.ToString('o')
     updated_at_utc = [DateTime]::UtcNow.ToString('o')
     worktrees = [object[]]$worktrees
@@ -116,14 +135,21 @@ function New-Issue13V5State([object]$Binding) {
     prep_fault = [ordered]@{
       plan_status = 'planned'
       plan_directory = $null
+      plan_path = $null
+      plan_sha256 = $null
+      plan_audit_path = $null
+      plan_audit_sha256 = $null
       preparation_comparison_status = 'planned'
       preparation_comparison_path = $null
       preparation_comparison_sha256 = $null
       import_status = 'planned'
       import_report_path = $null
+      import_report_sha256 = $null
       seed_plan_status = 'planned'
       seed_plan_path = $null
+      seed_plan_sha256 = $null
       seeds_status = 'planned'
+      seed_evidence = [object[]]@()
       faults = [object[]]@($config.matrix.faults | ForEach-Object {
         [ordered]@{
           fault_id = [string]$_
@@ -136,6 +162,7 @@ function New-Issue13V5State([object]$Binding) {
       })
       aggregate_status = 'planned'
       aggregate_path = $null
+      aggregate_sha256 = $null
     }
     final_aggregate = [ordered]@{
       status = 'planned'
@@ -175,7 +202,17 @@ function Initialize-Issue13V5([object]$Binding) {
     )) {
     $null = New-Item -ItemType Directory -Path $path
   }
-  $state = New-Issue13V5State $Binding
+  $oracleControlPath = Join-Path ([string]$config.control_root) `
+    'oracle-effect-validation.json'
+  $oracleControlRecord = New-Issue13V5OracleEffectControlRecord $config `
+    ([string]$Binding.sha256) $Binding.oracle_effect_validation
+  $oracleControlSha256 = Write-Issue13V5Json $oracleControlRecord `
+    $oracleControlPath
+  $oracleControlBinding = [pscustomobject]@{
+    path = (Resolve-Path -LiteralPath $oracleControlPath).Path
+    sha256 = $oracleControlSha256
+  }
+  $state = New-Issue13V5State $Binding $oracleControlBinding
   $null = Write-Issue13V5Json $state (Get-Issue13V5StatePath $config)
   Read-Issue13V5State $config $Binding.sha256
 }
@@ -451,12 +488,19 @@ function Ensure-Issue13V5PrepFaultPlan(
       throw 'Preparation/fault plan or independent audit failed.'
     }
     $workflow.plan_directory = (Resolve-Path -LiteralPath $root).Path
+    $workflow.plan_path = (Resolve-Path -LiteralPath $planPath).Path
+    $workflow.plan_sha256 = Get-Issue13V5Sha256 $planPath
+    $workflow.plan_audit_path = (Resolve-Path -LiteralPath $auditPath).Path
+    $workflow.plan_audit_sha256 = Get-Issue13V5Sha256 $auditPath
     $workflow.plan_status = 'built'
     Save-Issue13V5State $Config $State
   }
   $plan = Read-Issue13V5Json $planPath
   $audit = Read-Issue13V5Json $auditPath
-  if ((Get-Issue13V5Sha256 $planPath) -cne [string]$audit.plan_sha256) {
+  if ((Get-Issue13V5Sha256 $planPath) -cne [string]$audit.plan_sha256 -or
+      (Get-Issue13V5Sha256 $planPath) -cne [string]$workflow.plan_sha256 -or
+      (Get-Issue13V5Sha256 $auditPath) -cne
+        [string]$workflow.plan_audit_sha256) {
     throw 'Preparation/fault plan changed after audit.'
   }
   [pscustomobject]@{
@@ -780,6 +824,7 @@ function Complete-Issue13V5Pair(
   [object]$State,
   [object]$Phase
 ) {
+  $null = Assert-Issue13V5PhaseEvidenceState $Config $Phase
   $pairRequiredMemory = if ([long]$Phase.workers -eq 2L) { 64GB } else { 40GB }
   $null = Wait-Issue13V5CoolState $Config $CoolingSeconds `
     ([int64]$pairRequiredMemory)
@@ -866,11 +911,15 @@ function Complete-Issue13V5Pair(
   if (Test-Path -LiteralPath $pairPath) {
     throw "Planned pair result already exists: $($Phase.phase)"
   }
-  $null = Write-Issue13V5Json $pair $pairPath
+  $pairSha256 = Write-Issue13V5Json $pair $pairPath
   $Phase.performance = $performance
   $Phase.comparisons = [object[]]$records.ToArray()
+  $Phase.pair_result_path = (Resolve-Path -LiteralPath $pairPath).Path
+  $Phase.pair_result_sha256 = $pairSha256
   $Phase.comparison_status = 'completed'
   $Phase.completed_at_utc = [DateTime]::UtcNow.ToString('o')
+  $null = Assert-Issue13V5PhaseEvidenceState $Config $Phase `
+    -RequireCompletedComparison
   Save-Issue13V5State $Config $State
   $pair
 }
@@ -972,6 +1021,7 @@ function Invoke-Issue13V5FaultWorkflowNext(
     }
     $workflow.import_status = 'passed'
     $workflow.import_report_path = (Resolve-Path -LiteralPath $reportPath).Path
+    $workflow.import_report_sha256 = Get-Issue13V5Sha256 $reportPath
     Save-Issue13V5State $Config $State
     return [pscustomobject]@{ status = 'fault-inputs-imported' }
   }
@@ -996,6 +1046,7 @@ function Invoke-Issue13V5FaultWorkflowNext(
     }
     $workflow.seed_plan_status = 'built'
     $workflow.seed_plan_path = (Resolve-Path -LiteralPath $seedPlan).Path
+    $workflow.seed_plan_sha256 = Get-Issue13V5Sha256 $seedPlan
     Save-Issue13V5State $Config $State
     return [pscustomobject]@{ status = 'fault-seed-plan-built' }
   }
@@ -1013,6 +1064,7 @@ function Invoke-Issue13V5FaultWorkflowNext(
       (Join-Path ([string]$Config.harness_root) 'issue13-run-fault-seeds.ps1'),
       '-SeedPlanPath', [string]$workflow.seed_plan_path
     ) 'fault/seed-channels' 30000 -ConfirmExecuteR:$ConfirmExecuteR
+    $seedBindings = [Collections.Generic.List[object]]::new()
     foreach ($record in @($seedPlan.records)) {
       $evidence = [string]$record.evidence_directory
       $metrics = Read-Issue13V5Json (Join-Path $evidence 'process-metrics.json')
@@ -1020,7 +1072,17 @@ function Invoke-Issue13V5FaultWorkflowNext(
           @($metrics.lingering_pids).Count -ne 0) {
         throw "Fault channel seed telemetry failed: $($record.scenario_id)"
       }
+      $seedInventory = Get-Issue13V5TreeInventory $evidence
+      $seedBindings.Add([ordered]@{
+        scenario_id = [string]$record.scenario_id
+        root = [string]$seedInventory.root
+        inventory = $seedInventory
+      })
     }
+    if ($seedBindings.Count -ne 10) {
+      throw 'Fault seed evidence coverage is not exactly ten records.'
+    }
+    $workflow.seed_evidence = [object[]]$seedBindings.ToArray()
     $workflow.seeds_status = 'executed'
     Save-Issue13V5State $Config $State
     return [pscustomobject]@{ status = 'fault-channels-seeded'; count = 10 }
@@ -1064,6 +1126,8 @@ function Invoke-Issue13V5FaultWorkflowNext(
     }
   }
   if ([string]$workflow.aggregate_status -ceq 'planned') {
+    $null = Assert-Issue13V5PrepFaultEvidenceState $Config $State `
+      -BeforeAggregate
     $output = Join-Path ([string]$Config.control_root) 'prep-fault-aggregate'
     if (Test-Path -LiteralPath $output) {
       throw 'Planned prep/fault aggregate output already exists.'
@@ -1089,7 +1153,9 @@ function Invoke-Issue13V5FaultWorkflowNext(
     }
     $workflow.aggregate_status = 'passed'
     $workflow.aggregate_path = (Resolve-Path -LiteralPath $reportPath).Path
+    $workflow.aggregate_sha256 = Get-Issue13V5Sha256 $reportPath
     $State.status = 'scenarios-complete'
+    $null = Assert-Issue13V5PrepFaultEvidenceState $Config $State
     Save-Issue13V5State $Config $State
     return [pscustomobject]@{
       status = 'scenarios-complete'; pairs = 76; faults = 10
@@ -1117,6 +1183,9 @@ function Invoke-Issue13V5Aggregate(
 ) {
   if (-not $ConfirmExecuteR) { throw 'Aggregate requires -ConfirmExecuteR.' }
   $config = $Binding.config
+  $oracleEffectValidation = Invoke-Issue13V5OracleEffectValidation $config
+  $null = Assert-Issue13V5OracleEffectControlRecord $config $State `
+    $oracleEffectValidation
   if (@($State.phases | Where-Object comparison_status -cne 'completed').Count `
         -ne 0 -or
       [string]$State.prep_fault.aggregate_status -cne 'passed' -or
@@ -1124,6 +1193,7 @@ function Invoke-Issue13V5Aggregate(
         -ne 0) {
     throw 'Aggregate requires 76 pairs and all ten fault gates.'
   }
+  $null = Assert-Issue13V5CompletedEvidenceState $config $State
   if ([string]$State.final_aggregate.status -ceq 'passed') {
     $null = Assert-Issue13V5FinalBindings $config $State
     return Read-Issue13V5Json $State.final_aggregate.path
@@ -1168,12 +1238,46 @@ function Invoke-Issue13V5Aggregate(
   }
   $performance = @(Import-Csv -LiteralPath (
     Join-Path $output 'performance.csv'))
+  $expectedSciencePhases = @(Get-Issue13V5ExpectedSciencePhases)
+  $expectedPerformanceScenarios = @(
+    @($expectedSciencePhases.phase) + @('prepare/all', 'paper/0') |
+      Sort-Object)
+  $observedPerformanceScenarios = @($performance.scenario | Sort-Object)
   if ($performance.Count -ne 76 -or
+      @($performance.scenario | Sort-Object -Unique).Count -ne 76 -or
+      [string]::Join("`n", $observedPerformanceScenarios) -cne
+        [string]::Join("`n", $expectedPerformanceScenarios) -or
       @($performance | Where-Object {
         [string]$_.time_passed -cne 'TRUE' -or
-        [string]$_.rss_passed -cne 'TRUE'
+        [string]$_.rss_passed -cne 'TRUE' -or
+        [string]$_.rss_recomputed_from_authenticated_samples -cne 'TRUE' -or
+        [long]$_.baseline_rss_sample_count -le 0L -or
+        [long]$_.candidate_rss_sample_count -le 0L -or
+        [string]$_.baseline_samples_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+        [string]$_.candidate_samples_sha256 -cnotmatch '^[0-9a-f]{64}$'
       }).Count -ne 0) {
     throw 'Final performance table failed time/RSS limits.'
+  }
+  $oracleDeltas = @(Import-Csv -LiteralPath (
+    Join-Path $output 'oracle-classification.csv'))
+  $expectedOraclePhases = @($expectedSciencePhases |
+    Where-Object kind -ceq 'recalculate' | ForEach-Object phase |
+    Sort-Object)
+  $observedOraclePhases = @($oracleDeltas.phase | Sort-Object)
+  if ($oracleDeltas.Count -ne 60 -or
+      @($oracleDeltas.phase | Sort-Object -Unique).Count -ne 60 -or
+      [string]::Join("`n", $observedOraclePhases) -cne
+        [string]::Join("`n", $expectedOraclePhases) -or
+      @($oracleDeltas | Where-Object {
+        [string]$_.delta_schema -cne
+          'wlv-issue13-complete-recalculation-delta/1' -or
+        [string]$_.complete_delta_equal -cne 'TRUE' -or
+        [string]$_.baseline_delta_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+        [string]$_.candidate_delta_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+        [string]$_.baseline_delta_sha256 -cne
+          [string]$_.candidate_delta_sha256
+      }).Count -ne 0) {
+    throw 'Final recalculation oracle table lacks 60 complete equal deltas.'
   }
   $State.final_aggregate.status = 'passed'
   $State.final_aggregate.path = (Resolve-Path -LiteralPath $reportPath).Path
@@ -1261,7 +1365,11 @@ function Invoke-Issue13V5Report(
       [string]$config.strict_baseline_smoke.sha256,
       [string]$config.compatibility_baseline_smoke.sha256,
       [string]$config.baseline_overlay.sha256,
-      [string]$config.baseline_overlay.patch_id
+      [string]$config.baseline_overlay.patch_id,
+      [string]$config.oracle_effect.proof.sha256,
+      [string]$config.oracle_effect.oracle_smoke.sha256,
+      [string]$config.oracle_effect.comparisons.inventory.inventory_sha256,
+      [string]$State.oracle_effect.control_record_sha256
     )) {
     if (-not $text.Contains($bindingText)) {
       throw "Generated report lacks an authenticated binding: $bindingText"
@@ -1325,6 +1433,15 @@ if ($Action -ceq 'ValidateConfig') {
     scenarios = 162
     comparisons = 202
     faults = 10
+    oracle_effect = [pscustomobject]@{
+      status = [string]$binding.oracle_effect_validation.status
+      proof_sha256 =
+        [string]$binding.oracle_effect_validation.proof_sha256
+      strict_common_method_count = 5L
+      recovered_method_count = 7L
+      final_evidence_eligible = $false
+      required_by_final_gate = $true
+    }
   }
   return
 }

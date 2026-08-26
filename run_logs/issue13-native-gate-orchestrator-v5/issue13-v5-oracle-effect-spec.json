@@ -1,0 +1,687 @@
+{
+  "schema": "wlv-issue13-v5-oracle-effect-spec/2",
+  "purpose": "closed-authorized-oracle-effect-cc2-to-e2f",
+  "status": "requires-terminal-primary-and-replay-comparisons",
+  "proof_schema_sha256": "71060076271205ba0134c1f6ccd38f379ca354810996be7c1c40ed1cf15005b4",
+  "final_evidence_eligible": false,
+  "scope_note": "This auxiliary proof closes only the effect of the authorized baseline oracle. It is not a substitute for the final V5 scientific gate.",
+  "oracle": {
+    "base_commit": "cc2c86189a06676bcb9f0e05e08033d710a92509",
+    "base_tree": "0cb1142cdadd74bf95272010f5393ebe2af79f47",
+    "runtime_commit": "e2f4d6dae9a6d35c966b305fabac52e489faa3e7",
+    "runtime_tree": "7da19c4f2913e857040ba228280f404b0e54eaab",
+    "canonical_patch_sha256": "9f9b878f8e557973127e6260a0f224c868a0c4e8dc2db52dd6aa3f7131f28cd9",
+    "stable_patch_id": "253ca5f1397132f94e3432264084a37395c60ec3",
+    "changed_file_count": 8,
+    "authorization_boundary": "validation-only baseline compatibility oracle; never candidate runtime"
+  },
+  "evidence_pins": {
+    "source_inventory_sha256": "c593624ebfa75fb350b8b6528c1d5b6535d71bfe672c7eb61729c1b02f784e26",
+    "strict_smoke": {
+      "schema": "wlv-issue13-v5-baseline-smoke/1",
+      "purpose": "strict-cc2-executability-preflight",
+      "summary_sha256": "973079b3cba2df2627b3dcc4dcde0899b261eff9ad1930eb31b2407d23e3dd6d",
+      "harness_manifest_sha256": "a17a187621cdd4aff6f24efd6bf43ffbf9336de0a19189dfc7f5a82758a92c23",
+      "passed_count": 5,
+      "failed_count": 7
+    },
+    "oracle_smoke": {
+      "schema": "wlv-issue13-v5-baseline-smoke/1",
+      "purpose": "compatibility-oracle-executability-preflight",
+      "summary_sha256": "4ba530a191ef45baaaa08b2aa03ec6dcd0268aa6514caec6520203a0213afdfe",
+      "harness_manifest_sha256": "8075eb124ecb982c9b70d067c3eaa49995c37e289fbe069c73c8a9a8afbae27c",
+      "passed_count": 12,
+      "failed_count": 0
+    }
+  },
+  "method_partition": {
+    "strict_common": [
+      "wiodr13",
+      "wiodr16",
+      "wiodr16v09",
+      "zerodep_1",
+      "zerodep_2"
+    ],
+    "recovered": [
+      "alternative_1",
+      "alternative_2",
+      "norow_w13",
+      "ochoa_1",
+      "ochoa_2",
+      "petrovic",
+      "wiodr13v09"
+    ]
+  },
+  "terminal_comparison_runtime": {
+    "generation": "v5-terminal",
+    "source_controller_commit_field": "commit_sha256",
+    "forbidden_runtime_basenames": ["v5c5", "v5c6"],
+    "harness_directory": "issue13-evidence-harness",
+    "comparison_script": "issue13-compare-results.R",
+    "r_library_environment_variable": "R_LIBS_USER",
+    "r_environment_set": {
+      "R_LIBS_USER": "configured-r-library",
+      "TZ": "UTC"
+    },
+    "r_environment_cleared": [
+      "LANG", "LC_ALL", "LC_CTYPE", "R_ARCH", "R_DEFAULT_PACKAGES",
+      "R_ENVIRON", "R_ENVIRON_USER", "R_HOME", "R_LIBS", "R_LIBS_SITE",
+      "R_PROFILE", "R_PROFILE_USER", "R_STARTUP_DEBUG",
+      "RENV_CONFIG_AUTOLOADER_ENABLED", "RENV_PATHS_LIBRARY",
+      "RENV_PATHS_ROOT"
+    ],
+    "required_r_packages": ["fst", "jsonlite", "openssl"],
+    "sealed_inventory": {
+      "status": "requires-terminal-reseal",
+      "file_count": 39,
+      "total_bytes": 594386,
+      "inventory_sha256": "9f50c978ffc5f1f2d69d70ca8e5a7205eca39ec8441843cd5fa43b959eaf03c1"
+    },
+    "required_controller_files": [
+      "README.md",
+      "issue13-v5-aggregate-hardening.R",
+      "issue13-v5-attest-delivery.ps1",
+      "issue13-v5-baseline-smoke.ps1",
+      "issue13-v5-build-baseline-index.R",
+      "issue13-v5-build-diagnostic-bridges.R",
+      "issue13-v5-build-metadata-equivalence.R",
+      "issue13-v5-build-preparation-equivalence.R",
+      "issue13-v5-build-stage5-profiles.R",
+      "issue13-v5-capture-clean-bridge-evidence.ps1",
+      "issue13-v5-capture-clean-stage5-evidence.ps1",
+      "issue13-v5-compare-override.R",
+      "issue13-v5-compatibility-baseline-override.R",
+      "issue13-v5-coordinator-lib.ps1",
+      "issue13-v5-coordinator.ps1",
+      "issue13-v5-diagnostic-module-bridges.csv",
+      "issue13-v5-diagnostics-override.R",
+      "issue13-v5-difference-fingerprint.R",
+      "issue13-v5-materialize-harness.ps1",
+      "issue13-v5-metadata-equivalence.json",
+      "issue13-v5-new-config.ps1",
+      "issue13-v5-oracle-effect-README.md",
+      "issue13-v5-oracle-effect-generate.ps1",
+      "issue13-v5-oracle-effect-lib.ps1",
+      "issue13-v5-oracle-effect-proof.schema.json",
+      "issue13-v5-oracle-effect-spec.json",
+      "issue13-v5-oracle-effect-validate.ps1",
+      "issue13-v5-preparation-equivalence.R",
+      "issue13-v5-preparation-equivalence.json",
+      "issue13-v5-render-report.ps1",
+      "issue13-v5-run-stage5-evidence.R",
+      "issue13-v5-stage5-multiplicity-profiles.csv",
+      "issue13-v5-static-verify.ps1",
+      "issue13-v5-verify-diagnostic-evidence.R"
+    ],
+    "required_tool_files": [
+      "issue13-compare-results.R",
+      "issue13-compare-lib.R",
+      "issue13-v5-compare-override.R",
+      "issue13-lib.R"
+    ]
+  },
+  "reachability_contracts": [
+    {
+      "patched_file": "R/modules/assumptions/row/row-reduction_problem.R",
+      "configuration_file": "methods/{method}/_method_assumptions.csv",
+      "configuration_value": "row/row-reduction_problem.R",
+      "methods": [
+        "alternative_1", "alternative_2", "ochoa_1", "ochoa_2", "petrovic"
+      ]
+    },
+    {
+      "patched_file": "R/modules/assumptions/row/no_row.R",
+      "configuration_file": "methods/{method}/_method_assumptions.csv",
+      "configuration_value": "row/no_row.R",
+      "methods": ["norow_w13"]
+    },
+    {
+      "patched_file": "R/modules/variables/sea_sectors.R",
+      "configuration_file": "methods/{method}/_method_solutions.csv",
+      "configuration_values": {
+        "alternative_2": "reduction/alternative_2-complex_labour_multiplier.empe.r.un.R",
+        "petrovic": "reduction/petrovic-complex_labour_multiplier.empe.r.un.R"
+      },
+      "methods": ["alternative_2", "petrovic"]
+    }
+  ],
+  "coordinate_contracts": {
+    "go_price_row_from_usa": {
+      "artifact": "sea_sectors",
+      "checkpoint": "after_assumptions",
+      "indicator": "go_price.r.id",
+      "years": [
+        "1995", "1996", "1997", "1998", "1999",
+        "2000", "2001", "2002", "2003", "2004",
+        "2005", "2006", "2007", "2008", "2009"
+      ],
+      "sectors": [
+        "AtB", "C", "15t16", "17t18", "19", "20", "21t22", "23",
+        "24", "25", "26", "27t28", "29", "30t33", "34t35",
+        "36t37", "E", "F", "50", "51", "52", "H", "60", "61",
+        "62", "63", "64", "J", "70", "71t74", "L", "M", "N",
+        "O", "P"
+      ],
+      "target_country": "ROW",
+      "source_country": "USA",
+      "coordinate_key_format": "indicator|year|country|sector",
+      "coordinate_count": 525,
+      "coordinate_sha256": "59d531c9417e058ef5ed57fb3fdff696293e11108e761937dbfa2ee4c4fec241",
+      "strict_before": "all 525 target coordinates are NA or otherwise non-finite at after_assumptions",
+      "oracle_after": "for every coordinate, target value is finite and bitwise equal to the same year/indicator/sector at source_country",
+      "methods": [
+        "alternative_1", "alternative_2", "norow_w13", "ochoa_1",
+        "ochoa_2", "petrovic"
+      ]
+    },
+    "historical_nan_clean": {
+      "artifact": "sea_sectors",
+      "checkpoint": "after_stage_2",
+      "stage": 2,
+      "indicators": [
+        "hours_worked.empe_hs.r.pc",
+        "hours_worked.empe_ms.r.pc",
+        "hours_worked.empe_ls.r.pc"
+      ],
+      "years": [
+        "1995", "1996", "1997", "1998", "1999",
+        "2000", "2001", "2002", "2003", "2004",
+        "2005", "2006", "2007", "2008", "2009"
+      ],
+      "country_sector_pairs": [
+        "AUS|P", "BRA|P", "CHN|50", "CHN|P", "IDN|50",
+        "IDN|P", "JPN|P", "KOR|P", "RUS|P"
+      ],
+      "coordinate_key_format": "indicator|year|country|sector",
+      "coordinate_count": 405,
+      "per_indicator_count": 135,
+      "coordinate_sha256": "52c0f3c1224bec91b29e3ce2e2a77c855c8e81ee59e6054696a8da13e21052ca",
+      "coordinate_md5": "e667f3c2de78d48614b6e24a09f52a9d",
+      "before_value": "NaN",
+      "denominator_requirement": "finite numeric zero at every selected coordinate",
+      "after_value": "finite numeric zero",
+      "policy_id": "issue13_cc2_historical_nan_clean_v1",
+      "action": "replace_historical_nan_with_zero",
+      "methods": {
+        "alternative_2": {
+          "module": "reduction/alternative_2-complex_labour_multiplier.empe.r.un.R",
+          "denominator_indicator": "complex_labour_multiplier.emp.r.un"
+        },
+        "petrovic": {
+          "module": "reduction/petrovic-complex_labour_multiplier.empe.r.un.R",
+          "denominator_indicator": "complex_labour_multiplier.empe.r.un"
+        }
+      }
+    },
+    "leontief_zero_output": {
+      "artifact": "m_io",
+      "indicator": "leontief_input_ratio",
+      "checkpoint": "after_matrices",
+      "stage": 3,
+      "module": "transformation.R",
+      "coordinate_key_format": "year|input|output",
+      "before_value": "Inf from nonzero input over zero output",
+      "after_value": "zero coefficient admitted only for the exact allowlisted coordinates",
+      "policy_id": "wiodr13_leontief_zero_output_v1",
+      "action": "allowlisted_nonzero_over_zero",
+      "profiles": {
+        "stable": {
+          "methods": ["wiodr13", "norow_w13"],
+          "coordinate_count": 3150,
+          "coordinate_md5": "f66341eea44e71728bbda6f8e25765ba",
+          "year_output_counts": {
+            "2005|CYP.23": 781,
+            "2006|CYP.23": 776,
+            "2007|CYP.23": 786,
+            "2005|MLT.23": 807
+          }
+        },
+        "v09": {
+          "methods": [
+            "wiodr13v09", "alternative_1", "alternative_2", "ochoa_1",
+            "ochoa_2", "petrovic"
+          ],
+          "coordinate_count": 2945,
+          "coordinate_md5": "3fd6663ca00317b42d3044df5019db4c",
+          "year_output_counts": {
+            "2005|CYP.23": 730,
+            "2005|MLT.23": 753,
+            "2006|CYP.23": 728,
+            "2007|CYP.23": 734
+          }
+        }
+      }
+    },
+    "leontief_signed_diagnostic": {
+      "years": [
+        "1995", "1996", "1997", "1998", "1999",
+        "2000", "2001", "2002", "2003", "2004",
+        "2005", "2006", "2007", "2008", "2009"
+      ],
+      "stable": {
+        "methods": ["wiodr13", "norow_w13"],
+        "signed_year": "2006",
+        "signed_coefficient_count": 397
+      },
+      "v09": {
+        "methods": [
+          "wiodr13v09", "alternative_1", "alternative_2", "ochoa_1",
+          "ochoa_2", "petrovic"
+        ],
+        "signed_year": "2006",
+        "signed_coefficient_count": 396
+      },
+      "signed_certificate": "absolute_convergence_signed",
+      "other_year_count": 0,
+      "other_year_certificate": "productivity_nonnegative",
+      "scientific_checks": {
+        "leontief_diagnostics": "warning; 15 observations; signed domain is declared for 2006",
+        "leontief_generation_fingerprint": "pass; 15 observations; exact",
+        "leontief_productivity": "not_applicable; scope 2006; 0 observations"
+      }
+    },
+    "norow_utf8": {
+      "method": "norow_w13",
+      "file": "methods/norow_w13/_parameters.csv",
+      "field": "name",
+      "expected_value": "Teste sem suposições para resto do mundo",
+      "expected_value_utf8_sha256": "7dd0229f4bd175d60fb873a09ada3560192e960d71f1238809c62d90f4bb5203",
+      "forbidden_fragments": ["replacement_character", "double_question_mark", "mojibake"],
+      "reader_encoding": "UTF-8"
+    }
+  },
+  "patch_files": [
+    {
+      "path": "R/lib/catalog.R",
+      "old_mode": "100644",
+      "new_mode": "100644",
+      "old_blob": "51ed49cdcc52e83a22632712f8b9f0ee166d752b",
+      "new_blob": "b4987870a8b299826e20e853e3d4335e3e0bcbeb",
+      "change_ids": ["catalog_parameters_utf8"],
+      "semantic_methods": ["norow_w13"]
+    },
+    {
+      "path": "R/lib/parameters.R",
+      "old_mode": "100755",
+      "new_mode": "100755",
+      "old_blob": "70cdec9a73630874b71935303e394606826a53c7",
+      "new_blob": "25c76a537c66b3b1e21ee846028ee2b1c185c0c1",
+      "change_ids": ["runtime_parameters_utf8"],
+      "semantic_methods": ["norow_w13"]
+    },
+    {
+      "path": "R/lib/result_contracts.R",
+      "old_mode": "100644",
+      "new_mode": "100644",
+      "old_blob": "b1b2b5ffcf31ecb8154b515ad9f827c677fc0aba",
+      "new_blob": "a4814a2de92bffd572114cda23e7cf47e78927a5",
+      "change_ids": ["leontief_zero_output_stable", "leontief_zero_output_v09"],
+      "semantic_methods": [
+        "wiodr13", "wiodr13v09", "alternative_1", "alternative_2",
+        "norow_w13", "ochoa_1", "ochoa_2", "petrovic"
+      ]
+    },
+    {
+      "path": "R/lib/scientific_validation.R",
+      "old_mode": "100644",
+      "new_mode": "100644",
+      "old_blob": "3430cfc5c466d703238831794f6d35f27623d0a0",
+      "new_blob": "94fe657cc7505fd4755f6c01d37d5808e3ae2899",
+      "change_ids": ["leontief_signed_stable", "leontief_signed_v09"],
+      "semantic_methods": [
+        "wiodr13", "wiodr13v09", "alternative_1", "alternative_2",
+        "norow_w13", "ochoa_1", "ochoa_2", "petrovic"
+      ]
+    },
+    {
+      "path": "R/modules/assumptions/row/no_row.R",
+      "old_mode": "100644",
+      "new_mode": "100644",
+      "old_blob": "945b7b03094e3235e61e86ecc92a339a9e7531f4",
+      "new_blob": "e51c37342edcbb1d0fd30405bea5625b517c1276",
+      "change_ids": ["go_price_row_from_usa"],
+      "semantic_methods": ["norow_w13"]
+    },
+    {
+      "path": "R/modules/assumptions/row/row-reduction_problem.R",
+      "old_mode": "100644",
+      "new_mode": "100644",
+      "old_blob": "28a3ec0428ead427c829541d93d6024b8c7f4449",
+      "new_blob": "74977cb1343a952274e99ff019c612bd9bdee0b3",
+      "change_ids": ["go_price_row_from_usa"],
+      "semantic_methods": [
+        "alternative_1", "alternative_2", "ochoa_1", "ochoa_2", "petrovic"
+      ]
+    },
+    {
+      "path": "R/modules/variables/sea_sectors.R",
+      "old_mode": "100755",
+      "new_mode": "100755",
+      "old_blob": "cf53272e7c6ef7693f1d203af6f2ea41c0dadf8c",
+      "new_blob": "ff951f0707971e3f9a806a79f413a2f0765db0bc",
+      "change_ids": ["historical_nan_clean"],
+      "semantic_methods": ["alternative_2", "petrovic"]
+    },
+    {
+      "path": "methods/norow_w13/_parameters.csv",
+      "old_mode": "100644",
+      "new_mode": "100644",
+      "old_blob": "9a4768765692ff1325494cf1cca7d654d1f7c727",
+      "new_blob": "bcded34553da2817da6896b141dc61e95d78af51",
+      "change_ids": ["norow_parameter_text_utf8"],
+      "semantic_methods": ["norow_w13"]
+    }
+  ],
+  "recovered_file_method_effects": [
+    {
+      "file": "R/modules/assumptions/row/row-reduction_problem.R",
+      "method": "alternative_1",
+      "change_id": "go_price_row_from_usa",
+      "expected_contract_ref": "/coordinate_contracts/go_price_row_from_usa"
+    },
+    {
+      "file": "R/lib/result_contracts.R",
+      "method": "alternative_1",
+      "change_id": "leontief_zero_output_v09",
+      "expected_contract_ref": "/coordinate_contracts/leontief_zero_output/profiles/v09"
+    },
+    {
+      "file": "R/lib/scientific_validation.R",
+      "method": "alternative_1",
+      "change_id": "leontief_signed_v09",
+      "expected_contract_ref": "/coordinate_contracts/leontief_signed_diagnostic/v09"
+    },
+    {
+      "file": "R/modules/assumptions/row/row-reduction_problem.R",
+      "method": "alternative_2",
+      "change_id": "go_price_row_from_usa",
+      "expected_contract_ref": "/coordinate_contracts/go_price_row_from_usa"
+    },
+    {
+      "file": "R/modules/variables/sea_sectors.R",
+      "method": "alternative_2",
+      "change_id": "historical_nan_clean",
+      "expected_contract_ref": "/coordinate_contracts/historical_nan_clean"
+    },
+    {
+      "file": "R/lib/result_contracts.R",
+      "method": "alternative_2",
+      "change_id": "leontief_zero_output_v09",
+      "expected_contract_ref": "/coordinate_contracts/leontief_zero_output/profiles/v09"
+    },
+    {
+      "file": "R/lib/scientific_validation.R",
+      "method": "alternative_2",
+      "change_id": "leontief_signed_v09",
+      "expected_contract_ref": "/coordinate_contracts/leontief_signed_diagnostic/v09"
+    },
+    {
+      "file": "R/lib/catalog.R",
+      "method": "norow_w13",
+      "change_id": "catalog_parameters_utf8",
+      "expected_contract_ref": "/coordinate_contracts/norow_utf8"
+    },
+    {
+      "file": "R/lib/parameters.R",
+      "method": "norow_w13",
+      "change_id": "runtime_parameters_utf8",
+      "expected_contract_ref": "/coordinate_contracts/norow_utf8"
+    },
+    {
+      "file": "methods/norow_w13/_parameters.csv",
+      "method": "norow_w13",
+      "change_id": "norow_parameter_text_utf8",
+      "expected_contract_ref": "/coordinate_contracts/norow_utf8"
+    },
+    {
+      "file": "R/modules/assumptions/row/no_row.R",
+      "method": "norow_w13",
+      "change_id": "go_price_row_from_usa",
+      "expected_contract_ref": "/coordinate_contracts/go_price_row_from_usa"
+    },
+    {
+      "file": "R/lib/result_contracts.R",
+      "method": "norow_w13",
+      "change_id": "leontief_zero_output_stable",
+      "expected_contract_ref": "/coordinate_contracts/leontief_zero_output/profiles/stable"
+    },
+    {
+      "file": "R/lib/scientific_validation.R",
+      "method": "norow_w13",
+      "change_id": "leontief_signed_stable",
+      "expected_contract_ref": "/coordinate_contracts/leontief_signed_diagnostic/stable"
+    },
+    {
+      "file": "R/modules/assumptions/row/row-reduction_problem.R",
+      "method": "ochoa_1",
+      "change_id": "go_price_row_from_usa",
+      "expected_contract_ref": "/coordinate_contracts/go_price_row_from_usa"
+    },
+    {
+      "file": "R/lib/result_contracts.R",
+      "method": "ochoa_1",
+      "change_id": "leontief_zero_output_v09",
+      "expected_contract_ref": "/coordinate_contracts/leontief_zero_output/profiles/v09"
+    },
+    {
+      "file": "R/lib/scientific_validation.R",
+      "method": "ochoa_1",
+      "change_id": "leontief_signed_v09",
+      "expected_contract_ref": "/coordinate_contracts/leontief_signed_diagnostic/v09"
+    },
+    {
+      "file": "R/modules/assumptions/row/row-reduction_problem.R",
+      "method": "ochoa_2",
+      "change_id": "go_price_row_from_usa",
+      "expected_contract_ref": "/coordinate_contracts/go_price_row_from_usa"
+    },
+    {
+      "file": "R/lib/result_contracts.R",
+      "method": "ochoa_2",
+      "change_id": "leontief_zero_output_v09",
+      "expected_contract_ref": "/coordinate_contracts/leontief_zero_output/profiles/v09"
+    },
+    {
+      "file": "R/lib/scientific_validation.R",
+      "method": "ochoa_2",
+      "change_id": "leontief_signed_v09",
+      "expected_contract_ref": "/coordinate_contracts/leontief_signed_diagnostic/v09"
+    },
+    {
+      "file": "R/modules/assumptions/row/row-reduction_problem.R",
+      "method": "petrovic",
+      "change_id": "go_price_row_from_usa",
+      "expected_contract_ref": "/coordinate_contracts/go_price_row_from_usa"
+    },
+    {
+      "file": "R/modules/variables/sea_sectors.R",
+      "method": "petrovic",
+      "change_id": "historical_nan_clean",
+      "expected_contract_ref": "/coordinate_contracts/historical_nan_clean"
+    },
+    {
+      "file": "R/lib/result_contracts.R",
+      "method": "petrovic",
+      "change_id": "leontief_zero_output_v09",
+      "expected_contract_ref": "/coordinate_contracts/leontief_zero_output/profiles/v09"
+    },
+    {
+      "file": "R/lib/scientific_validation.R",
+      "method": "petrovic",
+      "change_id": "leontief_signed_v09",
+      "expected_contract_ref": "/coordinate_contracts/leontief_signed_diagnostic/v09"
+    },
+    {
+      "file": "R/lib/result_contracts.R",
+      "method": "wiodr13v09",
+      "change_id": "leontief_zero_output_v09",
+      "expected_contract_ref": "/coordinate_contracts/leontief_zero_output/profiles/v09"
+    },
+    {
+      "file": "R/lib/scientific_validation.R",
+      "method": "wiodr13v09",
+      "change_id": "leontief_signed_v09",
+      "expected_contract_ref": "/coordinate_contracts/leontief_signed_diagnostic/v09"
+    }
+  ],
+  "common_methods": [
+    {
+      "method": "wiodr13",
+      "strict_scenario_sha256": "f8ed384ff4e0308a98b897511e733c75e6dd6df5c41167774191312c33ea7d4d",
+      "oracle_scenario_sha256": "f247d3d7b38d88f99707cdeea6970bfe5a5377e79aa1c3293823e78434e16483",
+      "strict_manifest_sha256": "8cdb89d40f66d6ea9b2145ae6fdc02527bb9e13bb9057fcaa8ab2bc8d2d66c4f",
+      "oracle_manifest_sha256": "3dab2bdaddd893dc811a1da9945590899bbd501ed64194135a939f353ef25857",
+      "strict_inventory_sha256": "4b162d0913c6bc4e5798fe4d82b4f4ab92985cc17a292e49c1ffe4847d0a78bc",
+      "oracle_inventory_sha256": "5882dc3ca7ec4abff770fb9bf5a4f9805dd9841b253546f80cd16ce903c236fd"
+    },
+    {
+      "method": "wiodr16",
+      "strict_scenario_sha256": "868c8b74c56a7efcbb6c52d501a9f3911c011c2083bd84a8686b31cde3ca5287",
+      "oracle_scenario_sha256": "e5695d5777c7b62f456c0b73077110b61a77942ac97c1b8d34fa1fc76c599f1b",
+      "strict_manifest_sha256": "a44e557878494b3078c1c5c211168d947004ffbdd55585ef9042e744e00c71e8",
+      "oracle_manifest_sha256": "8da6b577e00cd6a910bd921445e77c2f156bedc74782185b0a2d7e910da58656",
+      "strict_inventory_sha256": "677af34cbe012261a685475d87112c7668d6931dccca03c503532d9f112e07ae",
+      "oracle_inventory_sha256": "5ddf6255307ee00081ac535484a842f5fa0d25a9af7a56a47cc584f9fce9762d"
+    },
+    {
+      "method": "wiodr16v09",
+      "strict_scenario_sha256": "bf840dfe85ee09d47b4d8df41218ceed753633779d0b0b4a846efa694e3a331d",
+      "oracle_scenario_sha256": "c85ce4a6f37567c242e6b457777c83e20cb7dc9947a2d972b9859c97c4aa1f5f",
+      "strict_manifest_sha256": "c70ba29d86d98e4bb5a73f810982459809b903208493f3ac991cde865e711d96",
+      "oracle_manifest_sha256": "66bd06bb6e4dcce8c48e3f0236bbd39386255c02ebb500c55a2b72e6c108ae1b",
+      "strict_inventory_sha256": "f444037b9344b93cf97c13f7ce7910863fbf67a6164b02cd682232b3cb426a8c",
+      "oracle_inventory_sha256": "debc4cf527d32da7ca4284c285488f288ae114646743f3fc7b75a26df310548d"
+    },
+    {
+      "method": "zerodep_1",
+      "strict_scenario_sha256": "dc221c52be3b88362424185b29fe463ec9457611fa4b47b861bd5458fb831ce4",
+      "oracle_scenario_sha256": "ac8678468e37bdaa8c822efa56ac9d9c25ca19440bf358b73cfe4eccbe7dfaaa",
+      "strict_manifest_sha256": "fdd5d741d8af17197440e5507196a7c3464f1d1b4e4f0e35db7afa73d699ade2",
+      "oracle_manifest_sha256": "9554284e67267fbe33b5378d221d4d156142bae9d8bc35d1a4d5b3d2cf976de6",
+      "strict_inventory_sha256": "a1deb93307ae512923cc8db1f2a785322e867929e5c75e8f5aad3e3095216cc8",
+      "oracle_inventory_sha256": "517912461ad7a7f2986f0e1b8ab5b101621b24da4105ff671bf6e7891af25390"
+    },
+    {
+      "method": "zerodep_2",
+      "strict_scenario_sha256": "fd51094b032f41b67604b3cfc7b53783b5f1668aed24cfd926d75a258372bd5d",
+      "oracle_scenario_sha256": "24fb2c9bd8c596d7d2ad8d9c013b861c756697e176dbbdd22476b9253c06ae77",
+      "strict_manifest_sha256": "f409462dc45a1213bb375b751699a0ac82e6235fa09c6dae0c981a10d7fb4190",
+      "oracle_manifest_sha256": "a9622a3375f6cd76105db97c3f9b8e3b8df7693181549fa0f8567e5ca9efb8af",
+      "strict_inventory_sha256": "f8826d0f3201b93afe4a56c3f6a71d49560ea4adf7c7a8ff2afb2b487f047d91",
+      "oracle_inventory_sha256": "f97b04d47e41320a66e742eb0b528875b2e0361993ffa35b16e3a76175074be0"
+    }
+  ],
+  "recovered_methods": [
+    {
+      "method": "alternative_1",
+      "strict_scenario_sha256": "3195dada71c73eb3c5ccbe5b1dafb8ead1899537022dba41807ad0439d650b20",
+      "strict_failure_id": "go_price_row_missingness_525",
+      "oracle_scenario_sha256": "f6c90d583dbeb38801519c203a9236efae2da27cf84a697a42f3e96ed18e6113",
+      "oracle_manifest_sha256": "6da89483d725aeac7b0406f200bc8cca366510860947072ebeffdda6c118d7f1",
+      "oracle_inventory_sha256": "c94e0849ff9b185672d442f73d43bf6ec27eb62eb89ed4adc3352ceca5b29feb",
+      "oracle_result_id": "46b57e9fbb999b3ff47c8979f9d75736645658cd370bdb0bd7941d0bf985defb",
+      "change_ids": ["go_price_row_from_usa", "leontief_zero_output_v09", "leontief_signed_v09"]
+    },
+    {
+      "method": "alternative_2",
+      "strict_scenario_sha256": "cadfc87d0f4dfa6be26b745324e14c54c65d8a19be9a7b3b05ffb38874b9b5bd",
+      "strict_failure_id": "go_price_row_missingness_525",
+      "oracle_scenario_sha256": "8771eefad05af74315a09efbcdf29ffd154a8b7bcd01e9849121d4fa7dfa5f2d",
+      "oracle_manifest_sha256": "bc5d3c10b0f572dc6f320e271aecc8643d7ddb1e51c8dbaf93d501c434d7405a",
+      "oracle_inventory_sha256": "f39135dc260addd071f927b3b8544d70016026332d523c0b10666693662b3b2a",
+      "oracle_result_id": "789e9c345b780f2132e5e0ba0356ae15c83a5e99dd440ac0be81eb01122b3b90",
+      "change_ids": ["go_price_row_from_usa", "historical_nan_clean", "leontief_zero_output_v09", "leontief_signed_v09"]
+    },
+    {
+      "method": "norow_w13",
+      "strict_scenario_sha256": "18077fd222e8415097701dddb18ef6805e9193693e2f9ef86750a758d3ee0fe9",
+      "strict_failure_id": "go_price_row_missingness_525",
+      "oracle_scenario_sha256": "ef7ed254c40610c2205b74c36dd281176cb6dfb4086a9946f30153f338f05ac4",
+      "oracle_manifest_sha256": "07bc48e8614aa7fad32e87804cdba13cccd399897a2bd43bb35c530c3a5257d6",
+      "oracle_inventory_sha256": "bc3ad7a55a545680f5667ebc0ccf82706ae3db15af6aa29dcd92f46de6f1802b",
+      "oracle_result_id": "3c9538173f7f56bbe5f9e6240e5483dfeaa94cc313b768a1afee8d584e2094f2",
+      "change_ids": ["catalog_parameters_utf8", "runtime_parameters_utf8", "norow_parameter_text_utf8", "go_price_row_from_usa", "leontief_zero_output_stable", "leontief_signed_stable"]
+    },
+    {
+      "method": "ochoa_1",
+      "strict_scenario_sha256": "06347e8ef02eb2baae574d52387a6172cab90a62dc5e1670f98e5e1688732744",
+      "strict_failure_id": "go_price_row_missingness_525",
+      "oracle_scenario_sha256": "4aec1683a5441ac79d2feb6533b31a989bee6d47975725821f9c667d6fbff909",
+      "oracle_manifest_sha256": "51b6429e2b8c05bf76aa149352f30b65f0363591c6d23efce7a7f88bc4aeca58",
+      "oracle_inventory_sha256": "852ab447023999374e08dc940db6566bd304683b57fbe45a06b3b7a70bb31eb5",
+      "oracle_result_id": "8a012415073eb56d89c228273f7a8b2e8a26fd4e72567337a8e3c586d142c4a0",
+      "change_ids": ["go_price_row_from_usa", "leontief_zero_output_v09", "leontief_signed_v09"]
+    },
+    {
+      "method": "ochoa_2",
+      "strict_scenario_sha256": "f650e48fb341f2cb540e3feec1ccfa7926c6011651f9138909eec74c36aef849",
+      "strict_failure_id": "go_price_row_missingness_525",
+      "oracle_scenario_sha256": "0ce05ea4273c67d5034087e5f35424beb7bb86e79bf51297c9db52e0316c3fd8",
+      "oracle_manifest_sha256": "b8e573aac5cb3283ea3cb11fc959567cd476bc6b0554a6aa349b6e60d5275915",
+      "oracle_inventory_sha256": "3fe220b6658cadd969d3f156c168e103caddb2779fcdc3f909c9194f8dadc789",
+      "oracle_result_id": "f2cc936a85cc8d3acbfcc177725efe4d3b71267819597980d25bee39763bbc0e",
+      "change_ids": ["go_price_row_from_usa", "leontief_zero_output_v09", "leontief_signed_v09"]
+    },
+    {
+      "method": "petrovic",
+      "strict_scenario_sha256": "c7dd62c6278af08ac55b606012f88e4e68f074f1456548652f6a2c445d620950",
+      "strict_failure_id": "go_price_row_missingness_525",
+      "oracle_scenario_sha256": "bc19d1f4838cfc42a56d8fe1d7a0d74759dcd50c46307d581615aa17dbd030f2",
+      "oracle_manifest_sha256": "84edd037482f63514964b0e18d69f9d5ec47976affa87fb00cec1dd5b06c11f2",
+      "oracle_inventory_sha256": "5af14cfedcc1da597105a9abf53d090c615e92d550174b7d53459334974045d0",
+      "oracle_result_id": "b2270682610a8ada048fd24d125f11c518c3c71c9d867c2fea2862b8f6332ef2",
+      "change_ids": ["go_price_row_from_usa", "historical_nan_clean", "leontief_zero_output_v09", "leontief_signed_v09"]
+    },
+    {
+      "method": "wiodr13v09",
+      "strict_scenario_sha256": "a2dc21f2ec542bef0e00bb0e534a5117e17d73748aff000374be3a30e9185609",
+      "strict_failure_id": "undeclared_leontief_nonzero_over_zero",
+      "oracle_scenario_sha256": "561ed44be8a063b71641c1bc191fc65144a22450f74fb4ce8f2d2e0abc428a6e",
+      "oracle_manifest_sha256": "54810bb7b6f2ab53ceabc108d32939b1dcaf91beee955df16576fb1222a72be2",
+      "oracle_inventory_sha256": "9660ce77ddd8788b09ad7df64f660c1de152d529b40cdf2d8343906aa4082f4c",
+      "oracle_result_id": "bae80b3aa68cedcca64db48f3ab31e4d5079a25ed6ad338e40e1ffedb1e33b66",
+      "change_ids": ["leontief_zero_output_v09", "leontief_signed_v09"]
+    }
+  ],
+  "strict_failure_messages": {
+    "go_price_row_missingness_525": "Missingness contract failed for artifact `sea_sectors`, indicator `go_price.r.id`, checkpoint `after_assumptions`: 525 unexpected missing or non-finite value(s); example(s): year=1995/country=ROW/sector=AtB (NA), year=1996/country=ROW/sector=AtB (NA), year=1997/country=ROW/sector=AtB (NA).",
+    "undeclared_leontief_nonzero_over_zero": "Method `wiodr13v09` failed: Leontief inputs contain an undeclared nonzero flow over zero output."
+  },
+  "comparison_contract": {
+    "schema": "wlv-issue13-artifact-comparison/1",
+    "comparison_mode": "strict",
+    "scenario_id_format": "oracle-effect/common/{method}",
+    "candidate_role": "oracle runtime e2f4d6d",
+    "baseline_role": "strict base cc2c861",
+    "output_contract": {
+      "id": "wlvpanel-output",
+      "version": "1.0.0"
+    },
+    "required_files": [
+      "artifact-summary.csv",
+      "state-transitions.csv",
+      "indicator-differences.csv",
+      "comparison.json"
+    ],
+    "required_comparison_count": 5,
+    "required_execution_count": 10,
+    "required_phases": ["primary", "replay"],
+    "json_replay_normalization": "remove-top-level-compared_at",
+    "approved_run_count": 17,
+    "requirements": [
+      "passed true and status passed",
+      "identity passed",
+      "no missing or extra candidate artifact",
+      "no allowed candidate-only artifact",
+      "no architecture difference",
+      "no policy exception",
+      "every artifact summary passed",
+      "only positive diagonal state-transition rows and zero indicator-difference rows",
+      "candidate and baseline manifest/inventory hashes match the pinned scenario outputs",
+      "the generator creates both output roots and never adopts pre-existing comparisons",
+      "primary and replay CSV files are byte-identical",
+      "primary and replay comparison JSON documents are identical after removing only compared_at",
+      "all 17 approved run inventories and their scenario/spec pins are byte-immutable before and after both phases"
+    ]
+  }
+}

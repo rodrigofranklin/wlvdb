@@ -363,6 +363,9 @@ $recipePaths = @{
         $script:controllerDir "issue13-v5-metadata-equivalence.json") `
         "Metadata equivalence manifest"
 }
+$recipeRecordsBefore = @($recipePaths.Keys | Sort-Object | ForEach-Object {
+    "recipe_record;name=$_;sha256=$(Get-Sha256 $recipePaths[$_])"
+})
 $bridgeIndexPath = Resolve-ExistingFile (Join-Path $bridgeCapture `
     "diagnostic-bridge-evidence.csv") "Bridge evidence index"
 $bridgeRecordPath = Resolve-ExistingFile (Join-Path $bridgeCapture `
@@ -704,9 +707,14 @@ if ($harnessInventoryAfter -cne $harnessInventoryBefore -or
     (Get-Sha256 $script:rscriptPath) -cne $rscriptSha256) {
     throw "Stage-five capture tooling changed during execution."
 }
-$recipeRecords = foreach ($name in @($recipePaths.Keys | Sort-Object)) {
-    "recipe_record;name=$name;sha256=$(Get-Sha256 $recipePaths[$name])"
+$recipeRecordsAfter = @($recipePaths.Keys | Sort-Object | ForEach-Object {
+    "recipe_record;name=$_;sha256=$(Get-Sha256 $recipePaths[$_])"
+})
+if (($recipeRecordsAfter -join "`n") -cne
+    ($recipeRecordsBefore -join "`n")) {
+    throw "Stage-five capture recipes changed during execution."
 }
+$recipeRecords = $recipeRecordsBefore
 $captureRecord = @(
     "schema=issue13-v5-clean-stage5-capture/1",
     "baseline_base_commit=$baselineBaseCommit",

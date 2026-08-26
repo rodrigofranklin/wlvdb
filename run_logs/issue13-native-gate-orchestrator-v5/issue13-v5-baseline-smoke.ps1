@@ -29,6 +29,150 @@ if (-not $ConfirmCreateWorktrees -or -not $ConfirmExecuteR) {
   throw 'Baseline smoke requires -ConfirmCreateWorktrees and -ConfirmExecuteR.'
 }
 
+if (-not $IsWindows) {
+  throw 'The V5 baseline smoke is Windows-only.'
+}
+
+if (-not ('Issue13V5.BaselineSmokeNativePath' -as [type])) {
+  Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
+
+namespace Issue13V5 {
+  public static class BaselineSmokeNativePath {
+    private const uint ShareAll = 0x00000007;
+    private const uint OpenExisting = 3;
+    private const uint BackupSemantics = 0x02000000;
+    private const uint VolumeNameGuid = 0x00000001;
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFile(
+      string fileName, uint desiredAccess, uint shareMode,
+      IntPtr securityAttributes, uint creationDisposition,
+      uint flagsAndAttributes, IntPtr templateFile);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetFinalPathNameByHandle(
+      SafeFileHandle file, StringBuilder path, uint pathLength, uint flags);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint QueryDosDevice(
+      string deviceName, StringBuilder targetPath, int maximumLength);
+
+    public static string Resolve(string path) {
+      using (SafeFileHandle handle = CreateFile(
+        path, 0, ShareAll, IntPtr.Zero, OpenExisting,
+        BackupSemantics, IntPtr.Zero)) {
+        if (handle.IsInvalid) {
+          throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+        uint capacity = 512;
+        while (true) {
+          StringBuilder buffer = new StringBuilder((int)capacity);
+          uint length = GetFinalPathNameByHandle(
+            handle, buffer, capacity, VolumeNameGuid);
+          if (length == 0) {
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+          }
+          if (length < capacity) {
+            return buffer.ToString();
+          }
+          capacity = length + 1;
+        }
+      }
+    }
+
+    public static string DriveTarget(string driveName) {
+      int capacity = 512;
+      while (true) {
+        StringBuilder buffer = new StringBuilder(capacity);
+        uint length = QueryDosDevice(driveName, buffer, capacity);
+        if (length != 0) {
+          return buffer.ToString();
+        }
+        int error = Marshal.GetLastWin32Error();
+        if (error != 122) {
+          throw new Win32Exception(error);
+        }
+        capacity *= 2;
+      }
+    }
+  }
+}
+'@
+}
+
+function Assert-Issue13V5BaselineSmokeLocalDrive(
+  [string]$Path,
+  [string]$Label
+) {
+  $full = [IO.Path]::GetFullPath($Path)
+  $root = [IO.Path]::GetPathRoot($full)
+  if ([string]::IsNullOrWhiteSpace($root) -or
+      $root -cnotmatch '^[A-Za-z]:\\$') {
+    throw "$Label must use a local drive-letter path: $full"
+  }
+  $drive = [IO.DriveInfo]::new($root)
+  if (-not $drive.IsReady -or $drive.DriveType -ne [IO.DriveType]::Fixed) {
+    throw "$Label must use a ready fixed local drive: $full"
+  }
+  $driveName = $root.Substring(0, 2)
+  $target = [Issue13V5.BaselineSmokeNativePath]::DriveTarget($driveName)
+  if ($target.StartsWith('\??\', [StringComparison]::OrdinalIgnoreCase) -or
+      $target.StartsWith('\Device\Mup', [StringComparison]::OrdinalIgnoreCase) -or
+      $target.StartsWith('\Device\LanmanRedirector',
+        [StringComparison]::OrdinalIgnoreCase) -or
+      $target.StartsWith('\Device\WebDavRedirector',
+        [StringComparison]::OrdinalIgnoreCase)) {
+    throw "$Label must not use a SUBST or mapped-drive alias: $full"
+  }
+  $full
+}
+
+function ConvertTo-Issue13V5BaselineSmokePhysicalPath(
+  [string]$Path,
+  [string]$Label
+) {
+  $full = Assert-Issue13V5BaselineSmokeLocalDrive $Path $Label
+  $missing = [Collections.Generic.List[string]]::new()
+  $cursor = $full
+  while (-not (Test-Path -LiteralPath $cursor)) {
+    $leaf = [IO.Path]::GetFileName($cursor)
+    if ([string]::IsNullOrWhiteSpace($leaf)) {
+      throw "Cannot canonicalize $Label path: $full"
+    }
+    $missing.Add($leaf)
+    $parent = [IO.Directory]::GetParent($cursor)
+    if ($null -eq $parent) {
+      throw "Cannot find an existing ancestor for $Label path: $full"
+    }
+    $cursor = $parent.FullName
+  }
+  $canonical = [Issue13V5.BaselineSmokeNativePath]::Resolve($cursor).
+    TrimEnd('\')
+  for ($index = $missing.Count - 1; $index -ge 0; $index--) {
+    $canonical = $canonical + '\' + $missing[$index]
+  }
+  $canonical.TrimEnd('\')
+}
+
+function Test-Issue13V5BaselineSmokePhysicalOverlap(
+  [string]$Left,
+  [string]$Right
+) {
+  $leftFull = $Left.TrimEnd('\')
+  $rightFull = $Right.TrimEnd('\')
+  [string]::Equals($leftFull, $rightFull,
+    [StringComparison]::OrdinalIgnoreCase) -or
+    $leftFull.StartsWith($rightFull + '\',
+      [StringComparison]::OrdinalIgnoreCase) -or
+    $rightFull.StartsWith($leftFull + '\',
+      [StringComparison]::OrdinalIgnoreCase)
+}
+
 $baselineBaseCommit = 'cc2c86189a06676bcb9f0e05e08033d710a92509'
 $baselineCommit = $BaselineRuntimeCommit
 $sourceInventorySha256 =
@@ -154,7 +298,7 @@ function Assert-Issue13V5SmokeHarness(
   [string]$ExpectedManifestSha256 = ''
 ) {
   $manifest = Read-Issue13V5Json $ManifestPath
-  $candidateCommit = [string]$manifest.source_controller.candidate_commit
+  $candidateCommit = [string]$manifest.source_controller.commit_sha256
   if ($candidateCommit -cnotmatch '^[0-9a-f]{40}$') {
     throw 'Baseline smoke harness lacks its candidate controller commit.'
   }
@@ -178,6 +322,13 @@ function Assert-Issue13V5SmokeHarness(
   $binding
 }
 
+$null = Assert-Issue13V5NoReparseAncestors $RepositoryRoot 'Repository root'
+$null = Assert-Issue13V5NoReparseAncestors $SourceOrigin 'Source origin'
+$null = Assert-Issue13V5NoReparseAncestors $HarnessRuntimeRoot `
+  'Harness runtime root'
+$null = Assert-Issue13V5NoReparseAncestors $RLibrary 'R library'
+$null = Assert-Issue13V5NoReparseAncestors $SmokeRoot 'Smoke root'
+
 $repository = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 $source = (Resolve-Path -LiteralPath $SourceOrigin).Path
 $runtimeRoot = (Resolve-Path -LiteralPath $HarnessRuntimeRoot).Path
@@ -186,6 +337,53 @@ $harnessManifestPath = Join-Path $runtimeRoot 'v5-harness-manifest.json'
 $rscriptFull = (Resolve-Path -LiteralPath $Rscript).Path
 $library = (Resolve-Path -LiteralPath $RLibrary).Path
 $smoke = [IO.Path]::GetFullPath($SmokeRoot)
+if (-not (Test-Path -LiteralPath $harness -PathType Container) -or
+    -not (Test-Path -LiteralPath $harnessManifestPath -PathType Leaf)) {
+  throw 'The materialized V5 harness is incomplete.'
+}
+$null = Assert-Issue13V5NoReparseAncestors $harness 'Harness root'
+$null = Assert-Issue13V5NoReparseAncestors $harnessManifestPath `
+  'Harness manifest'
+if (Test-Path -LiteralPath $smoke) {
+  throw 'The disposable V5 smoke root already exists; reuse is forbidden.'
+}
+$smokePhysical = ConvertTo-Issue13V5BaselineSmokePhysicalPath $smoke `
+  'Smoke root'
+$protectedPhysicalPaths = @(
+  [pscustomobject]@{
+    label = 'repository root'
+    path = ConvertTo-Issue13V5BaselineSmokePhysicalPath $repository `
+      'Repository root'
+  },
+  [pscustomobject]@{
+    label = 'source origin'
+    path = ConvertTo-Issue13V5BaselineSmokePhysicalPath $source 'Source origin'
+  },
+  [pscustomobject]@{
+    label = 'harness runtime root'
+    path = ConvertTo-Issue13V5BaselineSmokePhysicalPath $runtimeRoot `
+      'Harness runtime root'
+  },
+  [pscustomobject]@{
+    label = 'harness root'
+    path = ConvertTo-Issue13V5BaselineSmokePhysicalPath $harness 'Harness root'
+  },
+  [pscustomobject]@{
+    label = 'harness manifest'
+    path = ConvertTo-Issue13V5BaselineSmokePhysicalPath $harnessManifestPath `
+      'Harness manifest'
+  },
+  [pscustomobject]@{
+    label = 'R library'
+    path = ConvertTo-Issue13V5BaselineSmokePhysicalPath $library 'R library'
+  }
+)
+foreach ($protected in $protectedPhysicalPaths) {
+  if (Test-Issue13V5BaselineSmokePhysicalOverlap $smokePhysical `
+      ([string]$protected.path)) {
+    throw "The disposable V5 smoke root physically overlaps the $($protected.label)."
+  }
+}
 if (($Purpose -ceq 'strict-cc2-executability-preflight' -and
       $baselineCommit -cne $baselineBaseCommit) -or
     ($Purpose -ceq 'compatibility-oracle-executability-preflight' -and
@@ -220,13 +418,6 @@ if ($smoke -match '(?i)(^|[\\/])[^\\/]*v4(?:r[0-9]+)?[^\\/]*($|[\\/])' -or
       [StringComparison]::OrdinalIgnoreCase)) {
   throw 'The disposable V5 smoke root must be outside the repository and V4 roots.'
 }
-if (Test-Path -LiteralPath $smoke) {
-  throw 'The disposable V5 smoke root already exists; reuse is forbidden.'
-}
-if (-not (Test-Path -LiteralPath $harness -PathType Container) -or
-    -not (Test-Path -LiteralPath $harnessManifestPath -PathType Leaf)) {
-  throw 'The materialized V5 harness is incomplete.'
-}
 $harnessBinding = Assert-Issue13V5SmokeHarness $runtimeRoot `
   $harnessManifestPath $repository
 $harnessManifest = $harnessBinding.manifest
@@ -237,6 +428,13 @@ Assert-Issue13V5SourceInventory $sourceInventory 'Source origin'
 Assert-Issue13V5NoConcurrentR
 
 $null = New-Item -ItemType Directory -Path $smoke
+$null = Assert-Issue13V5NoReparseAncestors $smoke 'Created smoke root'
+$createdSmokePhysical = ConvertTo-Issue13V5BaselineSmokePhysicalPath $smoke `
+  'Created smoke root'
+if (-not [string]::Equals($createdSmokePhysical, $smokePhysical,
+    [StringComparison]::OrdinalIgnoreCase)) {
+  throw 'The created V5 smoke root changed physical identity.'
+}
 $worktreeRoot = Join-Path $smoke 'worktrees'
 $attemptRoot = Join-Path $smoke 'attempts'
 $null = New-Item -ItemType Directory -Path $worktreeRoot

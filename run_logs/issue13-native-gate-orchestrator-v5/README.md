@@ -43,11 +43,61 @@ seja limpo e tenha `cc2c861` como pai direto.
 - tempo candidato `<= 120%` do baseline e RSS candidato
   `<= baseline + max(10%, 512 MiB)`.
 
+## Inventário fonte fechado do controller
+
+O vínculo `source_controller` contém exatamente 34 registros, um para cada
+arquivo abaixo, com `name`, `relative_path`, tamanho, SHA-256 e blob Git
+recalculado sobre os bytes crus de `git cat-file blob` no commit candidato:
+
+```text
+README.md
+issue13-v5-aggregate-hardening.R
+issue13-v5-attest-delivery.ps1
+issue13-v5-baseline-smoke.ps1
+issue13-v5-build-baseline-index.R
+issue13-v5-build-diagnostic-bridges.R
+issue13-v5-build-metadata-equivalence.R
+issue13-v5-build-preparation-equivalence.R
+issue13-v5-build-stage5-profiles.R
+issue13-v5-capture-clean-bridge-evidence.ps1
+issue13-v5-capture-clean-stage5-evidence.ps1
+issue13-v5-compare-override.R
+issue13-v5-compatibility-baseline-override.R
+issue13-v5-coordinator-lib.ps1
+issue13-v5-coordinator.ps1
+issue13-v5-diagnostic-module-bridges.csv
+issue13-v5-diagnostics-override.R
+issue13-v5-difference-fingerprint.R
+issue13-v5-materialize-harness.ps1
+issue13-v5-metadata-equivalence.json
+issue13-v5-new-config.ps1
+issue13-v5-oracle-effect-README.md
+issue13-v5-oracle-effect-generate.ps1
+issue13-v5-oracle-effect-lib.ps1
+issue13-v5-oracle-effect-proof.schema.json
+issue13-v5-oracle-effect-spec.json
+issue13-v5-oracle-effect-validate.ps1
+issue13-v5-preparation-equivalence.R
+issue13-v5-preparation-equivalence.json
+issue13-v5-render-report.ps1
+issue13-v5-run-stage5-evidence.R
+issue13-v5-stage5-multiplicity-profiles.csv
+issue13-v5-static-verify.ps1
+issue13-v5-verify-diagnostic-evidence.R
+```
+
+`issue13-v5-diagnostic-bridge-evidence.csv` é um seed absoluto de captura: ele
+contém caminhos autenticados para evidência histórica e, por isso, fica
+deliberadamente fora desses 34 arquivos, do runtime materializado e de qualquer
+autoridade `source_controller`. Sua existência local não altera o inventário
+fechado.
+
 ## Pré-condições
 
 1. O diretório V5 deve estar incluído no commit candidato; materializador,
-   configurador, verificador e coordenador exigem que seus 11 arquivos fonte
-   sejam byte a byte idênticos aos blobs desse commit.
+   configurador, verificador e coordenador exigem que todos os arquivos fonte
+   do inventário fechado acima sejam byte a byte idênticos aos blobs desse
+   commit.
 2. O candidato deve ser descendente de `cc2c861`, estar disponível localmente e
    a árvore rastreada deve permanecer limpa até a escrita do relatório.
 3. O runtime-oráculo deve ser filho direto de `cc2c861`, permanecer fora do
@@ -61,7 +111,10 @@ seja limpo e tenha `cc2c861` como pai direto.
 6. Os manifests candidatos WIOD13/WIOD16 devem estar ligados aos contratos
    `1f246283...`/`3b23ab67...`; o preflight verifica manifests, generation IDs,
    hashes compostos e blobs Git antes de criar worktrees.
-7. O smoke compatível deve passar os 12 métodos.
+7. O smoke compatível terminal deve passar os 12 métodos. Separadamente, a
+   prova do efeito do oráculo usa o smoke autenticado para o qual suas
+   comparações strict foram produzidas; os dois resumos não são
+   intercambiáveis.
 8. Nenhum processo R inesperado pode estar ativo.
 9. `docs/validation/issue-13.md` não pode existir antes de `Report`.
 10. Worktrees, evidência e controle usam raízes novas e distintas. Nenhuma raiz
@@ -74,24 +127,18 @@ explicitamente de todo `ProcessStartInfo`. Cada resumo compatível e registro de
 comando autentica a lista em `environment_removed`, evitando queda silenciosa
 para locale C/codepage 0 e corrupção de metadados UTF-8.
 
-## V5C4/V5C5 terminais e corte V5C6
+## Runtime terminal e origem candidata
 
-A V5C4 foi preservada integralmente. O baseline do primeiro par passou, mas o
-candidato recusou corretamente a geração normalizada baseline porque seu
-contrato nativo substitui paths de agregação por `module_id`. A tentativa
-write-once impede retomada/reuso. A V5C5 usa origens normalizadas separadas por
-braço, sem afrouxar `wlv_verify_source_manifest()` e sem restaurar paths legados.
-Na comparação entre arquiteturas, são projetados somente os campos declarados
-do contrato/agregação e os bytes dos sidecars FST. Estes últimos só passam após
-provar dimensões, dimnames, payload bit a bit, hash interno e a transição
-autenticada `legacy-positional` → `versioned-v1`.
+O harness aceito para evidência tem geração única `v5-terminal`, é materializado
+diretamente dos blobs do commit candidato e não reutiliza evidência. As origens
+normalizadas continuam separadas por braço, sem afrouxar
+`wlv_verify_source_manifest()` nem restaurar paths legados. Na comparação entre
+arquiteturas, cada perfil fechado valida dimensões, dimnames, payload bit a bit,
+hash interno e a transição autenticada `legacy-positional` → `versioned-v1` dos
+sidecars FST.
 
-A primeira materialização V5C5 foi preservada, mas invalidada antes da geração
-da configuração: o self-test canônico usava um baseline sintético incompatível
-com o overlay fail-closed de produção. A V5C6 exige a rejeição desse perfil pelo
-agregador de produção e testa separadamente o núcleo sintético completo.
-
-Origem candidata autenticada:
+Origem candidata histórica autenticada (o nome do diretório é somente a
+identidade preservada dessa preparação):
 
 - raiz: `D:\Trabalho\Code\wlvdb-issue13-candidate-source-v5c5-prep-001\source_data`;
 - commit preparador: `d7791584c58a9e52ba558da99d763207fe561b4e`;
@@ -99,7 +146,67 @@ Origem candidata autenticada:
 - WIOD16 manifest `28dc13d3...`, generation `1f747ab8...`;
 - caches oficiais: os mesmos seis arquivos autenticados do baseline.
 
-## Materialização V5C6
+## Capturas limpas dos bridges e do estágio 5
+
+Os manifests diagnósticos são derivados de capturas write-once, em raízes
+novas. A captura de bridges completa os sete métodos que não estão no seed
+absoluto; a captura do estágio 5 só começa depois de autenticar o índice, o
+registro e o manifest de bridges. Os comandos operacionais atuais são:
+
+```powershell
+$rscript = 'C:\Users\rodri\AppData\Local\Programs\R\R-4.6.1\bin\x64\Rscript.exe'
+$rLibrary = 'D:\Trabalho\Code\wlvdb\renv\library\windows\R-4.6\x86_64-w64-mingw32'
+$controller = 'D:\Trabalho\Code\wlvdb\run_logs\issue13-native-gate-orchestrator-v5'
+$harness = 'D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5c6\issue13-evidence-harness'
+
+& (Join-Path $controller 'issue13-v5-capture-clean-bridge-evidence.ps1') `
+  -RepositoryRoot D:\Trabalho\Code\wlvdb `
+  -CaptureRoot D:\Trabalho\Code\wlvdb-issue13-v5d-bridge-capture-003 `
+  -BaselineSourceDataRoot D:\Trabalho\Code\wlvdb-issue13-baseline\source_data `
+  -SeedEvidenceIndex (Join-Path $controller 'issue13-v5-diagnostic-bridge-evidence.csv') `
+  -HarnessDir $harness `
+  -RscriptCommand $rscript `
+  -RLibrary $rLibrary
+
+& (Join-Path $controller 'issue13-v5-capture-clean-stage5-evidence.ps1') `
+  -RepositoryRoot D:\Trabalho\Code\wlvdb `
+  -Stage5CaptureRoot D:\Trabalho\Code\wlvdb-issue13-v5d-stage5-capture-001 `
+  -BaselineSourceDataRoot D:\Trabalho\Code\wlvdb-issue13-baseline\source_data `
+  -BridgeCaptureRoot D:\Trabalho\Code\wlvdb-issue13-v5d-bridge-capture-003 `
+  -BridgeManifest (Join-Path $controller 'issue13-v5-diagnostic-module-bridges.csv') `
+  -HarnessDir $harness `
+  -RscriptCommand $rscript `
+  -RLibrary $rLibrary
+```
+
+Esses comandos documentam a receita; não afirmam que as capturas terminaram.
+Uma raiz que recebeu qualquer saída nunca é apagada nem reutilizada. Em cada
+invocação R, os capturadores usam `--vanilla`, removem `LANG`, `LC_ALL`,
+`LC_CTYPE` e as 13 variáveis de startup/`renv` seladas, fixam
+`R_LIBS_USER=$rLibrary` e `TZ=UTC`, e restauram exatamente o ambiente anterior
+em `finally`. O caminho físico e o inventário recursivo da biblioteca R são
+registrados antes e depois; o mesmo ocorre com o runtime inteiro que contém o
+harness e com as árvores normalizadas WIOD13/WIOD16. O manifesto exaustivo de
+metadados é uma ferramenta nominalmente pinada no registro. Qualquer diferença
+interrompe a captura. A captura do estágio 5 exige ainda igualdade com a
+biblioteca, o runtime e as fontes registrados na captura de bridges.
+
+## Equivalência exaustiva da preparação
+
+WIOD13 e WIOD16 são comparados pelo perfil
+`wlv-issue13-preparation-equivalence/1`. Para cada fonte, o gate autentica e
+compara integralmente `_unit_contract.csv` e `_source_manifest.csv`: todos os
+campos, todas as linhas e a ordem devem ser exatos. Não há categoria genérica,
+wildcard, tolerância, reordenação nem projeção de arquitetura. A configuração
+fecha `architecture_projection = []` e exige
+`source_unit_contract_bridge = exhaustive-source-unit-contract-bridge`.
+
+Esse bridge é uma tradução exaustiva entre contratos de engine, não uma
+dispensa de paridade. A configuração, o coordenador, o agregado e o renderer
+releem o mesmo documento e seu SHA-256. A identidade separada dos 42 artefatos
+EU KLEMS continua obrigatória.
+
+## Fluxo terminal write-once
 
 Depois de commitado o tooling, materialize uma cópia nova:
 
@@ -107,24 +214,38 @@ Depois de commitado o tooling, materialize uma cópia nova:
 $candidate = (git rev-parse HEAD).Trim()
 ./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-materialize-harness.ps1 `
   -CandidateCommit $candidate `
-  -Destination D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5c6 `
+  -Destination D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal `
   -ConfirmMaterialize
 ```
 
-A materialização é recusada se qualquer um dos 11 blobs diferir do candidato.
-O output deve ter exatamente 39 arquivos, 594386 bytes, inventário SHA-256
-`9f50c978ffc5f1f2d69d70ca8e5a7205eca39ec8441843cd5fa43b959eaf03c1`,
-um único diretório plano `issue13-evidence-harness` e nenhum subdiretório
-oculto. O manifesto não é aceito como autoridade para esses valores: todos os
-validadores repetem a conferência contra o selo incorporado.
+A materialização é recusada se qualquer blob do controller diferir do
+candidato. O materializador é Windows-only, resolve repositório, fonte,
+staging e destino por identidade física baseada em handle e volume GUID, exige
+que sejam disjuntos e rejeita reparse points em ancestrais ou árvores. Aliases
+UNC, unidades mapeadas e unidades `SUBST` não podem substituir uma identidade
+física aceita; o smoke terminal os rejeita explicitamente e repete a validação
+depois de criar sua raiz. A cópia usa blobs Git crus autenticados, staging
+exclusivo e promoção atômica.
+
+O selo incorporado neste freeze ainda é deliberadamente provisório:
+`39` arquivos, `594386` bytes e inventário SHA-256
+`9f50c978ffc5f1f2d69d70ca8e5a7205eca39ec8441843cd5fa43b959eaf03c1`.
+O spec do Oracle registra `status = requires-terminal-reseal`; esses números
+não são resultado final nem tornam o runtime elegível. Um dry-run terminal deve
+recalcular contagem, bytes e hash, atualizar todos os pins e trocar o status
+para `sealed` antes da prova Oracle e do gate longo. Até lá, o gerador e o
+validador do Oracle recusam a prova. Depois do reseal, o output continuará
+exigindo um único diretório plano `issue13-evidence-harness`, sem subdiretório
+oculto; o manifesto nunca é autoridade isolada, pois cada validador recompõe o
+inventário físico contra o selo incorporado.
 
 Gere o índice do oráculo compatível:
 
 ```powershell
 Rscript --vanilla `
   ./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-build-baseline-index.R `
-  D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5c6\issue13-evidence-harness `
-  D:\Trabalho\Code\wlvdb-issue13-native-final-index-v5c6\baseline-runtime-index.json `
+  D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal\issue13-evidence-harness `
+  D:\Trabalho\Code\wlvdb-issue13-native-final-index-v5-terminal\baseline-runtime-index.json `
   e2f4d6dae9a6d35c966b305fabac52e489faa3e7 `
   D:\Trabalho\Code\wlvdb-issue13-v5-baseline-oracle-v2-e2f4d6dae9a6-canonical.patch
 ```
@@ -133,8 +254,8 @@ Execute o preflight descartável do oráculo antes do gate longo:
 
 ```powershell
 ./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-baseline-smoke.ps1 `
-  -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5c6 `
-  -SmokeRoot D:\Trabalho\Code\wlvdb-issue13-v5-compat-smoke-004 `
+  -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal `
+  -SmokeRoot D:\Trabalho\Code\wlvdb-issue13-v5-terminal-smoke-001 `
   -BaselineRuntimeCommit e2f4d6dae9a6d35c966b305fabac52e489faa3e7 `
   -Purpose compatibility-oracle-executability-preflight `
   -ConfirmCreateWorktrees `
@@ -148,33 +269,88 @@ do relatório: eles não são reutilizados como evidência científica, mas cada
 `ValidateConfig`, retomada e renderização reautentica seus 12 registros,
 commits, árvores, resultados, métricas e quatro arquivos de telemetria.
 
+Em seguida, gere a prova Oracle-effect `/2` com duas raízes novas e distintas.
+O spec usa `wlv-issue13-v5-oracle-effect-spec/2` e o proof usa
+`wlv-issue13-v5-oracle-effect-proof/2`. O gerador cria cinco comparações strict
+em `primary`, repete as cinco em `replay` e autentica os dez comandos e os
+inventários físicos dos 17 runs aprovados:
+
+```powershell
+$rscript = 'C:\Users\rodri\AppData\Local\Programs\R\R-4.6.1\bin\x64\Rscript.exe'
+$rLibrary = 'D:\Trabalho\Code\wlvdb\renv\library\windows\R-4.6\x86_64-w64-mingw32'
+$oraclePrimary = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-primary-terminal-001'
+$oracleReplay = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-replay-terminal-001'
+$oracleProof = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-proof-terminal-001.json'
+
+./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-oracle-effect-generate.ps1 `
+  -RepositoryRoot D:\Trabalho\Code\wlvdb `
+  -ExpectedCandidateCommit $candidate `
+  -StrictSmokeSummary D:\Trabalho\Code\wlvdb-issue13-v5-cc2-smoke-003\baseline-smoke-summary.json `
+  -OracleSmokeSummary D:\Trabalho\Code\wlvdb-issue13-v5-compat-smoke-003\baseline-smoke-summary.json `
+  -OraclePatch D:\Trabalho\Code\wlvdb-issue13-v5-baseline-oracle-v2-e2f4d6dae9a6-canonical.patch `
+  -ComparisonHarnessManifest D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal\v5-harness-manifest.json `
+  -Rscript $rscript `
+  -RLibrary $rLibrary `
+  -ComparisonRoot $oraclePrimary `
+  -ReplayRoot $oracleReplay `
+  -OutputPath $oracleProof
+```
+
+A prova divide os métodos em `5` comuns — com artefatos científicos
+integralmente iguais entre `cc2` e `e2f` nas duas execuções — e `7` recuperados,
+com falhas, coordenadas e diagnósticos fechados pelo patch autorizado. Seu
+`terminal_runtime` fecha simultaneamente:
+
+- `comparison_harness.source_controller`, com o commit e os 34 registros
+  nome↔caminho↔blob Git;
+- o executável R, com caminho, tamanho e SHA-256;
+- a biblioteca R física, com versão/plataforma, `.libPaths()`, inventário
+  recursivo e os namespaces carregados; `fst`, `jsonlite` e `openssl` devem
+  resolver dentro de `RLibrary`;
+- o ambiente de cada comando, com `R_LIBS_USER=RLibrary`, `TZ=UTC` e o conjunto
+  exato das 16 variáveis removidas;
+- `runtime_immutability`, com snapshots completos `before` e `after`
+  idênticos e `immutable=true`.
+
+O validador relê os dois smokes, patch, source-controller, runtime terminal,
+Rscript/RLibrary, ambiente, as duas raízes e os 17 runs; o JSON não é aceito
+como autoridade isolada. A prova permanece
+`final_evidence_eligible=false`, mas sua validação é obrigatória para o gate
+final.
+
 Com o candidato já commitado e limpo, gere a configuração selada:
 
 ```powershell
 $candidate = (git rev-parse HEAD).Trim()
 ./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-new-config.ps1 `
   -CandidateCommit $candidate `
-  -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5c6 `
-  -BaselineRuntimeIndex D:\Trabalho\Code\wlvdb-issue13-native-final-index-v5c6\baseline-runtime-index.json `
+  -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal `
+  -BaselineRuntimeIndex D:\Trabalho\Code\wlvdb-issue13-native-final-index-v5-terminal\baseline-runtime-index.json `
   -BaselineRuntimeCommit e2f4d6dae9a6d35c966b305fabac52e489faa3e7 `
   -BaselineOverlayPatch D:\Trabalho\Code\wlvdb-issue13-v5-baseline-oracle-v2-e2f4d6dae9a6-canonical.patch `
   -StrictBaselineSmokeSummary D:\Trabalho\Code\wlvdb-issue13-v5-cc2-smoke-003\baseline-smoke-summary.json `
-  -CompatibilityBaselineSmokeSummary D:\Trabalho\Code\wlvdb-issue13-v5-compat-smoke-004\baseline-smoke-summary.json `
+  -CompatibilityBaselineSmokeSummary D:\Trabalho\Code\wlvdb-issue13-v5-terminal-smoke-001\baseline-smoke-summary.json `
+  -OracleEffectSmokeSummary D:\Trabalho\Code\wlvdb-issue13-v5-compat-smoke-003\baseline-smoke-summary.json `
+  -ProofPath $oracleProof `
+  -ComparisonRoot $oraclePrimary `
+  -ReplayRoot $oracleReplay `
+  -Rscript $rscript `
+  -RLibrary $rLibrary `
   -CandidateSourceOrigin D:\Trabalho\Code\wlvdb-issue13-candidate-source-v5c5-prep-001\source_data `
-  -WorktreeRoot D:\Trabalho\Code\wlvdb-issue13-native-worktrees-v5c6 `
-  -EvidenceRoot D:\Trabalho\Code\wlvdb-issue13-native-final-evidence-v5c6 `
-  -ControlRoot D:\Trabalho\Code\wlvdb-issue13-native-final-control-v5c6 `
-  -Output D:\Trabalho\Code\wlvdb-issue13-native-final-config-v5c6\gate-config.json
+  -WorktreeRoot D:\Trabalho\Code\wlvdb-issue13-native-worktrees-v5-terminal `
+  -EvidenceRoot D:\Trabalho\Code\wlvdb-issue13-native-final-evidence-v5-terminal `
+  -ControlRoot D:\Trabalho\Code\wlvdb-issue13-native-final-control-v5-terminal `
+  -Output D:\Trabalho\Code\wlvdb-issue13-native-final-config-v5-terminal\gate-config.json
 ```
 
 ## Validação, execução e monitoramento
 
 ```powershell
-$config = 'D:\Trabalho\Code\wlvdb-issue13-native-final-config-v5c6\gate-config.json'
+$config = 'D:\Trabalho\Code\wlvdb-issue13-native-final-config-v5-terminal\gate-config.json'
 
 ./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-static-verify.ps1 `
   -CandidateCommit $candidate `
-  -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5c6
+  -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal
 
 ./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-coordinator.ps1 `
   -Action ValidateConfig -ConfigPath $config
@@ -205,7 +381,14 @@ Para executar todo o restante, sem escrever o relatório prematuramente:
 
 `Status` não toma o lock de execução e pode ser chamado durante `RunAll`. O
 estado retomável fica em
-`D:\Trabalho\Code\wlvdb-issue13-native-final-control-v5c6\gate-state.json`.
+`D:\Trabalho\Code\wlvdb-issue13-native-final-control-v5-terminal\gate-state.json`.
+O `Initialize` também cria, de forma write-once,
+`oracle-effect-validation.json`: ele registra a invocação exata do validador,
+os hashes da prova/patch/harness, os inventários separados de `primary` e
+`replay`, os dez comandos e os 17 inventários de runs aprovados. Toda retomada
+autentica esse registro; o fechamento reexecuta o validador e exige resultado
+idêntico. O resumo agregado dos dois inventários é mantido apenas como vínculo
+determinístico do estado; ele não substitui nenhum dos dois inventários fonte.
 
 ## Retomada
 
@@ -217,7 +400,7 @@ reautentica qualquer saída terminal já completa.
 Não edite `gate-state.json`, não apague evidência e não reutilize raízes. Uma
 saída parcial que já ocupou um destino write-once é terminal. Nesse caso,
 preserve-a para diagnóstico e gere nova configuração com outro sufixo, por
-exemplo `v5c7`.
+exemplo `v5-terminal-rerun-001`.
 
 `Initialize` só pode ser executado uma vez. `PrepareWorktrees` retoma apenas os
 registros já salvos como completos; um worktree criado sem registro de estado é
@@ -243,3 +426,15 @@ HEAD candidato fixado, árvore rastreada limpa, caminho exato e roundtrip UTF-8.
 Ele também registra as identidades `source_generation_id`, `contract_id`,
 `contract_version` e `contract_sha256` dos manifestos WIOD13/WIOD16, além da
 identidade autenticada dos 42 artefatos preparados EU KLEMS.
+Ele ainda exige exatamente 60 deltas completos de recálculo com digests iguais,
+recomposição de RSS a partir de amostras autenticadas nas 76 linhas, e registra
+no Markdown os resultados `5+7`, os hashes da prova/patch/comparações e cada
+um dos dez comandos oracle com executável, argumentos, ambiente e diretório de
+trabalho, além dos 17 inventários imutáveis.
+
+Antes de cada comparação de par, o coordenador reconfere no estado os hashes de
+`scenario-result.json` e `process-metrics.json` dos dois braços; o hash das
+métricas ancora o `process-samples.csv`. Antes do agregado, essa verificação é
+repetida para os 76 pares, seus `comparison.json`/`pair-result`, e para todo o
+fluxo de preparação/falhas. Alterar coerentemente amostras e métricas sem
+alterar o estado continua sendo rejeitado.

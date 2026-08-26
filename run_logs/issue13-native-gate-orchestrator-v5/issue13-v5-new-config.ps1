@@ -8,6 +8,10 @@ param(
   [Parameter(Mandatory = $true)][string]$BaselineOverlayPatch,
   [Parameter(Mandatory = $true)][string]$StrictBaselineSmokeSummary,
   [Parameter(Mandatory = $true)][string]$CompatibilityBaselineSmokeSummary,
+  [Parameter(Mandatory = $true)][string]$OracleEffectSmokeSummary,
+  [Parameter(Mandatory = $true)][string]$ProofPath,
+  [Parameter(Mandatory = $true)][string]$ComparisonRoot,
+  [Parameter(Mandatory = $true)][string]$ReplayRoot,
   [Parameter(Mandatory = $true)][string]$WorktreeRoot,
   [Parameter(Mandatory = $true)][string]$EvidenceRoot,
   [Parameter(Mandatory = $true)][string]$ControlRoot,
@@ -135,7 +139,7 @@ function Get-Issue13V5HarnessInventory([string]$Root) {
   }
 }
 
-# The shared validator is itself one of the eleven candidate-pinned controller
+# The shared validator is itself one of the candidate-pinned controller
 # sources. Reuse its smoke/worktree checks here, before any config is emitted.
 . (Join-Path $PSScriptRoot 'issue13-v5-coordinator-lib.ps1')
 
@@ -153,7 +157,7 @@ $harnessManifest = Get-Content -LiteralPath $harnessManifestPath -Raw |
   ConvertFrom-Json -DateKind String
 if ([string]$harnessManifest.schema -cne
       'wlv-issue13-v5-harness-materialization/1' -or
-    [string]$harnessManifest.generation -cne 'v5' -or
+    [string]$harnessManifest.generation -cne 'v5-terminal' -or
     -not [bool]$harnessManifest.final_evidence_eligible -or
     [bool]$harnessManifest.reuses_candidate_evidence -or
     [string]$harnessManifest.baseline_commit -cne $baselineCommit -or
@@ -194,12 +198,13 @@ $pinConfig = [pscustomobject]@{
   candidate_commit = $CandidateCommit
 }
 $controllerPins = @(Get-Issue13V5CoordinatorPins $pinConfig)
-if ($controllerPins.Count -ne 11 -or
-    [string]$harnessManifest.source_controller.candidate_commit -cne
+$controllerCount = [long]$script:Issue13V5ControllerFiles.Count
+if ($controllerPins.Count -ne $controllerCount -or
+    [string]$harnessManifest.source_controller.commit_sha256 -cne
       $CandidateCommit -or
-    [long]$harnessManifest.source_controller.file_count -ne 11L -or
-    @($harnessManifest.source_controller.records).Count -ne 11) {
-  throw 'The V5 harness does not bind all eleven controller sources.'
+    [long]$harnessManifest.source_controller.file_count -ne $controllerCount -or
+    @($harnessManifest.source_controller.records).Count -ne $controllerCount) {
+  throw 'The V5 harness does not bind every controller source.'
 }
 for ($pinIndex = 0; $pinIndex -lt $controllerPins.Count; $pinIndex++) {
   foreach ($field in @('name', 'relative_path', 'sha256', 'git_blob')) {
@@ -208,6 +213,34 @@ for ($pinIndex = 0; $pinIndex -lt $controllerPins.Count; $pinIndex++) {
       throw "The V5 harness controller binding changed: $($controllerPins[$pinIndex].name)/$field"
     }
   }
+}
+$preparationEquivalencePath = Join-Path $harness `
+  'issue13-v5-preparation-equivalence.json'
+if (-not (Test-Path -LiteralPath $preparationEquivalencePath -PathType Leaf)) {
+  throw 'The exhaustive preparation-equivalence profile is missing.'
+}
+$preparationEquivalence = Read-Issue13V5Json $preparationEquivalencePath
+if ([string]$preparationEquivalence.schema -cne
+      'wlv-issue13-preparation-equivalence/1' -or
+    [string]::Join("`n", @($preparationEquivalence.sources)) -cne
+      "wiodr13`nwiodr16" -or
+    [string]::Join("`n", @($preparationEquivalence.artifacts)) -cne
+      "_unit_contract.csv`n_source_manifest.csv" -or
+    @($preparationEquivalence.profiles).Count -ne 2 -or
+    [string]::Join("`n", @($preparationEquivalence.profiles.source)) -cne
+      "wiodr13`nwiodr16") {
+  throw 'The exhaustive preparation-equivalence profile changed.'
+}
+$preparationEquivalenceBinding = [ordered]@{
+  schema = 'wlv-issue13-preparation-equivalence/1'
+  path = $preparationEquivalencePath
+  sha256 = Get-Issue13V5Sha256 $preparationEquivalencePath
+  sources = @('wiodr13', 'wiodr16')
+  artifacts = @('_unit_contract.csv', '_source_manifest.csv')
+  profile_count = 2
+  all_rows_fields_and_order_exact = $true
+  architecture_projection = @()
+  source_unit_contract_bridge = 'exhaustive-source-unit-contract-bridge'
 }
 
 $runtimeIndex = (Resolve-Path -LiteralPath (
@@ -220,6 +253,8 @@ $strictSmokePath = (Resolve-Path -LiteralPath (
   ConvertTo-Issue13V5FullPath $StrictBaselineSmokeSummary $true)).Path
 $compatibilitySmokePath = (Resolve-Path -LiteralPath (
   ConvertTo-Issue13V5FullPath $CompatibilityBaselineSmokeSummary $true)).Path
+$oracleEffectSmokePath = (Resolve-Path -LiteralPath (
+  ConvertTo-Issue13V5FullPath $OracleEffectSmokeSummary $true)).Path
 $strictSmoke = Get-Content -LiteralPath $strictSmokePath -Raw |
   ConvertFrom-Json -DateKind String
 $compatibilitySmoke = Get-Content -LiteralPath $compatibilitySmokePath -Raw |
@@ -367,6 +402,161 @@ $rscriptFull = (Resolve-Path -LiteralPath (
   ConvertTo-Issue13V5FullPath $Rscript $true)).Path
 $library = (Resolve-Path -LiteralPath (
   ConvertTo-Issue13V5FullPath $RLibrary $true)).Path
+$oracleProofPath = (Resolve-Path -LiteralPath (
+  ConvertTo-Issue13V5FullPath $ProofPath $true)).Path
+$oracleProof = Read-Issue13V5Json $oracleProofPath
+if ([string]$oracleProof.schema -cne
+      'wlv-issue13-v5-oracle-effect-proof/2' -or
+    [string]$oracleProof.status -cne 'passed' -or
+    -not [bool]$oracleProof.passed) {
+  throw 'Oracle-effect proof is not the required passed terminal proof.'
+}
+$oraclePrimaryRoot = (Resolve-Path -LiteralPath (
+  ConvertTo-Issue13V5FullPath $ComparisonRoot $true)).Path
+$oracleReplayRoot = (Resolve-Path -LiteralPath (
+  ConvertTo-Issue13V5FullPath $ReplayRoot $true)).Path
+if (-not (Test-Path -LiteralPath $oraclePrimaryRoot -PathType Container) -or
+    -not (Test-Path -LiteralPath $oracleReplayRoot -PathType Container)) {
+  throw 'Oracle-effect ComparisonRoot and ReplayRoot must be existing directories.'
+}
+$primaryPrefix = $oraclePrimaryRoot.TrimEnd('\') + '\'
+$replayPrefix = $oracleReplayRoot.TrimEnd('\') + '\'
+if ([string]::Equals($oraclePrimaryRoot, $oracleReplayRoot,
+    [StringComparison]::OrdinalIgnoreCase) -or
+    $oraclePrimaryRoot.StartsWith($replayPrefix,
+      [StringComparison]::OrdinalIgnoreCase) -or
+    $oracleReplayRoot.StartsWith($primaryPrefix,
+      [StringComparison]::OrdinalIgnoreCase)) {
+  throw 'Oracle-effect primary and replay roots must be distinct and non-nested.'
+}
+foreach ($outputRoot in @($oraclePrimaryRoot, $oracleReplayRoot)) {
+  Assert-Issue13V5NoReparse $outputRoot
+  foreach ($protectedRoot in @(
+      $repository, $harnessRuntime, $library,
+      (Split-Path -Parent $strictSmokePath),
+      (Split-Path -Parent $oracleEffectSmokePath))) {
+    Assert-Issue13V5NoReparseAncestors $protectedRoot `
+      'Oracle-effect protected root'
+    Assert-Issue13V5PathsDisjoint $outputRoot $protectedRoot `
+      'Oracle-effect output/protected-root isolation'
+  }
+}
+$oraclePrimaryInventory = Get-Issue13V5TreeInventory $oraclePrimaryRoot
+$oracleReplayInventory = Get-Issue13V5TreeInventory $oracleReplayRoot
+$oracleComparisonPairPayload = [string]::Join("`n", @(
+  'wlv-issue13-v5-oracle-effect-comparison-pair-inventory/1',
+  'primary|' + (ConvertTo-Issue13V5Path $oraclePrimaryRoot) + '|' +
+    [string]$oraclePrimaryInventory.inventory_sha256,
+  'replay|' + (ConvertTo-Issue13V5Path $oracleReplayRoot) + '|' +
+    [string]$oracleReplayInventory.inventory_sha256
+))
+$oracleComparisonPairInventory = [ordered]@{
+  schema = 'wlv-issue13-v5-oracle-effect-comparison-pair-inventory/1'
+  primary_inventory_sha256 =
+    [string]$oraclePrimaryInventory.inventory_sha256
+  replay_inventory_sha256 =
+    [string]$oracleReplayInventory.inventory_sha256
+  inventory_sha256 = Get-Issue13V5TextSha256 $oracleComparisonPairPayload
+}
+$oracleTooling = @(Get-Issue13V5OracleEffectToolRecords)
+$oracleEffect = [ordered]@{
+  schema = 'wlv-issue13-v5-oracle-effect-binding/2'
+  status = 'passed'
+  passed = $true
+  final_evidence_eligible = $false
+  required_by_final_gate = $true
+  strict_common_method_count = 5
+  comparison_execution_count = 10
+  approved_run_inventory_count = 17
+  recovered_method_count = 7
+  oracle_effect_closed = $true
+  final_v5_gate_substituted = $false
+  authorized_patch_sha256 = $expectedOverlaySha256
+  authorized_patch_id = $expectedOverlayPatchId
+  oracle_smoke = [ordered]@{
+    path = $oracleEffectSmokePath
+    sha256 = Get-Issue13V5Sha256 $oracleEffectSmokePath
+    final_evidence_eligible = $false
+  }
+  proof = [ordered]@{
+    path = $oracleProofPath
+    sha256 = Get-Issue13V5Sha256 $oracleProofPath
+    schema = 'wlv-issue13-v5-oracle-effect-proof/2'
+  }
+  comparisons = [ordered]@{
+    primary = [ordered]@{
+      root = $oraclePrimaryRoot
+      inventory = $oraclePrimaryInventory
+    }
+    replay = [ordered]@{
+      root = $oracleReplayRoot
+      inventory = $oracleReplayInventory
+    }
+    inventory = $oracleComparisonPairInventory
+  }
+  comparison_harness = [ordered]@{
+    expected_candidate_commit = $CandidateCommit
+    manifest_path = $harnessManifestPath
+    manifest_sha256 = Get-Issue13V5Sha256 $harnessManifestPath
+    generation = 'v5-terminal'
+    final_evidence_eligible = $true
+    reuses_candidate_evidence = $false
+    source_controller_commit_sha256 =
+      [string]$harnessManifest.source_controller.commit_sha256
+    source_controller = $oracleProof.evidence.terminal_runtime.
+      comparison_harness.source_controller
+    output_tooling = [ordered]@{
+      file_count = [long]$harnessManifest.output_tooling.file_count
+      total_bytes = [long]$harnessManifest.output_tooling.total_bytes
+      inventory_sha256 = [string]$harnessManifest.output_tooling.inventory_sha256
+    }
+    sealed_output_tooling = [ordered]@{
+      file_count = [long]$harnessManifest.sealed_output_tooling.file_count
+      total_bytes = [long]$harnessManifest.sealed_output_tooling.total_bytes
+      inventory_sha256 =
+        [string]$harnessManifest.sealed_output_tooling.inventory_sha256
+    }
+    installed_inventory = [ordered]@{
+      root = $harnessRuntime
+      harness_root = $harness
+      file_count = [long]$harnessInventory.file_count
+      total_bytes = [long]$harnessInventory.total_bytes
+      inventory_sha256 = [string]$harnessInventory.inventory_sha256
+    }
+  }
+  rscript = [ordered]@{
+    path = $rscriptFull
+    sha256 = Get-Issue13V5Sha256 $rscriptFull
+    size_bytes = [int64](Get-Item -LiteralPath $rscriptFull).Length
+  }
+  r_library = $oracleProof.evidence.terminal_runtime.r_library
+  tooling = [object[]]$oracleTooling
+}
+$oracleValidationConfig = [pscustomobject]@{
+  repository_root = $repository
+  candidate_commit = $CandidateCommit
+  baseline_commit = $baselineCommit
+  baseline_runtime_commit = $BaselineRuntimeCommit
+  harness_manifest_path = $harnessManifestPath
+  harness_manifest_sha256 = Get-Issue13V5Sha256 $harnessManifestPath
+  rscript = $rscriptFull
+  r_library = $library
+  strict_baseline_smoke = [pscustomobject]@{
+    path = $strictSmokePath
+    sha256 = Get-Issue13V5Sha256 $strictSmokePath
+  }
+  compatibility_baseline_smoke = [pscustomobject]@{
+    path = $compatibilitySmokePath
+  }
+  baseline_overlay = [pscustomobject]@{
+    path = $overlayPatch
+    sha256 = Get-Issue13V5Sha256 $overlayPatch
+  }
+  oracle_effect = [pscustomobject]$oracleEffect
+}
+$oracleInitialValidation = Invoke-Issue13V5OracleEffectValidation `
+  $oracleValidationConfig
+$oracleEffect['initial_validation'] = $oracleInitialValidation
 $worktrees = Assert-Issue13V5FreshRoot $WorktreeRoot 'Worktree root'
 $evidence = Assert-Issue13V5FreshRoot $EvidenceRoot 'Evidence root'
 $control = Assert-Issue13V5FreshRoot $ControlRoot 'Control root'
@@ -382,6 +572,28 @@ foreach ($rootPath in @($worktrees, $evidence, $control)) {
       $rootPath.StartsWith($outputFull.TrimEnd('\') + '\',
         [StringComparison]::OrdinalIgnoreCase)) {
     throw 'The V5 config output must be outside worktree, evidence, and control roots.'
+  }
+  $rootPrefix = $rootPath.TrimEnd('\') + '\'
+  foreach ($oracleRoot in @($oraclePrimaryRoot, $oracleReplayRoot)) {
+    $oraclePrefix = $oracleRoot.TrimEnd('\') + '\'
+    if ([string]::Equals($rootPath, $oracleRoot,
+        [StringComparison]::OrdinalIgnoreCase) -or
+        $rootPath.StartsWith($oraclePrefix,
+          [StringComparison]::OrdinalIgnoreCase) -or
+        $oracleRoot.StartsWith($rootPrefix,
+          [StringComparison]::OrdinalIgnoreCase)) {
+      throw 'V5 output roots must not overlap oracle-effect primary or replay comparisons.'
+    }
+  }
+}
+foreach ($oracleRoot in @($oraclePrimaryRoot, $oracleReplayRoot)) {
+  if ([string]::Equals($outputFull, $oracleRoot,
+      [StringComparison]::OrdinalIgnoreCase) -or
+      $outputFull.StartsWith($oracleRoot.TrimEnd('\') + '\',
+        [StringComparison]::OrdinalIgnoreCase) -or
+      $oracleRoot.StartsWith($outputFull.TrimEnd('\') + '\',
+        [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'The V5 config output must be outside both oracle-effect comparison roots.'
   }
 }
 
@@ -595,6 +807,7 @@ $config = [ordered]@{
     failed_count = 0
     final_evidence_eligible = $false
   }
+  oracle_effect = $oracleEffect
   candidate_commit = $CandidateCommit
   candidate_seed_commit = $CandidateCommit
   baseline_runtime_index = $runtimeIndex
@@ -635,13 +848,7 @@ $config = [ordered]@{
       '_nonfinite_resolution_diagnostics.csv',
       '_runtime_resources.rds'
     )
-    preparation_architecture_projection = @(
-      'module', 'aggregation_notes', 'source_generation_id',
-      'contract_sha256', '_unit_contract.csv:size_bytes',
-      '_unit_contract.csv:sha256', 'm_io.fst.meta:size_bytes',
-      'm_io.fst.meta:sha256', 'sea.fst.meta:size_bytes',
-      'sea.fst.meta:sha256'
-    )
+    preparation_equivalence_profile = $preparationEquivalenceBinding
   }
   performance = [ordered]@{
     candidate_time_ratio_maximum = 1.2
@@ -666,7 +873,8 @@ $config = [ordered]@{
     required_fields = @(
       'baseline_commit', 'baseline_base_commit', 'baseline_runtime_commit',
       'strict_baseline_smoke', 'compatibility_baseline_smoke',
-      'baseline_overlay_patch', 'candidate_commit', 'source_ids', 'commands',
+      'baseline_overlay_patch', 'oracle_effect_proof', 'candidate_commit',
+      'source_ids', 'commands',
       'hashes', 'times', 'peak_rss', 'differences', 'fault_results',
       'preparation_results', 'paper0_results'
     )
@@ -698,7 +906,27 @@ $roundtrip = $roundtripText | ConvertFrom-Json -DateKind String
 if ([string]$roundtrip.generation -cne 'v5' -or
     [string]$roundtrip.baseline_commit -cne $baselineCommit -or
     [string]$roundtrip.baseline_runtime_commit -cne $BaselineRuntimeCommit -or
-    @($roundtrip.matrix.science_phases).Count -ne 74) {
+    @($roundtrip.matrix.science_phases).Count -ne 74 -or
+    [string]$roundtrip.oracle_effect.proof.sha256 -cne
+      (Get-Issue13V5Sha256 $oracleProofPath) -or
+    [string]$roundtrip.oracle_effect.comparisons.primary.inventory.
+      inventory_sha256 -cne
+      [string]$oraclePrimaryInventory.inventory_sha256 -or
+    [string]$roundtrip.oracle_effect.comparisons.replay.inventory.
+      inventory_sha256 -cne
+      [string]$oracleReplayInventory.inventory_sha256 -or
+    [string]$roundtrip.oracle_effect.comparisons.inventory.inventory_sha256 `
+      -cne [string]$oracleComparisonPairInventory.inventory_sha256 -or
+    [string]$roundtrip.oracle_effect.comparison_harness.source_controller.
+      inventory_sha256 -cne
+      [string]$oracleEffect.comparison_harness.source_controller.
+        inventory_sha256 -or
+    [string]$roundtrip.oracle_effect.r_library.inventory_sha256 -cne
+      [string]$oracleEffect.r_library.inventory_sha256 -or
+    [long]$roundtrip.oracle_effect.comparison_execution_count -ne 10L -or
+    [long]$roundtrip.oracle_effect.approved_run_inventory_count -ne 17L -or
+    [bool]$roundtrip.oracle_effect.final_evidence_eligible -or
+    -not [bool]$roundtrip.oracle_effect.required_by_final_gate) {
   throw 'V5 config JSON round trip changed the contract.'
 }
 if (Test-Path -LiteralPath $outputFull) {
@@ -721,4 +949,16 @@ if (-not [string]::Equals($installed, $payload, [StringComparison]::Ordinal)) {
   scenarios = 162
   comparisons = 202
   faults = 10
+  oracle_effect_proof_sha256 = Get-Issue13V5Sha256 $oracleProofPath
+  oracle_effect_smoke_sha256 = Get-Issue13V5Sha256 $oracleEffectSmokePath
+  oracle_effect_primary_inventory_sha256 =
+    [string]$oraclePrimaryInventory.inventory_sha256
+  oracle_effect_replay_inventory_sha256 =
+    [string]$oracleReplayInventory.inventory_sha256
+  oracle_effect_comparison_pair_inventory_sha256 =
+    [string]$oracleComparisonPairInventory.inventory_sha256
+  oracle_effect_strict_common_methods = 5
+  oracle_effect_comparison_executions = 10
+  oracle_effect_approved_run_inventories = 17
+  oracle_effect_recovered_methods = 7
 }

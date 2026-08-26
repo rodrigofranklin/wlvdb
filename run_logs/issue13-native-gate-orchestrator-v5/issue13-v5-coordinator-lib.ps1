@@ -13,6 +13,8 @@ $script:Issue13V5BaselineOverlaySha256 =
   '9f9b878f8e557973127e6260a0f224c868a0c4e8dc2db52dd6aa3f7131f28cd9'
 $script:Issue13V5BaselineOverlayPatchId =
   '253ca5f1397132f94e3432264084a37395c60ec3'
+# Terminal harness fixture. Keep this one coordinator triplet synchronized with
+# materialize-harness and sealed_inventory when the terminal dry-run reseals it.
 $script:Issue13V5HarnessFileCount = 39L
 $script:Issue13V5HarnessTotalBytes = 594386L
 $script:Issue13V5HarnessInventorySha256 =
@@ -33,18 +35,56 @@ $script:Issue13V5CandidateSourceDirectorySha256 =
   'c75aa417f14cded3c3bb6028effc8acadd64a32e86fddc0f1278079acdb6f114'
 $script:Issue13V5AllowedRCommandSha256 =
   'cb09e749c6c1d9e1d5b93ea7c1cf4333d9f57f816fcc25967b04adb4e2595fc1'
+$script:Issue13V5OracleEffectFiles = @(
+  'issue13-v5-oracle-effect-README.md',
+  'issue13-v5-oracle-effect-generate.ps1',
+  'issue13-v5-oracle-effect-lib.ps1',
+  'issue13-v5-oracle-effect-proof.schema.json',
+  'issue13-v5-oracle-effect-spec.json',
+  'issue13-v5-oracle-effect-validate.ps1'
+)
 $script:Issue13V5ControllerFiles = @(
   'README.md',
+  'issue13-v5-aggregate-hardening.R',
+  'issue13-v5-attest-delivery.ps1',
   'issue13-v5-baseline-smoke.ps1',
   'issue13-v5-build-baseline-index.R',
+  'issue13-v5-build-diagnostic-bridges.R',
+  'issue13-v5-build-metadata-equivalence.R',
+  'issue13-v5-build-preparation-equivalence.R',
+  'issue13-v5-build-stage5-profiles.R',
+  'issue13-v5-capture-clean-bridge-evidence.ps1',
+  'issue13-v5-capture-clean-stage5-evidence.ps1',
   'issue13-v5-compare-override.R',
   'issue13-v5-compatibility-baseline-override.R',
   'issue13-v5-coordinator-lib.ps1',
   'issue13-v5-coordinator.ps1',
+  'issue13-v5-diagnostic-module-bridges.csv',
+  'issue13-v5-diagnostics-override.R',
+  'issue13-v5-difference-fingerprint.R',
   'issue13-v5-materialize-harness.ps1',
+  'issue13-v5-metadata-equivalence.json',
   'issue13-v5-new-config.ps1',
+  'issue13-v5-oracle-effect-README.md',
+  'issue13-v5-oracle-effect-generate.ps1',
+  'issue13-v5-oracle-effect-lib.ps1',
+  'issue13-v5-oracle-effect-proof.schema.json',
+  'issue13-v5-oracle-effect-spec.json',
+  'issue13-v5-oracle-effect-validate.ps1',
+  'issue13-v5-preparation-equivalence.R',
+  'issue13-v5-preparation-equivalence.json',
   'issue13-v5-render-report.ps1',
-  'issue13-v5-static-verify.ps1'
+  'issue13-v5-run-stage5-evidence.R',
+  'issue13-v5-stage5-multiplicity-profiles.csv',
+  'issue13-v5-static-verify.ps1',
+  'issue13-v5-verify-diagnostic-evidence.R'
+)
+$script:Issue13V5OracleRequiredRPackages = @('fst', 'jsonlite', 'openssl')
+$script:Issue13V5OracleClearedREnvironment = @(
+  'LANG', 'LC_ALL', 'LC_CTYPE',
+  'R_ARCH', 'R_DEFAULT_PACKAGES', 'R_ENVIRON', 'R_ENVIRON_USER', 'R_HOME',
+  'R_LIBS', 'R_LIBS_SITE', 'R_PROFILE', 'R_PROFILE_USER', 'R_STARTUP_DEBUG',
+  'RENV_CONFIG_AUTOLOADER_ENABLED', 'RENV_PATHS_LIBRARY', 'RENV_PATHS_ROOT'
 )
 $script:Issue13V5Methods = @(
   'wiodr13', 'wiodr16', 'alternative_1', 'alternative_2', 'norow_w13',
@@ -108,6 +148,51 @@ function ConvertTo-Issue13V5Path([string]$Path) {
   [IO.Path]::GetFullPath($Path).TrimEnd('\')
 }
 
+function Test-Issue13V5PathContained([string]$Child, [string]$Parent) {
+  $childFull = ConvertTo-Issue13V5Path $Child
+  $parentFull = ConvertTo-Issue13V5Path $Parent
+  if ([string]::Equals($childFull, $parentFull,
+      [StringComparison]::OrdinalIgnoreCase)) { return $true }
+  $childFull.StartsWith($parentFull + '\',
+    [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Assert-Issue13V5PathsDisjoint(
+  [string]$Left,
+  [string]$Right,
+  [string]$Label
+) {
+  if ((Test-Issue13V5PathContained $Left $Right) -or
+      (Test-Issue13V5PathContained $Right $Left)) {
+    throw "$Label paths overlap: $Left ; $Right"
+  }
+}
+
+function Assert-Issue13V5NoReparseAncestors(
+  [string]$Path,
+  [string]$Label
+) {
+  $full = ConvertTo-Issue13V5Path $Path
+  $current = if (Test-Path -LiteralPath $full) {
+    $full
+  } else {
+    Split-Path -Parent $full
+  }
+  while (-not [string]::IsNullOrWhiteSpace($current)) {
+    if (Test-Path -LiteralPath $current) {
+      $item = Get-Item -LiteralPath $current -Force
+      if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "$Label has a reparse-point ancestor: $($item.FullName)"
+      }
+    }
+    $parent = Split-Path -Parent $current
+    if ([string]::IsNullOrWhiteSpace($parent) -or
+        [string]::Equals($parent, $current,
+          [StringComparison]::OrdinalIgnoreCase)) { break }
+    $current = $parent
+  }
+}
+
 function Get-Issue13V5ConfiguredPaths([object]$Config) {
   $paths = [Collections.Generic.List[string]]::new()
   foreach ($name in @(
@@ -123,9 +208,18 @@ function Get-Issue13V5ConfiguredPaths([object]$Config) {
       $Config.baseline_overlay.path,
       $Config.strict_baseline_smoke.path,
       $Config.compatibility_baseline_smoke.path,
+      $Config.oracle_effect.oracle_smoke.path,
+      $Config.oracle_effect.proof.path,
+      $Config.oracle_effect.comparisons.primary.root,
+      $Config.oracle_effect.comparisons.replay.root,
+      $Config.oracle_effect.comparison_harness.manifest_path,
+      $Config.comparison.preparation_equivalence_profile.path,
       $Config.report.required_path
     )) {
     $paths.Add([string]$value)
+  }
+  foreach ($tool in @($Config.oracle_effect.tooling)) {
+    $paths.Add([string]$tool.path)
   }
   foreach ($method in @($Config.methods)) {
     $paths.Add([string]$method.baseline)
@@ -204,6 +298,7 @@ function Write-Issue13V5Json(
 }
 
 function Assert-Issue13V5NoReparse([string]$Root) {
+  Assert-Issue13V5NoReparseAncestors $Root 'V5 tree'
   $items = @((Get-Item -LiteralPath $Root -Force)) +
     @(Get-ChildItem -LiteralPath $Root -Recurse -Force)
   $bad = @($items | Where-Object {
@@ -253,6 +348,1204 @@ function Get-Issue13V5TreeInventory([string]$Root) {
     directory_records = [object[]]$directoryNames
     records = [object[]]$records.ToArray()
   }
+}
+
+function Get-Issue13V5OracleEffectToolRecords {
+  @($script:Issue13V5OracleEffectFiles | ForEach-Object {
+    $path = (Resolve-Path -LiteralPath (
+      Join-Path $script:Issue13V5CoordinatorRoot $_)).Path
+    [pscustomobject][ordered]@{
+      name = [string]$_
+      path = $path
+      size_bytes = [int64](Get-Item -LiteralPath $path).Length
+      sha256 = Get-Issue13V5Sha256 $path
+    }
+  })
+}
+
+function Get-Issue13V5OraclePackageInventory([string]$Root) {
+  $resolved = (Resolve-Path -LiteralPath $Root).Path.TrimEnd('\')
+  Assert-Issue13V5NoReparse $resolved
+  $records = @(Get-ChildItem -LiteralPath $resolved -File -Recurse -Force |
+    ForEach-Object {
+      [pscustomobject][ordered]@{
+        relative_path = $_.FullName.Substring($resolved.Length + 1).
+          Replace('\', '/')
+        size_bytes = [int64]$_.Length
+        sha256 = Get-Issue13V5Sha256 $_.FullName
+      }
+    })
+  [Array]::Sort($records, [Comparison[object]]{
+    param($left, $right)
+    [StringComparer]::Ordinal.Compare(
+      [string]$left.relative_path, [string]$right.relative_path)
+  })
+  $payload = [string]::Join("`n", @($records | ForEach-Object {
+    [string]$_.relative_path + '|' + [string]$_.size_bytes + '|' +
+      [string]$_.sha256
+  }))
+  [pscustomobject][ordered]@{
+    file_count = [int64]$records.Count
+    total_bytes = [int64](($records | Measure-Object size_bytes -Sum).Sum)
+    inventory_sha256 = Get-Issue13V5TextSha256 $payload
+  }
+}
+
+function Get-Issue13V5GitBlobIdentity(
+  [string]$RepositoryRoot,
+  [string]$Commit,
+  [string]$RelativePath
+) {
+  if ($RelativePath -notmatch '^[^\\/:]+(?:/[^\\/:]+)+$' -or
+      $RelativePath -match '(^|/)\.\.?(?:/|$)') {
+    throw "Unsafe terminal controller Git path: $RelativePath"
+  }
+  $objectSpec = "$Commit`:$RelativePath"
+  $blob = (& git -C $RepositoryRoot rev-parse $objectSpec 2>$null).Trim()
+  if ($LASTEXITCODE -ne 0 -or $blob -cnotmatch '^[0-9a-f]{40}$') {
+    throw "Unavailable terminal controller Git blob: $RelativePath"
+  }
+  $sizeText = (& git -C $RepositoryRoot cat-file -s $objectSpec 2>$null).Trim()
+  $size = [int64]0
+  if ($LASTEXITCODE -ne 0 -or -not [int64]::TryParse(
+      $sizeText, [Globalization.NumberStyles]::None,
+      [Globalization.CultureInfo]::InvariantCulture, [ref]$size)) {
+    throw "Malformed terminal controller Git blob size: $RelativePath"
+  }
+  $start = [Diagnostics.ProcessStartInfo]::new()
+  $start.FileName = (Get-Command git -ErrorAction Stop).Source
+  $start.UseShellExecute = $false
+  $start.CreateNoWindow = $true
+  $start.RedirectStandardOutput = $true
+  $start.RedirectStandardError = $true
+  foreach ($argument in @(
+      '-C', $RepositoryRoot, 'cat-file', 'blob', $objectSpec)) {
+    $null = $start.ArgumentList.Add([string]$argument)
+  }
+  $process = [Diagnostics.Process]::new()
+  $process.StartInfo = $start
+  $hasher = [Security.Cryptography.SHA256]::Create()
+  try {
+    if (-not $process.Start()) {
+      throw "Cannot start git cat-file for terminal controller: $RelativePath"
+    }
+    $stderrTask = $process.StandardError.ReadToEndAsync()
+    $sha256 = (($hasher.ComputeHash($process.StandardOutput.BaseStream) |
+      ForEach-Object { $_.ToString('x2') }) -join '')
+    $process.WaitForExit()
+    $stderr = $stderrTask.GetAwaiter().GetResult()
+    if ($process.ExitCode -ne 0) {
+      throw "git cat-file failed for terminal controller $RelativePath`: $stderr"
+    }
+  } finally {
+    $hasher.Dispose()
+    $process.Dispose()
+  }
+  [pscustomobject][ordered]@{
+    git_blob = $blob
+    size_bytes = $size
+    sha256 = $sha256
+  }
+}
+
+function Get-Issue13V5ControllerIdentity(
+  [string]$RepositoryRoot,
+  [string]$CandidateCommit
+) {
+  $repository = ConvertTo-Issue13V5Path $RepositoryRoot
+  $controllerRoot = ConvertTo-Issue13V5Path $script:Issue13V5CoordinatorRoot
+  if (-not (Test-Issue13V5PathContained $controllerRoot $repository)) {
+    throw 'V5 controller root is outside the configured repository.'
+  }
+  Assert-Issue13V5NoReparseAncestors $repository 'repository root'
+  Assert-Issue13V5NoReparseAncestors $controllerRoot 'V5 controller root'
+  $relativeRoot = $controllerRoot.Substring($repository.Length).
+    TrimStart('\').Replace('\', '/')
+  $records = @(
+    foreach ($name in $script:Issue13V5ControllerFiles) {
+      if ($name -cnotmatch '^[A-Za-z0-9._-]+$') {
+        throw "Unsafe V5 controller filename: $name"
+      }
+      $path = (Resolve-Path -LiteralPath (Join-Path $controllerRoot $name)).Path
+      Assert-Issue13V5NoReparseAncestors $path "V5 controller $name"
+      $relative = $relativeRoot + '/' + $name
+      $blob = Get-Issue13V5GitBlobIdentity $repository $CandidateCommit $relative
+      if ([int64](Get-Item -LiteralPath $path).Length -ne
+            [int64]$blob.size_bytes -or
+          (Get-Issue13V5Sha256 $path) -cne [string]$blob.sha256) {
+        throw "V5 controller bytes differ from candidate blob: $relative"
+      }
+      $localBlob = (& git -C $repository hash-object -- $path 2>$null).Trim()
+      if ($LASTEXITCODE -ne 0 -or $localBlob -cne [string]$blob.git_blob) {
+        throw "V5 controller Git identity differs from candidate blob: $relative"
+      }
+      [pscustomobject][ordered]@{
+        name = [string]$name
+        relative_path = $relative
+        size_bytes = [int64]$blob.size_bytes
+        sha256 = [string]$blob.sha256
+        git_blob = [string]$blob.git_blob
+      }
+    }
+  )
+  $payload = [string]::Join("`n", @($records | ForEach-Object {
+    [string]$_.name + '|' + [string]$_.relative_path + '|' +
+      [string]$_.size_bytes + '|' + [string]$_.sha256 + '|' +
+      [string]$_.git_blob
+  }))
+  [pscustomobject][ordered]@{
+    commit_sha256 = $CandidateCommit
+    file_count = [int64]$records.Count
+    inventory_sha256 = Get-Issue13V5TextSha256 $payload
+    records = $records
+  }
+}
+
+function Assert-Issue13V5ControllerIdentity(
+  [object]$Observed,
+  [object]$Expected,
+  [string]$Label
+) {
+  $null = Assert-Issue13V5ExactPropertyNames $Observed @(
+    'commit_sha256', 'file_count', 'inventory_sha256', 'records'
+  ) $Label
+  if ([string]$Observed.commit_sha256 -cne [string]$Expected.commit_sha256 -or
+      [int64]$Observed.file_count -ne [int64]$Expected.file_count -or
+      [string]$Observed.inventory_sha256 -cne
+        [string]$Expected.inventory_sha256 -or
+      @($Observed.records).Count -ne @($Expected.records).Count) {
+    throw "$Label aggregate identity differs."
+  }
+  foreach ($expectedRecord in @($Expected.records)) {
+    $matches = @($Observed.records | Where-Object {
+      [string]$_.name -ceq [string]$expectedRecord.name
+    })
+    if ($matches.Count -ne 1) {
+      throw "$Label record is missing or duplicated: $($expectedRecord.name)"
+    }
+    $null = Assert-Issue13V5ExactPropertyNames $matches[0] @(
+      'name', 'relative_path', 'size_bytes', 'sha256', 'git_blob'
+    ) "$Label record $($expectedRecord.name)"
+    foreach ($field in @(
+        'name', 'relative_path', 'size_bytes', 'sha256', 'git_blob')) {
+      if ([string]$matches[0].$field -cne [string]$expectedRecord.$field) {
+        throw "$Label record differs: $($expectedRecord.name)/$field"
+      }
+    }
+  }
+  $true
+}
+
+function Assert-Issue13V5OracleComparisonIsolation([object]$Config) {
+  $primary = ConvertTo-Issue13V5Path `
+    ([string]$Config.oracle_effect.comparisons.primary.root)
+  $replay = ConvertTo-Issue13V5Path `
+    ([string]$Config.oracle_effect.comparisons.replay.root)
+  Assert-Issue13V5PathsDisjoint $primary $replay `
+    'Oracle-effect primary/replay isolation'
+  $protected = @(
+    [pscustomobject]@{
+      label = 'repository root'; path = [string]$Config.repository_root
+    }
+    [pscustomobject]@{
+      label = 'harness runtime root'; path = [string]$Config.harness_runtime_root
+    }
+    [pscustomobject]@{
+      label = 'R library root'; path = [string]$Config.r_library
+    }
+    [pscustomobject]@{
+      label = 'strict smoke root'
+      path = Split-Path -Parent ([string]$Config.strict_baseline_smoke.path)
+    }
+    [pscustomobject]@{
+      label = 'oracle smoke root'
+      path = Split-Path -Parent ([string]$Config.oracle_effect.oracle_smoke.path)
+    }
+  )
+  foreach ($output in @(
+      [pscustomobject]@{ label = 'primary comparison root'; path = $primary }
+      [pscustomobject]@{ label = 'replay comparison root'; path = $replay }
+    )) {
+    Assert-Issue13V5NoReparse $output.path
+    foreach ($protectedRoot in $protected) {
+      Assert-Issue13V5NoReparseAncestors $protectedRoot.path $protectedRoot.label
+      Assert-Issue13V5PathsDisjoint $output.path $protectedRoot.path `
+        "$($output.label)/$($protectedRoot.label) isolation"
+    }
+  }
+  $true
+}
+
+function Assert-Issue13V5InventoryBinding(
+  [object]$Expected,
+  [object]$Observed,
+  [string]$Label
+) {
+  if (-not [string]::Equals(
+      (ConvertTo-Issue13V5Path ([string]$Expected.root)),
+      (ConvertTo-Issue13V5Path ([string]$Observed.root)),
+      [StringComparison]::OrdinalIgnoreCase)) {
+    throw "$Label root changed."
+  }
+  foreach ($field in @(
+      'file_count', 'directory_count', 'total_bytes', 'inventory_sha256',
+      'directory_list_sha256')) {
+    if ([string]$Expected.$field -cne [string]$Observed.$field) {
+      throw "$Label inventory changed: $field"
+    }
+  }
+  if (@($Expected.records).Count -ne [long]$Observed.file_count -or
+      @($Expected.directory_records).Count -ne
+        [long]$Observed.directory_count) {
+    throw "$Label stored inventory is incomplete."
+  }
+  $true
+}
+
+function Assert-Issue13V5ExactPropertyNames(
+  [object]$Value,
+  [string[]]$Expected,
+  [string]$Label
+) {
+  $observedNames = if ($Value -is [Collections.IDictionary]) {
+    [string[]]@($Value.Keys | ForEach-Object { [string]$_ } | Sort-Object)
+  } else {
+    [string[]]@($Value.PSObject.Properties.Name | Sort-Object)
+  }
+  $expectedNames = [string[]]@($Expected | Sort-Object)
+  if ([string]::Join("`n", $observedNames) -cne
+      [string]::Join("`n", $expectedNames)) {
+    throw "$Label properties changed."
+  }
+  $true
+}
+
+function Assert-Issue13V5OracleEffectBindings([object]$Config) {
+  $oracle = $Config.oracle_effect
+  $bindingFields = @(
+    'schema', 'status', 'passed', 'final_evidence_eligible',
+    'required_by_final_gate', 'strict_common_method_count',
+    'comparison_execution_count', 'approved_run_inventory_count',
+    'recovered_method_count', 'oracle_effect_closed',
+    'final_v5_gate_substituted', 'authorized_patch_sha256',
+    'authorized_patch_id', 'oracle_smoke', 'proof', 'comparisons',
+    'comparison_harness', 'rscript', 'r_library', 'tooling'
+  )
+  if ($oracle.PSObject.Properties.Name -ccontains 'initial_validation') {
+    $bindingFields += 'initial_validation'
+  }
+  $null = Assert-Issue13V5ExactPropertyNames $oracle $bindingFields `
+    'Oracle-effect config binding'
+  $null = Assert-Issue13V5ExactPropertyNames $oracle.oracle_smoke @(
+    'path', 'sha256', 'final_evidence_eligible'
+  ) 'Oracle-effect smoke binding'
+  $null = Assert-Issue13V5ExactPropertyNames $oracle.proof @(
+    'path', 'sha256', 'schema'
+  ) 'Oracle-effect proof binding'
+  $null = Assert-Issue13V5ExactPropertyNames $oracle.comparisons.primary @(
+    'root', 'inventory'
+  ) 'Oracle-effect primary binding'
+  $null = Assert-Issue13V5ExactPropertyNames $oracle.comparisons.replay @(
+    'root', 'inventory'
+  ) 'Oracle-effect replay binding'
+  $null = Assert-Issue13V5ExactPropertyNames $oracle.comparison_harness @(
+    'expected_candidate_commit', 'manifest_path', 'manifest_sha256',
+    'generation', 'final_evidence_eligible', 'reuses_candidate_evidence',
+    'source_controller_commit_sha256', 'source_controller', 'output_tooling',
+    'sealed_output_tooling', 'installed_inventory'
+  ) 'Oracle-effect terminal harness binding'
+  $null = Assert-Issue13V5ExactPropertyNames $oracle.rscript @(
+    'path', 'sha256', 'size_bytes'
+  ) 'Oracle-effect Rscript binding'
+  $null = Assert-Issue13V5ExactPropertyNames $oracle.r_library @(
+    'path', 'environment_variable', 'environment', 'r_version', 'platform',
+    'lib_paths', 'required_packages', 'loaded_packages', 'inventory_sha256'
+  ) 'Oracle-effect R library binding'
+  $null = Assert-Issue13V5ExactPropertyNames $oracle.r_library.environment @(
+    'set', 'cleared'
+  ) 'Oracle-effect R environment binding'
+  foreach ($record in @($oracle.r_library.environment.set)) {
+    $null = Assert-Issue13V5ExactPropertyNames $record @(
+      'name', 'value'
+    ) 'Oracle-effect set R environment record'
+  }
+  foreach ($package in @($oracle.r_library.loaded_packages)) {
+    $null = Assert-Issue13V5ExactPropertyNames $package @(
+      'name', 'version', 'path', 'required', 'file_count', 'total_bytes',
+      'inventory_sha256'
+    ) 'Oracle-effect loaded R package record'
+  }
+  foreach ($inventoryName in @('output_tooling', 'sealed_output_tooling')) {
+    $null = Assert-Issue13V5ExactPropertyNames `
+      $oracle.comparison_harness.$inventoryName @(
+        'file_count', 'total_bytes', 'inventory_sha256'
+      ) "Oracle-effect harness $inventoryName binding"
+  }
+  $null = Assert-Issue13V5ExactPropertyNames `
+    $oracle.comparison_harness.installed_inventory @(
+      'root', 'harness_root', 'file_count', 'total_bytes', 'inventory_sha256'
+    ) 'Oracle-effect installed harness inventory binding'
+  if ([string]$oracle.schema -cne 'wlv-issue13-v5-oracle-effect-binding/2' -or
+      [string]$oracle.status -cne 'passed' -or -not [bool]$oracle.passed -or
+      [bool]$oracle.final_evidence_eligible -or
+      -not [bool]$oracle.required_by_final_gate -or
+      [long]$oracle.strict_common_method_count -ne 5L -or
+      [long]$oracle.comparison_execution_count -ne 10L -or
+      [long]$oracle.approved_run_inventory_count -ne 17L -or
+      [long]$oracle.recovered_method_count -ne 7L -or
+      -not [bool]$oracle.oracle_effect_closed -or
+      [bool]$oracle.final_v5_gate_substituted -or
+      [string]$oracle.authorized_patch_sha256 -cne
+        $script:Issue13V5BaselineOverlaySha256 -or
+      [string]$oracle.authorized_patch_id -cne
+        $script:Issue13V5BaselineOverlayPatchId) {
+    throw 'Oracle-effect config binding is not the required auxiliary 5+7 proof.'
+  }
+  $proofPath = (Resolve-Path -LiteralPath (
+    [string]$oracle.proof.path)).Path
+  $oracleSmokePath = (Resolve-Path -LiteralPath (
+    [string]$oracle.oracle_smoke.path)).Path
+  $primaryRoot = (Resolve-Path -LiteralPath (
+    [string]$oracle.comparisons.primary.root)).Path
+  $replayRoot = (Resolve-Path -LiteralPath (
+    [string]$oracle.comparisons.replay.root)).Path
+  $comparisonHarness = (Resolve-Path -LiteralPath (
+    [string]$oracle.comparison_harness.manifest_path)).Path
+  $rscriptPath = (Resolve-Path -LiteralPath (
+    [string]$oracle.rscript.path)).Path
+  $rLibraryPath = (Resolve-Path -LiteralPath (
+    [string]$oracle.r_library.path)).Path
+  $null = Assert-Issue13V5OracleComparisonIsolation $Config
+  if ((Get-Issue13V5Sha256 $proofPath) -cne
+        [string]$oracle.proof.sha256 -or
+      [string]$oracle.proof.schema -cne
+        'wlv-issue13-v5-oracle-effect-proof/2' -or
+      (Get-Issue13V5Sha256 $oracleSmokePath) -cne
+        [string]$oracle.oracle_smoke.sha256 -or
+      [bool]$oracle.oracle_smoke.final_evidence_eligible -or
+      [string]::Equals(
+        (ConvertTo-Issue13V5Path $primaryRoot),
+        (ConvertTo-Issue13V5Path $replayRoot),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      $primaryRoot.StartsWith($replayRoot.TrimEnd('\') + '\',
+        [StringComparison]::OrdinalIgnoreCase) -or
+      $replayRoot.StartsWith($primaryRoot.TrimEnd('\') + '\',
+        [StringComparison]::OrdinalIgnoreCase) -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path $comparisonHarness),
+        (ConvertTo-Issue13V5Path ([string]$Config.harness_manifest_path)),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      (Get-Issue13V5Sha256 $comparisonHarness) -cne
+        [string]$oracle.comparison_harness.manifest_sha256 -or
+      [string]$oracle.comparison_harness.manifest_sha256 -cne
+        [string]$Config.harness_manifest_sha256 -or
+      [string]$oracle.comparison_harness.expected_candidate_commit -cne
+        [string]$Config.candidate_commit -or
+      [string]$oracle.comparison_harness.source_controller_commit_sha256 -cne
+        [string]$Config.candidate_commit -or
+      [string]$oracle.comparison_harness.generation -cne 'v5-terminal' -or
+      -not [bool]$oracle.comparison_harness.final_evidence_eligible -or
+      [bool]$oracle.comparison_harness.reuses_candidate_evidence -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path $rscriptPath),
+        (ConvertTo-Issue13V5Path ([string]$Config.rscript)),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      (Get-Issue13V5Sha256 $rscriptPath) -cne
+        [string]$oracle.rscript.sha256 -or
+      [int64](Get-Item -LiteralPath $rscriptPath).Length -ne
+        [int64]$oracle.rscript.size_bytes -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path $rLibraryPath),
+        (ConvertTo-Issue13V5Path ([string]$Config.r_library)),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$oracle.r_library.environment_variable -cne 'R_LIBS_USER') {
+    throw 'Oracle-effect proof, terminal runtime, or candidate binding changed.'
+  }
+  $clearedObserved = [string[]]@($oracle.r_library.environment.cleared | Sort-Object)
+  $clearedExpected = [string[]]@(
+    $script:Issue13V5OracleClearedREnvironment | Sort-Object)
+  $requiredObserved = [string[]]@($oracle.r_library.required_packages |
+    Sort-Object)
+  $requiredExpected = [string[]]@(
+    $script:Issue13V5OracleRequiredRPackages | Sort-Object)
+  $setRecords = @($oracle.r_library.environment.set)
+  $rLibrarySet = @($setRecords | Where-Object {
+    [string]$_.name -ceq 'R_LIBS_USER' -and
+    [string]::Equals(
+      (ConvertTo-Issue13V5Path ([string]$_.value)),
+      (ConvertTo-Issue13V5Path $rLibraryPath),
+      [StringComparison]::OrdinalIgnoreCase)
+  })
+  $tzSet = @($setRecords | Where-Object {
+    [string]$_.name -ceq 'TZ' -and [string]$_.value -ceq 'UTC'
+  })
+  if ([string]::Join("`n", $clearedObserved) -cne
+        [string]::Join("`n", $clearedExpected) -or
+      [string]::Join("`n", $requiredObserved) -cne
+        [string]::Join("`n", $requiredExpected) -or
+      $setRecords.Count -ne 2 -or $rLibrarySet.Count -ne 1 -or
+      $tzSet.Count -ne 1 -or @($oracle.r_library.lib_paths).Count -lt 1 -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path ([string]$oracle.r_library.lib_paths[0])),
+        (ConvertTo-Issue13V5Path $rLibraryPath),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$oracle.r_library.r_version -notmatch '^R version ' -or
+      [string]::IsNullOrWhiteSpace([string]$oracle.r_library.platform) -or
+      [string]$oracle.r_library.inventory_sha256 -cnotmatch
+        '^[0-9a-f]{64}$') {
+    throw 'Oracle-effect sanitized R environment/runtime binding changed.'
+  }
+  $loadedPackages = @($oracle.r_library.loaded_packages)
+  if ($loadedPackages.Count -lt 3 -or
+      @($loadedPackages.name | Select-Object -Unique).Count -ne
+        $loadedPackages.Count) {
+    throw 'Oracle-effect loaded R package inventory is incomplete or duplicated.'
+  }
+  $loadedRequired = [string[]]@($loadedPackages | Where-Object required |
+    ForEach-Object name | Sort-Object)
+  if ([string]::Join("`n", $loadedRequired) -cne
+      [string]::Join("`n", $requiredExpected)) {
+    throw 'Oracle-effect required R package inventory changed.'
+  }
+  foreach ($package in $loadedPackages) {
+    $packagePath = (Resolve-Path -LiteralPath ([string]$package.path)).Path
+    if ([bool]$package.required -and
+        -not (Test-Issue13V5PathContained $packagePath $rLibraryPath)) {
+      throw "Required R package escaped RLibrary: $($package.name)"
+    }
+    $packageInventory = Get-Issue13V5OraclePackageInventory $packagePath
+    foreach ($field in @('file_count', 'total_bytes', 'inventory_sha256')) {
+      if ([string]$package.$field -cne [string]$packageInventory.$field) {
+        throw "Loaded R package inventory changed: $($package.name)/$field"
+      }
+    }
+  }
+  $expectedTools = @(Get-Issue13V5OracleEffectToolRecords)
+  $storedTools = @($oracle.tooling)
+  if ($storedTools.Count -ne $script:Issue13V5OracleEffectFiles.Count -or
+      $expectedTools.Count -ne $storedTools.Count) {
+    throw 'Oracle-effect tooling coverage is incomplete.'
+  }
+  for ($index = 0; $index -lt $expectedTools.Count; $index++) {
+    foreach ($field in @('name', 'path', 'size_bytes', 'sha256')) {
+      $left = [string]$storedTools[$index].$field
+      $right = [string]$expectedTools[$index].$field
+      if ($field -ceq 'path') {
+        if (-not [string]::Equals(
+            (ConvertTo-Issue13V5Path $left),
+            (ConvertTo-Issue13V5Path $right),
+            [StringComparison]::OrdinalIgnoreCase)) {
+          throw "Oracle-effect tooling path changed: $($expectedTools[$index].name)"
+        }
+      } elseif ($left -cne $right) {
+        throw "Oracle-effect tooling changed: $($expectedTools[$index].name)/$field"
+      }
+    }
+  }
+  $specTool = @($expectedTools | Where-Object name -ceq
+      'issue13-v5-oracle-effect-spec.json')
+  $schemaTool = @($expectedTools | Where-Object name -ceq
+      'issue13-v5-oracle-effect-proof.schema.json')
+  if ($specTool.Count -ne 1 -or $schemaTool.Count -ne 1) {
+    throw 'Oracle-effect spec/schema tooling is ambiguous.'
+  }
+  $proof = Read-Issue13V5Json $proofPath
+  $null = Assert-Issue13V5ExactPropertyNames $proof @(
+    'schema', 'status', 'passed', 'final_evidence_eligible', 'purpose',
+    'generated_at_utc', 'evidence', 'conclusion'
+  ) 'Oracle-effect proof'
+  $null = Assert-Issue13V5ExactPropertyNames $proof.evidence @(
+    'spec', 'proof_schema', 'oracle', 'terminal_runtime', 'source_evidence',
+    'approved_run_immutability', 'comparison_workflow', 'recovered_methods'
+  ) 'Oracle-effect evidence'
+  $null = Assert-Issue13V5ExactPropertyNames $proof.evidence.terminal_runtime @(
+    'comparison_harness', 'rscript', 'r_library', 'runtime_immutability'
+  ) 'Oracle-effect terminal runtime evidence'
+  $runtimeImmutability = $proof.evidence.terminal_runtime.runtime_immutability
+  $null = Assert-Issue13V5ExactPropertyNames $runtimeImmutability @(
+    'before', 'after', 'immutable'
+  ) 'Oracle-effect R runtime immutability'
+  foreach ($snapshot in @($runtimeImmutability.before, $runtimeImmutability.after)) {
+    $null = Assert-Issue13V5ExactPropertyNames $snapshot @(
+      'rscript', 'r_library'
+    ) 'Oracle-effect R runtime snapshot'
+  }
+  if (-not [bool]$runtimeImmutability.immutable -or
+      ($runtimeImmutability.before | ConvertTo-Json -Depth 30 -Compress) -cne
+        ($runtimeImmutability.after | ConvertTo-Json -Depth 30 -Compress)) {
+    throw 'Oracle-effect R runtime before/after inventory is not immutable.'
+  }
+  $configuredRuntimeSnapshot = [pscustomobject][ordered]@{
+    rscript = $oracle.rscript
+    r_library = $oracle.r_library
+  }
+  if (($runtimeImmutability.after | ConvertTo-Json -Depth 30 -Compress) -cne
+      ($configuredRuntimeSnapshot | ConvertTo-Json -Depth 30 -Compress)) {
+    throw 'Oracle-effect config differs from the attested R runtime snapshot.'
+  }
+  $expectedController = Get-Issue13V5ControllerIdentity `
+    ([string]$Config.repository_root) ([string]$Config.candidate_commit)
+  $null = Assert-Issue13V5ControllerIdentity `
+    $oracle.comparison_harness.source_controller $expectedController `
+    'Oracle-effect config source controller'
+  $null = Assert-Issue13V5ControllerIdentity `
+    $proof.evidence.terminal_runtime.comparison_harness.source_controller `
+    $expectedController 'Oracle-effect proof source controller'
+  $harnessManifest = Read-Issue13V5Json $comparisonHarness
+  $null = Assert-Issue13V5ExactPropertyNames $harnessManifest.source_controller @(
+    'commit_sha256', 'file_count', 'records'
+  ) 'Terminal harness manifest source controller'
+  if ([string]$harnessManifest.source_controller.commit_sha256 -cne
+        [string]$expectedController.commit_sha256 -or
+      [int64]$harnessManifest.source_controller.file_count -ne
+        [int64]$expectedController.file_count -or
+      @($harnessManifest.source_controller.records).Count -ne
+        [int64]$expectedController.file_count) {
+    throw 'Terminal harness manifest source controller aggregate changed.'
+  }
+  foreach ($expectedRecord in @($expectedController.records)) {
+    $matches = @($harnessManifest.source_controller.records | Where-Object {
+      [string]$_.name -ceq [string]$expectedRecord.name
+    })
+    if ($matches.Count -ne 1) {
+      throw "Terminal harness source record is missing or duplicated: $($expectedRecord.name)"
+    }
+    $null = Assert-Issue13V5ExactPropertyNames $matches[0] @(
+      'name', 'relative_path', 'sha256', 'git_blob'
+    ) "Terminal harness source record $($expectedRecord.name)"
+    foreach ($field in @('name', 'relative_path', 'sha256', 'git_blob')) {
+      if ([string]$matches[0].$field -cne [string]$expectedRecord.$field) {
+        throw "Terminal harness source record differs: $($expectedRecord.name)/$field"
+      }
+    }
+  }
+  $null = Assert-Issue13V5ExactPropertyNames $proof.conclusion @(
+    'authorized_patch_authenticated', 'terminal_harness_authenticated',
+    'strict_common_method_count', 'strict_common_primary_and_replay_passed',
+    'approved_run_count', 'approved_runs_immutable', 'recovered_method_count',
+    'recovered_methods_passed',
+    'recovered_coordinate_and_diagnostic_contracts_passed',
+    'oracle_effect_closed', 'final_v5_gate_substituted'
+  ) 'Oracle-effect conclusion'
+  if ([string]$proof.schema -cne
+        'wlv-issue13-v5-oracle-effect-proof/2' -or
+      [string]$proof.status -cne 'passed' -or -not [bool]$proof.passed -or
+      [bool]$proof.final_evidence_eligible -or
+      [string]$proof.purpose -cne
+        'closed-authorized-oracle-effect-cc2-to-e2f' -or
+      -not [bool]$proof.conclusion.authorized_patch_authenticated -or
+      -not [bool]$proof.conclusion.terminal_harness_authenticated -or
+      [long]$proof.conclusion.strict_common_method_count -ne 5L -or
+      -not [bool]$proof.conclusion.
+        strict_common_primary_and_replay_passed -or
+      [long]$proof.conclusion.approved_run_count -ne 17L -or
+      -not [bool]$proof.conclusion.approved_runs_immutable -or
+      [long]$proof.conclusion.recovered_method_count -ne 7L -or
+      -not [bool]$proof.conclusion.recovered_methods_passed -or
+      -not [bool]$proof.conclusion.
+        recovered_coordinate_and_diagnostic_contracts_passed -or
+      -not [bool]$proof.conclusion.oracle_effect_closed -or
+      [bool]$proof.conclusion.final_v5_gate_substituted) {
+    throw 'Oracle-effect proof envelope or conclusion changed.'
+  }
+  if (-not [string]::Equals(
+      (ConvertTo-Issue13V5Path (
+        [string]$proof.evidence.source_evidence.strict_smoke_summary_path)),
+      (ConvertTo-Issue13V5Path (
+        [string]$Config.strict_baseline_smoke.path)),
+      [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$proof.evidence.source_evidence.strict_smoke_summary_sha256 `
+        -cne [string]$Config.strict_baseline_smoke.sha256 -or
+      -not [string]::Equals(
+      (ConvertTo-Issue13V5Path (
+        [string]$proof.evidence.source_evidence.oracle_smoke_summary_path)),
+      (ConvertTo-Issue13V5Path $oracleSmokePath),
+      [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$proof.evidence.source_evidence.oracle_smoke_summary_sha256 `
+        -cne [string]$oracle.oracle_smoke.sha256) {
+    throw 'Oracle-effect proof is not bound to both authenticated smoke summaries.'
+  }
+  if (-not [string]::Equals(
+      (ConvertTo-Issue13V5Path ([string]$proof.evidence.spec.path)),
+      (ConvertTo-Issue13V5Path ([string]$specTool[0].path)),
+      [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$proof.evidence.spec.sha256 -cne [string]$specTool[0].sha256 -or
+      [string]$proof.evidence.spec.schema -cne
+        'wlv-issue13-v5-oracle-effect-spec/2' -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path ([string]$proof.evidence.proof_schema.path)),
+        (ConvertTo-Issue13V5Path ([string]$schemaTool[0].path)),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$proof.evidence.proof_schema.sha256 -cne
+        [string]$schemaTool[0].sha256 -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path ([string]$proof.evidence.oracle.patch_path)),
+        (ConvertTo-Issue13V5Path ([string]$Config.baseline_overlay.path)),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$proof.evidence.oracle.patch_sha256 -cne
+        [string]$Config.baseline_overlay.sha256 -or
+      [string]$proof.evidence.oracle.base_commit -cne
+        [string]$Config.baseline_commit -or
+      [string]$proof.evidence.oracle.runtime_commit -cne
+        [string]$Config.baseline_runtime_commit) {
+    throw 'Oracle-effect spec, schema, or authorized oracle binding changed.'
+  }
+  $workflow = $proof.evidence.comparison_workflow
+  $null = Assert-Issue13V5ExactPropertyNames $workflow @(
+    'primary_root', 'replay_root', 'generator_created_both_roots', 'methods',
+    'commands', 'comparisons'
+  ) 'Oracle-effect comparison workflow'
+  $commonMethods = @('wiodr13', 'wiodr16', 'wiodr16v09', 'zerodep_1', 'zerodep_2')
+  foreach ($commandRecord in @($workflow.commands)) {
+    $null = Assert-Issue13V5ExactPropertyNames $commandRecord @(
+      'phase', 'method', 'executable', 'arguments', 'working_directory',
+      'r_library_environment', 'environment_set', 'environment_cleared',
+      'output_directory', 'command_sha256', 'exit_code'
+    ) 'Oracle-effect comparison command'
+    foreach ($environmentRecord in @($commandRecord.environment_set)) {
+      $null = Assert-Issue13V5ExactPropertyNames $environmentRecord @(
+        'name', 'value'
+      ) 'Oracle-effect command set-environment record'
+    }
+  }
+  $expectedEnvironmentSetJson = $oracle.r_library.environment.set |
+    ConvertTo-Json -Depth 5 -Compress
+  $expectedClearedEnvironment = [string]::Join(
+    "`n", @($oracle.r_library.environment.cleared))
+  if (-not [string]::Equals(
+      (ConvertTo-Issue13V5Path ([string]$workflow.primary_root)),
+      (ConvertTo-Issue13V5Path $primaryRoot),
+      [StringComparison]::OrdinalIgnoreCase) -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path ([string]$workflow.replay_root)),
+        (ConvertTo-Issue13V5Path $replayRoot),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      -not [bool]$workflow.generator_created_both_roots -or
+      [string]::Join("`n", @($workflow.methods)) -cne
+        [string]::Join("`n", $commonMethods) -or
+      @($workflow.commands).Count -ne 10 -or
+      @($workflow.commands | Where-Object {
+        @($_.arguments).Count -ne 9 -or
+        [string]$_.arguments[0] -cne '--vanilla' -or
+        -not [string]::Equals(
+          (ConvertTo-Issue13V5Path ([string]$_.executable)),
+          (ConvertTo-Issue13V5Path $rscriptPath),
+          [StringComparison]::OrdinalIgnoreCase) -or
+        -not [string]::Equals(
+          (ConvertTo-Issue13V5Path ([string]$_.working_directory)),
+          (ConvertTo-Issue13V5Path (
+            (Join-Path (Split-Path -Parent $comparisonHarness) `
+              'issue13-evidence-harness'))),
+          [StringComparison]::OrdinalIgnoreCase) -or
+        [string]$_.r_library_environment.name -cne 'R_LIBS_USER' -or
+        -not [string]::Equals(
+          (ConvertTo-Issue13V5Path (
+            [string]$_.r_library_environment.value)),
+          (ConvertTo-Issue13V5Path $rLibraryPath),
+          [StringComparison]::OrdinalIgnoreCase) -or
+        ($_.environment_set | ConvertTo-Json -Depth 5 -Compress) -cne
+          $expectedEnvironmentSetJson -or
+        [string]::Join("`n", @($_.environment_cleared)) -cne
+          $expectedClearedEnvironment
+      }).Count -ne 0 -or
+      @($workflow.comparisons).Count -ne 5 -or
+      @($workflow.comparisons | Where-Object {
+        [string]$_.comparison_mode -cne 'strict' -or
+        @($_.files).Count -ne 4 -or
+        @($_.files | Where-Object { -not [bool]$_.normalized_identical }).Count `
+          -ne 0
+      }).Count -ne 0 -or
+      @($proof.evidence.approved_run_immutability).Count -ne 17 -or
+      @($proof.evidence.approved_run_immutability | Where-Object {
+        -not [bool]$_.immutable
+      }).Count -ne 0 -or
+      @($proof.evidence.recovered_methods).Count -ne 7) {
+    throw 'Oracle-effect primary/replay, 10-execution, 17-run, or 5+7 binding changed.'
+  }
+  $primaryInventory = Get-Issue13V5TreeInventory $primaryRoot
+  $replayInventory = Get-Issue13V5TreeInventory $replayRoot
+  $null = Assert-Issue13V5InventoryBinding $oracle.comparisons.primary.inventory `
+    $primaryInventory 'Oracle-effect primary comparison'
+  $null = Assert-Issue13V5InventoryBinding $oracle.comparisons.replay.inventory `
+    $replayInventory 'Oracle-effect replay comparison'
+  $null = Assert-Issue13V5ExactPropertyNames $oracle.comparisons @(
+    'primary', 'replay', 'inventory'
+  ) 'Oracle-effect comparison pair binding'
+  $null = Assert-Issue13V5ExactPropertyNames $oracle.comparisons.inventory @(
+    'schema', 'primary_inventory_sha256', 'replay_inventory_sha256',
+    'inventory_sha256'
+  ) 'Oracle-effect comparison pair inventory'
+  $pairInventoryPayload = [string]::Join("`n", @(
+    'wlv-issue13-v5-oracle-effect-comparison-pair-inventory/1',
+    'primary|' + (ConvertTo-Issue13V5Path $primaryRoot) + '|' +
+      [string]$primaryInventory.inventory_sha256,
+    'replay|' + (ConvertTo-Issue13V5Path $replayRoot) + '|' +
+      [string]$replayInventory.inventory_sha256
+  ))
+  if ([string]$oracle.comparisons.inventory.schema -cne
+        'wlv-issue13-v5-oracle-effect-comparison-pair-inventory/1' -or
+      [string]$oracle.comparisons.inventory.primary_inventory_sha256 -cne
+        [string]$primaryInventory.inventory_sha256 -or
+      [string]$oracle.comparisons.inventory.replay_inventory_sha256 -cne
+        [string]$replayInventory.inventory_sha256 -or
+      [string]$oracle.comparisons.inventory.inventory_sha256 -cne
+        (Get-Issue13V5TextSha256 $pairInventoryPayload)) {
+    throw 'Oracle-effect combined primary/replay inventory changed.'
+  }
+  $harnessInventory = Get-Issue13V5HarnessInventory (
+    Split-Path -Parent $comparisonHarness)
+  if ([int64]$harnessInventory.file_count -ne
+        $script:Issue13V5HarnessFileCount -or
+      [int64]$harnessInventory.total_bytes -ne
+        $script:Issue13V5HarnessTotalBytes -or
+      [string]$harnessInventory.inventory_sha256 -cne
+        $script:Issue13V5HarnessInventorySha256) {
+    throw 'Oracle-effect harness differs from the external terminal inventory pin.'
+  }
+  $proofHarness = $proof.evidence.terminal_runtime.comparison_harness
+  foreach ($field in @('file_count', 'total_bytes', 'inventory_sha256')) {
+    if ([string]$oracle.comparison_harness.output_tooling.$field -cne
+          [string]$harnessInventory.$field -or
+        [string]$oracle.comparison_harness.sealed_output_tooling.$field -cne
+          [string]$harnessInventory.$field -or
+        [string]$oracle.comparison_harness.installed_inventory.$field -cne
+          [string]$harnessInventory.$field -or
+        [string]$proofHarness.output_tooling.$field -cne
+          [string]$harnessInventory.$field -or
+        [string]$proofHarness.sealed_output_tooling.$field -cne
+          [string]$harnessInventory.$field -or
+        [string]$proofHarness.installed_inventory.$field -cne
+          [string]$harnessInventory.$field) {
+      throw "Oracle-effect terminal harness inventory changed: $field"
+    }
+  }
+  $proofRLibraryJson = $proof.evidence.terminal_runtime.r_library |
+    ConvertTo-Json -Depth 20 -Compress
+  $configRLibraryJson = $oracle.r_library |
+    ConvertTo-Json -Depth 20 -Compress
+  if ([string]$proofHarness.expected_candidate_commit -cne
+        [string]$Config.candidate_commit -or
+      [string]$proofHarness.source_controller_commit_sha256 -cne
+        [string]$Config.candidate_commit -or
+      [string]$proofHarness.generation -cne 'v5-terminal' -or
+      -not [bool]$proofHarness.final_evidence_eligible -or
+      [bool]$proofHarness.reuses_candidate_evidence -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path ([string]$proofHarness.manifest_path)),
+        (ConvertTo-Issue13V5Path $comparisonHarness),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$proofHarness.manifest_sha256 -cne
+        [string]$oracle.comparison_harness.manifest_sha256 -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path (
+          [string]$oracle.comparison_harness.installed_inventory.root)),
+        (ConvertTo-Issue13V5Path (Split-Path -Parent $comparisonHarness)),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path (
+          [string]$oracle.comparison_harness.installed_inventory.harness_root)),
+        (ConvertTo-Issue13V5Path (
+          (Join-Path (Split-Path -Parent $comparisonHarness) `
+            'issue13-evidence-harness'))),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path (
+          [string]$proofHarness.installed_inventory.root)),
+        (ConvertTo-Issue13V5Path (Split-Path -Parent $comparisonHarness)),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path (
+          [string]$proofHarness.installed_inventory.harness_root)),
+        (ConvertTo-Issue13V5Path (
+          (Join-Path (Split-Path -Parent $comparisonHarness) `
+            'issue13-evidence-harness'))),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      @($proofHarness.installed_inventory.records).Count -ne
+        [long]$harnessInventory.file_count -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path (
+          [string]$proof.evidence.terminal_runtime.rscript.path)),
+        (ConvertTo-Issue13V5Path $rscriptPath),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$proof.evidence.terminal_runtime.rscript.sha256 -cne
+        [string]$oracle.rscript.sha256 -or
+      [int64]$proof.evidence.terminal_runtime.rscript.size_bytes -ne
+        [int64]$oracle.rscript.size_bytes -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path (
+          [string]$proof.evidence.terminal_runtime.r_library.path)),
+        (ConvertTo-Issue13V5Path $rLibraryPath),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$proof.evidence.terminal_runtime.r_library.environment_variable `
+        -cne 'R_LIBS_USER' -or
+      $proofRLibraryJson -cne $configRLibraryJson) {
+    throw 'Oracle-effect terminal harness/R runtime proof binding changed.'
+  }
+  [pscustomobject][ordered]@{
+    proof = $proof
+    proof_path = $proofPath
+    primary_root = $primaryRoot
+    primary_inventory = $primaryInventory
+    replay_root = $replayRoot
+    replay_inventory = $replayInventory
+    harness_inventory = $harnessInventory
+    source_controller = $expectedController
+    r_runtime = $oracle.r_library
+    tooling = $expectedTools
+  }
+}
+
+function Invoke-Issue13V5OracleEffectValidation([object]$Config) {
+  $bindings = Assert-Issue13V5OracleEffectBindings $Config
+  $oracle = $Config.oracle_effect
+  $validator = @($bindings.tooling | Where-Object {
+    [string]$_.name -ceq 'issue13-v5-oracle-effect-validate.ps1'
+  })
+  $spec = @($bindings.tooling | Where-Object {
+    [string]$_.name -ceq 'issue13-v5-oracle-effect-spec.json'
+  })
+  $schema = @($bindings.tooling | Where-Object {
+    [string]$_.name -ceq 'issue13-v5-oracle-effect-proof.schema.json'
+  })
+  if ($validator.Count -ne 1 -or $spec.Count -ne 1 -or $schema.Count -ne 1) {
+    throw 'Oracle-effect validator/spec/schema tooling is ambiguous.'
+  }
+  $pwsh = (Get-Command pwsh.exe -ErrorAction Stop).Source
+  $arguments = @(
+    '-NoLogo', '-NoProfile', '-File', [string]$validator[0].path,
+    '-RepositoryRoot', [string]$Config.repository_root,
+    '-ExpectedCandidateCommit', [string]$Config.candidate_commit,
+    '-SpecPath', [string]$spec[0].path,
+    '-SchemaPath', [string]$schema[0].path,
+    '-StrictSmokeSummary', [string]$Config.strict_baseline_smoke.path,
+    '-OracleSmokeSummary', [string]$oracle.oracle_smoke.path,
+    '-OraclePatch', [string]$Config.baseline_overlay.path,
+    '-ComparisonHarnessManifest',
+      [string]$Config.harness_manifest_path,
+    '-Rscript', [string]$Config.rscript,
+    '-RLibrary', [string]$Config.r_library,
+    '-ComparisonRoot', [string]$oracle.comparisons.primary.root,
+    '-ReplayRoot', [string]$oracle.comparisons.replay.root,
+    '-ProofPath', [string]$oracle.proof.path
+  )
+  $previous = (Get-Location).Path
+  try {
+    Set-Location -LiteralPath ([string]$Config.repository_root)
+    $output = @(& $pwsh @arguments 2>&1 | ForEach-Object { [string]$_ })
+    $exitCode = $LASTEXITCODE
+  } finally {
+    Set-Location -LiteralPath $previous
+  }
+  $outputText = [string]::Join("`n", $output)
+  if ($exitCode -ne 0) {
+    throw "Oracle-effect validation failed (exit=$exitCode): $outputText"
+  }
+  try {
+    $result = $outputText | ConvertFrom-Json -DateKind String
+  } catch {
+    throw "Oracle-effect validator returned invalid JSON: $($_.Exception.Message)"
+  }
+  $null = Assert-Issue13V5ExactPropertyNames $result @(
+    'schema', 'status', 'passed', 'proof_path', 'proof_sha256',
+    'strict_common_comparison_count', 'comparison_execution_count',
+    'approved_run_inventory_count', 'recovered_method_count',
+    'source_controller_inventory_sha256', 'r_runtime_inventory_sha256',
+    'oracle_effect_closed', 'final_v5_gate_substituted'
+  ) 'Oracle-effect validator result'
+  if ([string]$result.schema -cne
+        'wlv-issue13-v5-oracle-effect-validation/2' -or
+      [string]$result.status -cne 'passed' -or -not [bool]$result.passed -or
+      (Get-Issue13V5Sha256 ([string]$result.proof_path)) -cne
+        [string]$result.proof_sha256 -or
+      [string]$result.proof_sha256 -cne [string]$oracle.proof.sha256 -or
+      [long]$result.strict_common_comparison_count -ne 5L -or
+      [long]$result.comparison_execution_count -ne 10L -or
+      [long]$result.approved_run_inventory_count -ne 17L -or
+      [long]$result.recovered_method_count -ne 7L -or
+      [string]$result.source_controller_inventory_sha256 -cne
+        [string]$oracle.comparison_harness.source_controller.inventory_sha256 -or
+      [string]$result.r_runtime_inventory_sha256 -cne
+        [string]$oracle.r_library.inventory_sha256 -or
+      -not [bool]$result.oracle_effect_closed -or
+      [bool]$result.final_v5_gate_substituted) {
+    throw 'Oracle-effect validator returned a forged or incomplete result.'
+  }
+  $after = Assert-Issue13V5OracleEffectBindings $Config
+  [pscustomobject][ordered]@{
+    schema = 'wlv-issue13-v5-oracle-effect-validation-record/2'
+    status = 'passed'
+    passed = $true
+    final_evidence_eligible = $false
+    required_by_final_gate = $true
+    strict_common_comparison_count = 5L
+    comparison_execution_count = 10L
+    approved_run_inventory_count = 17L
+    recovered_method_count = 7L
+    source_controller_inventory_sha256 =
+      [string]$result.source_controller_inventory_sha256
+    r_runtime_inventory_sha256 = [string]$result.r_runtime_inventory_sha256
+    oracle_effect_closed = $true
+    final_v5_gate_substituted = $false
+    proof_sha256 = [string]$result.proof_sha256
+    primary_comparison_inventory_sha256 =
+      [string]$after.primary_inventory.inventory_sha256
+    replay_comparison_inventory_sha256 =
+      [string]$after.replay_inventory.inventory_sha256
+    comparison_harness_manifest_sha256 =
+      [string]$oracle.comparison_harness.manifest_sha256
+    comparison_harness_inventory_sha256 =
+      [string]$after.harness_inventory.inventory_sha256
+    expected_candidate_commit = [string]$Config.candidate_commit
+    rscript_sha256 = [string]$oracle.rscript.sha256
+    r_library_path = [string]$oracle.r_library.path
+    authorized_patch_sha256 = $script:Issue13V5BaselineOverlaySha256
+    authorized_patch_id = $script:Issue13V5BaselineOverlayPatchId
+    command = [pscustomobject][ordered]@{
+      executable = ConvertTo-Issue13V5Path $pwsh
+      arguments = [object[]]$arguments
+      working_directory = [string]$Config.repository_root
+      exit_code = [long]$exitCode
+      stdout_sha256 = Get-Issue13V5TextSha256 $outputText
+    }
+  }
+}
+
+function New-Issue13V5OracleEffectControlRecord(
+  [object]$Config,
+  [string]$ConfigSha256,
+  [object]$Validation
+) {
+  [pscustomobject][ordered]@{
+    schema = 'wlv-issue13-v5-oracle-effect-control/2'
+    status = 'passed'
+    passed = $true
+    final_evidence_eligible = $false
+    required_by_final_gate = $true
+    config_sha256 = $ConfigSha256
+    baseline_commit = [string]$Config.baseline_commit
+    baseline_runtime_commit = [string]$Config.baseline_runtime_commit
+    candidate_commit = [string]$Config.candidate_commit
+    proof = $Config.oracle_effect.proof
+    oracle_smoke = $Config.oracle_effect.oracle_smoke
+    comparisons = $Config.oracle_effect.comparisons
+    comparison_harness = $Config.oracle_effect.comparison_harness
+    rscript = $Config.oracle_effect.rscript
+    r_library = $Config.oracle_effect.r_library
+    authorized_patch_sha256 = [string]$Config.baseline_overlay.sha256
+    authorized_patch_id = [string]$Config.baseline_overlay.patch_id
+    validation = $Validation
+  }
+}
+
+function Assert-Issue13V5OracleEffectControlRecord(
+  [object]$Config,
+  [object]$State,
+  [object]$FreshValidation = $null
+) {
+  $null = Assert-Issue13V5OracleEffectBindings $Config
+  $expectedPath = ConvertTo-Issue13V5Path (
+    Join-Path ([string]$Config.control_root) 'oracle-effect-validation.json')
+  $null = Assert-Issue13V5ExactPropertyNames $State.oracle_effect @(
+    'status', 'control_record_path', 'control_record_sha256', 'proof_sha256',
+    'comparison_inventory_sha256', 'strict_common_method_count',
+    'recovered_method_count', 'final_evidence_eligible', 'required_by_final_gate'
+  ) 'Oracle-effect state binding'
+  if ([string]$State.oracle_effect.status -cne 'authenticated' -or
+      [string]$State.oracle_effect.control_record_sha256 -cnotmatch
+        '^[0-9a-f]{64}$' -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path (
+          [string]$State.oracle_effect.control_record_path)),
+        $expectedPath, [StringComparison]::OrdinalIgnoreCase) -or
+      -not (Test-Path -LiteralPath $expectedPath -PathType Leaf) -or
+      (Get-Issue13V5Sha256 $expectedPath) -cne
+        [string]$State.oracle_effect.control_record_sha256 -or
+      [string]$State.oracle_effect.proof_sha256 -cne
+        [string]$Config.oracle_effect.proof.sha256 -or
+      [string]$State.oracle_effect.comparison_inventory_sha256 -cne
+        [string]$Config.oracle_effect.comparisons.inventory.inventory_sha256 -or
+      [long]$State.oracle_effect.strict_common_method_count -ne 5L -or
+      [long]$State.oracle_effect.recovered_method_count -ne 7L -or
+      [bool]$State.oracle_effect.final_evidence_eligible -or
+      -not [bool]$State.oracle_effect.required_by_final_gate) {
+    throw 'Oracle-effect state/control binding is missing or changed.'
+  }
+  $record = Read-Issue13V5Json $expectedPath
+  $null = Assert-Issue13V5ExactPropertyNames $record @(
+    'schema', 'status', 'passed', 'final_evidence_eligible',
+    'required_by_final_gate', 'config_sha256', 'baseline_commit',
+    'baseline_runtime_commit', 'candidate_commit', 'proof', 'oracle_smoke',
+    'comparisons', 'comparison_harness', 'rscript', 'r_library',
+    'authorized_patch_sha256', 'authorized_patch_id', 'validation'
+  ) 'Oracle-effect control record'
+  $null = Assert-Issue13V5ExactPropertyNames $record.validation @(
+    'schema', 'status', 'passed', 'final_evidence_eligible',
+    'required_by_final_gate', 'strict_common_comparison_count',
+    'comparison_execution_count', 'approved_run_inventory_count',
+    'recovered_method_count', 'source_controller_inventory_sha256',
+    'r_runtime_inventory_sha256', 'oracle_effect_closed',
+    'final_v5_gate_substituted', 'proof_sha256',
+    'primary_comparison_inventory_sha256',
+    'replay_comparison_inventory_sha256',
+    'comparison_harness_manifest_sha256',
+    'comparison_harness_inventory_sha256', 'expected_candidate_commit',
+    'rscript_sha256', 'r_library_path', 'authorized_patch_sha256',
+    'authorized_patch_id', 'command'
+  ) 'Oracle-effect validation record'
+  $null = Assert-Issue13V5ExactPropertyNames $record.validation.command @(
+    'executable', 'arguments', 'working_directory', 'exit_code',
+    'stdout_sha256'
+  ) 'Oracle-effect validation command'
+  if ([string]$record.schema -cne
+        'wlv-issue13-v5-oracle-effect-control/2' -or
+      [string]$record.status -cne 'passed' -or -not [bool]$record.passed -or
+      [bool]$record.final_evidence_eligible -or
+      -not [bool]$record.required_by_final_gate -or
+      [string]$record.config_sha256 -cne [string]$State.config_sha256 -or
+      [string]$record.baseline_commit -cne
+        [string]$Config.baseline_commit -or
+      [string]$record.baseline_runtime_commit -cne
+        [string]$Config.baseline_runtime_commit -or
+      [string]$record.candidate_commit -cne
+        [string]$Config.candidate_commit -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path ([string]$record.proof.path)),
+        (ConvertTo-Issue13V5Path ([string]$Config.oracle_effect.proof.path)),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$record.proof.sha256 -cne
+        [string]$Config.oracle_effect.proof.sha256 -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path ([string]$record.oracle_smoke.path)),
+        (ConvertTo-Issue13V5Path (
+          [string]$Config.oracle_effect.oracle_smoke.path)),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$record.oracle_smoke.sha256 -cne
+        [string]$Config.oracle_effect.oracle_smoke.sha256 -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path (
+          [string]$record.comparisons.primary.root)),
+        (ConvertTo-Issue13V5Path (
+          [string]$Config.oracle_effect.comparisons.primary.root)),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$record.comparisons.primary.inventory.inventory_sha256 -cne
+        [string]$Config.oracle_effect.comparisons.primary.inventory.
+          inventory_sha256 -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path (
+          [string]$record.comparisons.replay.root)),
+        (ConvertTo-Issue13V5Path (
+          [string]$Config.oracle_effect.comparisons.replay.root)),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$record.comparisons.replay.inventory.inventory_sha256 -cne
+        [string]$Config.oracle_effect.comparisons.replay.inventory.
+          inventory_sha256 -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path (
+          [string]$record.comparison_harness.manifest_path)),
+        (ConvertTo-Issue13V5Path ([string]$Config.harness_manifest_path)),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$record.comparison_harness.manifest_sha256 -cne
+        [string]$Config.harness_manifest_sha256 -or
+      [string]$record.comparison_harness.expected_candidate_commit -cne
+        [string]$Config.candidate_commit -or
+      ($record.comparison_harness | ConvertTo-Json -Depth 30 -Compress) -cne
+        ($Config.oracle_effect.comparison_harness |
+          ConvertTo-Json -Depth 30 -Compress) -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path ([string]$record.rscript.path)),
+        (ConvertTo-Issue13V5Path ([string]$Config.rscript)),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$record.rscript.sha256 -cne
+        [string]$Config.oracle_effect.rscript.sha256 -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path ([string]$record.r_library.path)),
+        (ConvertTo-Issue13V5Path ([string]$Config.r_library)),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      ($record.r_library | ConvertTo-Json -Depth 30 -Compress) -cne
+        ($Config.oracle_effect.r_library | ConvertTo-Json -Depth 30 -Compress) -or
+      [string]$record.authorized_patch_sha256 -cne
+        $script:Issue13V5BaselineOverlaySha256 -or
+      [string]$record.authorized_patch_id -cne
+        $script:Issue13V5BaselineOverlayPatchId -or
+      [string]$record.validation.schema -cne
+        'wlv-issue13-v5-oracle-effect-validation-record/2' -or
+      [string]$record.validation.status -cne 'passed' -or
+      -not [bool]$record.validation.passed -or
+      [bool]$record.validation.final_evidence_eligible -or
+      -not [bool]$record.validation.required_by_final_gate -or
+      [long]$record.validation.strict_common_comparison_count -ne 5L -or
+      [long]$record.validation.comparison_execution_count -ne 10L -or
+      [long]$record.validation.approved_run_inventory_count -ne 17L -or
+      [long]$record.validation.recovered_method_count -ne 7L -or
+      [string]$record.validation.source_controller_inventory_sha256 -cne
+        [string]$Config.oracle_effect.comparison_harness.source_controller.
+          inventory_sha256 -or
+      [string]$record.validation.r_runtime_inventory_sha256 -cne
+        [string]$Config.oracle_effect.r_library.inventory_sha256 -or
+      -not [bool]$record.validation.oracle_effect_closed -or
+      [bool]$record.validation.final_v5_gate_substituted -or
+      [string]$record.validation.proof_sha256 -cne
+        [string]$Config.oracle_effect.proof.sha256 -or
+      [string]$record.validation.primary_comparison_inventory_sha256 -cne
+        [string]$Config.oracle_effect.comparisons.primary.inventory.
+          inventory_sha256 -or
+      [string]$record.validation.replay_comparison_inventory_sha256 -cne
+        [string]$Config.oracle_effect.comparisons.replay.inventory.
+          inventory_sha256 -or
+      [string]$record.validation.comparison_harness_manifest_sha256 -cne
+        [string]$Config.oracle_effect.comparison_harness.manifest_sha256 -or
+      [string]$record.validation.comparison_harness_inventory_sha256 -cne
+        [string]$Config.oracle_effect.comparison_harness.installed_inventory.
+          inventory_sha256 -or
+      [string]$record.validation.expected_candidate_commit -cne
+        [string]$Config.candidate_commit -or
+      [string]$record.validation.rscript_sha256 -cne
+        [string]$Config.oracle_effect.rscript.sha256 -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path ([string]$record.validation.r_library_path)),
+        (ConvertTo-Issue13V5Path ([string]$Config.r_library)),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$record.validation.authorized_patch_sha256 -cne
+        $script:Issue13V5BaselineOverlaySha256 -or
+      [string]$record.validation.authorized_patch_id -cne
+        $script:Issue13V5BaselineOverlayPatchId -or
+      [long]$record.validation.command.exit_code -ne 0L -or
+      [string]$record.validation.command.stdout_sha256 -cnotmatch
+        '^[0-9a-f]{64}$') {
+    throw 'Oracle-effect control record is forged or incomplete.'
+  }
+  if ($null -ne $FreshValidation) {
+    foreach ($field in @(
+        'schema', 'status', 'passed', 'final_evidence_eligible',
+        'required_by_final_gate', 'strict_common_comparison_count',
+        'comparison_execution_count', 'approved_run_inventory_count',
+        'recovered_method_count', 'source_controller_inventory_sha256',
+        'r_runtime_inventory_sha256', 'oracle_effect_closed',
+        'final_v5_gate_substituted', 'proof_sha256',
+        'primary_comparison_inventory_sha256',
+        'replay_comparison_inventory_sha256',
+        'comparison_harness_manifest_sha256',
+        'comparison_harness_inventory_sha256', 'expected_candidate_commit',
+        'rscript_sha256', 'r_library_path', 'authorized_patch_sha256',
+        'authorized_patch_id')) {
+      if ([string]$record.validation.$field -cne
+          [string]$FreshValidation.$field) {
+        throw "Oracle-effect closing validation changed: $field"
+      }
+    }
+    foreach ($field in @(
+        'executable', 'working_directory', 'exit_code', 'stdout_sha256')) {
+      if ([string]$record.validation.command.$field -cne
+          [string]$FreshValidation.command.$field) {
+        throw "Oracle-effect closing command changed: $field"
+      }
+    }
+    if ([string]::Join("`n", @($record.validation.command.arguments)) -cne
+        [string]::Join("`n", @($FreshValidation.command.arguments))) {
+      throw 'Oracle-effect closing command arguments changed.'
+    }
+  }
+  $record
 }
 
 function Get-Issue13V5SourceBinding(
@@ -601,7 +1894,7 @@ function Assert-Issue13V5HarnessBinding([object]$Config) {
   $inventory = Get-Issue13V5HarnessInventory $runtime
   if ([string]$manifest.schema -cne
         'wlv-issue13-v5-harness-materialization/1' -or
-      [string]$manifest.generation -cne 'v5' -or
+      [string]$manifest.generation -cne 'v5-terminal' -or
       [string]$manifest.baseline_commit -cne $script:Issue13V5BaselineCommit -or
       [string]$manifest.baseline_policy -cne
         'authenticated-direct-child-compatibility-oracle' -or
@@ -635,11 +1928,12 @@ function Assert-Issue13V5HarnessBinding([object]$Config) {
     throw 'Materialized V5 harness changed after authentication.'
   }
   $controllerPins = @(Get-Issue13V5CoordinatorPins $Config)
-  if ([string]$manifest.source_controller.candidate_commit -cne
+  $controllerCount = [long]$script:Issue13V5ControllerFiles.Count
+  if ([string]$manifest.source_controller.commit_sha256 -cne
         [string]$Config.candidate_commit -or
-      [long]$manifest.source_controller.file_count -ne 11L -or
-      @($manifest.source_controller.records).Count -ne 11 -or
-      $controllerPins.Count -ne 11) {
+      [long]$manifest.source_controller.file_count -ne $controllerCount -or
+      @($manifest.source_controller.records).Count -ne $controllerCount -or
+      $controllerPins.Count -ne $controllerCount) {
     throw 'Materialized V5 harness lacks the sealed controller source binding.'
   }
   for ($index = 0; $index -lt $controllerPins.Count; $index++) {
@@ -1062,6 +2356,47 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
       @($comparisonSafe | Sort-Object -Unique).Count -ne 202) {
     throw 'V5 scenario/comparison identifiers are not collision-free.'
   }
+  $preparationProfile = $config.comparison.preparation_equivalence_profile
+  $null = Assert-Issue13V5ExactPropertyNames $preparationProfile @(
+    'schema', 'path', 'sha256', 'sources', 'artifacts', 'profile_count',
+    'all_rows_fields_and_order_exact', 'architecture_projection',
+    'source_unit_contract_bridge'
+  ) 'Exhaustive preparation equivalence binding'
+  $preparationProfilePath = ConvertTo-Issue13V5Path (
+    [string]$preparationProfile.path)
+  $expectedPreparationProfilePath = ConvertTo-Issue13V5Path (Join-Path `
+    ([string]$config.harness_root) `
+    'issue13-v5-preparation-equivalence.json')
+  if (-not [string]::Equals($preparationProfilePath,
+        $expectedPreparationProfilePath,
+        [StringComparison]::OrdinalIgnoreCase) -or
+      -not (Test-Path -LiteralPath $preparationProfilePath -PathType Leaf) -or
+      [string]$preparationProfile.sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+      (Get-Issue13V5Sha256 $preparationProfilePath) -cne
+        [string]$preparationProfile.sha256 -or
+      [string]$preparationProfile.schema -cne
+        'wlv-issue13-preparation-equivalence/1' -or
+      [string]::Join("`n", @($preparationProfile.sources)) -cne
+        "wiodr13`nwiodr16" -or
+      [string]::Join("`n", @($preparationProfile.artifacts)) -cne
+        "_unit_contract.csv`n_source_manifest.csv" -or
+      [long]$preparationProfile.profile_count -ne 2L -or
+      -not [bool]$preparationProfile.all_rows_fields_and_order_exact -or
+      @($preparationProfile.architecture_projection).Count -ne 0 -or
+      [string]$preparationProfile.source_unit_contract_bridge -cne
+        'exhaustive-source-unit-contract-bridge') {
+    throw 'The exhaustive preparation-equivalence binding changed.'
+  }
+  $preparationProfileDocument = Read-Issue13V5Json $preparationProfilePath
+  if ([string]$preparationProfileDocument.schema -cne
+        'wlv-issue13-preparation-equivalence/1' -or
+      [string]::Join("`n", @($preparationProfileDocument.sources)) -cne
+        "wiodr13`nwiodr16" -or
+      [string]::Join("`n", @($preparationProfileDocument.artifacts)) -cne
+        "_unit_contract.csv`n_source_manifest.csv" -or
+      @($preparationProfileDocument.profiles).Count -ne 2) {
+    throw 'The exhaustive preparation-equivalence document changed.'
+  }
   if ([string]$config.comparison.numerical_tolerance -cne
         'contract-only-no-new-tolerance' -or
       -not [bool]$config.comparison.compare_dimensions -or
@@ -1078,14 +2413,7 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
         "timestamps`npaths`nrun_id`nresult_id`n" +
           'provenance-dependent-container-bytes' -or
       [string]::Join("`n", @($config.comparison.candidate_only_artifacts)) `
-        -cne "_nonfinite_resolution_diagnostics.csv`n_runtime_resources.rds" -or
-      [string]::Join("`n", @(
-        $config.comparison.preparation_architecture_projection)) -cne
-        "module`naggregation_notes`nsource_generation_id`n" +
-          "contract_sha256`n_unit_contract.csv:size_bytes`n" +
-          "_unit_contract.csv:sha256`nm_io.fst.meta:size_bytes`n" +
-          "m_io.fst.meta:sha256`nsea.fst.meta:size_bytes`n" +
-          'sea.fst.meta:sha256') {
+        -cne "_nonfinite_resolution_diagnostics.csv`n_runtime_resources.rds") {
     throw 'V5 scientific comparison policy changed.'
   }
   if ([double]$config.performance.candidate_time_ratio_maximum -ne 1.2 -or
@@ -1113,7 +2441,8 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
       [string]::Join("`n", @($config.report.required_fields)) -cne
         "baseline_commit`nbaseline_base_commit`nbaseline_runtime_commit`n" +
           "strict_baseline_smoke`ncompatibility_baseline_smoke`n" +
-          "baseline_overlay_patch`ncandidate_commit`nsource_ids`ncommands`n" +
+          "baseline_overlay_patch`noracle_effect_proof`n" +
+          "candidate_commit`nsource_ids`ncommands`n" +
           "hashes`ntimes`npeak_rss`ndifferences`nfault_results`n" +
           "preparation_results`npaper0_results" -or
       -not (Test-Path -LiteralPath ([string]$config.rscript) -PathType Leaf) -or
@@ -1155,6 +2484,22 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
       throw 'V5 config file must be outside worktree, evidence, and control roots.'
     }
   }
+  $oracleComparisonRoots = @(
+    (ConvertTo-Issue13V5Path (
+      [string]$config.oracle_effect.comparisons.primary.root)),
+    (ConvertTo-Issue13V5Path (
+      [string]$config.oracle_effect.comparisons.replay.root))
+  )
+  foreach ($oracleComparisonRoot in $oracleComparisonRoots) {
+    if ([string]::Equals($path, $oracleComparisonRoot,
+        [StringComparison]::OrdinalIgnoreCase) -or
+        $path.StartsWith($oracleComparisonRoot.TrimEnd('\') + '\',
+          [StringComparison]::OrdinalIgnoreCase) -or
+        $oracleComparisonRoot.StartsWith($path.TrimEnd('\') + '\',
+          [StringComparison]::OrdinalIgnoreCase)) {
+      throw 'V5 config file must be outside both oracle-effect comparison roots.'
+    }
+  }
   for ($left = 0; $left -lt $roots.Count; $left++) {
     for ($right = 0; $right -lt $roots.Count; $right++) {
       if ($left -eq $right) { continue }
@@ -1170,6 +2515,10 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
       (ConvertTo-Issue13V5Path ([string]$config.source_origin))
       (ConvertTo-Issue13V5Path ([string]$config.candidate_source_origin))
       (ConvertTo-Issue13V5Path ([string]$config.harness_runtime_root))
+      (ConvertTo-Issue13V5Path (
+        [string]$config.oracle_effect.comparisons.primary.root))
+      (ConvertTo-Issue13V5Path (
+        [string]$config.oracle_effect.comparisons.replay.root))
     )) {
     foreach ($root in $roots) {
       $immutablePrefix = $immutable.TrimEnd('\') + '\'
@@ -1180,7 +2529,7 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
             [StringComparison]::OrdinalIgnoreCase) -or
           $immutable.StartsWith($rootPrefix,
             [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'V5 output roots must not overlap repository, sources, or harness.'
+        throw 'V5 output roots must not overlap repository, sources, harness, or oracle comparisons.'
       }
     }
   }
@@ -1241,6 +2590,38 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
     ([string]$config.compatibility_baseline_smoke.sha256)
   $harnessBinding = Assert-Issue13V5HarnessBinding $config
   $harnessInventory = $harnessBinding.inventory
+  $oracleEffectValidation = Invoke-Issue13V5OracleEffectValidation $config
+  $initialOracleValidation = $config.oracle_effect.initial_validation
+  foreach ($field in @(
+      'schema', 'status', 'passed', 'final_evidence_eligible',
+      'required_by_final_gate', 'strict_common_comparison_count',
+      'comparison_execution_count', 'approved_run_inventory_count',
+      'recovered_method_count', 'source_controller_inventory_sha256',
+      'r_runtime_inventory_sha256', 'oracle_effect_closed',
+      'final_v5_gate_substituted', 'proof_sha256',
+      'primary_comparison_inventory_sha256',
+      'replay_comparison_inventory_sha256',
+      'comparison_harness_manifest_sha256',
+      'comparison_harness_inventory_sha256', 'expected_candidate_commit',
+      'rscript_sha256', 'r_library_path', 'authorized_patch_sha256',
+      'authorized_patch_id')) {
+    if ([string]$initialOracleValidation.$field -cne
+        [string]$oracleEffectValidation.$field) {
+      throw "Initial oracle-effect validation is stale or forged: $field"
+    }
+  }
+  if ([string]::Join("`n", @(
+        $initialOracleValidation.command.arguments)) -cne
+      [string]::Join("`n", @($oracleEffectValidation.command.arguments)) -or
+      [string]$initialOracleValidation.command.executable -cne
+        [string]$oracleEffectValidation.command.executable -or
+      [string]$initialOracleValidation.command.working_directory -cne
+        [string]$oracleEffectValidation.command.working_directory -or
+      [long]$initialOracleValidation.command.exit_code -ne 0L -or
+      [string]$initialOracleValidation.command.stdout_sha256 -cne
+        [string]$oracleEffectValidation.command.stdout_sha256) {
+    throw 'Initial oracle-effect validation command is stale or forged.'
+  }
   $index = Read-Issue13V5Json $config.baseline_runtime_index
   if ((Get-Issue13V5Sha256 $config.baseline_runtime_index) -cne
         [string]$config.baseline_runtime_index_sha256 -or
@@ -1340,6 +2721,7 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
     harness_inventory = $harnessInventory
     source_inventory = $source
     candidate_source_inventory = $candidateSource
+    oracle_effect_validation = $oracleEffectValidation
   }
 }
 
@@ -1746,6 +3128,7 @@ function Read-Issue13V5State([object]$Config, [string]$ConfigSha256) {
   }
   $null = Assert-Issue13V5CoordinatorPins $Config `
     @($state.coordinator_pins)
+  $null = Assert-Issue13V5OracleEffectControlRecord $Config $state
   $null = Assert-Issue13V5ReportBinding $Config $state
   if ([string]$state.final_aggregate.status -ceq 'passed') {
     $null = Assert-Issue13V5FinalBindings $Config $state
@@ -1760,6 +3143,7 @@ function Save-Issue13V5State(
   $null = Assert-Issue13V5CoordinatorPins $Config `
     @($State.coordinator_pins)
   $null = Assert-Issue13V5HarnessBinding $Config
+  $null = Assert-Issue13V5OracleEffectControlRecord $Config $State
   $null = Assert-Issue13V5ReportBinding $Config $State
   if ([string]$State.final_aggregate.status -ceq 'passed') {
     $null = Assert-Issue13V5FinalBindings $Config $State
@@ -1777,6 +3161,258 @@ function Get-Issue13V5ScenarioDirectory([object]$Config, [string]$Id) {
 function Get-Issue13V5ComparisonDirectory([object]$Config, [string]$Id) {
   Join-Path (Join-Path ([string]$Config.evidence_root) 'comparisons') `
     (Get-Issue13V5SafeId $Id)
+}
+
+function Assert-Issue13V5ScenarioStateHashes(
+  [string]$Directory,
+  [string]$ExpectedResultSha256,
+  [string]$ExpectedMetricsSha256,
+  [string]$Label
+) {
+  $root = (Resolve-Path -LiteralPath $Directory).Path
+  $resultPath = Join-Path $root 'scenario-result.json'
+  $metricsPath = Join-Path $root 'process-metrics.json'
+  if ($ExpectedResultSha256 -cnotmatch '^[0-9a-f]{64}$' -or
+      $ExpectedMetricsSha256 -cnotmatch '^[0-9a-f]{64}$' -or
+      (Get-Issue13V5Sha256 $resultPath) -cne $ExpectedResultSha256 -or
+      (Get-Issue13V5Sha256 $metricsPath) -cne $ExpectedMetricsSha256) {
+    throw "Scenario state hash changed: $Label"
+  }
+  $metrics = Read-Issue13V5Json $metricsPath
+  $expectedSamples = ConvertTo-Issue13V5Path (
+    Join-Path $root 'process-samples.csv')
+  $recordedSamplesName = [IO.Path]::GetFileName(
+    ([string]$metrics.samples_path).Replace('/', '\'))
+  if ($recordedSamplesName -cne 'process-samples.csv' -or
+      [string]$metrics.samples_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+      (Get-Issue13V5Sha256 $expectedSamples) -cne
+        [string]$metrics.samples_sha256) {
+    throw "Scenario samples are not anchored by the state-bound metrics: $Label"
+  }
+  foreach ($binding in @(
+      @($metrics.stdout_path, $metrics.stdout_sha256, 'stdout'),
+      @($metrics.stderr_path, $metrics.stderr_sha256, 'stderr'),
+      @($metrics.process_spec_path, $metrics.process_spec_sha256,
+        'process spec')
+    )) {
+    if ([string]$binding[1] -cnotmatch '^[0-9a-f]{64}$' -or
+        (Get-Issue13V5Sha256 ([string]$binding[0])) -cne
+          [string]$binding[1]) {
+      throw "Scenario $($binding[2]) changed: $Label"
+    }
+  }
+  if ((Get-Issue13V5Sha256 $resultPath) -cne $ExpectedResultSha256 -or
+      (Get-Issue13V5Sha256 $metricsPath) -cne $ExpectedMetricsSha256 -or
+      (Get-Issue13V5Sha256 $expectedSamples) -cne
+        [string]$metrics.samples_sha256) {
+    throw "Scenario evidence changed during authentication: $Label"
+  }
+  $true
+}
+
+function Assert-Issue13V5PhaseEvidenceState(
+  [object]$Config,
+  [object]$Phase,
+  [switch]$RequireCompletedComparison
+) {
+  foreach ($arm in @('baseline', 'candidate')) {
+    $status = [string]$Phase.($arm + '_status')
+    $directory = [string]$Phase.($arm + '_evidence')
+    $resultSha = [string]$Phase.($arm + '_result_sha256')
+    $metricsSha = [string]$Phase.($arm + '_metrics_sha256')
+    if ($status -cne 'executed') {
+      throw "Phase arm is not state-bound as executed: $($Phase.phase)/$arm"
+    }
+    $expectedDirectory = ConvertTo-Issue13V5Path (
+      Get-Issue13V5ScenarioDirectory $Config "$arm/$($Phase.phase)")
+    if (-not [string]::Equals(
+        (ConvertTo-Issue13V5Path $directory), $expectedDirectory,
+        [StringComparison]::OrdinalIgnoreCase)) {
+      throw "Phase evidence directory changed: $($Phase.phase)/$arm"
+    }
+    $null = Assert-Issue13V5ScenarioStateHashes $directory $resultSha `
+      $metricsSha "$($Phase.phase)/$arm"
+  }
+  if (-not $RequireCompletedComparison) { return $true }
+  if ([string]$Phase.comparison_status -cne 'completed') {
+    throw "Phase comparison is not complete: $($Phase.phase)"
+  }
+  $records = @($Phase.comparisons)
+  $expectedCount = if ([string]$Phase.kind -ceq 'prepare') {
+    3
+  } elseif ([string]$Phase.kind -ceq 'recalculate' -or
+      ([string]$Phase.kind -ceq 'calculate' -and
+        [long]$Phase.workers -eq 2L)) {
+    3
+  } else { 1 }
+  if ($records.Count -ne $expectedCount -or
+      @($records.id | Sort-Object -Unique).Count -ne $expectedCount) {
+    throw "Phase comparison coverage changed: $($Phase.phase)"
+  }
+  foreach ($record in $records) {
+    $expectedDirectory = ConvertTo-Issue13V5Path (
+      Get-Issue13V5ComparisonDirectory $Config ([string]$record.id))
+    if (-not [string]::Equals(
+        (ConvertTo-Issue13V5Path ([string]$record.directory)),
+        $expectedDirectory, [StringComparison]::OrdinalIgnoreCase) -or
+        [string]$record.comparison_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+        (Get-Issue13V5Sha256 (
+          Join-Path $expectedDirectory 'comparison.json')) -cne
+          [string]$record.comparison_sha256) {
+      throw "Phase comparison changed: $($record.id)"
+    }
+  }
+  $expectedPairPath = ConvertTo-Issue13V5Path (
+    Join-Path (Join-Path ([string]$Config.control_root) 'pair-results') `
+      ('p' + ([long]$Phase.ordinal).ToString('000') + '.json'))
+  if (-not [string]::Equals(
+      (ConvertTo-Issue13V5Path ([string]$Phase.pair_result_path)),
+      $expectedPairPath, [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$Phase.pair_result_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+      (Get-Issue13V5Sha256 $expectedPairPath) -cne
+        [string]$Phase.pair_result_sha256) {
+    throw "Phase pair-result changed: $($Phase.phase)"
+  }
+  $pair = Read-Issue13V5Json $expectedPairPath
+  if ([string]$pair.schema -cne 'wlv-issue13-v5-pair/1' -or
+      [string]$pair.status -cne 'passed' -or
+      [long]$pair.ordinal -ne [long]$Phase.ordinal -or
+      [string]$pair.phase -cne [string]$Phase.phase -or
+      @($pair.comparisons).Count -ne $records.Count) {
+    throw "Phase pair-result envelope changed: $($Phase.phase)"
+  }
+  for ($index = 0; $index -lt $records.Count; $index++) {
+    if ([string]$pair.comparisons[$index].id -cne
+          [string]$records[$index].id -or
+        [string]$pair.comparisons[$index].comparison_sha256 -cne
+          [string]$records[$index].comparison_sha256) {
+      throw "Phase pair-result comparison binding changed: $($Phase.phase)"
+    }
+  }
+  $true
+}
+
+function Assert-Issue13V5PrepFaultEvidenceState(
+  [object]$Config,
+  [object]$State,
+  [switch]$BeforeAggregate
+) {
+  $workflow = $State.prep_fault
+  if ([string]$workflow.plan_status -cne 'built') {
+    throw 'Preparation/fault plan is not state-bound.'
+  }
+  foreach ($binding in @(
+      @($workflow.plan_path, $workflow.plan_sha256,
+        (Join-Path ([string]$Config.control_root) 'prep-fault-plan\plan.json'),
+        'plan'),
+      @($workflow.plan_audit_path, $workflow.plan_audit_sha256,
+        (Join-Path ([string]$Config.control_root) `
+          'prep-fault-plan\plan-audit.json'), 'plan audit'),
+      @($workflow.preparation_comparison_path,
+        $workflow.preparation_comparison_sha256,
+        (Join-Path ([string]$Config.control_root) `
+          'preparation-comparison\issue13-preparation-comparison.json'),
+        'preparation comparison'),
+      @($workflow.import_report_path, $workflow.import_report_sha256,
+        (Join-Path ([string]$Config.control_root) `
+          'fault-inputs\fault-input-import.json'), 'fault import'),
+      @($workflow.seed_plan_path, $workflow.seed_plan_sha256,
+        (Join-Path ([string]$Config.control_root) `
+          'fault-seeds\seed-plan.json'), 'fault seed plan')
+    )) {
+    $expectedPath = ConvertTo-Issue13V5Path ([string]$binding[2])
+    if (-not [string]::Equals(
+        (ConvertTo-Issue13V5Path ([string]$binding[0])), $expectedPath,
+        [StringComparison]::OrdinalIgnoreCase) -or
+        [string]$binding[1] -cnotmatch '^[0-9a-f]{64}$' -or
+        (Get-Issue13V5Sha256 $expectedPath) -cne [string]$binding[1]) {
+      throw "Preparation/fault evidence changed: $($binding[3])"
+    }
+  }
+  $plan = Read-Issue13V5Json ([string]$workflow.plan_path)
+  $audit = Read-Issue13V5Json ([string]$workflow.plan_audit_path)
+  if ([string]$audit.plan_sha256 -cne [string]$workflow.plan_sha256 -or
+      @($plan.records).Count -ne 12) {
+    throw 'Preparation/fault plan audit binding changed.'
+  }
+  foreach ($record in @($plan.records)) {
+    foreach ($specBinding in @(
+        @($record.scenario_spec_path, $record.scenario_spec_sha256,
+          'scenario spec'),
+        @($record.process_spec_path, $record.process_spec_sha256,
+          'process spec')
+      )) {
+      if ([string]$specBinding[1] -cnotmatch '^[0-9a-f]{64}$' -or
+          (Get-Issue13V5Sha256 ([string]$specBinding[0])) -cne
+            [string]$specBinding[1]) {
+        throw "Preparation/fault $($specBinding[2]) changed: $($record.scenario_id)"
+      }
+    }
+  }
+  $seeds = @($workflow.seed_evidence)
+  if ([string]$workflow.seeds_status -cne 'executed' -or
+      $seeds.Count -ne 10 -or
+      @($seeds.scenario_id | Sort-Object -Unique).Count -ne 10) {
+    throw 'Preparation/fault seed evidence coverage changed.'
+  }
+  foreach ($seed in $seeds) {
+    $current = Get-Issue13V5TreeInventory ([string]$seed.root)
+    $null = Assert-Issue13V5InventoryBinding $seed.inventory $current `
+      "Fault seed $($seed.scenario_id)"
+  }
+  $faults = @($workflow.faults)
+  if ($faults.Count -ne 10 -or
+      @($faults | Where-Object status -cne 'executed').Count -ne 0) {
+    throw 'Preparation/fault scenario state coverage changed.'
+  }
+  foreach ($fault in $faults) {
+    $expectedDirectory = ConvertTo-Issue13V5Path (
+      Get-Issue13V5ScenarioDirectory $Config ([string]$fault.scenario_id))
+    if (-not [string]::Equals(
+        (ConvertTo-Issue13V5Path ([string]$fault.evidence)),
+        $expectedDirectory, [StringComparison]::OrdinalIgnoreCase)) {
+      throw "Fault evidence path changed: $($fault.fault_id)"
+    }
+    $null = Assert-Issue13V5ScenarioStateHashes $expectedDirectory `
+      ([string]$fault.result_sha256) ([string]$fault.metrics_sha256) `
+      ([string]$fault.scenario_id)
+  }
+  if ($BeforeAggregate) {
+    if ([string]$workflow.aggregate_status -cne 'planned' -or
+        $null -ne $workflow.aggregate_path -or
+        $null -ne $workflow.aggregate_sha256) {
+      throw 'Preparation/fault aggregate state is not pristine.'
+    }
+    return $true
+  }
+  $aggregatePath = ConvertTo-Issue13V5Path (
+    Join-Path ([string]$Config.control_root) `
+      'prep-fault-aggregate\prep-fault-aggregate.json')
+  if ([string]$workflow.aggregate_status -cne 'passed' -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path ([string]$workflow.aggregate_path)),
+        $aggregatePath, [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$workflow.aggregate_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+      (Get-Issue13V5Sha256 $aggregatePath) -cne
+        [string]$workflow.aggregate_sha256) {
+    throw 'Preparation/fault aggregate changed.'
+  }
+  $true
+}
+
+function Assert-Issue13V5CompletedEvidenceState(
+  [object]$Config,
+  [object]$State
+) {
+  if (@($State.phases).Count -ne 76) {
+    throw 'Completed evidence state does not contain exactly 76 phases.'
+  }
+  foreach ($phase in @($State.phases)) {
+    $null = Assert-Issue13V5PhaseEvidenceState $Config $phase `
+      -RequireCompletedComparison
+  }
+  $null = Assert-Issue13V5PrepFaultEvidenceState $Config $State
+  $true
 }
 
 function Get-Issue13V5FileRecords(
@@ -1832,7 +3468,16 @@ function Assert-Issue13V5ReportBinding(
       [string]$Config.strict_baseline_smoke.sha256,
       [string]$Config.compatibility_baseline_smoke.sha256,
       [string]$Config.baseline_overlay.sha256,
-      [string]$Config.baseline_overlay.patch_id
+      [string]$Config.baseline_overlay.patch_id,
+      [string]$Config.oracle_effect.proof.sha256,
+      [string]$Config.oracle_effect.oracle_smoke.sha256,
+      [string]$Config.oracle_effect.comparisons.inventory.inventory_sha256,
+      [string]$Config.oracle_effect.comparisons.primary.inventory.
+        inventory_sha256,
+      [string]$Config.oracle_effect.comparisons.replay.inventory.
+        inventory_sha256,
+      [string]$Config.oracle_effect.comparison_harness.manifest_sha256,
+      [string]$State.oracle_effect.control_record_sha256
     ) + @($Config.report.required_fields | ForEach-Object { [string]$_ })) {
     if (-not $text.Contains([string]$required)) {
       throw "Written V5 report lacks authenticated content: $required"
@@ -1845,6 +3490,10 @@ function Assert-Issue13V5FinalBindings(
   [object]$Config,
   [object]$State
 ) {
+  $oracleEffectValidation = Invoke-Issue13V5OracleEffectValidation $Config
+  $null = Assert-Issue13V5OracleEffectControlRecord $Config $State `
+    $oracleEffectValidation
+  $null = Assert-Issue13V5CompletedEvidenceState $Config $State
   if ([string]$State.final_aggregate.status -cne 'passed' -or
       (Get-Issue13V5Sha256 $State.final_aggregate.path) -cne
         [string]$State.final_aggregate.sha256) {

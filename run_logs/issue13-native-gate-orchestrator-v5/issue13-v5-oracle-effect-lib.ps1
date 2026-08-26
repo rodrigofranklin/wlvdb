@@ -1,0 +1,2748 @@
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$script:Issue13OracleEffectControllerRoot =
+  [IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\', '/')
+$script:Issue13OracleEffectRequiredRPackages = @('fst', 'jsonlite', 'openssl')
+$script:Issue13OracleEffectRClearedEnvironment = @(
+  'LANG', 'LC_ALL', 'LC_CTYPE',
+  'R_ARCH', 'R_DEFAULT_PACKAGES', 'R_ENVIRON', 'R_ENVIRON_USER', 'R_HOME',
+  'R_LIBS', 'R_LIBS_SITE', 'R_PROFILE', 'R_PROFILE_USER', 'R_STARTUP_DEBUG',
+  'RENV_CONFIG_AUTOLOADER_ENABLED', 'RENV_PATHS_LIBRARY', 'RENV_PATHS_ROOT'
+)
+$script:Issue13OracleEffectRSetEnvironment = [ordered]@{ TZ = 'UTC' }
+$script:Issue13OracleEffectControllerFiles = @(
+  'README.md',
+  'issue13-v5-aggregate-hardening.R',
+  'issue13-v5-attest-delivery.ps1',
+  'issue13-v5-baseline-smoke.ps1',
+  'issue13-v5-build-baseline-index.R',
+  'issue13-v5-build-diagnostic-bridges.R',
+  'issue13-v5-build-metadata-equivalence.R',
+  'issue13-v5-build-preparation-equivalence.R',
+  'issue13-v5-build-stage5-profiles.R',
+  'issue13-v5-capture-clean-bridge-evidence.ps1',
+  'issue13-v5-capture-clean-stage5-evidence.ps1',
+  'issue13-v5-compare-override.R',
+  'issue13-v5-compatibility-baseline-override.R',
+  'issue13-v5-coordinator-lib.ps1',
+  'issue13-v5-coordinator.ps1',
+  'issue13-v5-diagnostic-module-bridges.csv',
+  'issue13-v5-diagnostics-override.R',
+  'issue13-v5-difference-fingerprint.R',
+  'issue13-v5-materialize-harness.ps1',
+  'issue13-v5-metadata-equivalence.json',
+  'issue13-v5-new-config.ps1',
+  'issue13-v5-oracle-effect-README.md',
+  'issue13-v5-oracle-effect-generate.ps1',
+  'issue13-v5-oracle-effect-lib.ps1',
+  'issue13-v5-oracle-effect-proof.schema.json',
+  'issue13-v5-oracle-effect-spec.json',
+  'issue13-v5-oracle-effect-validate.ps1',
+  'issue13-v5-preparation-equivalence.R',
+  'issue13-v5-preparation-equivalence.json',
+  'issue13-v5-render-report.ps1',
+  'issue13-v5-run-stage5-evidence.R',
+  'issue13-v5-stage5-multiplicity-profiles.csv',
+  'issue13-v5-static-verify.ps1',
+  'issue13-v5-verify-diagnostic-evidence.R'
+)
+
+function Assert-Issue13OracleEffect {
+  param(
+    [Parameter(Mandatory = $true)][bool]$Condition,
+    [Parameter(Mandatory = $true)][string]$Message
+  )
+  if (-not $Condition) {
+    throw "Issue #13 oracle-effect proof rejected: $Message"
+  }
+}
+
+function Resolve-Issue13OracleEffectFile {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  Assert-Issue13OracleEffect (Test-Path -LiteralPath $Path -PathType Leaf) `
+    "$Label does not exist as a file: $Path"
+  $resolved = (Get-Item -LiteralPath $Path -Force).FullName
+  Assert-Issue13OracleEffectNoReparseAncestors $resolved $Label
+  $resolved
+}
+
+function Resolve-Issue13OracleEffectDirectory {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  Assert-Issue13OracleEffect (Test-Path -LiteralPath $Path -PathType Container) `
+    "$Label does not exist as a directory: $Path"
+  $resolved = (Get-Item -LiteralPath $Path -Force).FullName.TrimEnd('\', '/')
+  Assert-Issue13OracleEffectNoReparseAncestors $resolved $Label
+  $resolved
+}
+
+function Get-Issue13OracleEffectSha256 {
+  param([Parameter(Mandatory = $true)][string]$Path)
+  (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
+}
+
+function Get-Issue13OracleEffectUtf8Sha256 {
+  param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Text)
+  $bytes = [Text.Encoding]::UTF8.GetBytes($Text)
+  $hasher = [Security.Cryptography.HashAlgorithm]::Create('SHA256')
+  try {
+    (($hasher.ComputeHash($bytes) | ForEach-Object {
+      $_.ToString('x2')
+    }) -join '')
+  } finally {
+    $hasher.Dispose()
+  }
+}
+
+function Test-Issue13OracleEffectPathEqual {
+  param(
+    [Parameter(Mandatory = $true)][string]$Left,
+    [Parameter(Mandatory = $true)][string]$Right
+  )
+  $comparison = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+    [StringComparison]::OrdinalIgnoreCase
+  } else {
+    [StringComparison]::Ordinal
+  }
+  [string]::Equals(
+    ([IO.Path]::GetFullPath($Left)).TrimEnd('\', '/'),
+    ([IO.Path]::GetFullPath($Right)).TrimEnd('\', '/'),
+    $comparison
+  )
+}
+
+function Test-Issue13OracleEffectPathContained {
+  param(
+    [Parameter(Mandatory = $true)][string]$Child,
+    [Parameter(Mandatory = $true)][string]$Parent
+  )
+  $childFull = [IO.Path]::GetFullPath($Child).TrimEnd('\', '/')
+  $parentFull = [IO.Path]::GetFullPath($Parent).TrimEnd('\', '/')
+  if (Test-Issue13OracleEffectPathEqual $childFull $parentFull) { return $true }
+  $comparison = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+    [StringComparison]::OrdinalIgnoreCase
+  } else { [StringComparison]::Ordinal }
+  $separator = [IO.Path]::DirectorySeparatorChar
+  $childFull.StartsWith($parentFull + $separator, $comparison)
+}
+
+function Assert-Issue13OracleEffectPathsDisjoint {
+  param(
+    [Parameter(Mandatory = $true)][string]$Left,
+    [Parameter(Mandatory = $true)][string]$Right,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  Assert-Issue13OracleEffect (
+    -not (Test-Issue13OracleEffectPathContained $Left $Right) -and
+    -not (Test-Issue13OracleEffectPathContained $Right $Left)
+  ) "$Label paths overlap: $Left ; $Right"
+}
+
+function Test-Issue13OracleEffectReparseAttribute {
+  param([Parameter(Mandatory = $true)][IO.FileAttributes]$Attributes)
+  ($Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0
+}
+
+function Assert-Issue13OracleEffectNoReparseAncestors {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $full = [IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+  $current = if (Test-Path -LiteralPath $full) {
+    $full
+  } else {
+    Split-Path -Parent $full
+  }
+  while (-not [string]::IsNullOrWhiteSpace($current)) {
+    if (Test-Path -LiteralPath $current) {
+      $item = Get-Item -LiteralPath $current -Force
+      Assert-Issue13OracleEffect (
+        -not (Test-Issue13OracleEffectReparseAttribute $item.Attributes)
+      ) "$Label has a reparse-point ancestor: $($item.FullName)"
+    }
+    $parent = Split-Path -Parent $current
+    if ([string]::IsNullOrWhiteSpace($parent) -or
+        (Test-Issue13OracleEffectPathEqual $parent $current)) { break }
+    $current = $parent
+  }
+}
+
+function Assert-Issue13OracleEffectNoReparseTree {
+  param(
+    [Parameter(Mandatory = $true)][string]$Root,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  Assert-Issue13OracleEffectNoReparseAncestors $Root $Label
+  $items = @(
+    Get-Item -LiteralPath $Root -Force
+    Get-ChildItem -LiteralPath $Root -Recurse -Force
+  )
+  $reparse = @($items | Where-Object {
+    Test-Issue13OracleEffectReparseAttribute $_.Attributes
+  })
+  $reparseNames = @($reparse | ForEach-Object { [string]$_.FullName })
+  Assert-Issue13OracleEffect ($reparse.Count -eq 0) `
+    "$Label contains a reparse point: $($reparseNames -join ', ')."
+}
+
+function Resolve-Issue13OracleEffectNewDirectoryPath {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $full = [IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+  Assert-Issue13OracleEffect (-not (Test-Path -LiteralPath $full)) `
+    "$Label already exists; pre-fabricated comparison roots are forbidden: $full"
+  $parent = Split-Path -Parent $full
+  Assert-Issue13OracleEffect (Test-Path -LiteralPath $parent -PathType Container) `
+    "$Label parent does not exist: $parent"
+  $parentItem = Get-Item -LiteralPath $parent -Force
+  Assert-Issue13OracleEffect (
+    ($parentItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0
+  ) "$Label parent is a reparse point."
+  Assert-Issue13OracleEffectNoReparseAncestors $parent "$Label parent"
+  $full
+}
+
+function Test-Issue13OracleEffectJsonSchemaFile {
+  param(
+    [Parameter(Mandatory = $true)][string]$JsonPath,
+    [Parameter(Mandatory = $true)][string]$SchemaPath,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $json = [IO.File]::ReadAllText(
+    (Resolve-Issue13OracleEffectFile $JsonPath $Label),
+    [Text.UTF8Encoding]::new($false, $true)
+  )
+  try {
+    $valid = $json | Test-Json -SchemaFile $SchemaPath -ErrorAction Stop
+  } catch {
+    throw "Issue #13 oracle-effect proof rejected: $Label fails JSON Schema validation: $($_.Exception.Message)"
+  }
+  Assert-Issue13OracleEffect ([bool]$valid) `
+    "$Label fails JSON Schema validation."
+  $true
+}
+
+function Get-Issue13OracleEffectTextHash {
+  param(
+    [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Keys,
+    [Parameter(Mandatory = $true)][ValidateSet('MD5', 'SHA256')][string]$Algorithm
+  )
+  $ordered = [string[]]$Keys.Clone()
+  [Array]::Sort($ordered, [StringComparer]::Ordinal)
+  $bytes = [Text.Encoding]::UTF8.GetBytes(($ordered -join "`n"))
+  $hasher = [Security.Cryptography.HashAlgorithm]::Create($Algorithm)
+  try {
+    (($hasher.ComputeHash($bytes) | ForEach-Object {
+      $_.ToString('x2')
+    }) -join '')
+  } finally {
+    $hasher.Dispose()
+  }
+}
+
+function Read-Issue13OracleEffectJson {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $resolved = Resolve-Issue13OracleEffectFile $Path $Label
+  $bytes = [IO.File]::ReadAllBytes($resolved)
+  $encoding = New-Object Text.UTF8Encoding($false, $true)
+  try {
+    $text = $encoding.GetString($bytes)
+  } catch {
+    throw "Issue #13 oracle-effect proof rejected: $Label is not valid UTF-8."
+  }
+  Assert-Issue13OracleEffect (-not $text.Contains([char]0xFFFD)) `
+    "$Label contains U+FFFD."
+  try {
+    $text | ConvertFrom-Json -DateKind String
+  } catch {
+    throw "Issue #13 oracle-effect proof rejected: $Label is not valid JSON: $($_.Exception.Message)"
+  }
+}
+
+function Assert-Issue13OracleEffectExactSet {
+  param(
+    [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Observed,
+    [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Expected,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $left = [string[]]$Observed.Clone()
+  $right = [string[]]$Expected.Clone()
+  [Array]::Sort($left, [StringComparer]::Ordinal)
+  [Array]::Sort($right, [StringComparer]::Ordinal)
+  Assert-Issue13OracleEffect (($left -join "`n") -ceq ($right -join "`n")) `
+    "$Label differs. Observed=[$($left -join ', ')]; expected=[$($right -join ', ')]."
+}
+
+function Get-Issue13OracleEffectPropertyNames {
+  param([Parameter(Mandatory = $true)][object]$Value)
+  [string[]]@($Value.PSObject.Properties.Name)
+}
+
+function Assert-Issue13OracleEffectExactProperties {
+  param(
+    [Parameter(Mandatory = $true)][object]$Value,
+    [Parameter(Mandatory = $true)][string[]]$Expected,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  Assert-Issue13OracleEffectExactSet `
+    (Get-Issue13OracleEffectPropertyNames $Value) $Expected $Label
+}
+
+function Invoke-Issue13OracleEffectGit {
+  param(
+    [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+    [Parameter(Mandatory = $true)][string[]]$Arguments
+  )
+  $lines = @(& git -C $RepositoryRoot @Arguments 2>&1)
+  Assert-Issue13OracleEffect ($LASTEXITCODE -eq 0) `
+    "git $($Arguments -join ' ') failed: $($lines -join ' ')"
+  (($lines | ForEach-Object { [string]$_ }) -join "`n").Trim()
+}
+
+function Get-Issue13OracleEffectGitBlobIdentity {
+  param(
+    [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+    [Parameter(Mandatory = $true)][string]$Commit,
+    [Parameter(Mandatory = $true)][string]$RelativePath
+  )
+  $relative = Get-Issue13OracleEffectSafeRelativePath $RelativePath `
+    'controller Git path'
+  $objectSpec = "$Commit`:$relative"
+  $blob = Invoke-Issue13OracleEffectGit $RepositoryRoot @(
+    'rev-parse', $objectSpec
+  )
+  Assert-Issue13OracleEffect ($blob -cmatch '^[0-9a-f]{40}$') `
+    "controller Git blob is malformed: $relative"
+  $sizeText = Invoke-Issue13OracleEffectGit $RepositoryRoot @(
+    'cat-file', '-s', $objectSpec
+  )
+  $size = [int64]0
+  Assert-Issue13OracleEffect ([int64]::TryParse(
+      $sizeText, [Globalization.NumberStyles]::None,
+      [Globalization.CultureInfo]::InvariantCulture, [ref]$size
+    ) -and $size -ge 0) "controller Git blob size is malformed: $relative"
+
+  $git = (Get-Command git -ErrorAction Stop).Source
+  $start = [Diagnostics.ProcessStartInfo]::new()
+  $start.FileName = $git
+  $start.UseShellExecute = $false
+  $start.CreateNoWindow = $true
+  $start.RedirectStandardOutput = $true
+  $start.RedirectStandardError = $true
+  foreach ($argument in @('-C', $RepositoryRoot, 'cat-file', 'blob', $objectSpec)) {
+    $null = $start.ArgumentList.Add([string]$argument)
+  }
+  $process = [Diagnostics.Process]::new()
+  $process.StartInfo = $start
+  $hasher = [Security.Cryptography.SHA256]::Create()
+  try {
+    Assert-Issue13OracleEffect $process.Start() `
+      "cannot start git cat-file for controller blob: $relative"
+    $stderrTask = $process.StandardError.ReadToEndAsync()
+    $sha = (($hasher.ComputeHash($process.StandardOutput.BaseStream) |
+      ForEach-Object { $_.ToString('x2') }) -join '')
+    $process.WaitForExit()
+    $stderr = $stderrTask.GetAwaiter().GetResult()
+    Assert-Issue13OracleEffect ($process.ExitCode -eq 0) `
+      "git cat-file failed for controller blob $relative`: $stderr"
+  } finally {
+    $hasher.Dispose()
+    $process.Dispose()
+  }
+  [pscustomobject][ordered]@{
+    git_blob = $blob
+    size_bytes = $size
+    sha256 = $sha
+  }
+}
+
+function Assert-Issue13OracleEffectControllerRecords {
+  param(
+    [Parameter(Mandatory = $true)][object[]]$Observed,
+    [Parameter(Mandatory = $true)][object[]]$Expected,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  Assert-Issue13OracleEffect ($Observed.Count -eq $Expected.Count) `
+    "$Label controller record count differs."
+  Assert-Issue13OracleEffectExactSet `
+    @($Observed | ForEach-Object { [string]$_.name }) `
+    @($Expected | ForEach-Object { [string]$_.name }) "$Label controller names"
+  foreach ($expectedRecord in $Expected) {
+    $matches = @($Observed | Where-Object {
+      [string]$_.name -ceq [string]$expectedRecord.name
+    })
+    Assert-Issue13OracleEffect ($matches.Count -eq 1) `
+      "$Label controller record is missing or duplicated: $($expectedRecord.name)"
+    foreach ($field in @('name', 'relative_path', 'sha256', 'git_blob')) {
+      Assert-Issue13OracleEffect (
+        [string]$matches[0].$field -ceq [string]$expectedRecord.$field
+      ) "$Label controller record differs: name=$($expectedRecord.name) field=$field"
+    }
+  }
+  $true
+}
+
+function Get-Issue13OracleEffectExpectedController {
+  param(
+    [Parameter(Mandatory = $true)][object]$Spec,
+    [Parameter(Mandatory = $true)][string]$ExpectedCandidateCommit,
+    [Parameter(Mandatory = $true)][string]$RepositoryRoot
+  )
+  $repository = Resolve-Issue13OracleEffectDirectory $RepositoryRoot `
+    'controller repository root'
+  $controllerRoot = Resolve-Issue13OracleEffectDirectory `
+    $script:Issue13OracleEffectControllerRoot 'oracle-effect controller root'
+  Assert-Issue13OracleEffect (
+    Test-Issue13OracleEffectPathContained $controllerRoot $repository
+  ) 'oracle-effect controller root is outside RepositoryRoot.'
+  $relativeRoot = $controllerRoot.Substring($repository.Length).
+    TrimStart('\', '/').Replace('\', '/')
+  $names = [string[]]@(
+    $Spec.terminal_comparison_runtime.required_controller_files)
+  Assert-Issue13OracleEffect ($names.Count -gt 0 -and
+      @($names | Select-Object -Unique).Count -eq $names.Count) `
+    'terminal controller filename contract is empty or duplicated.'
+  $records = @(
+    foreach ($name in $names) {
+      Assert-Issue13OracleEffect ($name -cmatch '^[A-Za-z0-9._-]+$') `
+        "terminal controller filename is unsafe: $name"
+      $local = Resolve-Issue13OracleEffectFile (Join-Path $controllerRoot $name) `
+        "terminal controller source $name"
+      $relative = Get-Issue13OracleEffectSafeRelativePath `
+        ($relativeRoot + '/' + $name) "terminal controller Git path $name"
+      $blob = Get-Issue13OracleEffectGitBlobIdentity $repository `
+        $ExpectedCandidateCommit $relative
+      Assert-Issue13OracleEffect ([int64](Get-Item -LiteralPath $local).Length -eq
+          [int64]$blob.size_bytes -and
+          (Get-Issue13OracleEffectSha256 $local) -ceq [string]$blob.sha256) `
+        "terminal controller working bytes differ from candidate blob: $relative"
+      $localBlob = Invoke-Issue13OracleEffectGit $repository @(
+        'hash-object', '--', $local
+      )
+      Assert-Issue13OracleEffect ($localBlob -ceq [string]$blob.git_blob) `
+        "terminal controller Git object differs from candidate blob: $relative"
+      [pscustomobject][ordered]@{
+        name = $name
+        relative_path = $relative
+        size_bytes = [int64]$blob.size_bytes
+        sha256 = [string]$blob.sha256
+        git_blob = [string]$blob.git_blob
+      }
+    }
+  )
+  $payload = [string]::Join("`n", @($records | ForEach-Object {
+    [string]$_.name + '|' + [string]$_.relative_path + '|' +
+      [string]$_.size_bytes + '|' + [string]$_.sha256 + '|' +
+      [string]$_.git_blob
+  }))
+  [pscustomobject][ordered]@{
+    commit_sha256 = $ExpectedCandidateCommit
+    file_count = [int64]$records.Count
+    inventory_sha256 = Get-Issue13OracleEffectUtf8Sha256 $payload
+    records = $records
+  }
+}
+
+function Get-Issue13OracleEffectEnvironmentContract {
+  param([Parameter(Mandatory = $true)][string]$RLibrary)
+  $set = @(
+    [pscustomobject][ordered]@{ name = 'R_LIBS_USER'; value = $RLibrary }
+    foreach ($entry in $script:Issue13OracleEffectRSetEnvironment.GetEnumerator()) {
+      [pscustomobject][ordered]@{
+        name = [string]$entry.Key
+        value = [string]$entry.Value
+      }
+    }
+  )
+  [pscustomobject][ordered]@{
+    set = $set
+    cleared = [string[]]$script:Issue13OracleEffectRClearedEnvironment
+  }
+}
+
+function Enter-Issue13OracleEffectSanitizedREnvironment {
+  param([Parameter(Mandatory = $true)][string]$RLibrary)
+  $contract = Get-Issue13OracleEffectEnvironmentContract $RLibrary
+  $names = [string[]]@(
+    @($contract.cleared) + @($contract.set | ForEach-Object name))
+  $previous = [ordered]@{}
+  foreach ($name in $names) {
+    $previous[$name] = [Environment]::GetEnvironmentVariable(
+      $name, [EnvironmentVariableTarget]::Process)
+    [Environment]::SetEnvironmentVariable(
+      $name, $null, [EnvironmentVariableTarget]::Process)
+  }
+  foreach ($record in @($contract.set)) {
+    [Environment]::SetEnvironmentVariable(
+      [string]$record.name, [string]$record.value,
+      [EnvironmentVariableTarget]::Process)
+  }
+  [pscustomobject][ordered]@{ previous = $previous; contract = $contract }
+}
+
+function Exit-Issue13OracleEffectSanitizedREnvironment {
+  param([Parameter(Mandatory = $true)][object]$State)
+  foreach ($entry in $State.previous.GetEnumerator()) {
+    [Environment]::SetEnvironmentVariable(
+      [string]$entry.Key, $entry.Value, [EnvironmentVariableTarget]::Process)
+  }
+}
+
+function Get-Issue13OracleEffectDirectoryInventory {
+  param(
+    [Parameter(Mandatory = $true)][string]$Root,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $resolved = Resolve-Issue13OracleEffectDirectory $Root $Label
+  Assert-Issue13OracleEffectNoReparseTree $resolved $Label
+  $files = @(Get-ChildItem -LiteralPath $resolved -File -Recurse -Force)
+  $records = @($files | ForEach-Object {
+    [pscustomobject][ordered]@{
+      relative_path = $_.FullName.Substring($resolved.Length + 1).
+        Replace('\', '/')
+      size_bytes = [int64]$_.Length
+      sha256 = Get-Issue13OracleEffectSha256 $_.FullName
+    }
+  })
+  [Array]::Sort($records, [Comparison[object]]{
+    param($left, $right)
+    [StringComparer]::Ordinal.Compare(
+      [string]$left.relative_path, [string]$right.relative_path)
+  })
+  $payload = [string]::Join("`n", @($records | ForEach-Object {
+    [string]$_.relative_path + '|' + [string]$_.size_bytes + '|' +
+      [string]$_.sha256
+  }))
+  [pscustomobject][ordered]@{
+    file_count = [int64]$records.Count
+    total_bytes = [int64](($records | Measure-Object size_bytes -Sum).Sum)
+    inventory_sha256 = Get-Issue13OracleEffectUtf8Sha256 $payload
+  }
+}
+
+function Get-Issue13OracleEffectRRuntime {
+  param(
+    [Parameter(Mandatory = $true)][string]$Rscript,
+    [Parameter(Mandatory = $true)][string]$RLibrary
+  )
+  $rscriptPath = Resolve-Issue13OracleEffectFile $Rscript 'comparison Rscript'
+  $libraryPath = Resolve-Issue13OracleEffectDirectory $RLibrary `
+    'comparison R library'
+  Assert-Issue13OracleEffectNoReparseTree $libraryPath `
+    'comparison R library'
+  $expression = @'
+required <- c("fst", "jsonlite", "openssl")
+for (package in required) {
+  if (!requireNamespace(package, quietly = TRUE)) {
+    stop(sprintf("required package is unavailable: %s", package), call. = FALSE)
+  }
+}
+clean <- function(value) {
+  value <- enc2utf8(as.character(value))
+  unsafe <- grepl("\t", value, fixed = TRUE) |
+    grepl("\r", value, fixed = TRUE) | grepl("\n", value, fixed = TRUE)
+  if (any(unsafe)) stop("unsafe probe field", call. = FALSE)
+  value
+}
+cat("R_VERSION\t", clean(R.version.string), "\n", sep = "")
+cat("R_PLATFORM\t", clean(R.version$platform), "\n", sep = "")
+for (path in .libPaths()) {
+  cat("LIB\t", clean(normalizePath(path, winslash = "/", mustWork = TRUE)),
+      "\n", sep = "")
+}
+for (package in required) cat("REQUIRED\t", clean(package), "\n", sep = "")
+for (package in sort(loadedNamespaces(), method = "radix")) {
+  path <- normalizePath(find.package(package), winslash = "/", mustWork = TRUE)
+  cat("PACKAGE\t", clean(package), "\t",
+      clean(as.character(packageVersion(package))), "\t", clean(path), "\t",
+      if (package %in% required) "TRUE" else "FALSE", "\n", sep = "")
+}
+'@
+  $environmentState = Enter-Issue13OracleEffectSanitizedREnvironment $libraryPath
+  try {
+    $native = @(& $rscriptPath '--vanilla' '-e' $expression 2>&1 |
+      ForEach-Object { [string]$_ })
+    $exitCode = $LASTEXITCODE
+  } finally {
+    Exit-Issue13OracleEffectSanitizedREnvironment $environmentState
+  }
+  Assert-Issue13OracleEffect ($exitCode -eq 0) `
+    "R runtime probe failed: $($native -join ' ')"
+  $versionRows = @($native | Where-Object { $_.StartsWith("R_VERSION`t") })
+  $platformRows = @($native | Where-Object { $_.StartsWith("R_PLATFORM`t") })
+  $libRows = @($native | Where-Object { $_.StartsWith("LIB`t") })
+  $requiredRows = @($native | Where-Object { $_.StartsWith("REQUIRED`t") })
+  $packageRows = @($native | Where-Object { $_.StartsWith("PACKAGE`t") })
+  $recognized = $versionRows.Count + $platformRows.Count + $libRows.Count +
+    $requiredRows.Count + $packageRows.Count
+  Assert-Issue13OracleEffect ($recognized -eq $native.Count -and
+      $versionRows.Count -eq 1 -and $platformRows.Count -eq 1 -and
+      $libRows.Count -gt 0 -and $packageRows.Count -gt 0) `
+    'R runtime probe returned an unexpected or incomplete line.'
+  $libPaths = [string[]]@($libRows | ForEach-Object {
+    $fields = [string[]]$_.Split("`t")
+    Assert-Issue13OracleEffect ($fields.Count -eq 2) `
+      'R runtime probe returned a malformed LIB row.'
+    Resolve-Issue13OracleEffectDirectory $fields[1] `
+      'effective R library path'
+  })
+  Assert-Issue13OracleEffect (@($libPaths | Select-Object -Unique).Count -eq
+      $libPaths.Count) 'R runtime probe repeated an effective library path.'
+  Assert-Issue13OracleEffect (
+    Test-Issue13OracleEffectPathEqual $libPaths[0] $libraryPath
+  ) 'RLibrary is not the first effective .libPaths() entry.'
+  $required = [string[]]@($requiredRows | ForEach-Object {
+    ([string[]]$_.Split("`t"))[1]
+  })
+  Assert-Issue13OracleEffectExactSet $required `
+    $script:Issue13OracleEffectRequiredRPackages 'required R packages'
+  $packages = @(
+    foreach ($line in $packageRows) {
+      $fields = [string[]]$line.Split("`t")
+      Assert-Issue13OracleEffect ($fields.Count -eq 5 -and
+          $fields[1] -cmatch '^[A-Za-z][A-Za-z0-9.]*$' -and
+          $fields[2] -cmatch '^[0-9]+(?:\.[0-9]+)+(?:[-.][A-Za-z0-9]+)*$' -and
+          $fields[4] -cin @('TRUE', 'FALSE')) `
+        'R runtime probe returned a malformed PACKAGE row.'
+      $path = Resolve-Issue13OracleEffectDirectory $fields[3] `
+        "loaded R package $($fields[1])"
+      $isRequired = $fields[4] -ceq 'TRUE'
+      if ($isRequired) {
+        Assert-Issue13OracleEffect (
+          Test-Issue13OracleEffectPathContained $path $libraryPath
+        ) "required R package is outside RLibrary: $($fields[1])"
+      }
+      $inventory = Get-Issue13OracleEffectDirectoryInventory $path `
+        "loaded R package $($fields[1])"
+      [pscustomobject][ordered]@{
+        name = $fields[1]
+        version = $fields[2]
+        path = $path
+        required = $isRequired
+        file_count = [int64]$inventory.file_count
+        total_bytes = [int64]$inventory.total_bytes
+        inventory_sha256 = [string]$inventory.inventory_sha256
+      }
+    }
+  )
+  Assert-Issue13OracleEffectExactSet @($packages | Where-Object required |
+      ForEach-Object name) $script:Issue13OracleEffectRequiredRPackages `
+    'loaded required R packages'
+  Assert-Issue13OracleEffect (@($packages.name | Select-Object -Unique).Count -eq
+      $packages.Count) 'R runtime probe repeated a loaded package.'
+  $environment = $environmentState.contract
+  $payload = [string]::Join("`n", @(
+    'r-version|' + $versionRows[0].Substring("R_VERSION`t".Length)
+    'r-platform|' + $platformRows[0].Substring("R_PLATFORM`t".Length)
+    @($libPaths | ForEach-Object { 'lib|' + $_ })
+    @($environment.set | ForEach-Object {
+      'set|' + [string]$_.name + '|' + [string]$_.value
+    })
+    @($environment.cleared | ForEach-Object { 'clear|' + [string]$_ })
+    @($packages | Sort-Object name | ForEach-Object {
+      'package|' + [string]$_.name + '|' + [string]$_.version + '|' +
+        [string]$_.path + '|' + [string]$_.required + '|' +
+        [string]$_.file_count + '|' + [string]$_.total_bytes + '|' +
+        [string]$_.inventory_sha256
+    })
+  ))
+  [pscustomobject][ordered]@{
+    path = $libraryPath
+    environment_variable = 'R_LIBS_USER'
+    environment = $environment
+    r_version = $versionRows[0].Substring("R_VERSION`t".Length)
+    platform = $platformRows[0].Substring("R_PLATFORM`t".Length)
+    lib_paths = $libPaths
+    required_packages = [string[]]$script:Issue13OracleEffectRequiredRPackages
+    loaded_packages = $packages
+    inventory_sha256 = Get-Issue13OracleEffectUtf8Sha256 $payload
+  }
+}
+
+function Test-Issue13OracleEffectNegativeSelfTests {
+  $mustReject = {
+    param([scriptblock]$Body, [string]$Label)
+    $rejected = $false
+    try { & $Body } catch { $rejected = $true }
+    Assert-Issue13OracleEffect $rejected "negative self-test did not reject $Label"
+  }
+  & $mustReject {
+    $null = Get-Issue13OracleEffectSafeRelativePath '../escape' 'self-test path'
+  } 'relative-path traversal'
+  $anchor = [IO.Path]::GetFullPath((Join-Path `
+        ([IO.Path]::GetTempPath()) 'issue13-oracle-selftest'))
+  & $mustReject {
+    Assert-Issue13OracleEffectPathsDisjoint $anchor (Join-Path $anchor 'nested') `
+      'self-test overlap'
+  } 'nested roots'
+  & $mustReject {
+    Assert-Issue13OracleEffect (
+      -not (Test-Issue13OracleEffectReparseAttribute `
+        [IO.FileAttributes]::ReparsePoint)
+    ) 'self-test synthetic reparse point'
+  } 'reparse-point attribute'
+  $expected = @([pscustomobject]@{
+    name = 'a'; relative_path = 'x/a'; sha256 = ('0' * 64); git_blob = ('1' * 40)
+  })
+  $tampered = @([pscustomobject]@{
+    name = 'a'; relative_path = 'x/b'; sha256 = ('0' * 64); git_blob = ('1' * 40)
+  })
+  & $mustReject {
+    $null = Assert-Issue13OracleEffectControllerRecords $tampered $expected `
+      'self-test controller'
+  } 'controller name/path substitution'
+  $tampered[0].relative_path = 'x/a'
+  $tampered[0].sha256 = ('2' * 64)
+  & $mustReject {
+    $null = Assert-Issue13OracleEffectControllerRecords $tampered $expected `
+      'self-test controller hash'
+  } 'controller raw-byte hash substitution'
+  $contract = Get-Issue13OracleEffectEnvironmentContract $anchor
+  Assert-Issue13OracleEffectExactSet @($contract.cleared) `
+    $script:Issue13OracleEffectRClearedEnvironment `
+    'negative self-test cleared R environment'
+  Assert-Issue13OracleEffect (@($contract.set | Where-Object {
+        $_.name -ceq 'R_LIBS_USER' -and $_.value -ceq $anchor
+      }).Count -eq 1) 'negative self-test lacks the exact R_LIBS_USER binding.'
+  & $mustReject {
+    Assert-Issue13OracleEffectExactSet `
+      @($contract.cleared | Where-Object { $_ -cne 'R_LIBS_SITE' }) `
+      $script:Issue13OracleEffectRClearedEnvironment `
+      'self-test tampered R environment'
+  } 'missing R_LIBS_SITE sanitization'
+  $poisoned = [ordered]@{
+    R_LIBS = 'issue13-poison-r-libs'
+    R_LIBS_SITE = 'issue13-poison-r-libs-site'
+    R_LIBS_USER = 'issue13-poison-r-libs-user'
+  }
+  $original = [ordered]@{}
+  $state = $null
+  try {
+    foreach ($entry in $poisoned.GetEnumerator()) {
+      $original[$entry.Key] = [Environment]::GetEnvironmentVariable(
+        [string]$entry.Key, [EnvironmentVariableTarget]::Process)
+      [Environment]::SetEnvironmentVariable(
+        [string]$entry.Key, [string]$entry.Value,
+        [EnvironmentVariableTarget]::Process)
+    }
+    $state = Enter-Issue13OracleEffectSanitizedREnvironment $anchor
+    Assert-Issue13OracleEffect ([string]::IsNullOrEmpty(
+        [Environment]::GetEnvironmentVariable(
+          'R_LIBS', [EnvironmentVariableTarget]::Process)) -and
+        [string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable(
+          'R_LIBS_SITE', [EnvironmentVariableTarget]::Process)) -and
+        [Environment]::GetEnvironmentVariable(
+          'R_LIBS_USER', [EnvironmentVariableTarget]::Process) -ceq $anchor) `
+      'negative self-test did not remove poisoned R library variables.'
+  } finally {
+    if ($null -ne $state) {
+      Exit-Issue13OracleEffectSanitizedREnvironment $state
+    }
+    foreach ($entry in $original.GetEnumerator()) {
+      [Environment]::SetEnvironmentVariable(
+        [string]$entry.Key, $entry.Value,
+        [EnvironmentVariableTarget]::Process)
+    }
+  }
+  $true
+}
+
+function Test-Issue13OracleEffectSpec {
+  param(
+    [Parameter(Mandatory = $true)][object]$Spec,
+    [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+    [Parameter(Mandatory = $true)][string]$OraclePatch
+  )
+  $expectedBase = 'cc2c86189a06676bcb9f0e05e08033d710a92509'
+  $expectedBaseTree = '0cb1142cdadd74bf95272010f5393ebe2af79f47'
+  $expectedRuntime = 'e2f4d6dae9a6d35c966b305fabac52e489faa3e7'
+  $expectedRuntimeTree = '7da19c4f2913e857040ba228280f404b0e54eaab'
+  $expectedPatchSha = '9f9b878f8e557973127e6260a0f224c868a0c4e8dc2db52dd6aa3f7131f28cd9'
+  $expectedPatchId = '253ca5f1397132f94e3432264084a37395c60ec3'
+  $common = @('wiodr13', 'wiodr16', 'wiodr16v09', 'zerodep_1', 'zerodep_2')
+  $recovered = @(
+    'alternative_1', 'alternative_2', 'norow_w13', 'ochoa_1',
+    'ochoa_2', 'petrovic', 'wiodr13v09'
+  )
+
+  Assert-Issue13OracleEffect ($Spec.schema -ceq 'wlv-issue13-v5-oracle-effect-spec/2') `
+    'unexpected spec schema.'
+  Assert-Issue13OracleEffect ($Spec.purpose -ceq 'closed-authorized-oracle-effect-cc2-to-e2f') `
+    'unexpected spec purpose.'
+  Assert-Issue13OracleEffect ($Spec.status -ceq `
+      'requires-terminal-primary-and-replay-comparisons') `
+    'the static spec must require fresh terminal primary/replay comparisons.'
+  Assert-Issue13OracleEffect ($Spec.proof_schema_sha256 -ceq `
+      '71060076271205ba0134c1f6ccd38f379ca354810996be7c1c40ed1cf15005b4') `
+    'proof schema hash differs.'
+  Assert-Issue13OracleEffect (-not [bool]$Spec.final_evidence_eligible) `
+    'the auxiliary oracle proof must not claim final-gate eligibility.'
+  Assert-Issue13OracleEffect ($Spec.oracle.base_commit -ceq $expectedBase) `
+    'base commit is not cc2c861.'
+  Assert-Issue13OracleEffect ($Spec.oracle.base_tree -ceq $expectedBaseTree) `
+    'base tree differs.'
+  Assert-Issue13OracleEffect ($Spec.oracle.runtime_commit -ceq $expectedRuntime) `
+    'runtime commit is not e2f4d6d.'
+  Assert-Issue13OracleEffect ($Spec.oracle.runtime_tree -ceq $expectedRuntimeTree) `
+    'runtime tree differs.'
+  Assert-Issue13OracleEffect ($Spec.oracle.canonical_patch_sha256 -ceq $expectedPatchSha) `
+    'canonical patch hash differs.'
+  Assert-Issue13OracleEffect ($Spec.oracle.stable_patch_id -ceq $expectedPatchId) `
+    'stable patch-id differs.'
+  Assert-Issue13OracleEffect ([int]$Spec.oracle.changed_file_count -eq 8) `
+    'the oracle must change exactly eight files.'
+  Assert-Issue13OracleEffectExactSet @($Spec.method_partition.strict_common) $common `
+    'strict-common method partition'
+  Assert-Issue13OracleEffectExactSet @($Spec.method_partition.recovered) $recovered `
+    'recovered method partition'
+  Assert-Issue13OracleEffect (@($Spec.common_methods).Count -eq 5) `
+    'common method record count must be five.'
+  Assert-Issue13OracleEffect (@($Spec.recovered_methods).Count -eq 7) `
+    'recovered method record count must be seven.'
+  Assert-Issue13OracleEffectExactSet @($Spec.common_methods | ForEach-Object method) `
+    $common 'common method records'
+  Assert-Issue13OracleEffectExactSet @($Spec.recovered_methods | ForEach-Object method) `
+    $recovered 'recovered method records'
+  $terminal = $Spec.terminal_comparison_runtime
+  Assert-Issue13OracleEffect ($terminal.generation -ceq 'v5-terminal' -and `
+      $terminal.source_controller_commit_field -ceq 'commit_sha256' -and `
+      $terminal.harness_directory -ceq 'issue13-evidence-harness' -and `
+      $terminal.comparison_script -ceq 'issue13-compare-results.R' -and `
+      $terminal.r_library_environment_variable -ceq 'R_LIBS_USER') `
+    'terminal comparison runtime contract differs.'
+  Assert-Issue13OracleEffectExactProperties $terminal.r_environment_set @(
+    'R_LIBS_USER', 'TZ'
+  ) 'terminal R environment set contract'
+  Assert-Issue13OracleEffect (
+    [string]$terminal.r_environment_set.R_LIBS_USER -ceq `
+      'configured-r-library' -and
+    [string]$terminal.r_environment_set.TZ -ceq 'UTC'
+  ) 'terminal R environment set values differ.'
+  Assert-Issue13OracleEffectExactSet @($terminal.r_environment_cleared) `
+    $script:Issue13OracleEffectRClearedEnvironment `
+    'terminal cleared R environment variables'
+  Assert-Issue13OracleEffectExactSet @($terminal.required_r_packages) `
+    $script:Issue13OracleEffectRequiredRPackages 'terminal required R packages'
+  Assert-Issue13OracleEffectExactSet @($terminal.required_controller_files) `
+    $script:Issue13OracleEffectControllerFiles 'terminal controller files'
+  Assert-Issue13OracleEffect (
+    [string]$terminal.sealed_inventory.status -cin @(
+      'requires-terminal-reseal', 'sealed'
+    ) -and
+    [int64]$terminal.sealed_inventory.file_count -gt 0 -and
+    [int64]$terminal.sealed_inventory.total_bytes -gt 0 -and
+    [string]$terminal.sealed_inventory.inventory_sha256 -cmatch `
+      '^[0-9a-f]{64}$'
+  ) 'terminal external sealed harness inventory differs.'
+  Assert-Issue13OracleEffectExactSet @($terminal.forbidden_runtime_basenames) `
+    @('v5c5', 'v5c6') 'forbidden pre-terminal runtime basenames'
+  Assert-Issue13OracleEffectExactSet @($terminal.required_tool_files) @(
+    'issue13-compare-results.R', 'issue13-compare-lib.R',
+    'issue13-v5-compare-override.R', 'issue13-lib.R'
+  ) 'terminal comparison tool files'
+  Assert-Issue13OracleEffect ([int]$Spec.comparison_contract.required_execution_count -eq 10 -and `
+      [int]$Spec.comparison_contract.approved_run_count -eq 17 -and `
+      $Spec.comparison_contract.json_replay_normalization -ceq `
+        'remove-top-level-compared_at') `
+    'terminal comparison/replay contract differs.'
+
+  $go = $Spec.coordinate_contracts.go_price_row_from_usa
+  $goKeys = @(
+    foreach ($year in @($go.years)) {
+      foreach ($sector in @($go.sectors)) {
+        "$($go.indicator)|$year|$($go.target_country)|$sector"
+      }
+    }
+  )
+  Assert-Issue13OracleEffect ($goKeys.Count -eq 525) 'go-price coordinate count differs.'
+  Assert-Issue13OracleEffect ([int]$go.coordinate_count -eq $goKeys.Count) `
+    'go-price declared count differs from its axes.'
+  Assert-Issue13OracleEffect (
+    (Get-Issue13OracleEffectTextHash $goKeys SHA256) -ceq
+      '59d531c9417e058ef5ed57fb3fdff696293e11108e761937dbfa2ee4c4fec241'
+  ) 'go-price coordinate hash differs.'
+  Assert-Issue13OracleEffect ($go.coordinate_sha256 -ceq `
+      '59d531c9417e058ef5ed57fb3fdff696293e11108e761937dbfa2ee4c4fec241') `
+    'go-price declared coordinate hash differs.'
+  Assert-Issue13OracleEffectExactSet @($go.methods) `
+    @('alternative_1', 'alternative_2', 'norow_w13', 'ochoa_1', 'ochoa_2', 'petrovic') `
+    'go-price methods'
+
+  $nan = $Spec.coordinate_contracts.historical_nan_clean
+  $nanKeys = @(
+    foreach ($indicator in @($nan.indicators)) {
+      foreach ($year in @($nan.years)) {
+        foreach ($pair in @($nan.country_sector_pairs)) {
+          "$indicator|$year|$pair"
+        }
+      }
+    }
+  )
+  Assert-Issue13OracleEffect ($nanKeys.Count -eq 405) 'historical-NaN coordinate count differs.'
+  Assert-Issue13OracleEffect (
+    (Get-Issue13OracleEffectTextHash $nanKeys SHA256) -ceq
+      '52c0f3c1224bec91b29e3ce2e2a77c855c8e81ee59e6054696a8da13e21052ca'
+  ) 'historical-NaN SHA-256 differs.'
+  Assert-Issue13OracleEffect (
+    (Get-Issue13OracleEffectTextHash $nanKeys MD5) -ceq
+      'e667f3c2de78d48614b6e24a09f52a9d'
+  ) 'historical-NaN MD5 differs.'
+  Assert-Issue13OracleEffect ([int]$nan.coordinate_count -eq 405) `
+    'historical-NaN declared count differs.'
+  Assert-Issue13OracleEffect ([int]$nan.per_indicator_count -eq 135) `
+    'historical-NaN per-indicator count differs.'
+
+  $stable = $Spec.coordinate_contracts.leontief_zero_output.profiles.stable
+  $v09 = $Spec.coordinate_contracts.leontief_zero_output.profiles.v09
+  Assert-Issue13OracleEffect ([int]$stable.coordinate_count -eq 3150 -and `
+      $stable.coordinate_md5 -ceq 'f66341eea44e71728bbda6f8e25765ba') `
+    'stable Leontief profile differs.'
+  Assert-Issue13OracleEffect ([int]$v09.coordinate_count -eq 2945 -and `
+      $v09.coordinate_md5 -ceq '3fd6663ca00317b42d3044df5019db4c') `
+    'v09 Leontief profile differs.'
+  Assert-Issue13OracleEffect ([int]$Spec.coordinate_contracts.leontief_signed_diagnostic.stable.signed_coefficient_count -eq 397) `
+    'stable signed-coefficient count differs.'
+  Assert-Issue13OracleEffect ([int]$Spec.coordinate_contracts.leontief_signed_diagnostic.v09.signed_coefficient_count -eq 396) `
+    'v09 signed-coefficient count differs.'
+  Assert-Issue13OracleEffect ($Spec.coordinate_contracts.norow_utf8.expected_value -ceq `
+      'Teste sem suposições para resto do mundo') 'norow UTF-8 value differs.'
+  Assert-Issue13OracleEffect ($Spec.coordinate_contracts.norow_utf8.expected_value_utf8_sha256 -ceq `
+      '7dd0229f4bd175d60fb873a09ada3560192e960d71f1238809c62d90f4bb5203') `
+    'norow UTF-8 value hash differs.'
+
+  $patchPath = Resolve-Issue13OracleEffectFile $OraclePatch 'canonical oracle patch'
+  Assert-Issue13OracleEffect ((Get-Issue13OracleEffectSha256 $patchPath) -ceq $expectedPatchSha) `
+    'canonical oracle patch bytes differ.'
+  $repository = Resolve-Issue13OracleEffectDirectory $RepositoryRoot 'repository root'
+  Assert-Issue13OracleEffect (
+    (Invoke-Issue13OracleEffectGit $repository @('rev-parse', "$expectedBase^{tree}")) -ceq
+      $expectedBaseTree
+  ) 'observed cc2 tree differs.'
+  Assert-Issue13OracleEffect (
+    (Invoke-Issue13OracleEffectGit $repository @('rev-parse', "$expectedRuntime^{tree}")) -ceq
+      $expectedRuntimeTree
+  ) 'observed e2f tree differs.'
+  Assert-Issue13OracleEffect (
+    (Invoke-Issue13OracleEffectGit $repository @('rev-parse', "$expectedRuntime^")) -ceq
+      $expectedBase
+  ) 'e2f is not a direct child of cc2.'
+
+  $raw = Invoke-Issue13OracleEffectGit $repository @(
+    'diff-tree', '--no-commit-id', '-r', '--raw', $expectedBase, $expectedRuntime
+  )
+  $rawRows = @($raw -split "`n" | Where-Object { $_.Length -gt 0 })
+  Assert-Issue13OracleEffect ($rawRows.Count -eq 8) `
+    'git reports a change set other than exactly eight files.'
+  $observedByPath = @{}
+  foreach ($line in $rawRows) {
+    $match = [regex]::Match($line, '^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]{40}) ([0-9a-f]{40}) M\t(.+)$')
+    Assert-Issue13OracleEffect $match.Success "unexpected git raw-diff row: $line"
+    $path = $match.Groups[5].Value
+    Assert-Issue13OracleEffect (-not $observedByPath.ContainsKey($path)) `
+      "duplicate git raw-diff path: $path"
+    $observedByPath[$path] = [pscustomobject]@{
+      old_mode = $match.Groups[1].Value
+      new_mode = $match.Groups[2].Value
+      old_blob = $match.Groups[3].Value
+      new_blob = $match.Groups[4].Value
+    }
+  }
+  Assert-Issue13OracleEffect (@($Spec.patch_files).Count -eq 8) `
+    'spec patch-file count must be eight.'
+  Assert-Issue13OracleEffectExactSet @($Spec.patch_files | ForEach-Object path) `
+    @($observedByPath.Keys) 'patch paths'
+  foreach ($file in @($Spec.patch_files)) {
+    $observed = $observedByPath[[string]$file.path]
+    foreach ($field in @('old_mode', 'new_mode', 'old_blob', 'new_blob')) {
+      Assert-Issue13OracleEffect ([string]$file.$field -ceq [string]$observed.$field) `
+      "$field differs for $($file.path)."
+    }
+  }
+  $effects = @($Spec.recovered_file_method_effects)
+  Assert-Issue13OracleEffect ($effects.Count -eq 25) `
+    'recovered file/method effect count must be 25.'
+  $effectPairs = New-Object Collections.Generic.List[string]
+  $allowedContractRefs = @(
+    '/coordinate_contracts/go_price_row_from_usa',
+    '/coordinate_contracts/historical_nan_clean',
+    '/coordinate_contracts/leontief_zero_output/profiles/stable',
+    '/coordinate_contracts/leontief_zero_output/profiles/v09',
+    '/coordinate_contracts/leontief_signed_diagnostic/stable',
+    '/coordinate_contracts/leontief_signed_diagnostic/v09',
+    '/coordinate_contracts/norow_utf8'
+  )
+  foreach ($effect in $effects) {
+    Assert-Issue13OracleEffectExactProperties $effect @(
+      'file', 'method', 'change_id', 'expected_contract_ref'
+    ) 'recovered file/method effect properties'
+    $file = @($Spec.patch_files | Where-Object {
+      $_.path -ceq [string]$effect.file
+    })
+    $method = @($Spec.recovered_methods | Where-Object {
+      $_.method -ceq [string]$effect.method
+    })
+    Assert-Issue13OracleEffect ($file.Count -eq 1 -and $method.Count -eq 1) `
+      'recovered file/method effect references an unknown file or method.'
+    Assert-Issue13OracleEffect (@($file[0].semantic_methods | Where-Object {
+        $_ -ceq [string]$effect.method
+      }).Count -eq 1 -and @($file[0].change_ids | Where-Object {
+        $_ -ceq [string]$effect.change_id
+      }).Count -eq 1 -and @($method[0].change_ids | Where-Object {
+        $_ -ceq [string]$effect.change_id
+      }).Count -eq 1) `
+      'recovered file/method effect is inconsistent with its file or method record.'
+    Assert-Issue13OracleEffect (@($allowedContractRefs | Where-Object {
+        $_ -ceq [string]$effect.expected_contract_ref
+      }).Count -eq 1) 'recovered file/method effect has an unknown contract reference.'
+    $effectPairs.Add("$($effect.method)|$($effect.file)")
+  }
+  Assert-Issue13OracleEffect (($effectPairs | Select-Object -Unique).Count -eq `
+      $effectPairs.Count) 'recovered file/method effects repeat a pair.'
+  $expectedEffectPairs = @(
+    foreach ($file in @($Spec.patch_files)) {
+      foreach ($method in @($file.semantic_methods)) {
+        if ($method -in $recovered) { "$method|$($file.path)" }
+      }
+    }
+  )
+  Assert-Issue13OracleEffectExactSet $effectPairs.ToArray() $expectedEffectPairs `
+    'recovered file/method effect pairs'
+  foreach ($method in @($Spec.recovered_methods)) {
+    Assert-Issue13OracleEffectExactSet `
+      @($effects | Where-Object { $_.method -ceq $method.method } | `
+        ForEach-Object change_id) @($method.change_ids) `
+      "$($method.method) recovered change ids"
+  }
+  $routes = @($Spec.reachability_contracts)
+  Assert-Issue13OracleEffect ($routes.Count -eq 3) `
+    'reachability contract count must be three.'
+  $rowRoute = @($routes | Where-Object {
+    $_.patched_file -ceq 'R/modules/assumptions/row/row-reduction_problem.R'
+  })
+  $noRowRoute = @($routes | Where-Object {
+    $_.patched_file -ceq 'R/modules/assumptions/row/no_row.R'
+  })
+  $nanRoute = @($routes | Where-Object {
+    $_.patched_file -ceq 'R/modules/variables/sea_sectors.R'
+  })
+  Assert-Issue13OracleEffect ($rowRoute.Count -eq 1 -and `
+      $noRowRoute.Count -eq 1 -and $nanRoute.Count -eq 1) `
+    'reachability contracts do not bind each routed patch exactly once.'
+  Assert-Issue13OracleEffectExactSet @($rowRoute[0].methods) `
+    @('alternative_1', 'alternative_2', 'ochoa_1', 'ochoa_2', 'petrovic') `
+    'row-reduction route methods'
+  Assert-Issue13OracleEffectExactSet @($noRowRoute[0].methods) @('norow_w13') `
+    'no-row route methods'
+  Assert-Issue13OracleEffectExactSet @($nanRoute[0].methods) `
+    @('alternative_2', 'petrovic') 'historical-NaN route methods'
+  $expectedAssumptions = @{
+    alternative_1 = 'row/row-reduction_problem.R'
+    alternative_2 = 'row/row-reduction_problem.R'
+    norow_w13 = 'row/no_row.R'
+    ochoa_1 = 'row/row-reduction_problem.R'
+    ochoa_2 = 'row/row-reduction_problem.R'
+    petrovic = 'row/row-reduction_problem.R'
+    wiodr13v09 = 'row/row.old.R'
+  }
+  foreach ($method in $recovered) {
+    $configPath = "methods/$method/_method_assumptions.csv"
+    $content = Invoke-Issue13OracleEffectGit $repository `
+      @('show', "$expectedBase`:$configPath")
+    $expectedValue = [string]$expectedAssumptions[$method]
+    $occurrences = ([regex]::Matches($content, [regex]::Escape($expectedValue))).Count
+    Assert-Issue13OracleEffect ($occurrences -eq 1) `
+      "$method assumption route to $expectedValue is not exact at cc2."
+  }
+  foreach ($method in @('alternative_2', 'petrovic')) {
+    $configPath = "methods/$method/_method_solutions.csv"
+    $content = Invoke-Issue13OracleEffectGit $repository `
+      @('show', "$expectedBase`:$configPath")
+    $expectedValue = [string]$nanRoute[0].configuration_values.$method
+    $occurrences = ([regex]::Matches($content, [regex]::Escape($expectedValue))).Count
+    Assert-Issue13OracleEffect ($occurrences -eq 1) `
+      "$method historical-NaN module route is not exact at cc2."
+  }
+  [pscustomobject]@{
+    repository_root = $repository
+    patch_path = $patchPath
+    patch_sha256 = $expectedPatchSha
+    base_commit = $expectedBase
+    runtime_commit = $expectedRuntime
+    runtime_tree = $expectedRuntimeTree
+    changed_file_count = 8
+  }
+}
+
+function Get-Issue13OracleEffectSummaryRecords {
+  param(
+    [Parameter(Mandatory = $true)][object]$Summary,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $records = @($Summary.records)
+  $map = @{}
+  foreach ($record in $records) {
+    $method = [string]$record.method
+    Assert-Issue13OracleEffect ($method -match '^[a-z0-9_]+$') `
+      "$Label has an invalid method id."
+    Assert-Issue13OracleEffect (-not $map.ContainsKey($method)) `
+      "$Label repeats method $method."
+    $map[$method] = $record
+  }
+  $map
+}
+
+function Get-Issue13OracleEffectScenario {
+  param(
+    [Parameter(Mandatory = $true)][object]$Record,
+    [Parameter(Mandatory = $true)][string]$SummaryRoot,
+    [Parameter(Mandatory = $true)][string]$ExpectedSha256,
+    [Parameter(Mandatory = $true)][string]$Method,
+    [Parameter(Mandatory = $true)][bool]$ExpectedPassed,
+    [Parameter(Mandatory = $true)][string]$ExpectedCommit,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $expectedScenarioId = "baseline/calculate/$Method/workers1"
+  $expectedDirectory = Join-Path $SummaryRoot (
+    "attempts/$Method/evidence/scenarios/" +
+      "baseline__calculate__${Method}__workers1"
+  )
+  $expectedProjectRoot = Join-Path $SummaryRoot "worktrees/$Method"
+  Assert-Issue13OracleEffect ($Record.scenario_id -ceq $expectedScenarioId -and `
+      $Record.status -ceq $(if ($ExpectedPassed) {'passed'} else {'failed'})) `
+    "$Label summary record identity differs."
+  Assert-Issue13OracleEffect (
+    Test-Issue13OracleEffectPathEqual ([string]$Record.evidence_directory) `
+      $expectedDirectory
+  ) "$Label evidence_directory is not the closed baseline scenario directory."
+  Assert-Issue13OracleEffect (
+    Test-Issue13OracleEffectPathEqual ([string]$Record.project_root) `
+      $expectedProjectRoot
+  ) "$Label summary project_root differs."
+  if ($ExpectedPassed) {
+    Assert-Issue13OracleEffect ($Record.scenario_result_sha256 -ceq $ExpectedSha256) `
+      "$Label summary scenario pin differs."
+  }
+  $path = Join-Path $expectedDirectory 'scenario-result.json'
+  $resolved = Resolve-Issue13OracleEffectFile $path "$Label scenario result"
+  Assert-Issue13OracleEffect ((Get-Issue13OracleEffectSha256 $resolved) -ceq $ExpectedSha256) `
+    "$Label scenario-result hash differs."
+  $document = Read-Issue13OracleEffectJson $resolved "$Label scenario result"
+  Assert-Issue13OracleEffect ($document.schema -ceq 'wlv-issue13-scenario-result/1') `
+    "$Label scenario schema differs."
+  Assert-Issue13OracleEffect ([bool]$document.passed -eq $ExpectedPassed) `
+    "$Label scenario passed flag differs."
+  Assert-Issue13OracleEffect ($document.status -ceq $(if ($ExpectedPassed) {'passed'} else {'failed'})) `
+    "$Label scenario status differs."
+  Assert-Issue13OracleEffect ($document.kind -ceq 'calculate') `
+    "$Label scenario is not calculate."
+  Assert-Issue13OracleEffect ($document.scenario_id -ceq $expectedScenarioId -and `
+      $document.request.method -ceq $Method) `
+    "$Label request method differs."
+  Assert-Issue13OracleEffectExactSet @($document.request.methods) @($Method) `
+    "$Label request methods"
+  Assert-Issue13OracleEffect ([int]$document.request.workers -eq 1) `
+    "$Label is not workers=1."
+  Assert-Issue13OracleEffect ($document.expected_commit -ceq $ExpectedCommit -and `
+      $document.observed_commit -ceq $ExpectedCommit) `
+    "$Label commit binding differs."
+  Assert-Issue13OracleEffect (
+    Test-Issue13OracleEffectPathEqual ([string]$document.project_root) `
+      $expectedProjectRoot
+  ) "$Label scenario project_root differs."
+  $expectedSpecPath = Join-Path $SummaryRoot `
+    "attempts/$Method/bundle/scenario-spec.json"
+  Assert-Issue13OracleEffect (
+    Test-Issue13OracleEffectPathEqual `
+      ([string]$document.execution_checkpoint.scenario_spec_path) $expectedSpecPath
+  ) "$Label scenario spec path differs."
+  $specPath = Resolve-Issue13OracleEffectFile $expectedSpecPath "$Label scenario spec"
+  $specSha = Get-Issue13OracleEffectSha256 $specPath
+  Assert-Issue13OracleEffect ($specSha -ceq `
+      [string]$document.execution_checkpoint.scenario_spec_sha256) `
+    "$Label scenario spec bytes differ from the scenario pin."
+  $scenarioSpec = Read-Issue13OracleEffectJson $specPath "$Label scenario spec"
+  Assert-Issue13OracleEffect ($scenarioSpec.schema -ceq 'wlv-issue13-scenario/1' -and `
+      $scenarioSpec.scenario_id -ceq $expectedScenarioId -and `
+      $scenarioSpec.kind -ceq 'calculate' -and `
+      $scenarioSpec.method -ceq $Method -and `
+      [int]$scenarioSpec.workers -eq 1 -and `
+      $scenarioSpec.expected_commit -ceq $ExpectedCommit) `
+    "$Label scenario spec identity differs."
+  Assert-Issue13OracleEffect (
+    Test-Issue13OracleEffectPathEqual ([string]$scenarioSpec.project_root) `
+      $expectedProjectRoot
+  ) "$Label scenario spec project_root differs."
+  [pscustomobject]@{
+    path = $resolved
+    sha256 = $ExpectedSha256
+    spec_path = $specPath
+    spec_sha256 = $specSha
+    document = $document
+  }
+}
+
+function Get-Issue13OracleEffectSafeRelativePath {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $normalized = $Path.Replace('\', '/')
+  $invalid = [string]::IsNullOrWhiteSpace($normalized) -or `
+    $normalized.StartsWith('/') -or $normalized -match '^[A-Za-z]:' -or `
+    $normalized -match '(^|/)\.\.(/|$)' -or `
+    $normalized -match '(^|/)\.(/|$)' -or `
+    $normalized.EndsWith('/') -or $normalized.Contains('//')
+  Assert-Issue13OracleEffect (-not $invalid) "$Label is unsafe: $Path"
+  $normalized
+}
+
+function Get-Issue13OracleEffectRunInventory {
+  param(
+    [Parameter(Mandatory = $true)][string]$Root,
+    [Parameter(Mandatory = $true)][string]$ManifestPath,
+    [Parameter(Mandatory = $true)][object]$Manifest,
+    [Parameter(Mandatory = $true)][string]$DeclaredInventorySha256,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  Assert-Issue13OracleEffectNoReparseTree $Root "$Label run root"
+  $expectedManifest = Join-Path $Root 'run_manifest.json'
+  Assert-Issue13OracleEffect (
+    Test-Issue13OracleEffectPathEqual $ManifestPath $expectedManifest
+  ) "$Label manifest is not the physical run-root manifest."
+  Assert-Issue13OracleEffectExactProperties $Manifest @(
+    'schema', 'schema_version', 'run_id', 'result_id', 'created_at_utc',
+    'parent_run_id', 'method', 'output_contract', 'result', 'execution',
+    'artifacts'
+  ) "$Label run manifest properties"
+  Assert-Issue13OracleEffect ([string]$Manifest.schema_version -ceq '1') `
+    "$Label run manifest version differs."
+  $artifactRecords = @($Manifest.artifacts)
+  Assert-Issue13OracleEffect ($artifactRecords.Count -gt 0) `
+    "$Label run manifest has no artifact records."
+  $paths = New-Object Collections.Generic.List[string]
+  $roles = @{}
+  $previous = $null
+  foreach ($record in $artifactRecords) {
+    Assert-Issue13OracleEffectExactProperties $record @(
+      'path', 'role', 'size_bytes', 'sha256'
+    ) "$Label run artifact record"
+    $relative = Get-Issue13OracleEffectSafeRelativePath `
+      ([string]$record.path) "$Label run artifact path"
+    Assert-Issue13OracleEffect ($relative -cne 'run_manifest.json') `
+      "$Label run manifest inventories itself."
+    Assert-Issue13OracleEffect (-not $roles.ContainsKey($relative)) `
+      "$Label repeats run artifact $relative."
+    if ($null -ne $previous) {
+      Assert-Issue13OracleEffect (
+        [StringComparer]::Ordinal.Compare([string]$previous, $relative) -lt 0
+      ) "$Label run artifact paths are not canonically ordered."
+    }
+    $previous = $relative
+    Assert-Issue13OracleEffect ([string]$record.role -cmatch `
+        '^[a-z0-9][a-z0-9._-]*$') `
+      "$Label run artifact role is invalid: $relative"
+    Assert-Issue13OracleEffect ([int64]$record.size_bytes -ge 0 -and `
+        [string]$record.sha256 -cmatch '^[0-9a-f]{64}$') `
+      "$Label run artifact size or hash is invalid: $relative"
+    $paths.Add($relative)
+    $roles[$relative] = [string]$record.role
+  }
+  $physicalFiles = @(Get-ChildItem -LiteralPath $Root -File -Recurse -Force)
+  $physicalRelative = [string[]]@($physicalFiles | ForEach-Object {
+    $_.FullName.Substring($Root.Length + 1).Replace('\', '/')
+  })
+  $expectedRelative = [string[]]@($paths.ToArray() + @('run_manifest.json'))
+  Assert-Issue13OracleEffectExactSet $physicalRelative $expectedRelative `
+    "$Label physical run files"
+  $manifestSha = Get-Issue13OracleEffectSha256 $ManifestPath
+  $proofFiles = New-Object Collections.Generic.List[object]
+  $artifactLines = New-Object Collections.Generic.List[string]
+  foreach ($record in $artifactRecords) {
+    $relative = [string]$record.path
+    $path = Resolve-Issue13OracleEffectFile (Join-Path $Root $relative) `
+      "$Label run artifact $relative"
+    $item = Get-Item -LiteralPath $path -Force
+    $sha = Get-Issue13OracleEffectSha256 $path
+    Assert-Issue13OracleEffect ([int64]$item.Length -eq `
+        [int64]$record.size_bytes -and $sha -ceq [string]$record.sha256) `
+      "$Label physical run artifact differs from its manifest: $relative"
+    $proofFiles.Add([pscustomobject][ordered]@{
+      path = $relative
+      role = [string]$record.role
+      sha256 = $sha
+      size_bytes = [int64]$item.Length
+    })
+    $artifactLines.Add(
+      $relative + '|' + [string]$record.role + '|' +
+        ([int64]$item.Length).ToString(
+          [Globalization.CultureInfo]::InvariantCulture
+        ) + '|' + $sha
+    )
+  }
+  $manifestItem = Get-Item -LiteralPath $ManifestPath -Force
+  $proofFiles.Add([pscustomobject][ordered]@{
+    path = 'run_manifest.json'
+    role = 'run-manifest'
+    sha256 = $manifestSha
+    size_bytes = [int64]$manifestItem.Length
+  })
+  $orderedFiles = @($proofFiles.ToArray())
+  [Array]::Sort($orderedFiles, [Comparison[object]]{
+    param($left, $right)
+    [StringComparer]::Ordinal.Compare([string]$left.path, [string]$right.path)
+  })
+  $signature = Get-Issue13OracleEffectUtf8Sha256 (
+    'run' + "`n" + $manifestSha + "`n" + ($artifactLines -join "`n")
+  )
+  Assert-Issue13OracleEffect ($signature -ceq $DeclaredInventorySha256) `
+    "$Label physical wlv13_run_inventory/signature differs from the scenario pin."
+  [pscustomobject][ordered]@{
+    file_count = [int64]$orderedFiles.Count
+    total_bytes = [int64](($orderedFiles | Measure-Object size_bytes -Sum).Sum)
+    manifest_sha256 = $manifestSha
+    inventory_signature_sha256 = $signature
+    files = $orderedFiles
+  }
+}
+
+function Get-Issue13OracleEffectRunOutput {
+  param(
+    [Parameter(Mandatory = $true)][object]$Scenario,
+    [Parameter(Mandatory = $true)][object]$Pin,
+    [Parameter(Mandatory = $true)][string]$Method,
+    [Parameter(Mandatory = $true)][string]$ExpectedCommit,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $outputs = @($Scenario.document.outputs)
+  Assert-Issue13OracleEffect ($outputs.Count -eq 1) `
+    "$Label must publish exactly one output."
+  $output = $outputs[0]
+  Assert-Issue13OracleEffect ($output.kind -ceq 'run' -and $output.method -ceq $Method) `
+    "$Label output identity differs."
+  Assert-Issue13OracleEffect ($output.manifest_sha256 -ceq $Pin.manifest_sha256) `
+    "$Label output manifest pin differs."
+  Assert-Issue13OracleEffect ($output.inventory_sha256 -ceq $Pin.inventory_sha256) `
+    "$Label output inventory pin differs."
+  $root = Resolve-Issue13OracleEffectDirectory ([string]$output.root) "$Label run root"
+  $manifestPath = Resolve-Issue13OracleEffectFile ([string]$output.manifest_path) `
+    "$Label run manifest"
+  Assert-Issue13OracleEffect ((Get-Issue13OracleEffectSha256 $manifestPath) -ceq `
+      [string]$output.manifest_sha256) "$Label run manifest bytes differ."
+  $manifest = Read-Issue13OracleEffectJson $manifestPath "$Label run manifest"
+  Assert-Issue13OracleEffect ($manifest.schema -ceq 'wlv-run-manifest') `
+    "$Label run manifest schema differs."
+  Assert-Issue13OracleEffect ($manifest.method -ceq $Method) `
+    "$Label run manifest method differs."
+  Assert-Issue13OracleEffect ($manifest.run_id -ceq $output.run_id -and `
+      $manifest.result_id -ceq $output.result_id -and `
+      [string]$manifest.parent_run_id -ceq [string]$output.parent_run_id -and `
+      $manifest.result.request.method -ceq $Method -and `
+      $manifest.result.request.mode -ceq 'calculate' -and `
+      [int]$manifest.result.request.workers -eq 1 -and `
+      $output.request.method -ceq $Method -and `
+      $output.request.mode -ceq 'calculate' -and `
+      [int]$output.request.workers -eq 1) `
+    "$Label run identity or calculate/workers1 request differs."
+  Assert-Issue13OracleEffect ($manifest.output_contract.id -ceq 'wlvpanel-output' -and `
+      $manifest.output_contract.version -ceq '1.0.0') `
+    "$Label output contract differs."
+  Assert-Issue13OracleEffect ([bool]$manifest.result.provenance.complete -and `
+      -not [bool]$manifest.result.provenance.git.dirty -and `
+      $manifest.result.provenance.git.commit -ceq $ExpectedCommit) `
+    "$Label provenance is incomplete, dirty, or bound to another commit."
+  $physical = Get-Issue13OracleEffectRunInventory $root $manifestPath $manifest `
+    ([string]$output.inventory_sha256) $Label
+  [pscustomobject]@{
+    root = $root
+    output = $output
+    manifest_path = $manifestPath
+    manifest = $manifest
+    physical_inventory = $physical
+  }
+}
+
+function Get-Issue13OracleEffectArtifact {
+  param(
+    [Parameter(Mandatory = $true)][object]$Run,
+    [Parameter(Mandatory = $true)][string]$RelativePath,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $entries = @($Run.manifest.artifacts | Where-Object { $_.path -ceq $RelativePath })
+  Assert-Issue13OracleEffect ($entries.Count -eq 1) `
+    "$Label manifest does not contain exactly one $RelativePath artifact."
+  $entry = $entries[0]
+  $path = Resolve-Issue13OracleEffectFile (Join-Path $Run.root $RelativePath) `
+    "$Label $RelativePath"
+  $item = Get-Item -LiteralPath $path
+  Assert-Issue13OracleEffect ([int64]$entry.size_bytes -eq [int64]$item.Length) `
+    "$Label $RelativePath size differs from the manifest."
+  Assert-Issue13OracleEffect ((Get-Issue13OracleEffectSha256 $path) -ceq [string]$entry.sha256) `
+    "$Label $RelativePath hash differs from the manifest."
+  [pscustomobject]@{
+    path = $path
+    relative_path = $RelativePath
+    sha256 = [string]$entry.sha256
+    size_bytes = [int64]$entry.size_bytes
+    role = [string]$entry.role
+  }
+}
+
+function Split-Issue13OracleEffectSimpleCsvLine {
+  param(
+    [Parameter(Mandatory = $true)][string]$Line,
+    [Parameter(Mandatory = $true)][int]$ExpectedFieldCount,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $tokens = @($Line.Split(';'))
+  Assert-Issue13OracleEffect ($tokens.Count -eq $ExpectedFieldCount) `
+    "$Label has $($tokens.Count) fields; expected $ExpectedFieldCount."
+  [string[]]@($tokens | ForEach-Object {
+    $token = [string]$_
+    if ($token.Length -ge 2 -and $token[0] -eq '"' -and `
+        $token[$token.Length - 1] -eq '"') {
+      $token.Substring(1, $token.Length - 2).Replace('""', '"')
+    } else {
+      $token
+    }
+  })
+}
+
+function Get-Issue13OracleEffectAnomalyRows {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$PolicyId,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $expectedHeader = @(
+    'artifact', 'indicator', 'checkpoint', 'stage', 'module', 'year',
+    'country', 'sector', 'output', 'original_value', 'policy_id', 'action'
+  )
+  $rows = New-Object Collections.Generic.List[object]
+  $lineNumber = 0
+  foreach ($line in [IO.File]::ReadLines($Path)) {
+    $lineNumber++
+    if ($lineNumber -eq 1) {
+      $header = Split-Issue13OracleEffectSimpleCsvLine $line 12 "$Label header"
+      Assert-Issue13OracleEffect (($header -join "`n") -ceq ($expectedHeader -join "`n")) `
+        "$Label header differs."
+      continue
+    }
+    if (-not $line.Contains("`"$PolicyId`"")) {
+      continue
+    }
+    $fields = Split-Issue13OracleEffectSimpleCsvLine $line 12 `
+      "$Label line $lineNumber"
+    $row = [ordered]@{}
+    for ($index = 0; $index -lt $expectedHeader.Count; $index++) {
+      $row[$expectedHeader[$index]] = $fields[$index]
+    }
+    if ($row.policy_id -ceq $PolicyId) {
+      $rows.Add([pscustomobject]$row)
+    }
+  }
+  [object[]]$rows.ToArray()
+}
+
+function Test-Issue13OracleEffectLeontief {
+  param(
+    [Parameter(Mandatory = $true)][object]$Run,
+    [Parameter(Mandatory = $true)][object]$Spec,
+    [Parameter(Mandatory = $true)][string]$Method
+  )
+  $profileId = if ($Method -ceq 'norow_w13') { 'stable' } else { 'v09' }
+  $profile = $Spec.coordinate_contracts.leontief_zero_output.profiles.$profileId
+  $signed = $Spec.coordinate_contracts.leontief_signed_diagnostic.$profileId
+  $anomalies = Get-Issue13OracleEffectArtifact $Run '_anomalies.csv' "$Method oracle run"
+  $diagnostics = Get-Issue13OracleEffectArtifact $Run '_leontief_diagnostics.csv' `
+    "$Method oracle run"
+  $scientific = Get-Issue13OracleEffectArtifact $Run '_scientific_checks.csv' `
+    "$Method oracle run"
+  $rows = @(Get-Issue13OracleEffectAnomalyRows $anomalies.path `
+    'wiodr13_leontief_zero_output_v1' "$Method anomalies")
+  Assert-Issue13OracleEffect ($rows.Count -eq [int]$profile.coordinate_count) `
+    "$Method Leontief allowlist count differs."
+  $keys = New-Object Collections.Generic.List[string]
+  $counts = @{}
+  foreach ($row in $rows) {
+    Assert-Issue13OracleEffect ($row.artifact -ceq 'm_io' -and `
+        $row.indicator -ceq 'leontief_input_ratio' -and `
+        $row.checkpoint -ceq 'after_matrices' -and $row.stage -ceq '3' -and `
+        $row.module -ceq 'transformation.R' -and $row.country -ceq '' -and `
+        $row.original_value -ceq 'Inf' -and `
+        $row.action -ceq 'allowlisted_nonzero_over_zero') `
+      "$Method has a malformed Leontief anomaly row."
+    $key = "$($row.year)|$($row.sector)|$($row.output)"
+    $keys.Add($key)
+    $group = "$($row.year)|$($row.output)"
+    if (-not $counts.ContainsKey($group)) { $counts[$group] = 0 }
+    $counts[$group]++
+  }
+  Assert-Issue13OracleEffect (($keys | Select-Object -Unique).Count -eq $keys.Count) `
+    "$Method Leontief coordinates are duplicated."
+  Assert-Issue13OracleEffect (
+    (Get-Issue13OracleEffectTextHash $keys.ToArray() MD5) -ceq
+      [string]$profile.coordinate_md5
+  ) "$Method Leontief coordinate MD5 differs."
+  Assert-Issue13OracleEffectExactSet @($counts.Keys) `
+    @(Get-Issue13OracleEffectPropertyNames $profile.year_output_counts) `
+    "$Method Leontief year/output groups"
+  foreach ($property in $profile.year_output_counts.PSObject.Properties) {
+    Assert-Issue13OracleEffect ([int]$counts[$property.Name] -eq [int]$property.Value) `
+      "$Method Leontief count differs for $($property.Name)."
+  }
+
+  $diag = @(Import-Csv -Delimiter ';' -LiteralPath $diagnostics.path)
+  $years = @($Spec.coordinate_contracts.leontief_signed_diagnostic.years)
+  Assert-Issue13OracleEffect ($diag.Count -eq 15) `
+    "$Method Leontief diagnostic must have 15 rows."
+  Assert-Issue13OracleEffectExactSet @($diag | ForEach-Object year) $years `
+    "$Method diagnostic years"
+  foreach ($row in $diag) {
+    $isSigned = $row.year -ceq [string]$signed.signed_year
+    $expectedCount = if ($isSigned) { [int]$signed.signed_coefficient_count } else { 0 }
+    $expectedCertificate = if ($isSigned) {
+      [string]$Spec.coordinate_contracts.leontief_signed_diagnostic.signed_certificate
+    } else {
+      [string]$Spec.coordinate_contracts.leontief_signed_diagnostic.other_year_certificate
+    }
+    Assert-Issue13OracleEffect ($row.method -ceq $Method -and `
+        [int]$row.coefficient_negative_count -eq $expectedCount -and `
+        $row.certificate_type -ceq $expectedCertificate -and `
+        [int]$row.coefficient_nonfinite_count -eq 0 -and `
+        [int]$row.gross_output_nonfinite_count -eq 0 -and `
+        [int]$row.lambda_nonfinite_count -eq 0) `
+      "$Method Leontief diagnostic differs for year $($row.year)."
+  }
+
+  $checks = @(Import-Csv -Delimiter ';' -LiteralPath $scientific.path)
+  $expectedChecks = @{
+    leontief_diagnostics = @('warning', 'global', '15')
+    leontief_generation_fingerprint = @('pass', 'global', '15')
+    leontief_productivity = @('not_applicable', '2006', '0')
+  }
+  foreach ($id in $expectedChecks.Keys) {
+    $matches = @($checks | Where-Object { $_.check_id -ceq $id })
+    Assert-Issue13OracleEffect ($matches.Count -eq 1) `
+      "$Method scientific checks do not contain exactly one $id row."
+    $expected = $expectedChecks[$id]
+    Assert-Issue13OracleEffect ($matches[0].method -ceq $Method -and `
+        $matches[0].status -ceq $expected[0] -and `
+        $matches[0].scope -ceq $expected[1] -and `
+        $matches[0].observations -ceq $expected[2]) `
+      "$Method scientific check $id differs."
+  }
+  [pscustomobject][ordered]@{
+    profile_id = $profileId
+    coordinate_count = [int]$profile.coordinate_count
+    coordinate_md5 = [string]$profile.coordinate_md5
+    signed_year = [string]$signed.signed_year
+    signed_coefficient_count = [int]$signed.signed_coefficient_count
+    signed_certificate = [string]$Spec.coordinate_contracts.leontief_signed_diagnostic.signed_certificate
+    anomaly_artifact_sha256 = $anomalies.sha256
+    diagnostic_artifact_sha256 = $diagnostics.sha256
+    scientific_checks_sha256 = $scientific.sha256
+  }
+}
+
+function Test-Issue13OracleEffectNanClean {
+  param(
+    [Parameter(Mandatory = $true)][object]$Run,
+    [Parameter(Mandatory = $true)][object]$Spec,
+    [Parameter(Mandatory = $true)][string]$Method
+  )
+  $contract = $Spec.coordinate_contracts.historical_nan_clean
+  $methodContract = $contract.methods.$Method
+  Assert-Issue13OracleEffect ($null -ne $methodContract) `
+    "$Method does not have a historical-NaN contract."
+  $anomalies = Get-Issue13OracleEffectArtifact $Run '_anomalies.csv' "$Method oracle run"
+  $rows = @(Get-Issue13OracleEffectAnomalyRows $anomalies.path `
+    'issue13_cc2_historical_nan_clean_v1' "$Method anomalies")
+  Assert-Issue13OracleEffect ($rows.Count -eq 405) `
+    "$Method historical-NaN row count differs."
+  $keys = New-Object Collections.Generic.List[string]
+  $counts = @{}
+  foreach ($row in $rows) {
+    Assert-Issue13OracleEffect ($row.artifact -ceq 'sea_sectors' -and `
+        $row.checkpoint -ceq 'after_stage_2' -and $row.stage -ceq '2' -and `
+        $row.module -ceq [string]$methodContract.module -and `
+        $row.output -ceq '' -and $row.original_value -ceq 'NaN' -and `
+        $row.action -ceq 'replace_historical_nan_with_zero') `
+      "$Method has a malformed historical-NaN anomaly row."
+    $keys.Add("$($row.indicator)|$($row.year)|$($row.country)|$($row.sector)")
+    if (-not $counts.ContainsKey($row.indicator)) { $counts[$row.indicator] = 0 }
+    $counts[$row.indicator]++
+  }
+  Assert-Issue13OracleEffect (($keys | Select-Object -Unique).Count -eq 405) `
+    "$Method historical-NaN coordinates are duplicated."
+  Assert-Issue13OracleEffect (
+    (Get-Issue13OracleEffectTextHash $keys.ToArray() SHA256) -ceq
+      [string]$contract.coordinate_sha256
+  ) "$Method historical-NaN coordinate SHA-256 differs."
+  Assert-Issue13OracleEffectExactSet @($counts.Keys) @($contract.indicators) `
+    "$Method historical-NaN indicators"
+  foreach ($indicator in @($contract.indicators)) {
+    Assert-Issue13OracleEffect ([int]$counts[$indicator] -eq 135) `
+      "$Method historical-NaN count differs for $indicator."
+  }
+  [pscustomobject][ordered]@{
+    coordinate_count = 405
+    coordinate_sha256 = [string]$contract.coordinate_sha256
+    before_value = 'NaN'
+    denominator_indicator = [string]$methodContract.denominator_indicator
+    denominator_requirement = [string]$contract.denominator_requirement
+    after_value = 'finite numeric zero'
+    module = [string]$methodContract.module
+    policy_id = [string]$contract.policy_id
+    action = [string]$contract.action
+  }
+}
+
+function Test-Issue13OracleEffectUtf8 {
+  param(
+    [Parameter(Mandatory = $true)][object]$Run,
+    [Parameter(Mandatory = $true)][object]$Spec
+  )
+  $contract = $Spec.coordinate_contracts.norow_utf8
+  $artifact = Get-Issue13OracleEffectArtifact $Run '_parameters.csv' 'norow_w13 oracle run'
+  $bytes = [IO.File]::ReadAllBytes($artifact.path)
+  $encoding = New-Object Text.UTF8Encoding($false, $true)
+  try { $text = $encoding.GetString($bytes) } catch {
+    throw 'Issue #13 oracle-effect proof rejected: norow _parameters.csv is not valid UTF-8.'
+  }
+  Assert-Issue13OracleEffect (-not $text.Contains([char]0xFFFD)) `
+    'norow _parameters.csv contains U+FFFD.'
+  $rows = @(Import-Csv -Delimiter ';' -LiteralPath $artifact.path)
+  Assert-Issue13OracleEffect ($rows.Count -eq 1 -and `
+      $rows[0].source -ceq 'wiodr13' -and $rows[0].code -ceq 'norow_w13' -and `
+      $rows[0].name -ceq [string]$contract.expected_value) `
+    'norow UTF-8 parameter row differs.'
+  $valueHash = Get-Issue13OracleEffectTextHash @([string]$rows[0].name) SHA256
+  Assert-Issue13OracleEffect ($valueHash -ceq [string]$contract.expected_value_utf8_sha256) `
+    'norow UTF-8 parameter value hash differs.'
+  [pscustomobject][ordered]@{
+    artifact_sha256 = $artifact.sha256
+    field = 'name'
+    value = [string]$rows[0].name
+    value_utf8_sha256 = $valueHash
+  }
+}
+
+function Get-Issue13OracleEffectHarnessInventory {
+  param([Parameter(Mandatory = $true)][string]$RuntimeRoot)
+
+  $root = Resolve-Issue13OracleEffectDirectory $RuntimeRoot `
+    'materialized comparison runtime root'
+  Assert-Issue13OracleEffectNoReparseTree $root `
+    'materialized comparison runtime root'
+  $harnessRoot = Resolve-Issue13OracleEffectDirectory `
+    (Join-Path $root 'issue13-evidence-harness') `
+    'materialized comparison harness root'
+  $rootDirectories = @(Get-ChildItem -LiteralPath $root -Directory -Force)
+  Assert-Issue13OracleEffect ($rootDirectories.Count -eq 1 -and `
+      $rootDirectories[0].Name -ceq 'issue13-evidence-harness') `
+    'materialized comparison runtime has an unexpected root directory.'
+  Assert-Issue13OracleEffect (@(Get-ChildItem -LiteralPath $harnessRoot `
+      -Directory -Recurse -Force).Count -eq 0) `
+    'materialized comparison harness is not flat.'
+  $files = @(
+    @(Get-ChildItem -LiteralPath $root -File -Force | Where-Object {
+      $_.Name -cne 'v5-harness-manifest.json'
+    })
+    @(Get-ChildItem -LiteralPath $harnessRoot -File -Force)
+  )
+  $records = @($files | ForEach-Object {
+    [pscustomobject][ordered]@{
+      relative_path = $_.FullName.Substring($root.Length + 1).Replace('\', '/')
+      size_bytes = [int64]$_.Length
+      sha256 = Get-Issue13OracleEffectSha256 $_.FullName
+    }
+  } | Sort-Object relative_path)
+  Assert-Issue13OracleEffect ($records.Count -gt 0) `
+    'materialized comparison harness inventory is empty.'
+  $lines = [string[]]@($records | ForEach-Object {
+    [string]$_.relative_path + '|' + [string]$_.size_bytes + '|' +
+      [string]$_.sha256
+  })
+  $payload = [Text.Encoding]::UTF8.GetBytes(($lines -join "`n"))
+  $hasher = [Security.Cryptography.HashAlgorithm]::Create('SHA256')
+  try {
+    $inventoryHash = (($hasher.ComputeHash($payload) | ForEach-Object {
+      $_.ToString('x2')
+    }) -join '')
+  } finally {
+    $hasher.Dispose()
+  }
+  [pscustomobject][ordered]@{
+    root = $root
+    harness_root = $harnessRoot
+    file_count = [int64]$records.Count
+    total_bytes = [int64](($records | Measure-Object size_bytes -Sum).Sum)
+    inventory_sha256 = $inventoryHash
+    records = $records
+  }
+}
+
+function Test-Issue13OracleEffectHarnessManifest {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][object]$Spec,
+    [Parameter(Mandatory = $true)][string]$ExpectedCandidateCommit,
+    [Parameter(Mandatory = $true)][string]$RepositoryRoot
+  )
+  $resolved = Resolve-Issue13OracleEffectFile $Path 'comparison harness manifest'
+  $runtimeRoot = Split-Path -Parent $resolved
+  Assert-Issue13OracleEffect ((Split-Path -Leaf $resolved) -ceq `
+      'v5-harness-manifest.json') `
+    'comparison harness manifest must use the terminal manifest filename.'
+  $runtimeLeaf = Split-Path -Leaf $runtimeRoot
+  Assert-Issue13OracleEffect ($runtimeLeaf -cnotmatch '(?i)v5c[56](?:$|[^0-9])') `
+    'pre-terminal v5c5/v5c6 runtime names are forbidden.'
+  Assert-Issue13OracleEffect ($ExpectedCandidateCommit -cmatch '^[0-9a-f]{40}$') `
+    'ExpectedCandidateCommit is not a lowercase 40-hex Git commit.'
+  Assert-Issue13OracleEffect (
+    (Invoke-Issue13OracleEffectGit $RepositoryRoot @(
+      'rev-parse', "$ExpectedCandidateCommit^{commit}"
+    )) -ceq $ExpectedCandidateCommit
+  ) 'ExpectedCandidateCommit is not an available Git commit.'
+  $manifest = Read-Issue13OracleEffectJson $resolved 'comparison harness manifest'
+  Assert-Issue13OracleEffect ($manifest.schema -ceq 'wlv-issue13-v5-harness-materialization/1' -and `
+      $manifest.status -ceq 'materialized' -and `
+      $manifest.generation -ceq 'v5-terminal' -and `
+      [bool]$manifest.final_evidence_eligible -and `
+      -not [bool]$manifest.reuses_candidate_evidence) `
+    'comparison harness manifest identity differs.'
+  Assert-Issue13OracleEffectExactProperties $manifest.source_controller @(
+    'commit_sha256', 'file_count', 'records'
+  ) 'terminal source_controller properties'
+  $expectedController = Get-Issue13OracleEffectExpectedController $Spec `
+    $ExpectedCandidateCommit $RepositoryRoot
+  Assert-Issue13OracleEffect (
+    [string]$manifest.source_controller.commit_sha256 -ceq `
+      [string]$expectedController.commit_sha256
+  ) 'terminal source_controller.commit_sha256 differs from authenticated controller.'
+  $controllerRecords = @($manifest.source_controller.records)
+  Assert-Issue13OracleEffect (
+    [int64]$manifest.source_controller.file_count -eq `
+      [int64]$expectedController.file_count -and
+    $controllerRecords.Count -eq [int64]$expectedController.file_count
+  ) `
+    'terminal source_controller record count differs.'
+  foreach ($record in $controllerRecords) {
+    Assert-Issue13OracleEffectExactProperties $record @(
+      'name', 'relative_path', 'sha256', 'git_blob'
+    ) 'terminal source_controller record'
+    $null = Get-Issue13OracleEffectSafeRelativePath `
+      ([string]$record.relative_path) 'terminal controller relative_path'
+  }
+  $null = Assert-Issue13OracleEffectControllerRecords $controllerRecords `
+    @($expectedController.records) 'terminal source_controller'
+  Assert-Issue13OracleEffect ($manifest.baseline_commit -ceq $Spec.oracle.base_commit -and `
+      $manifest.baseline_runtime_commit -ceq $Spec.oracle.runtime_commit -and `
+      $manifest.baseline_runtime_tree -ceq $Spec.oracle.runtime_tree -and `
+      $manifest.baseline_overlay_sha256 -ceq $Spec.oracle.canonical_patch_sha256 -and `
+      $manifest.baseline_overlay_patch_id -ceq $Spec.oracle.stable_patch_id) `
+    'comparison harness manifest is not bound to the authorized oracle.'
+  $inventory = Get-Issue13OracleEffectHarnessInventory $runtimeRoot
+  $externalInventory = $Spec.terminal_comparison_runtime.sealed_inventory
+  Assert-Issue13OracleEffect (
+    [string]$externalInventory.status -ceq 'sealed'
+  ) 'terminal harness fixture still requires reseal; proof generation is disabled.'
+  Assert-Issue13OracleEffect (
+    [int64]$inventory.file_count -eq [int64]$externalInventory.file_count -and
+    [int64]$inventory.total_bytes -eq [int64]$externalInventory.total_bytes -and
+    [string]$inventory.inventory_sha256 -ceq `
+      [string]$externalInventory.inventory_sha256
+  ) 'materialized harness differs from the external terminal inventory pin.'
+  foreach ($record in @($manifest.output_tooling, $manifest.sealed_output_tooling)) {
+    Assert-Issue13OracleEffect ([int64]$record.file_count -eq $inventory.file_count -and `
+        [int64]$record.total_bytes -eq $inventory.total_bytes -and `
+        [string]$record.inventory_sha256 -ceq $inventory.inventory_sha256) `
+      'comparison harness manifest does not authenticate the installed inventory.'
+  }
+  $harnessRoot = $inventory.harness_root
+  $toolNames = @($Spec.terminal_comparison_runtime.required_tool_files)
+  $tools = @(
+    foreach ($name in $toolNames) {
+      $tool = Resolve-Issue13OracleEffectFile (Join-Path $harnessRoot $name) `
+        "comparison tool $name"
+      [pscustomobject][ordered]@{
+        name = $name
+        sha256 = Get-Issue13OracleEffectSha256 $tool
+        size_bytes = [int64](Get-Item -LiteralPath $tool).Length
+      }
+    }
+  )
+  [pscustomobject][ordered]@{
+    expected_candidate_commit = $ExpectedCandidateCommit
+    manifest_path = $resolved
+    manifest_sha256 = Get-Issue13OracleEffectSha256 $resolved
+    generation = 'v5-terminal'
+    final_evidence_eligible = $true
+    reuses_candidate_evidence = $false
+    source_controller_commit_sha256 = `
+      [string]$manifest.source_controller.commit_sha256
+    source_controller = $expectedController
+    output_tooling = [pscustomobject][ordered]@{
+      file_count = [int64]$manifest.output_tooling.file_count
+      total_bytes = [int64]$manifest.output_tooling.total_bytes
+      inventory_sha256 = [string]$manifest.output_tooling.inventory_sha256
+    }
+    sealed_output_tooling = [pscustomobject][ordered]@{
+      file_count = [int64]$manifest.sealed_output_tooling.file_count
+      total_bytes = [int64]$manifest.sealed_output_tooling.total_bytes
+      inventory_sha256 = [string]$manifest.sealed_output_tooling.inventory_sha256
+    }
+    installed_inventory = $inventory
+    tools = $tools
+  }
+}
+
+function New-Issue13OracleEffectApprovedRunState {
+  param(
+    [Parameter(Mandatory = $true)][ValidateSet('strict', 'oracle')]
+      [string]$Arm,
+    [Parameter(Mandatory = $true)][string]$Method,
+    [Parameter(Mandatory = $true)][string]$ExpectedCommit,
+    [Parameter(Mandatory = $true)][object]$Scenario,
+    [Parameter(Mandatory = $true)][object]$Run
+  )
+  [pscustomobject][ordered]@{
+    key = "$Arm|$Method"
+    arm = $Arm
+    method = $Method
+    expected_commit = $ExpectedCommit
+    scenario_pin = [pscustomobject][ordered]@{
+      path = [string]$Scenario.path
+      sha256 = [string]$Scenario.sha256
+    }
+    scenario_spec_pin = [pscustomobject][ordered]@{
+      path = [string]$Scenario.spec_path
+      sha256 = [string]$Scenario.spec_sha256
+    }
+    run_root = [string]$Run.root
+    manifest_path = [string]$Run.manifest_path
+    declared_inventory_sha256 = [string]$Run.output.inventory_sha256
+    snapshot = $Run.physical_inventory
+  }
+}
+
+function Get-Issue13OracleEffectInputContext {
+  param(
+    [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+    [Parameter(Mandatory = $true)][string]$ExpectedCandidateCommit,
+    [Parameter(Mandatory = $true)][string]$SpecPath,
+    [Parameter(Mandatory = $true)][string]$SchemaPath,
+    [Parameter(Mandatory = $true)][string]$StrictSmokeSummary,
+    [Parameter(Mandatory = $true)][string]$OracleSmokeSummary,
+    [Parameter(Mandatory = $true)][string]$OraclePatch,
+    [Parameter(Mandatory = $true)][string]$ComparisonHarnessManifest,
+    [Parameter(Mandatory = $true)][string]$Rscript,
+    [Parameter(Mandatory = $true)][string]$RLibrary
+  )
+  $specResolved = Resolve-Issue13OracleEffectFile $SpecPath 'oracle-effect spec'
+  $schemaResolved = Resolve-Issue13OracleEffectFile $SchemaPath `
+    'oracle-effect proof schema'
+  $spec = Read-Issue13OracleEffectJson $specResolved 'oracle-effect spec'
+  Assert-Issue13OracleEffect ((Get-Issue13OracleEffectSha256 $specResolved) -ceq `
+      '0de8feceef20c80b40c884a37abde70fdcee3d1f612968e37de1b938c4380211') `
+    'oracle-effect spec bytes differ from the closed terminal manifest.'
+  Assert-Issue13OracleEffect ((Get-Issue13OracleEffectSha256 $schemaResolved) -ceq `
+      [string]$spec.proof_schema_sha256) `
+    'proof schema bytes differ from the spec pin.'
+  $oracleIdentity = Test-Issue13OracleEffectSpec $spec $RepositoryRoot $OraclePatch
+  $strictPath = Resolve-Issue13OracleEffectFile $StrictSmokeSummary `
+    'strict smoke summary'
+  $oraclePath = Resolve-Issue13OracleEffectFile $OracleSmokeSummary `
+    'oracle smoke summary'
+  Assert-Issue13OracleEffect ((Get-Issue13OracleEffectSha256 $strictPath) -ceq `
+      [string]$spec.evidence_pins.strict_smoke.summary_sha256) `
+    'strict smoke summary hash differs.'
+  Assert-Issue13OracleEffect ((Get-Issue13OracleEffectSha256 $oraclePath) -ceq `
+      [string]$spec.evidence_pins.oracle_smoke.summary_sha256) `
+    'oracle smoke summary hash differs.'
+  $strict = Read-Issue13OracleEffectJson $strictPath 'strict smoke summary'
+  $oracle = Read-Issue13OracleEffectJson $oraclePath 'oracle smoke summary'
+  Assert-Issue13OracleEffect ($strict.schema -ceq `
+      $spec.evidence_pins.strict_smoke.schema -and `
+      $strict.purpose -ceq $spec.evidence_pins.strict_smoke.purpose -and `
+      $strict.status -ceq 'failed' -and -not [bool]$strict.passed -and `
+      -not [bool]$strict.final_evidence_eligible -and `
+      $strict.baseline_commit -ceq $spec.oracle.base_commit -and `
+      $strict.source_inventory_sha256 -ceq `
+        $spec.evidence_pins.source_inventory_sha256 -and `
+      $strict.harness_manifest_sha256 -ceq `
+        $spec.evidence_pins.strict_smoke.harness_manifest_sha256 -and `
+      [int]$strict.method_count -eq 12 -and `
+      [int]$strict.passed_count -eq 5 -and [int]$strict.failed_count -eq 7) `
+    'strict smoke summary envelope differs.'
+  Assert-Issue13OracleEffect ($oracle.schema -ceq `
+      $spec.evidence_pins.oracle_smoke.schema -and `
+      $oracle.purpose -ceq $spec.evidence_pins.oracle_smoke.purpose -and `
+      $oracle.status -ceq 'passed' -and [bool]$oracle.passed -and `
+      -not [bool]$oracle.final_evidence_eligible -and `
+      $oracle.baseline_commit -ceq $spec.oracle.base_commit -and `
+      $oracle.baseline_base_commit -ceq $spec.oracle.base_commit -and `
+      $oracle.baseline_runtime_commit -ceq $spec.oracle.runtime_commit -and `
+      $oracle.source_inventory_sha256 -ceq `
+        $spec.evidence_pins.source_inventory_sha256 -and `
+      $oracle.harness_manifest_sha256 -ceq `
+        $spec.evidence_pins.oracle_smoke.harness_manifest_sha256 -and `
+      [int]$oracle.method_count -eq 12 -and `
+      [int]$oracle.passed_count -eq 12 -and [int]$oracle.failed_count -eq 0) `
+    'oracle smoke summary envelope differs.'
+  $strictMap = Get-Issue13OracleEffectSummaryRecords $strict `
+    'strict smoke summary'
+  $oracleMap = Get-Issue13OracleEffectSummaryRecords $oracle `
+    'oracle smoke summary'
+  $allMethods = @($spec.method_partition.strict_common) + `
+    @($spec.method_partition.recovered)
+  Assert-Issue13OracleEffectExactSet @($strictMap.Keys) $allMethods `
+    'strict summary methods'
+  Assert-Issue13OracleEffectExactSet @($oracleMap.Keys) $allMethods `
+    'oracle summary methods'
+  Assert-Issue13OracleEffectExactSet `
+    @($strictMap.Keys | Where-Object { $strictMap[$_].status -ceq 'passed' }) `
+    @($spec.method_partition.strict_common) 'strict passed methods'
+  Assert-Issue13OracleEffectExactSet `
+    @($strictMap.Keys | Where-Object { $strictMap[$_].status -ceq 'failed' }) `
+    @($spec.method_partition.recovered) 'strict failed methods'
+  Assert-Issue13OracleEffect (@($oracleMap.Keys | Where-Object {
+      $oracleMap[$_].status -cne 'passed'
+    }).Count -eq 0) 'oracle summary contains a non-passed method.'
+  $harness = Test-Issue13OracleEffectHarnessManifest `
+    $ComparisonHarnessManifest $spec $ExpectedCandidateCommit `
+    $oracleIdentity.repository_root
+  $rscriptPath = Resolve-Issue13OracleEffectFile $Rscript 'comparison Rscript'
+  $rscriptItem = Get-Item -LiteralPath $rscriptPath -Force
+  $rRuntime = Get-Issue13OracleEffectRRuntime $rscriptPath $RLibrary
+  $strictRoot = Split-Path -Parent $strictPath
+  $oracleRoot = Split-Path -Parent $oraclePath
+  $strictScenarios = @{}
+  $oracleScenarios = @{}
+  $strictRuns = @{}
+  $oracleRuns = @{}
+  $approved = New-Object Collections.Generic.List[object]
+  foreach ($pin in @($spec.common_methods)) {
+    $method = [string]$pin.method
+    $strictScenario = Get-Issue13OracleEffectScenario $strictMap[$method] `
+      $strictRoot $pin.strict_scenario_sha256 $method $true `
+      $spec.oracle.base_commit "$method strict"
+    $oracleScenario = Get-Issue13OracleEffectScenario $oracleMap[$method] `
+      $oracleRoot $pin.oracle_scenario_sha256 $method $true `
+      $spec.oracle.runtime_commit "$method oracle"
+    $strictRun = Get-Issue13OracleEffectRunOutput $strictScenario `
+      ([pscustomobject]@{
+        manifest_sha256 = $pin.strict_manifest_sha256
+        inventory_sha256 = $pin.strict_inventory_sha256
+      }) $method $spec.oracle.base_commit "$method strict"
+    $oracleRun = Get-Issue13OracleEffectRunOutput $oracleScenario `
+      ([pscustomobject]@{
+        manifest_sha256 = $pin.oracle_manifest_sha256
+        inventory_sha256 = $pin.oracle_inventory_sha256
+      }) $method $spec.oracle.runtime_commit "$method oracle"
+    $strictScenarios[$method] = $strictScenario
+    $oracleScenarios[$method] = $oracleScenario
+    $strictRuns[$method] = $strictRun
+    $oracleRuns[$method] = $oracleRun
+    $approved.Add((New-Issue13OracleEffectApprovedRunState strict $method `
+      $spec.oracle.base_commit $strictScenario $strictRun))
+  }
+  foreach ($pin in @($spec.recovered_methods)) {
+    $method = [string]$pin.method
+    $strictScenario = Get-Issue13OracleEffectScenario $strictMap[$method] `
+      $strictRoot $pin.strict_scenario_sha256 $method $false `
+      $spec.oracle.base_commit "$method strict"
+    $oracleScenario = Get-Issue13OracleEffectScenario $oracleMap[$method] `
+      $oracleRoot $pin.oracle_scenario_sha256 $method $true `
+      $spec.oracle.runtime_commit "$method oracle"
+    $oracleRun = Get-Issue13OracleEffectRunOutput $oracleScenario `
+      ([pscustomobject]@{
+        manifest_sha256 = $pin.oracle_manifest_sha256
+        inventory_sha256 = $pin.oracle_inventory_sha256
+      }) $method $spec.oracle.runtime_commit "$method oracle"
+    $strictScenarios[$method] = $strictScenario
+    $oracleScenarios[$method] = $oracleScenario
+    $oracleRuns[$method] = $oracleRun
+  }
+  foreach ($method in $allMethods) {
+    $approved.Add((New-Issue13OracleEffectApprovedRunState oracle $method `
+      $spec.oracle.runtime_commit $oracleScenarios[$method] `
+      $oracleRuns[$method]))
+  }
+  Assert-Issue13OracleEffect ($approved.Count -eq 17) `
+    'approved physical run inventory count differs from 17.'
+  [pscustomobject]@{
+    spec_resolved = $specResolved
+    schema_resolved = $schemaResolved
+    spec = $spec
+    oracle_identity = $oracleIdentity
+    strict_path = $strictPath
+    oracle_path = $oraclePath
+    strict = $strict
+    oracle = $oracle
+    strict_map = $strictMap
+    oracle_map = $oracleMap
+    strict_scenarios = $strictScenarios
+    oracle_scenarios = $oracleScenarios
+    strict_runs = $strictRuns
+    oracle_runs = $oracleRuns
+    approved_runs = @($approved.ToArray())
+    harness = $harness
+    rscript = [pscustomobject][ordered]@{
+      path = $rscriptPath
+      sha256 = Get-Issue13OracleEffectSha256 $rscriptPath
+      size_bytes = [int64]$rscriptItem.Length
+    }
+    r_library = $rRuntime
+  }
+}
+
+function Assert-Issue13OracleEffectComparisonIsolation {
+  param(
+    [Parameter(Mandatory = $true)][string]$ComparisonRoot,
+    [Parameter(Mandatory = $true)][string]$ReplayRoot,
+    [Parameter(Mandatory = $true)][object]$Context,
+    [switch]$RequireExisting
+  )
+  $primary = [IO.Path]::GetFullPath($ComparisonRoot).TrimEnd('\', '/')
+  $replay = [IO.Path]::GetFullPath($ReplayRoot).TrimEnd('\', '/')
+  Assert-Issue13OracleEffectPathsDisjoint $primary $replay `
+    'primary/replay comparison isolation'
+  $protected = @(
+    [pscustomobject]@{
+      label = 'repository root'; path = [string]$Context.oracle_identity.repository_root
+    }
+    [pscustomobject]@{
+      label = 'harness runtime root'; path = [string]$Context.harness.installed_inventory.root
+    }
+    [pscustomobject]@{
+      label = 'R library root'; path = [string]$Context.r_library.path
+    }
+    [pscustomobject]@{
+      label = 'strict smoke root'; path = Split-Path -Parent ([string]$Context.strict_path)
+    }
+    [pscustomobject]@{
+      label = 'oracle smoke root'; path = Split-Path -Parent ([string]$Context.oracle_path)
+    }
+  )
+  foreach ($root in @(
+      [pscustomobject]@{ label = 'primary comparison root'; path = $primary },
+      [pscustomobject]@{ label = 'replay comparison root'; path = $replay }
+    )) {
+    Assert-Issue13OracleEffectNoReparseAncestors $root.path $root.label
+    if ($RequireExisting) {
+      $resolved = Resolve-Issue13OracleEffectDirectory $root.path $root.label
+      Assert-Issue13OracleEffectNoReparseTree $resolved $root.label
+    } else {
+      Assert-Issue13OracleEffect (-not (Test-Path -LiteralPath $root.path)) `
+        "$($root.label) existed before generator creation."
+    }
+    foreach ($protectedRoot in $protected) {
+      Assert-Issue13OracleEffectPathsDisjoint $root.path $protectedRoot.path `
+        "$($root.label)/$($protectedRoot.label) isolation"
+    }
+  }
+  $true
+}
+
+function Get-Issue13OracleEffectComparisonCommands {
+  param(
+    [Parameter(Mandatory = $true)][object]$Context,
+    [Parameter(Mandatory = $true)][string]$ComparisonRoot,
+    [Parameter(Mandatory = $true)][string]$ReplayRoot
+  )
+  $scriptPath = Resolve-Issue13OracleEffectFile (
+    Join-Path $Context.harness.installed_inventory.harness_root `
+      $Context.spec.terminal_comparison_runtime.comparison_script
+  ) 'terminal comparison script'
+  $commands = New-Object Collections.Generic.List[object]
+  foreach ($phase in @('primary', 'replay')) {
+    $root = if ($phase -ceq 'primary') { $ComparisonRoot } else { $ReplayRoot }
+    foreach ($method in @($Context.spec.method_partition.strict_common)) {
+      $output = [IO.Path]::GetFullPath((Join-Path $root $method))
+      $arguments = [string[]]@(
+        '--vanilla',
+        $scriptPath,
+        "--candidate_result=$($Context.oracle_scenarios[$method].path)",
+        "--candidate_selector=run:$method",
+        "--baseline_result=$($Context.strict_scenarios[$method].path)",
+        "--baseline_selector=run:$method",
+        "--output=$output",
+        "--scenario_id=oracle-effect/common/$method",
+        '--comparison_mode=strict'
+      )
+      $payloadParts = New-Object Collections.Generic.List[string]
+      $payloadParts.Add([string]$Context.rscript.path)
+      foreach ($argument in $arguments) {
+        $payloadParts.Add([string]$argument)
+      }
+      $payloadParts.Add(
+        'CWD=' + [string]$Context.harness.installed_inventory.harness_root
+      )
+      foreach ($record in @($Context.r_library.environment.set)) {
+        $payloadParts.Add(
+          'SET=' + [string]$record.name + '=' + [string]$record.value)
+      }
+      foreach ($name in @($Context.r_library.environment.cleared)) {
+        $payloadParts.Add('CLEAR=' + [string]$name)
+      }
+      $commandPayload = $payloadParts.ToArray() -join [char]0
+      $commands.Add([pscustomobject][ordered]@{
+        phase = $phase
+        method = $method
+        executable = [string]$Context.rscript.path
+        arguments = $arguments
+        working_directory = `
+          [string]$Context.harness.installed_inventory.harness_root
+        r_library_environment = [pscustomobject][ordered]@{
+          name = 'R_LIBS_USER'
+          value = [string]$Context.r_library.path
+        }
+        environment_set = @($Context.r_library.environment.set)
+        environment_cleared = `
+          [string[]]@($Context.r_library.environment.cleared)
+        output_directory = $output
+        command_sha256 = Get-Issue13OracleEffectUtf8Sha256 $commandPayload
+        exit_code = 0
+      })
+    }
+  }
+  Assert-Issue13OracleEffect ($commands.Count -eq 10) `
+    'terminal comparison command count differs from ten.'
+  @($commands.ToArray())
+}
+
+function Invoke-Issue13OracleEffectFreshComparisons {
+  param(
+    [Parameter(Mandatory = $true)][object]$Context,
+    [Parameter(Mandatory = $true)][string]$ComparisonRoot,
+    [Parameter(Mandatory = $true)][string]$ReplayRoot
+  )
+  $primary = Resolve-Issue13OracleEffectNewDirectoryPath $ComparisonRoot `
+    'primary comparison root'
+  $replay = Resolve-Issue13OracleEffectNewDirectoryPath $ReplayRoot `
+    'replay comparison root'
+  $null = Assert-Issue13OracleEffectComparisonIsolation $primary $replay $Context
+  $commands = Get-Issue13OracleEffectComparisonCommands $Context $primary $replay
+  $environmentState = Enter-Issue13OracleEffectSanitizedREnvironment `
+    ([string]$Context.r_library.path)
+  try {
+    foreach ($phase in @('primary', 'replay')) {
+      $phaseRoot = if ($phase -ceq 'primary') { $primary } else { $replay }
+      Assert-Issue13OracleEffect (-not (Test-Path -LiteralPath $phaseRoot)) `
+        "$phase comparison root appeared before generator creation."
+      $null = New-Item -ItemType Directory -LiteralPath $phaseRoot
+      Assert-Issue13OracleEffectNoReparseTree $phaseRoot `
+        "$phase comparison root after creation"
+      if ($phase -ceq 'replay') {
+        $null = Assert-Issue13OracleEffectComparisonIsolation $primary $replay `
+          $Context -RequireExisting
+      }
+      foreach ($command in @($commands | Where-Object { $_.phase -ceq $phase })) {
+        Assert-Issue13OracleEffect (-not (Test-Path -LiteralPath `
+            $command.output_directory)) `
+          "$phase/$($command.method) output appeared before its command."
+        $invokeArguments = [string[]]@($command.arguments)
+        Push-Location -LiteralPath $command.working_directory
+        try {
+          $nativeOutput = @(& $command.executable @invokeArguments 2>&1)
+          $exitCode = $LASTEXITCODE
+        } finally {
+          Pop-Location
+        }
+        Assert-Issue13OracleEffect ($exitCode -eq 0) `
+          "$phase comparison failed for $($command.method): $($nativeOutput -join ' ')"
+        Assert-Issue13OracleEffect (Test-Path -LiteralPath `
+            $command.output_directory -PathType Container) `
+          "$phase comparison did not create $($command.method) output."
+      }
+      Assert-Issue13OracleEffectNoReparseTree $phaseRoot `
+        "$phase comparison root after execution"
+    }
+  } finally {
+    Exit-Issue13OracleEffectSanitizedREnvironment $environmentState
+  }
+  $null = Assert-Issue13OracleEffectComparisonIsolation $primary $replay `
+    $Context -RequireExisting
+  $commands
+}
+
+function Test-Issue13OracleEffectComparisonRoot {
+  param(
+    [Parameter(Mandatory = $true)][string]$Root,
+    [Parameter(Mandatory = $true)][object]$Spec,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $resolved = Resolve-Issue13OracleEffectDirectory $Root $Label
+  Assert-Issue13OracleEffectNoReparseTree $resolved $Label
+  Assert-Issue13OracleEffectExactSet @(
+    Get-ChildItem -LiteralPath $resolved -Directory -Force | ForEach-Object Name
+  ) @($Spec.method_partition.strict_common) "$Label method directories"
+  Assert-Issue13OracleEffect (@(Get-ChildItem -LiteralPath $resolved `
+      -File -Force).Count -eq 0) "$Label contains a root file."
+  $resolved
+}
+
+function Get-Issue13OracleEffectNormalizedComparisonJson {
+  param(
+    [Parameter(Mandatory = $true)][object]$Document,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  Assert-Issue13OracleEffect (@($Document.PSObject.Properties | Where-Object {
+      $_.Name -ceq 'compared_at'
+    }).Count -eq 1) "$Label lacks exactly one top-level compared_at."
+  $copy = ($Document | ConvertTo-Json -Depth 100 -Compress) |
+    ConvertFrom-Json -DateKind String
+  $comparedAt = [string]$copy.compared_at
+  $parsed = [DateTimeOffset]::MinValue
+  Assert-Issue13OracleEffect ([DateTimeOffset]::TryParse(
+      $comparedAt,
+      [Globalization.CultureInfo]::InvariantCulture,
+      [Globalization.DateTimeStyles]::AllowWhiteSpaces,
+      [ref]$parsed
+    )) "$Label compared_at is not a timestamp."
+  $copy.PSObject.Properties.Remove('compared_at')
+  $json = $copy | ConvertTo-Json -Depth 100 -Compress
+  [pscustomobject]@{
+    compared_at = $comparedAt
+    json = $json
+    sha256 = Get-Issue13OracleEffectUtf8Sha256 $json
+  }
+}
+
+function Test-Issue13OracleEffectSingleComparison {
+  param(
+    [Parameter(Mandatory = $true)][string]$ComparisonRoot,
+    [Parameter(Mandatory = $true)][ValidateSet('primary', 'replay')]
+      [string]$Phase,
+    [Parameter(Mandatory = $true)][object]$Spec,
+    [Parameter(Mandatory = $true)][object]$MethodPin,
+    [Parameter(Mandatory = $true)][object]$StrictRun,
+    [Parameter(Mandatory = $true)][object]$OracleRun
+  )
+  $method = [string]$MethodPin.method
+  $directory = Resolve-Issue13OracleEffectDirectory `
+    (Join-Path $ComparisonRoot $method) "$Phase/$method comparison directory"
+  $required = @($Spec.comparison_contract.required_files)
+  Assert-Issue13OracleEffectExactSet @(
+    Get-ChildItem -LiteralPath $directory -File -Force | ForEach-Object Name
+  ) $required "$Phase/$method comparison files"
+  Assert-Issue13OracleEffect (@(Get-ChildItem -LiteralPath $directory `
+      -Directory -Force).Count -eq 0) `
+    "$Phase/$method comparison directory contains a nested directory."
+  $comparisonPath = Join-Path $directory 'comparison.json'
+  $document = Read-Issue13OracleEffectJson $comparisonPath `
+    "$Phase/$method comparison"
+  Assert-Issue13OracleEffect ($document.schema -ceq `
+      $Spec.comparison_contract.schema -and `
+      $document.scenario_id -ceq "oracle-effect/common/$method" -and `
+      $document.status -ceq 'passed' -and [bool]$document.passed -and `
+      $document.comparison_mode -ceq 'strict') `
+    "$Phase/$method comparison identity or status differs."
+  Assert-Issue13OracleEffect ([bool]$document.identity.passed -and `
+      $document.identity.candidate_method -ceq $method -and `
+      $document.identity.baseline_method -ceq $method -and `
+      $document.identity.candidate_output_contract.id -ceq 'wlvpanel-output' -and `
+      $document.identity.candidate_output_contract.version -ceq '1.0.0' -and `
+      $document.identity.baseline_output_contract.id -ceq 'wlvpanel-output' -and `
+      $document.identity.baseline_output_contract.version -ceq '1.0.0') `
+    "$Phase/$method comparison output identity differs."
+  Assert-Issue13OracleEffect ($document.candidate.kind -ceq 'run' -and `
+      $document.candidate.manifest_sha256 -ceq `
+        $MethodPin.oracle_manifest_sha256 -and `
+      $document.candidate.inventory_sha256 -ceq `
+        $MethodPin.oracle_inventory_sha256 -and `
+      $document.baseline.kind -ceq 'run' -and `
+      $document.baseline.manifest_sha256 -ceq `
+        $MethodPin.strict_manifest_sha256 -and `
+      $document.baseline.inventory_sha256 -ceq `
+        $MethodPin.strict_inventory_sha256) `
+    "$Phase/$method comparison arm hashes differ."
+  Assert-Issue13OracleEffect (Test-Issue13OracleEffectPathEqual `
+      ([string]$document.candidate.root) $OracleRun.root) `
+    "$Phase/$method candidate root differs from its summary scenario."
+  Assert-Issue13OracleEffect (Test-Issue13OracleEffectPathEqual `
+      ([string]$document.baseline.root) $StrictRun.root) `
+    "$Phase/$method baseline root differs from its summary scenario."
+  foreach ($field in @(
+    'missing_candidate_artifacts', 'extra_candidate_artifacts',
+    'allowed_candidate_only_artifacts', 'architecture_differences',
+    'policy_exceptions'
+  )) {
+    Assert-Issue13OracleEffect (@($document.$field).Count -eq 0) `
+      "$Phase/$method comparison has non-empty $field."
+  }
+  $artifacts = @($document.artifacts)
+  Assert-Issue13OracleEffect ($artifacts.Count -gt 0 -and `
+      [int]$document.artifact_count -eq $artifacts.Count -and `
+      (@($artifacts | Where-Object { -not [bool]$_.passed }).Count -eq 0)) `
+    "$Phase/$method has a failed or inconsistent artifact summary."
+  $transitions = @($document.transitions)
+  foreach ($transition in $transitions) {
+    Assert-Issue13OracleEffect ($transition.candidate_state -ceq `
+        $transition.baseline_state -and [double]$transition.count -gt 0 -and `
+        -not [string]::IsNullOrWhiteSpace([string]$transition.artifact)) `
+      "$Phase/$method reports a non-diagonal state transition."
+  }
+  Assert-Issue13OracleEffect (@($document.indicator_differences).Count -eq 0) `
+    "$Phase/$method reports an indicator difference."
+  $artifactRows = @(Import-Csv -LiteralPath `
+    (Join-Path $directory 'artifact-summary.csv'))
+  Assert-Issue13OracleEffect ($artifactRows.Count -eq $artifacts.Count) `
+    "$Phase/$method artifact-summary row count differs."
+  foreach ($row in $artifactRows) {
+    Assert-Issue13OracleEffect ($row.passed -ceq 'TRUE' -and `
+        ($row.mismatch_count -ceq '' -or $row.mismatch_count -ceq '0')) `
+      "$Phase/$method artifact-summary contains a mismatch."
+  }
+  $transitionRows = @(Import-Csv -LiteralPath `
+    (Join-Path $directory 'state-transitions.csv'))
+  Assert-Issue13OracleEffect ($transitionRows.Count -eq $transitions.Count) `
+    "$Phase/$method state-transition row count differs."
+  foreach ($transition in $transitionRows) {
+    Assert-Issue13OracleEffect ($transition.candidate_state -ceq `
+        $transition.baseline_state -and [double]$transition.count -gt 0 -and `
+        -not [string]::IsNullOrWhiteSpace([string]$transition.artifact)) `
+      "$Phase/$method state-transitions.csv is malformed."
+  }
+  Assert-Issue13OracleEffect (@(Import-Csv -LiteralPath `
+      (Join-Path $directory 'indicator-differences.csv')).Count -eq 0) `
+    "$Phase/$method indicator-differences.csv is non-empty."
+  $fileRecords = @(
+    foreach ($name in $required) {
+      $path = Join-Path $directory $name
+      [pscustomobject][ordered]@{
+        name = $name
+        sha256 = Get-Issue13OracleEffectSha256 $path
+        size_bytes = [int64](Get-Item -LiteralPath $path).Length
+      }
+    }
+  )
+  [pscustomobject]@{
+    directory = $directory
+    document = $document
+    artifact_count = $artifacts.Count
+    normalized = Get-Issue13OracleEffectNormalizedComparisonJson $document `
+      "$Phase/$method comparison"
+    files = $fileRecords
+  }
+}
+
+function Test-Issue13OracleEffectComparisonPair {
+  param(
+    [Parameter(Mandatory = $true)][string]$ComparisonRoot,
+    [Parameter(Mandatory = $true)][string]$ReplayRoot,
+    [Parameter(Mandatory = $true)][object]$Spec,
+    [Parameter(Mandatory = $true)][object]$MethodPin,
+    [Parameter(Mandatory = $true)][object]$StrictRun,
+    [Parameter(Mandatory = $true)][object]$OracleRun,
+    [Parameter(Mandatory = $true)][object[]]$Commands
+  )
+  $method = [string]$MethodPin.method
+  $primary = Test-Issue13OracleEffectSingleComparison $ComparisonRoot primary `
+    $Spec $MethodPin $StrictRun $OracleRun
+  $replay = Test-Issue13OracleEffectSingleComparison $ReplayRoot replay `
+    $Spec $MethodPin $StrictRun $OracleRun
+  Assert-Issue13OracleEffect ($primary.normalized.json -ceq `
+      $replay.normalized.json -and $primary.normalized.sha256 -ceq `
+      $replay.normalized.sha256) `
+    "$method primary/replay comparison JSON differs beyond compared_at."
+  $normalizedFiles = @(
+    foreach ($name in @($Spec.comparison_contract.required_files)) {
+      $left = @($primary.files | Where-Object { $_.name -ceq $name })[0]
+      $right = @($replay.files | Where-Object { $_.name -ceq $name })[0]
+      if ($name -ceq 'comparison.json') {
+        $normalization = 'remove-top-level-compared_at'
+        $normalizedSha = [string]$primary.normalized.sha256
+      } else {
+        Assert-Issue13OracleEffect ($left.sha256 -ceq $right.sha256 -and `
+            [int64]$left.size_bytes -eq [int64]$right.size_bytes) `
+          "$method primary/replay $name is not byte-identical."
+        $normalization = 'identity'
+        $normalizedSha = [string]$left.sha256
+      }
+      [pscustomobject][ordered]@{
+        name = $name
+        primary_sha256 = [string]$left.sha256
+        primary_size_bytes = [int64]$left.size_bytes
+        replay_sha256 = [string]$right.sha256
+        replay_size_bytes = [int64]$right.size_bytes
+        normalization = $normalization
+        normalized_sha256 = $normalizedSha
+        normalized_identical = $true
+        raw_byte_identical = [bool]($left.sha256 -ceq $right.sha256 -and `
+          [int64]$left.size_bytes -eq [int64]$right.size_bytes)
+      }
+    }
+  )
+  $primaryCommand = @($Commands | Where-Object {
+    $_.phase -ceq 'primary' -and $_.method -ceq $method
+  })
+  $replayCommand = @($Commands | Where-Object {
+    $_.phase -ceq 'replay' -and $_.method -ceq $method
+  })
+  Assert-Issue13OracleEffect ($primaryCommand.Count -eq 1 -and `
+      $replayCommand.Count -eq 1) "$method command binding is ambiguous."
+  [pscustomobject][ordered]@{
+    method = $method
+    primary_directory = [string]$primary.directory
+    replay_directory = [string]$replay.directory
+    comparison_mode = 'strict'
+    artifact_count = [int]$primary.artifact_count
+    candidate_manifest_sha256 = `
+      [string]$primary.document.candidate.manifest_sha256
+    candidate_inventory_sha256 = `
+      [string]$primary.document.candidate.inventory_sha256
+    baseline_manifest_sha256 = `
+      [string]$primary.document.baseline.manifest_sha256
+    baseline_inventory_sha256 = `
+      [string]$primary.document.baseline.inventory_sha256
+    primary_compared_at = [string]$primary.normalized.compared_at
+    replay_compared_at = [string]$replay.normalized.compared_at
+    primary_command_sha256 = [string]$primaryCommand[0].command_sha256
+    replay_command_sha256 = [string]$replayCommand[0].command_sha256
+    files = $normalizedFiles
+  }
+}
+
+function Get-Issue13OracleEffectEvidence {
+  param(
+    [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+    [Parameter(Mandatory = $true)][string]$ExpectedCandidateCommit,
+    [Parameter(Mandatory = $true)][string]$SpecPath,
+    [Parameter(Mandatory = $true)][string]$SchemaPath,
+    [Parameter(Mandatory = $true)][string]$StrictSmokeSummary,
+    [Parameter(Mandatory = $true)][string]$OracleSmokeSummary,
+    [Parameter(Mandatory = $true)][string]$OraclePatch,
+    [Parameter(Mandatory = $true)][string]$ComparisonRoot,
+    [Parameter(Mandatory = $true)][string]$ReplayRoot,
+    [Parameter(Mandatory = $true)][string]$ComparisonHarnessManifest,
+    [Parameter(Mandatory = $true)][string]$Rscript,
+    [Parameter(Mandatory = $true)][string]$RLibrary,
+    [object]$PreparedContext,
+    [AllowNull()][object[]]$RunInventoriesBefore,
+    [AllowNull()][object]$RuntimeBefore
+  )
+  $context = $PreparedContext
+  if ($null -eq $context) {
+    $context = Get-Issue13OracleEffectInputContext `
+      -RepositoryRoot $RepositoryRoot `
+      -ExpectedCandidateCommit $ExpectedCandidateCommit `
+      -SpecPath $SpecPath `
+      -SchemaPath $SchemaPath `
+      -StrictSmokeSummary $StrictSmokeSummary `
+      -OracleSmokeSummary $OracleSmokeSummary `
+      -OraclePatch $OraclePatch `
+      -ComparisonHarnessManifest $ComparisonHarnessManifest `
+      -Rscript $Rscript `
+      -RLibrary $RLibrary
+  }
+  $spec = $context.spec
+  $null = Assert-Issue13OracleEffectComparisonIsolation $ComparisonRoot `
+    $ReplayRoot $context -RequireExisting
+  $comparisonRootResolved = Test-Issue13OracleEffectComparisonRoot `
+    $ComparisonRoot $spec 'primary comparison root'
+  $replayRootResolved = Test-Issue13OracleEffectComparisonRoot `
+    $ReplayRoot $spec 'replay comparison root'
+  Assert-Issue13OracleEffect (-not (Test-Issue13OracleEffectPathEqual `
+      $comparisonRootResolved $replayRootResolved)) `
+    'primary and replay comparison roots are identical.'
+  $commands = Get-Issue13OracleEffectComparisonCommands $context `
+    $comparisonRootResolved $replayRootResolved
+  $commonEvidence = @(
+    foreach ($pin in @($spec.common_methods)) {
+      $method = [string]$pin.method
+      Test-Issue13OracleEffectComparisonPair $comparisonRootResolved `
+        $replayRootResolved $spec $pin $context.strict_runs[$method] `
+        $context.oracle_runs[$method] $commands
+    }
+  )
+  $beforeStates = if ($null -eq $RunInventoriesBefore -or `
+      @($RunInventoriesBefore).Count -eq 0) {
+    @($context.approved_runs)
+  } else { @($RunInventoriesBefore) }
+  Assert-Issue13OracleEffect ($beforeStates.Count -eq 17) `
+    'before-comparison approved run inventory count differs from 17.'
+  Assert-Issue13OracleEffectExactSet @($beforeStates | ForEach-Object key) `
+    @($context.approved_runs | ForEach-Object key) `
+    'before/after approved run inventory keys'
+  $approvedEvidence = @(
+    foreach ($after in @($context.approved_runs)) {
+      $before = @($beforeStates | Where-Object { $_.key -ceq $after.key })
+      Assert-Issue13OracleEffect ($before.Count -eq 1) `
+        "approved run before-state is ambiguous: $($after.key)"
+      $beforeComparable = [pscustomobject][ordered]@{
+        arm = $before[0].arm
+        method = $before[0].method
+        expected_commit = $before[0].expected_commit
+        scenario_pin = $before[0].scenario_pin
+        scenario_spec_pin = $before[0].scenario_spec_pin
+        run_root = $before[0].run_root
+        manifest_path = $before[0].manifest_path
+        declared_inventory_sha256 = $before[0].declared_inventory_sha256
+        snapshot = $before[0].snapshot
+      }
+      $afterComparable = [pscustomobject][ordered]@{
+        arm = $after.arm
+        method = $after.method
+        expected_commit = $after.expected_commit
+        scenario_pin = $after.scenario_pin
+        scenario_spec_pin = $after.scenario_spec_pin
+        run_root = $after.run_root
+        manifest_path = $after.manifest_path
+        declared_inventory_sha256 = $after.declared_inventory_sha256
+        snapshot = $after.snapshot
+      }
+      Assert-Issue13OracleEffect (
+        ($beforeComparable | ConvertTo-Json -Depth 30 -Compress) -ceq `
+          ($afterComparable | ConvertTo-Json -Depth 30 -Compress)
+      ) "approved run or its scenario/spec pin changed: $($after.key)"
+      [pscustomobject][ordered]@{
+        arm = [string]$after.arm
+        method = [string]$after.method
+        expected_commit = [string]$after.expected_commit
+        run_root = [string]$after.run_root
+        manifest_path = [string]$after.manifest_path
+        declared_inventory_sha256 = `
+          [string]$after.declared_inventory_sha256
+        before = [pscustomobject][ordered]@{
+          scenario_pin = $before[0].scenario_pin
+          scenario_spec_pin = $before[0].scenario_spec_pin
+          run_inventory = $before[0].snapshot
+        }
+        after = [pscustomobject][ordered]@{
+          scenario_pin = $after.scenario_pin
+          scenario_spec_pin = $after.scenario_spec_pin
+          run_inventory = $after.snapshot
+        }
+        immutable = $true
+      }
+    }
+  )
+
+  $recoveredEvidence = @(
+    foreach ($pin in @($spec.recovered_methods)) {
+      $method = [string]$pin.method
+      $strictScenario = $context.strict_scenarios[$method]
+      $expectedError = [string]$spec.strict_failure_messages.([string]$pin.strict_failure_id)
+      Assert-Issue13OracleEffect ($strictScenario.document.error -ceq $expectedError) `
+        "$method strict failure message differs."
+      $oracleScenario = $context.oracle_scenarios[$method]
+      $oracleRun = $context.oracle_runs[$method]
+      Assert-Issue13OracleEffect ($oracleRun.output.result_id -ceq $pin.oracle_result_id) `
+        "$method oracle result_id differs."
+      $leontief = Test-Issue13OracleEffectLeontief $oracleRun $spec $method
+      $nan = if ($method -in @('alternative_2', 'petrovic')) {
+        Test-Issue13OracleEffectNanClean $oracleRun $spec $method
+      } else { $null }
+      $utf8 = if ($method -ceq 'norow_w13') {
+        Test-Issue13OracleEffectUtf8 $oracleRun $spec
+      } else { $null }
+      $goPrice = if ($method -in @(
+        'alternative_1', 'alternative_2', 'norow_w13', 'ochoa_1',
+        'ochoa_2', 'petrovic'
+      )) {
+        [pscustomobject][ordered]@{
+          coordinate_count = 525
+          coordinate_sha256 = [string]$spec.coordinate_contracts.go_price_row_from_usa.coordinate_sha256
+          checkpoint = 'after_assumptions'
+          strict_failure_observed = $true
+          oracle_checkpoint_passed = $true
+          value_rule = 'ROW is finite and bitwise equal to USA at the same year/indicator/sector'
+        }
+      } else { $null }
+      [pscustomobject][ordered]@{
+        method = $method
+        strict_scenario_path = $strictScenario.path
+        strict_scenario_sha256 = $strictScenario.sha256
+        strict_failure_id = [string]$pin.strict_failure_id
+        strict_failure_message = $expectedError
+        oracle_scenario_path = $oracleScenario.path
+        oracle_scenario_sha256 = $oracleScenario.sha256
+        oracle_manifest_sha256 = [string]$oracleRun.output.manifest_sha256
+        oracle_inventory_sha256 = [string]$oracleRun.output.inventory_sha256
+        oracle_result_id = [string]$oracleRun.output.result_id
+        change_ids = @($pin.change_ids)
+        go_price = $goPrice
+        historical_nan_clean = $nan
+        leontief = $leontief
+        utf8 = $utf8
+      }
+    }
+  )
+  $currentRuntimeSnapshot = [pscustomobject][ordered]@{
+    rscript = $context.rscript
+    r_library = $context.r_library
+  }
+  $beforeRuntimeSnapshot = if ($null -eq $RuntimeBefore) {
+    $currentRuntimeSnapshot
+  } else {
+    [pscustomobject][ordered]@{
+      rscript = $RuntimeBefore.rscript
+      r_library = $RuntimeBefore.r_library
+    }
+  }
+  Assert-Issue13OracleEffect (
+    ($beforeRuntimeSnapshot | ConvertTo-Json -Depth 100 -Compress) -ceq
+      ($currentRuntimeSnapshot | ConvertTo-Json -Depth 100 -Compress)
+  ) 'Rscript/R library runtime inventory changed between before and after probes.'
+  [pscustomobject][ordered]@{
+    spec = [pscustomobject][ordered]@{
+      path = $context.spec_resolved
+      sha256 = Get-Issue13OracleEffectSha256 $context.spec_resolved
+      schema = [string]$spec.schema
+    }
+    proof_schema = [pscustomobject][ordered]@{
+      path = $context.schema_resolved
+      sha256 = Get-Issue13OracleEffectSha256 $context.schema_resolved
+    }
+    oracle = $context.oracle_identity
+    terminal_runtime = [pscustomobject][ordered]@{
+      comparison_harness = $context.harness
+      rscript = $context.rscript
+      r_library = $context.r_library
+      runtime_immutability = [pscustomobject][ordered]@{
+        before = $beforeRuntimeSnapshot
+        after = $currentRuntimeSnapshot
+        immutable = $true
+      }
+    }
+    source_evidence = [pscustomobject][ordered]@{
+      strict_smoke_summary_path = $context.strict_path
+      strict_smoke_summary_sha256 = `
+        Get-Issue13OracleEffectSha256 $context.strict_path
+      oracle_smoke_summary_path = $context.oracle_path
+      oracle_smoke_summary_sha256 = `
+        Get-Issue13OracleEffectSha256 $context.oracle_path
+    }
+    approved_run_immutability = $approvedEvidence
+    comparison_workflow = [pscustomobject][ordered]@{
+      primary_root = $comparisonRootResolved
+      replay_root = $replayRootResolved
+      generator_created_both_roots = $true
+      methods = @($spec.method_partition.strict_common)
+      commands = $commands
+      comparisons = $commonEvidence
+    }
+    recovered_methods = $recoveredEvidence
+  }
+}
+
+function New-Issue13OracleEffectProofObject {
+  param([Parameter(Mandatory = $true)][object]$Evidence)
+  [pscustomobject][ordered]@{
+    schema = 'wlv-issue13-v5-oracle-effect-proof/2'
+    status = 'passed'
+    passed = $true
+    final_evidence_eligible = $false
+    purpose = 'closed-authorized-oracle-effect-cc2-to-e2f'
+    generated_at_utc = [DateTime]::UtcNow.ToString('o')
+    evidence = $Evidence
+    conclusion = [pscustomobject][ordered]@{
+      authorized_patch_authenticated = $true
+      terminal_harness_authenticated = $true
+      strict_common_method_count = 5
+      strict_common_primary_and_replay_passed = $true
+      approved_run_count = 17
+      approved_runs_immutable = $true
+      recovered_method_count = 7
+      recovered_methods_passed = $true
+      recovered_coordinate_and_diagnostic_contracts_passed = $true
+      oracle_effect_closed = $true
+      final_v5_gate_substituted = $false
+    }
+  }
+}
+
+function Write-Issue13OracleEffectJsonOnce {
+  param(
+    [Parameter(Mandatory = $true)][object]$Value,
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$SchemaPath
+  )
+  $full = [IO.Path]::GetFullPath($Path)
+  $parent = Split-Path -Parent $full
+  Assert-Issue13OracleEffect (Test-Path -LiteralPath $parent -PathType Container) `
+    "proof output parent does not exist: $parent"
+  Assert-Issue13OracleEffect (-not (Test-Path -LiteralPath $full)) `
+    "refusing to overwrite proof output: $full"
+  $json = $Value | ConvertTo-Json -Depth 100
+  $encoding = New-Object Text.UTF8Encoding($false, $true)
+  $temporary = Join-Path $parent ('.' + [IO.Path]::GetFileName($full) + `
+    '.' + [Guid]::NewGuid().ToString('N') + '.tmp')
+  try {
+    [IO.File]::WriteAllText($temporary, $json + "`n", $encoding)
+    $null = Read-Issue13OracleEffectJson $temporary 'staged oracle-effect proof'
+    $null = Test-Issue13OracleEffectJsonSchemaFile $temporary $SchemaPath `
+      'staged oracle-effect proof'
+    Assert-Issue13OracleEffect (-not (Test-Path -LiteralPath $full)) `
+      "proof output appeared during staging: $full"
+    [IO.File]::Move($temporary, $full)
+  } finally {
+    if (Test-Path -LiteralPath $temporary -PathType Leaf) {
+      Remove-Item -LiteralPath $temporary -Force
+    }
+  }
+  Resolve-Issue13OracleEffectFile $full 'oracle-effect proof output'
+}
+
+function Test-Issue13OracleEffectProofObject {
+  param(
+    [Parameter(Mandatory = $true)][object]$Proof,
+    [Parameter(Mandatory = $true)][object]$ExpectedEvidence
+  )
+  Assert-Issue13OracleEffectExactProperties $Proof @(
+    'schema', 'status', 'passed', 'final_evidence_eligible', 'purpose',
+    'generated_at_utc', 'evidence', 'conclusion'
+  ) 'proof top-level properties'
+  Assert-Issue13OracleEffect ($Proof.schema -ceq 'wlv-issue13-v5-oracle-effect-proof/2' -and `
+      $Proof.status -ceq 'passed' -and [bool]$Proof.passed -and `
+      -not [bool]$Proof.final_evidence_eligible -and `
+      $Proof.purpose -ceq 'closed-authorized-oracle-effect-cc2-to-e2f') `
+    'proof envelope differs.'
+  $timestamp = [DateTime]::MinValue
+  Assert-Issue13OracleEffect ([DateTime]::TryParse(
+      [string]$Proof.generated_at_utc,
+      [Globalization.CultureInfo]::InvariantCulture,
+      [Globalization.DateTimeStyles]::RoundtripKind,
+      [ref]$timestamp
+    ) -and $timestamp.Kind -eq [DateTimeKind]::Utc) 'proof timestamp is not UTC ISO-8601.'
+  $observedEvidenceJson = $Proof.evidence | ConvertTo-Json -Depth 100 -Compress
+  $expectedEvidenceJson = $ExpectedEvidence | ConvertTo-Json -Depth 100 -Compress
+  Assert-Issue13OracleEffect ($observedEvidenceJson -ceq $expectedEvidenceJson) `
+    'proof evidence differs from independently revalidated inputs.'
+  $conclusion = $Proof.conclusion
+  Assert-Issue13OracleEffectExactProperties $conclusion @(
+    'authorized_patch_authenticated', 'terminal_harness_authenticated',
+    'strict_common_method_count', 'strict_common_primary_and_replay_passed',
+    'approved_run_count', 'approved_runs_immutable', 'recovered_method_count',
+    'recovered_methods_passed',
+    'recovered_coordinate_and_diagnostic_contracts_passed',
+    'oracle_effect_closed', 'final_v5_gate_substituted'
+  ) 'proof conclusion properties'
+  Assert-Issue13OracleEffect ([bool]$conclusion.authorized_patch_authenticated -and `
+      [bool]$conclusion.terminal_harness_authenticated -and `
+      [int]$conclusion.strict_common_method_count -eq 5 -and `
+      [bool]$conclusion.strict_common_primary_and_replay_passed -and `
+      [int]$conclusion.approved_run_count -eq 17 -and `
+      [bool]$conclusion.approved_runs_immutable -and `
+      [int]$conclusion.recovered_method_count -eq 7 -and `
+      [bool]$conclusion.recovered_methods_passed -and `
+      [bool]$conclusion.recovered_coordinate_and_diagnostic_contracts_passed -and `
+      [bool]$conclusion.oracle_effect_closed -and `
+      -not [bool]$conclusion.final_v5_gate_substituted) `
+    'proof conclusion differs.'
+  $true
+}
