@@ -51,9 +51,36 @@ wlv13_v5d_capture_semicolon_record <- function(line, prefix, fields) {
   as.list(stats::setNames(values, names))
 }
 
+wlv13_v5d_directory_inventory_sha256 <- function(root) {
+  root <- normalizePath(root, winslash = "/", mustWork = TRUE)
+  paths <- sort(list.files(
+    root, recursive = TRUE, all.files = TRUE, full.names = TRUE,
+    include.dirs = FALSE, no.. = TRUE
+  ), method = "radix")
+  info <- file.info(paths)
+  if (!length(paths) || anyNA(info$isdir) || any(info$isdir)) {
+    stop("Capture tooling inventory is invalid.", call. = FALSE)
+  }
+  prefix <- paste0(root, "/")
+  relative <- ifelse(startsWith(paths, prefix), substring(paths,
+    nchar(prefix) + 1L
+  ), "")
+  if (any(!nzchar(relative)) || anyDuplicated(relative)) {
+    stop("Capture tooling inventory paths are invalid.", call. = FALSE)
+  }
+  records <- vapply(seq_along(paths), function(index) {
+    paste(
+      relative[[index]],
+      format(info$size[[index]], scientific = FALSE, trim = TRUE),
+      wlv13_sha256_file(paths[[index]]), sep = "|"
+    )
+  }, character(1L))
+  wlv13_v5d_sha256_text(paste(records, collapse = "\n"))
+}
+
 wlv13_v5d_validate_stage5_capture <- function(
     bridge_capture_path, bridge_index_path, bridge_manifest_path,
-    stage_capture_path, stage_index_path, evidence) {
+    stage_capture_path, stage_index_path, evidence, harness_dir) {
   paths <- vapply(list(
     bridge_capture_path, bridge_index_path, bridge_manifest_path,
     stage_capture_path, stage_index_path
@@ -63,19 +90,23 @@ wlv13_v5d_validate_stage5_capture <- function(
   bridge_manifest_path <- paths[[3L]]
   stage_capture_path <- paths[[4L]]
   stage_index_path <- paths[[5L]]
+  harness_dir <- normalizePath(harness_dir, winslash = "/", mustWork = TRUE)
   bridge_lines <- readLines(
     bridge_capture_path, warn = FALSE, encoding = "UTF-8"
   )
   bridge_header <- c(
     "schema", "baseline_base_commit", "baseline_base_tree",
     "baseline_runtime_commit", "baseline_runtime_tree",
-    "baseline_worktree", "captured_methods", "verified_records",
+    "harness_path", "harness_inventory_sha256", "rscript_path",
+    "rscript_sha256", "tool_records", "baseline_worktree",
+    "captured_methods", "verified_records",
     "seed_evidence_index_sha256", "source_wiodr13_manifest_sha256",
     "source_wiodr16_manifest_sha256", "evidence_index",
     "evidence_index_sha256"
   )
   bridge_keys <- sub("=.*$", "", bridge_lines[seq_along(bridge_header)])
   bridge_records <- grep("^evidence_record;", bridge_lines, value = TRUE)
+  bridge_tool_lines <- grep("^tool_record;", bridge_lines, value = TRUE)
   bridge_fields <- c(
     "method", "mode", "at_stage", "scenario_id", "run_id",
     "parent_run_id", "commit", "tree", "request_sha256",
@@ -92,17 +123,31 @@ wlv13_v5d_validate_stage5_capture <- function(
       "alternative_1", "alternative_2", "norow_w13", "ochoa_1",
       "ochoa_2", "petrovic", "wiodr13v09"
     ), collapse = ","),
-    verified_records = "7"
+    verified_records = "7", tool_records = "5"
   )
   bridge_fixed_valid <- all(vapply(names(bridge_fixed), function(key) {
     identical(wlv13_v5d_capture_field(bridge_lines, key),
       unname(bridge_fixed[[key]]))
   }, logical(1L)))
-  if (length(bridge_lines) != length(bridge_header) + 7L ||
+  bridge_rscript_path <- normalizePath(wlv13_v5d_capture_field(
+    bridge_lines, "rscript_path"
+  ), winslash = "/", mustWork = TRUE)
+  bridge_tooling_valid <-
+    identical(wlv13_v5d_capture_field(
+      bridge_lines, "harness_path"
+    ), harness_dir) &&
+    identical(wlv13_v5d_capture_field(
+      bridge_lines, "harness_inventory_sha256"
+    ), wlv13_v5d_directory_inventory_sha256(harness_dir)) &&
+    identical(wlv13_v5d_capture_field(
+      bridge_lines, "rscript_sha256"
+    ), wlv13_sha256_file(bridge_rscript_path))
+  if (length(bridge_lines) != length(bridge_header) + 5L + 7L ||
       !identical(bridge_keys, bridge_header) ||
       !identical(bridge_lines[[1L]],
         "schema=issue13-v5-clean-bridge-capture/1") ||
-      !bridge_fixed_valid || length(bridge_records) != 7L ||
+      !bridge_fixed_valid || !bridge_tooling_valid ||
+      length(bridge_tool_lines) != 5L || length(bridge_records) != 7L ||
       !identical(wlv13_v5d_capture_field(
         bridge_lines, "evidence_index_sha256"
       ), wlv13_sha256_file(bridge_index_path)) ||
@@ -113,6 +158,38 @@ wlv13_v5d_validate_stage5_capture <- function(
         wlv13_v5d_capture_field(bridge_lines, key)
       }, character(1L))))) {
     stop("The bridge capture record is not exhaustive.", call. = FALSE)
+  }
+  bridge_tools <- lapply(bridge_tool_lines, function(line) {
+    wlv13_v5d_capture_semicolon_record(
+      line, "tool_record", c("name", "sha256")
+    )
+  })
+  bridge_tool_names <- c(
+    "bridge_builder", "bridge_capture_script", "compare_override",
+    "diagnostics_override", "verifier"
+  )
+  bridge_tool_files <- stats::setNames(c(
+    "issue13-v5-build-diagnostic-bridges.R",
+    "issue13-v5-capture-clean-bridge-evidence.ps1",
+    "issue13-v5-compare-override.R",
+    "issue13-v5-diagnostics-override.R",
+    "issue13-v5-verify-diagnostic-evidence.R"
+  ), bridge_tool_names)
+  bridge_tool_root <- normalizePath(script_dir,
+    winslash = "/", mustWork = TRUE
+  )
+  if (!identical(
+      vapply(bridge_tools, `[[`, character(1L), "name"),
+      bridge_tool_names
+    ) || any(!vapply(seq_along(bridge_tools), function(index) {
+      record <- bridge_tools[[index]]
+      identical(record$sha256, wlv13_sha256_file(file.path(
+        bridge_tool_root, bridge_tool_files[[record$name]]
+      )))
+    }, logical(1L)))) {
+    stop("Bridge capture tools differ from their recorded bytes.",
+      call. = FALSE
+    )
   }
   bridge_parsed <- lapply(bridge_records, function(line) {
     wlv13_v5d_capture_semicolon_record(
@@ -148,7 +225,8 @@ wlv13_v5d_validate_stage5_capture <- function(
   )
   stage_header <- c(
     "schema", "baseline_base_commit", "baseline_base_tree",
-    "baseline_runtime_commit", "baseline_runtime_tree", "methods",
+    "baseline_runtime_commit", "baseline_runtime_tree", "harness_path",
+    "harness_inventory_sha256", "rscript_path", "rscript_sha256", "methods",
     "stages", "bridge_capture_record_sha256",
     "bridge_evidence_index_sha256", "bridge_manifest_sha256",
     "stage5_evidence_index_sha256",
@@ -210,12 +288,30 @@ wlv13_v5d_validate_stage5_capture <- function(
   inventory_valid <- all(grepl(sha, inventory_hashes)) &&
     identical(inventory_hashes[[1L]], inventory_hashes[[2L]]) &&
     identical(inventory_hashes[[3L]], inventory_hashes[[4L]])
+  stage_rscript_path <- normalizePath(wlv13_v5d_capture_field(
+    stage_lines, "rscript_path"
+  ), winslash = "/", mustWork = TRUE)
+  tooling_valid <- identical(wlv13_v5d_capture_field(
+      stage_lines, "harness_path"
+    ), harness_dir) &&
+    identical(wlv13_v5d_capture_field(
+      stage_lines, "harness_inventory_sha256"
+    ), wlv13_v5d_directory_inventory_sha256(harness_dir)) &&
+    identical(wlv13_v5d_capture_field(
+      stage_lines, "rscript_path"
+    ), wlv13_v5d_capture_field(bridge_lines, "rscript_path")) &&
+    identical(wlv13_v5d_capture_field(
+      stage_lines, "rscript_sha256"
+    ), wlv13_sha256_file(stage_rscript_path)) &&
+    identical(wlv13_v5d_capture_field(
+      stage_lines, "rscript_sha256"
+    ), wlv13_v5d_capture_field(bridge_lines, "rscript_sha256"))
   if (length(stage_lines) !=
         length(stage_header) + 8L + 6L + 12L + 36L + 36L ||
       !identical(stage_keys, stage_header) ||
       !identical(stage_lines[[1L]],
         "schema=issue13-v5-clean-stage5-capture/1") ||
-      !fixed_valid || !hash_valid || !inventory_valid ||
+      !fixed_valid || !hash_valid || !inventory_valid || !tooling_valid ||
       length(recipe_lines) != 8L || length(worktree_lines) != 6L ||
       length(reference_lines) != 12L || length(seed_lines) != 36L ||
       length(target_lines) != 36L) {
@@ -499,7 +595,7 @@ wlv13_v5d_validate_stage5_capture <- function(
 
 wlv13_v5d_stage5_capture_mutation_selftest <- function(
     bridge_capture_path, bridge_index_path, bridge_manifest_path,
-    stage_capture_path, stage_index_path, evidence) {
+    stage_capture_path, stage_index_path, evidence, harness_dir) {
   assertions <- 0L
   expect_error <- function(expression, label) {
     failed <- tryCatch({
@@ -523,7 +619,7 @@ wlv13_v5d_stage5_capture_mutation_selftest <- function(
     writeLines(lines, temporary, sep = "\n", useBytes = TRUE)
     wlv13_v5d_validate_stage5_capture(
       bridge_capture_path, bridge_index_path, bridge_manifest_path,
-      temporary, stage_index_path, mutated_evidence
+      temporary, stage_index_path, mutated_evidence, harness_dir
     )
   }
   line_index <- function(pattern) {
@@ -567,6 +663,18 @@ wlv13_v5d_stage5_capture_mutation_selftest <- function(
     )
   )
   expect_error(validate_mutation(mutation), "source inventory after")
+  mutation <- original
+  index <- line_index("^harness_inventory_sha256=")
+  mutation[[index]] <- paste0("harness_inventory_sha256=", mutate_hash(
+    sub("^[^=]*=", "", mutation[[index]])
+  ))
+  expect_error(validate_mutation(mutation), "harness inventory")
+  mutation <- original
+  index <- line_index("^rscript_sha256=")
+  mutation[[index]] <- paste0("rscript_sha256=", mutate_hash(
+    sub("^[^=]*=", "", mutation[[index]])
+  ))
+  expect_error(validate_mutation(mutation), "Rscript hash")
   recipe_index <- grep("^recipe_record;", original)[[1L]]
   expect_error(validate_mutation(mutate_field(
     original, recipe_index, "sha256"
@@ -791,13 +899,14 @@ wlv13_v5d_generate_stage5_profiles <- function(
         call. = FALSE
       )
     }
-    profile <- wlv13_v5d_scientific_profile(
-      candidate$project_root, method
+    historical_profile <- wlv13_v5d_scientific_profile_from_run(
+      candidate, method
     )
-    current_profile <- wlv13_v5d_scientific_profile(
+    current_profile <- wlv13_v5d_scientific_profile_from_head(
       contract_project_root, method
     )
-    if (!identical(profile, current_profile)) {
+    profile <- historical_profile$profile
+    if (!identical(profile, current_profile$profile)) {
       stop(paste0(
         "Historical and current scientific diagnostic profiles differ for `",
         method, "`."
@@ -954,13 +1063,13 @@ wlv13_v5d_stage5_generator_main <- function(arguments = commandArgs(TRUE)) {
   )
   capture_record_sha256 <- wlv13_v5d_validate_stage5_capture(
     bridge_capture_path, bridge_index_path, bridge_path,
-    stage_capture_path, evidence_path, evidence
+    stage_capture_path, evidence_path, evidence, harness_dir
   )
   capture_assertions <- wlv13_v5d_stage5_capture_mutation_selftest(
     bridge_capture_path, bridge_index_path, bridge_path,
-    stage_capture_path, evidence_path, evidence
+    stage_capture_path, evidence_path, evidence, harness_dir
   )
-  if (!identical(capture_assertions, 19L)) {
+  if (!identical(capture_assertions, 21L)) {
     stop("Stage-five capture mutation self-test is incomplete.",
       call. = FALSE
     )

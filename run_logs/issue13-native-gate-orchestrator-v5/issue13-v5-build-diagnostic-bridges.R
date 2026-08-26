@@ -169,6 +169,288 @@ wlv13_v5d_authenticate_source <- function(project_root, provenance) {
   wlv13_v5d_sha256_text(paste(records, collapse = "\n"))
 }
 
+wlv13_v5d_profile_contract_paths <- c(
+  "config/contracts/scientific_method_profiles.csv",
+  "config/contracts/scientific_profiles.csv",
+  "config/contracts/nonfinite_resolution_profiles.csv",
+  "config/contracts/nonfinite_resolution_groups.csv"
+)
+
+wlv13_v5d_git_scalar <- function(project_root, arguments, label) {
+  value <- tryCatch(system2(
+    "git", c("-C", shQuote(project_root), arguments),
+    stdout = TRUE, stderr = FALSE
+  ), error = function(error) structure(character(), status = 1L))
+  status <- attr(value, "status")
+  if ((!is.null(status) && status != 0L) || length(value) != 1L ||
+      !nzchar(value[[1L]])) {
+    stop(sprintf("Cannot authenticate historical profile %s.", label),
+      call. = FALSE
+    )
+  }
+  enc2utf8(value[[1L]])
+}
+
+wlv13_v5d_git_blob_file <- function(
+    project_root, commit, relative, output_path, filters = FALSE) {
+  if (!relative %in% wlv13_v5d_profile_contract_paths ||
+      grepl("^([A-Za-z]:|[/\\\\])", relative) ||
+      grepl("(^|[/\\\\])[.][.]($|[/\\\\])", relative)) {
+    stop("Historical profile path is not in the closed contract set.",
+      call. = FALSE
+    )
+  }
+  arguments <- if (isTRUE(filters)) {
+    c(
+      "-C", shQuote(project_root), "cat-file", "--filters",
+      shQuote(paste0("--path=", relative)),
+      shQuote(paste0(commit, ":", relative))
+    )
+  } else {
+    c(
+      "-C", shQuote(project_root), "cat-file", "blob",
+      shQuote(paste0(commit, ":", relative))
+    )
+  }
+  status <- tryCatch(system2(
+    "git", arguments, stdout = output_path, stderr = FALSE
+  ), error = function(error) 1L)
+  if (!identical(as.integer(status), 0L) || !file.exists(output_path) ||
+      isTRUE(file.info(output_path)$isdir) || file.info(output_path)$size <= 0) {
+    stop(sprintf(
+      "Cannot read historical profile `%s` from its provenance commit.",
+      relative
+    ), call. = FALSE)
+  }
+  invisible(output_path)
+}
+
+wlv13_v5d_scientific_profile_from_commit <- function(
+    project_root, commit, tree, method, provenance_inputs = NULL) {
+  project_root <- normalizePath(
+    project_root, winslash = "/", mustWork = TRUE
+  )
+  commit <- wlv13_v5d_scalar(
+    commit, "historical profile commit", "^[0-9a-f]{40}$"
+  )
+  tree <- wlv13_v5d_scalar(
+    tree, "historical profile tree", "^[0-9a-f]{40}$"
+  )
+  observed_tree <- wlv13_v5d_git_scalar(
+    project_root,
+    c("rev-parse", shQuote(paste0(commit, "^{tree}"))),
+    "commit tree"
+  )
+  if (!identical(observed_tree, tree)) {
+    stop("Historical profile commit/tree binding differs.", call. = FALSE)
+  }
+  input_table <- NULL
+  if (!is.null(provenance_inputs)) {
+    if (!is.data.frame(provenance_inputs) ||
+        !identical(names(provenance_inputs), c("path", "sha256")) ||
+        any(!vapply(provenance_inputs, is.character, logical(1L))) ||
+        anyDuplicated(provenance_inputs$path) ||
+        any(!grepl("^[0-9a-f]{64}$", provenance_inputs$sha256))) {
+      stop("Historical profile provenance inputs are invalid.", call. = FALSE)
+    }
+    input_table <- provenance_inputs[
+      match(wlv13_v5d_profile_contract_paths, provenance_inputs$path),
+      , drop = FALSE
+    ]
+    if (nrow(input_table) != length(wlv13_v5d_profile_contract_paths) ||
+        anyNA(input_table$path) ||
+        !identical(input_table$path, wlv13_v5d_profile_contract_paths)) {
+      stop("Historical profile provenance is incomplete.", call. = FALSE)
+    }
+  }
+  temporary_root <- tempfile("wlv13-v5d-profile-commit-")
+  contract_root <- file.path(temporary_root, "config", "contracts")
+  if (!dir.create(contract_root, recursive = TRUE, showWarnings = FALSE)) {
+    stop("Could not stage historical profile contract bytes.", call. = FALSE)
+  }
+  on.exit(unlink(temporary_root, recursive = TRUE, force = TRUE), add = TRUE)
+  records <- character(length(wlv13_v5d_profile_contract_paths))
+  for (index in seq_along(wlv13_v5d_profile_contract_paths)) {
+    relative <- wlv13_v5d_profile_contract_paths[[index]]
+    raw_path <- file.path(contract_root, basename(relative))
+    wlv13_v5d_git_blob_file(
+      project_root, commit, relative, raw_path, filters = FALSE
+    )
+    raw_sha256 <- wlv13_sha256_file(raw_path)
+    provenance_sha256 <- ""
+    if (!is.null(input_table)) {
+      filtered_path <- tempfile("wlv13-v5d-profile-filtered-")
+      on.exit(unlink(filtered_path, force = TRUE), add = TRUE)
+      wlv13_v5d_git_blob_file(
+        project_root, commit, relative, filtered_path, filters = TRUE
+      )
+      provenance_sha256 <- input_table$sha256[[index]]
+      if (!identical(wlv13_sha256_file(filtered_path), provenance_sha256)) {
+        stop(sprintf(
+          "Historical profile `%s` differs from run provenance.", relative
+        ), call. = FALSE)
+      }
+      unlink(filtered_path, force = TRUE)
+    }
+    records[[index]] <- wlv13_v5d_length_record(
+      relative, raw_sha256, provenance_sha256
+    )
+  }
+  list(
+    profile = wlv13_v5d_scientific_profile(temporary_root, method),
+    commit = commit,
+    tree = tree,
+    contract_sha256 = wlv13_v5d_sha256_text(paste(records, collapse = "\n"))
+  )
+}
+
+wlv13_v5d_scientific_profile_from_run <- function(value, method) {
+  if (!is.list(value) || !identical(value$run_id, value$execution$run_id) ||
+      !identical(value$execution$method, method)) {
+    stop("Historical scientific profile lacks an authenticated run.",
+      call. = FALSE
+    )
+  }
+  wlv13_v5d_scientific_profile_from_commit(
+    value$project_root, value$commit, value$tree, method, value$inputs
+  )
+}
+
+wlv13_v5d_scientific_profile_from_head <- function(project_root, method) {
+  project_root <- normalizePath(
+    project_root, winslash = "/", mustWork = TRUE
+  )
+  commit <- wlv13_v5d_git_scalar(
+    project_root, c("rev-parse", "HEAD"), "current HEAD"
+  )
+  tree <- wlv13_v5d_git_scalar(
+    project_root, c("rev-parse", "HEAD^{tree}"), "current HEAD tree"
+  )
+  wlv13_v5d_scientific_profile_from_commit(
+    project_root, commit, tree, method, provenance_inputs = NULL
+  )
+}
+
+wlv13_v5d_historical_profile_binding_selftest <- function(
+    evidence, contract_project_root, expected_unique_roots = NULL,
+    expected_divergent_roots = NULL) {
+  required <- c(
+    "method", "candidate_project_root", "candidate_run_root",
+    "baseline_project_root", "baseline_run_root"
+  )
+  if (!is.data.frame(evidence) || !identical(names(evidence), required) ||
+      nrow(evidence) != length(wlv13_v5d_methods) ||
+      anyDuplicated(evidence$method) ||
+      !identical(sort(evidence$method, method = "radix"),
+        sort(wlv13_v5d_methods, method = "radix"))) {
+    stop("Historical profile self-test lacks the exact evidence index.",
+      call. = FALSE
+    )
+  }
+  heads <- commits <- character(nrow(evidence))
+  assertions <- 0L
+  for (index in seq_len(nrow(evidence))) {
+    method <- evidence$method[[index]]
+    project_root <- normalizePath(
+      evidence$candidate_project_root[[index]],
+      winslash = "/", mustWork = TRUE
+    )
+    manifest <- wlv13_json_read(file.path(
+      evidence$candidate_run_root[[index]], "run_manifest.json"
+    ), simplify = FALSE)
+    provenance <- if (is.list(manifest) && is.list(manifest$result)) {
+      manifest$result$provenance
+    } else {
+      NULL
+    }
+    inputs <- if (is.list(provenance) && is.list(provenance$inputs)) {
+      data.frame(
+        path = vapply(provenance$inputs, `[[`, character(1L), "path"),
+        sha256 = vapply(provenance$inputs, `[[`, character(1L), "sha256"),
+        stringsAsFactors = FALSE, check.names = FALSE
+      )
+    } else {
+      NULL
+    }
+    commit <- if (is.list(provenance) && is.list(provenance$git)) {
+      provenance$git$commit
+    } else {
+      NULL
+    }
+    tree <- wlv13_v5d_git_scalar(
+      project_root,
+      c("rev-parse", shQuote(paste0(commit, "^{tree}"))),
+      "self-test commit tree"
+    )
+    historical <- wlv13_v5d_scientific_profile_from_commit(
+      project_root, commit, tree, method, inputs
+    )
+    current <- wlv13_v5d_scientific_profile_from_head(
+      contract_project_root, method
+    )
+    if (!identical(historical$profile, current$profile)) {
+      stop(sprintf(
+        "Historical profile self-test differs for `%s`.", method
+      ), call. = FALSE)
+    }
+    assertions <- assertions + 1L
+    mutation <- inputs
+    mutation_index <- match(
+      wlv13_v5d_profile_contract_paths[[1L]], mutation$path
+    )
+    if (is.na(mutation_index)) {
+      stop("Historical profile mutation fixture is incomplete.",
+        call. = FALSE
+      )
+    }
+    original <- mutation$sha256[[mutation_index]]
+    mutation$sha256[[mutation_index]] <- paste0(
+      substr(original, 1L, 63L),
+      if (substr(original, 64L, 64L) == "0") "1" else "0"
+    )
+    rejected <- inherits(try(wlv13_v5d_scientific_profile_from_commit(
+      project_root, commit, tree, method, mutation
+    ), silent = TRUE), "try-error")
+    if (!rejected) {
+      stop(sprintf(
+        "Historical profile provenance mutation passed for `%s`.", method
+      ), call. = FALSE)
+    }
+    assertions <- assertions + 1L
+    heads[[index]] <- wlv13_v5d_git_scalar(
+      project_root, c("rev-parse", "HEAD"), "self-test worktree HEAD"
+    )
+    commits[[index]] <- commit
+  }
+  roots <- unique(evidence$candidate_project_root)
+  first <- match(roots, evidence$candidate_project_root)
+  divergent_roots <- sum(heads[first] != commits[first])
+  if (!is.null(expected_unique_roots) &&
+      !identical(length(roots), as.integer(expected_unique_roots))) {
+    stop(sprintf(
+      paste0(
+        "Historical profile worktree-negative coverage changed ",
+        "(roots=%s; divergent=%s)."
+      ), length(roots), divergent_roots
+    ), call. = FALSE)
+  }
+  if (!is.null(expected_divergent_roots) &&
+      !identical(divergent_roots, as.integer(expected_divergent_roots))) {
+    stop(sprintf(
+      paste0(
+        "Historical profile worktree-negative coverage changed ",
+        "(roots=%s; divergent=%s)."
+      ), length(roots), divergent_roots
+    ), call. = FALSE)
+  }
+  list(
+    assertions = assertions + 2L,
+    methods = nrow(evidence),
+    unique_roots = length(roots),
+    divergent_roots = divergent_roots
+  )
+}
+
 wlv13_v5d_bridge_authenticate_run <- function(
     project_root, run_root, method, expected_mode = "calculate") {
   if (!expected_mode %in% c("calculate", "recalculate")) {
@@ -275,6 +557,13 @@ wlv13_v5d_bridge_authenticate_run <- function(
       if (nzchar(input_error)) paste0(": ", input_error) else ""
     ), call. = FALSE)
   }
+  authenticated_inputs <- data.frame(
+    path = vapply(inputs, function(input) enc2utf8(input$path), character(1L)),
+    sha256 = vapply(inputs, function(input) enc2utf8(input$sha256),
+      character(1L)
+    ),
+    stringsAsFactors = FALSE, check.names = FALSE
+  )
   source_sha256 <- wlv13_v5d_authenticate_source(project_root, provenance)
   context <- list(
     arm = "evidence", project_root = project_root,
@@ -314,6 +603,7 @@ wlv13_v5d_bridge_authenticate_run <- function(
     tree = evidence_tree,
     context = context,
     execution = execution,
+    inputs = authenticated_inputs,
     source_sha256 = source_sha256,
     run_manifest_sha256 = inventory$manifest_sha256,
     run_inventory_sha256 = wlv13_inventory_signature(inventory),
@@ -592,12 +882,14 @@ wlv13_v5d_generate_bridge_manifest <- function(
         call. = FALSE
       )
     }
-    profile <- wlv13_v5d_scientific_profile(
-      candidate$project_root, method
+    historical_profile <- wlv13_v5d_scientific_profile_from_run(
+      candidate, method
     )
-    if (!identical(profile, wlv13_v5d_scientific_profile(
-        contract_project_root, method
-      ))) {
+    current_profile <- wlv13_v5d_scientific_profile_from_head(
+      contract_project_root, method
+    )
+    profile <- historical_profile$profile
+    if (!identical(profile, current_profile$profile)) {
       stop("Historical and current scientific profiles differ.",
         call. = FALSE
       )
@@ -679,12 +971,25 @@ wlv13_v5d_bridge_generator_main <- function(arguments = commandArgs(TRUE)) {
     ),
     "Diagnostic bridge evidence index"
   )
+  profile_selftest <- wlv13_v5d_historical_profile_binding_selftest(
+    evidence, contract_project_root
+  )
+  if (!identical(profile_selftest$assertions, 26L)) {
+    stop("Historical profile binding self-test is incomplete.",
+      call. = FALSE
+    )
+  }
   value <- wlv13_v5d_generate_bridge_manifest(
     evidence, contract_project_root, arguments[[4L]]
   )
   cat(sprintf(
-    "generated_rows=%d manifest_sha256=%s\n",
-    nrow(value), wlv13_sha256_file(arguments[[4L]])
+    paste0(
+      "generated_rows=%d manifest_sha256=%s profile_assertions=%d ",
+      "profile_roots=%d divergent_profile_roots=%d\n"
+    ),
+    nrow(value), wlv13_sha256_file(arguments[[4L]]),
+    profile_selftest$assertions, profile_selftest$unique_roots,
+    profile_selftest$divergent_roots
   ))
   invisible(value)
 }

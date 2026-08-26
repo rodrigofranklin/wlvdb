@@ -46,6 +46,48 @@ function Resolve-ExistingDirectory([string]$Path, [string]$Label) {
     return (Resolve-Path -LiteralPath $Path).Path
 }
 
+function Resolve-ExistingFile([string]$Path, [string]$Label) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "$Label does not exist: $Path"
+    }
+    return (Resolve-Path -LiteralPath $Path).Path
+}
+
+function Get-Sha256([string]$Path) {
+    return (Get-FileHash -LiteralPath $Path `
+        -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Get-TextSha256([string]$Value) {
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($Value)
+    $algorithm = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return ([System.BitConverter]::ToString(
+            $algorithm.ComputeHash($bytes)
+        ) -replace '-', '').ToLowerInvariant()
+    } finally {
+        $algorithm.Dispose()
+    }
+}
+
+function Get-DirectoryInventorySha256([string]$Root) {
+    $resolved = (Resolve-Path -LiteralPath $Root).Path.TrimEnd('\')
+    $items = @(Get-ChildItem -LiteralPath $resolved -Recurse -Force)
+    if (@($items | Where-Object {
+        ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0
+    }).Count -ne 0) {
+        throw "Tooling inventory contains a reparse point."
+    }
+    $records = @($items | Where-Object { -not $_.PSIsContainer } |
+        ForEach-Object {
+            $relative = $_.FullName.Substring($resolved.Length).TrimStart('\')
+            $relative = $relative.Replace('\', '/')
+            $relative + "|" + $_.Length + "|" + (Get-Sha256 $_.FullName)
+        })
+    [System.Array]::Sort($records, [System.StringComparer]::Ordinal)
+    return (Get-TextSha256 ($records -join "`n"))
+}
+
 function Assert-GitValue(
     [string]$Worktree,
     [string]$Arguments,
@@ -87,10 +129,28 @@ $sourceData = Resolve-ExistingDirectory $BaselineSourceDataRoot "Source-data roo
 $harness = Resolve-ExistingDirectory $HarnessDir "Harness directory"
 $seedPath = (Resolve-Path -LiteralPath $SeedEvidenceIndex).Path
 $controllerDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$verifier = Join-Path $controllerDir "issue13-v5-verify-diagnostic-evidence.R"
-if (-not (Test-Path -LiteralPath $verifier -PathType Leaf)) {
-    throw "The diagnostic evidence verifier is missing."
+$verifier = Resolve-ExistingFile (Join-Path $controllerDir `
+    "issue13-v5-verify-diagnostic-evidence.R") "Evidence verifier"
+$rscriptApplication = Get-Command -Name $RscriptCommand `
+    -CommandType Application -ErrorAction Stop
+$rscriptPath = Resolve-ExistingFile $rscriptApplication.Source `
+    "Rscript executable"
+$toolPaths = @{
+    bridge_builder = Resolve-ExistingFile (Join-Path $controllerDir `
+        "issue13-v5-build-diagnostic-bridges.R") "Bridge builder"
+    bridge_capture_script = Resolve-ExistingFile `
+        $MyInvocation.MyCommand.Path "Bridge capture script"
+    compare_override = Resolve-ExistingFile (Join-Path $controllerDir `
+        "issue13-v5-compare-override.R") "Comparison override"
+    diagnostics_override = Resolve-ExistingFile (Join-Path $controllerDir `
+        "issue13-v5-diagnostics-override.R") "Diagnostic override"
+    verifier = $verifier
 }
+$toolRecordsBefore = @($toolPaths.Keys | Sort-Object | ForEach-Object {
+    "tool_record;name=$_;sha256=$(Get-Sha256 $toolPaths[$_])"
+})
+$harnessInventoryBefore = Get-DirectoryInventorySha256 $harness
+$rscriptSha256 = Get-Sha256 $rscriptPath
 foreach ($source in @("wiodr13", "wiodr16")) {
     $sourceManifest = Join-Path $sourceData (
         $source + "\normalized\_source_manifest.csv"
@@ -169,7 +229,7 @@ foreach ($method in $captureMethods) {
         "--method", $method, "--workers", "1", "--channel",
         $channel, "--allow-experimental"
     )
-    $runOutput = @(& $RscriptCommand @arguments 2>&1)
+    $runOutput = @(& $rscriptPath @arguments 2>&1)
     $runOutput | Set-Content -LiteralPath $logPath -Encoding utf8
     if ($LASTEXITCODE -ne 0) {
         throw "Baseline calculation failed for $method. See $logPath"
@@ -181,7 +241,7 @@ foreach ($method in $captureMethods) {
     }
     Assert-CleanWorktree $baselineRoot "Baseline after $method"
     $verifyLog = Join-Path $logsRoot ($method + ".verify.log")
-    $verifyOutput = @(& $RscriptCommand --vanilla $verifier `
+    $verifyOutput = @(& $rscriptPath --vanilla $verifier `
         $harness $controllerDir $baselineRoot $created[0] $method 2>&1)
     $verifyOutput | Set-Content -LiteralPath $verifyLog -Encoding utf8
     $evidenceRecord = @($verifyOutput | Where-Object {
@@ -224,12 +284,26 @@ if (($roundTrip -join "`n") -cne ($lines -join "`n")) {
     throw "Evidence index failed its UTF-8 byte round trip."
 }
 
+$toolRecordsAfter = @($toolPaths.Keys | Sort-Object | ForEach-Object {
+    "tool_record;name=$_;sha256=$(Get-Sha256 $toolPaths[$_])"
+})
+$harnessInventoryAfter = Get-DirectoryInventorySha256 $harness
+if (($toolRecordsAfter -join "`n") -cne ($toolRecordsBefore -join "`n") -or
+    $harnessInventoryAfter -cne $harnessInventoryBefore -or
+    (Get-Sha256 $rscriptPath) -cne $rscriptSha256) {
+    throw "Diagnostic capture tooling changed during execution."
+}
 $captureRecord = @(
     "schema=issue13-v5-clean-bridge-capture/1",
     "baseline_base_commit=$baselineBaseCommit",
     "baseline_base_tree=$baselineBaseTree",
     "baseline_runtime_commit=$baselineRuntimeCommit",
     "baseline_runtime_tree=$baselineRuntimeTree",
+    "harness_path=$($harness.Replace('\', '/'))",
+    "harness_inventory_sha256=$harnessInventoryBefore",
+    "rscript_path=$($rscriptPath.Replace('\', '/'))",
+    "rscript_sha256=$rscriptSha256",
+    "tool_records=$($toolRecordsBefore.Count)",
     "baseline_worktree=$($baselineRoot.Replace('\', '/'))",
     "captured_methods=$($captureMethods -join ',')",
     "verified_records=$($verifiedRecords.Count)",
@@ -238,7 +312,7 @@ $captureRecord = @(
     "source_wiodr16_manifest_sha256=$($sourceManifestHashes['wiodr16'])",
     "evidence_index=$($outputIndex.Replace('\', '/'))",
     "evidence_index_sha256=$((Get-FileHash -LiteralPath $outputIndex -Algorithm SHA256).Hash.ToLowerInvariant())"
-) + $verifiedRecords
+) + $toolRecordsBefore + $verifiedRecords
 $captureRecordPath = Join-Path $capture "capture-record.txt"
 [System.IO.File]::WriteAllLines($captureRecordPath, $captureRecord, $utf8)
 $captureRoundTrip = [System.IO.File]::ReadAllLines($captureRecordPath, $utf8)

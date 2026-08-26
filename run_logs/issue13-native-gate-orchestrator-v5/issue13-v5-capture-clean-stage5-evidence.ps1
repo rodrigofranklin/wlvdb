@@ -94,7 +94,8 @@ function Get-DirectoryInventorySha256([string]$Root) {
             $relative = $relative.Replace('\', '/')
             $hash = Get-Sha256 $_.FullName
             $relative + "|" + $_.Length + "|" + $hash
-        } | Sort-Object)
+        })
+    [System.Array]::Sort($records, [System.StringComparer]::Ordinal)
     $recordText = $records -join "`n"
     return (Get-TextSha256 $recordText)
 }
@@ -165,7 +166,7 @@ function Invoke-EvidenceVerifier(
     [string]$Stage = "-",
     [string]$LogPath
 ) {
-    $output = @(& $RscriptCommand --vanilla $script:verifier `
+    $output = @(& $script:rscriptPath --vanilla $script:verifier `
         $script:harness $script:controllerDir $ProjectRoot $RunRoot $Method `
         $Mode $ParentRunId $Stage 2>&1)
     $output | Set-Content -LiteralPath $LogPath -Encoding utf8
@@ -258,6 +259,12 @@ $sourceData = Resolve-ExistingDirectory $BaselineSourceDataRoot `
 $bridgeCapture = Resolve-ExistingDirectory $BridgeCaptureRoot `
     "Bridge capture root"
 $script:harness = Resolve-ExistingDirectory $HarnessDir "Harness directory"
+$rscriptApplication = Get-Command -Name $RscriptCommand `
+    -CommandType Application -ErrorAction Stop
+$script:rscriptPath = Resolve-ExistingFile $rscriptApplication.Source `
+    "Rscript executable"
+$rscriptSha256 = Get-Sha256 $script:rscriptPath
+$harnessInventoryBefore = Get-DirectoryInventorySha256 $script:harness
 $bridgeManifestPath = Resolve-ExistingFile $BridgeManifest "Bridge manifest"
 $script:controllerDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:verifier = Resolve-ExistingFile (Join-Path $script:controllerDir `
@@ -292,9 +299,32 @@ $bridgeRecordLines = @([System.IO.File]::ReadAllLines(
 ))
 if ($bridgeRecordLines[0] -cne "schema=issue13-v5-clean-bridge-capture/1" -or
     (Get-CaptureValue $bridgeRecordLines "verified_records") -cne "7" -or
+    (Get-CaptureValue $bridgeRecordLines "tool_records") -cne "5" -or
+    (Get-CaptureValue $bridgeRecordLines "harness_path") -cne
+        $script:harness.Replace('\', '/') -or
+    (Get-CaptureValue $bridgeRecordLines "harness_inventory_sha256") -cne
+        $harnessInventoryBefore -or
+    (Get-CaptureValue $bridgeRecordLines "rscript_path") -cne
+        $script:rscriptPath.Replace('\', '/') -or
+    (Get-CaptureValue $bridgeRecordLines "rscript_sha256") -cne
+        $rscriptSha256 -or
     (Get-CaptureValue $bridgeRecordLines "evidence_index_sha256") -cne
         (Get-Sha256 $bridgeIndexPath)) {
     throw "Bridge capture record is not bound to its evidence index."
+}
+$bridgeToolRecords = @($bridgeRecordLines | Where-Object {
+    $_ -cmatch '^tool_record;'
+})
+$bridgeToolNames = @(
+    "bridge_builder", "bridge_capture_script", "compare_override",
+    "diagnostics_override", "verifier"
+)
+$expectedBridgeToolRecords = @($bridgeToolNames | ForEach-Object {
+    "tool_record;name=$_;sha256=$(Get-Sha256 $recipePaths[$_])"
+})
+if (($bridgeToolRecords -join "`n") -cne
+    ($expectedBridgeToolRecords -join "`n")) {
+    throw "Bridge capture tooling differs from its recorded bytes."
 }
 $bridgeCaptureRecords = @($bridgeRecordLines | Where-Object {
     $_ -cmatch '^evidence_record;'
@@ -475,7 +505,7 @@ foreach ($method in $methods) {
         )
         $channel = "issue13-v5d-stage-" + $stage + "-" +
             $method.Replace("_", "-")
-        $runOutput = @(& $RscriptCommand --vanilla $launcher $worktree `
+        $runOutput = @(& $script:rscriptPath --vanilla $launcher $worktree `
             $method $reference.Fields.run_id ([string]$stage) $channel 2>&1)
         $runOutput | Set-Content -LiteralPath $runLog -Encoding utf8
         if ($LASTEXITCODE -ne 0) {
@@ -564,6 +594,11 @@ foreach ($source in @("wiodr13", "wiodr16")) {
         throw "Normalized $source source inventory changed during capture."
     }
 }
+$harnessInventoryAfter = Get-DirectoryInventorySha256 $script:harness
+if ($harnessInventoryAfter -cne $harnessInventoryBefore -or
+    (Get-Sha256 $script:rscriptPath) -cne $rscriptSha256) {
+    throw "Stage-five capture tooling changed during execution."
+}
 $recipeRecords = foreach ($name in @($recipePaths.Keys | Sort-Object)) {
     "recipe_record;name=$name;sha256=$(Get-Sha256 $recipePaths[$name])"
 }
@@ -573,6 +608,10 @@ $captureRecord = @(
     "baseline_base_tree=$baselineBaseTree",
     "baseline_runtime_commit=$baselineRuntimeCommit",
     "baseline_runtime_tree=$baselineRuntimeTree",
+    "harness_path=$($script:harness.Replace('\', '/'))",
+    "harness_inventory_sha256=$harnessInventoryBefore",
+    "rscript_path=$($script:rscriptPath.Replace('\', '/'))",
+    "rscript_sha256=$rscriptSha256",
     "methods=$($methods -join ',')",
     "stages=$($stages -join ',')",
     "bridge_capture_record_sha256=$(Get-Sha256 $bridgeRecordPath)",
