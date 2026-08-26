@@ -125,39 +125,60 @@ foreach ($sourceName in @('wiodr13', 'wiodr16')) {
   $candidateManifest = $sourceComparison.candidate_manifest
   $manifestComparison =
     $sourceComparison.csv.PSObject.Properties['_source_manifest.csv'].Value
-  $identityFields = @(
-    'source_generation_id', 'contract_id', 'contract_version', 'contract_sha256')
+  $unitComparison =
+    $sourceComparison.csv.PSObject.Properties['_unit_contract.csv'].Value
+  $baselineBinding = @($config.source_contract_bindings | Where-Object {
+    [string]$_.arm -ceq 'baseline' -and
+      [string]$_.source -ceq $sourceName
+  })
+  $candidateBinding = @($config.source_contract_bindings | Where-Object {
+    [string]$_.arm -ceq 'candidate' -and
+      [string]$_.source -ceq $sourceName
+  })
   if (-not [bool]$sourceComparison.passed -or
-      -not [bool]$sourceComparison.manifest_tables_identical -or
+      -not [bool]$sourceComparison.
+        manifest_tables_architecture_projected_equal -or
       -not [bool]$baselineManifest.passed -or
       -not [bool]$candidateManifest.passed -or
       -not [bool]$manifestComparison.passed -or
-      [string]$manifestComparison.baseline_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
-      [string]$manifestComparison.candidate_sha256 -cnotmatch
-        '^[0-9a-f]{64}$') {
-    throw "Preparation source manifest is not identical: $sourceName"
+      [string]$manifestComparison.comparison_mode -cne
+        'architecture-projected-source-manifest' -or
+      -not [bool]$unitComparison.passed -or
+      [string]$unitComparison.comparison_mode -cne
+        'architecture-projected-unit-contract' -or
+      $baselineBinding.Count -ne 1 -or $candidateBinding.Count -ne 1) {
+    throw "Preparation source projection is invalid: $sourceName"
   }
-  foreach ($field in $identityFields) {
-    if ([string]::IsNullOrWhiteSpace([string]$baselineManifest.$field) -or
-        [string]$baselineManifest.$field -cne
-          [string]$candidateManifest.$field) {
-      throw "Preparation source identity differs: $sourceName/$field"
+  foreach ($record in @(
+      @($baselineManifest, $baselineBinding[0]),
+      @($candidateManifest, $candidateBinding[0])
+    )) {
+    foreach ($field in @(
+        'source_generation_id', 'contract_id', 'contract_version',
+        'contract_sha256'
+      )) {
+      if ([string]$record[0].$field -cne [string]$record[1].$field) {
+        throw "Preparation source identity differs from its binding: $sourceName/$field"
+      }
     }
   }
-  if ([string]$baselineManifest.source_generation_id -cnotmatch
-        '^[0-9a-f]{64}$' -or
-      [string]$baselineManifest.contract_sha256 -cnotmatch '^[0-9a-f]{64}$') {
-    throw "Preparation source identity hash is invalid: $sourceName"
+  if ([string]$baselineManifest.contract_id -cne
+        [string]$candidateManifest.contract_id -or
+      [string]$baselineManifest.contract_version -cne
+        [string]$candidateManifest.contract_version) {
+    throw "Preparation contract ID/version differs: $sourceName"
   }
   $sourceIdentityLines.Add(
-    '- `' + $sourceName + '`: source_generation_id `' +
-      [string]$baselineManifest.source_generation_id + '`, contract_id `' +
+    '- `' + $sourceName + '`: contract_id `' +
       [string]$baselineManifest.contract_id + '`, contract_version `' +
-      [string]$baselineManifest.contract_version + '`, contract_sha256 `' +
-      [string]$baselineManifest.contract_sha256 + '`, manifest SHA-256 ' +
-      'baseline `' + [string]$manifestComparison.baseline_sha256 + '`, ' +
-      'candidato `' + [string]$manifestComparison.candidate_sha256 +
-      '` (tabelas semanticamente idênticas).'
+      [string]$baselineManifest.contract_version + '`. Baseline: geração `' +
+      [string]$baselineManifest.source_generation_id + '`, contrato `' +
+      [string]$baselineManifest.contract_sha256 + '`, manifest `' +
+      [string]$baselineBinding[0].manifest_sha256 + '`. Candidato: geração `' +
+      [string]$candidateManifest.source_generation_id + '`, contrato `' +
+      [string]$candidateManifest.contract_sha256 + '`, manifest `' +
+      [string]$candidateBinding[0].manifest_sha256 +
+      '`. Artefatos científicos idênticos após a projeção arquitetural selada.'
   )
 }
 $euklemsArtifacts = @(
@@ -238,14 +259,21 @@ importado como resultado científico final.
 
 ## source_ids
 
-- Inventário oficial: `$($config.source_inventory.inventory_sha256)`
+- Inventário baseline oficial: `$($config.source_inventory.inventory_sha256)`
   ($($config.source_inventory.file_count) arquivos,
   $($config.source_inventory.total_bytes) bytes).
-- Inventário de diretórios: `$($config.source_inventory.directory_list_sha256)`.
+- Inventário de diretórios baseline:
+  `$($config.source_inventory.directory_list_sha256)`.
+- Inventário candidato nativo:
+  `$($config.candidate_source_inventory.inventory_sha256)`
+  ($($config.candidate_source_inventory.file_count) arquivos,
+  $($config.candidate_source_inventory.total_bytes) bytes).
+- Inventário de diretórios candidato:
+  `$($config.candidate_source_inventory.directory_list_sha256)`.
 $([string]::Join("`n", $sourceCacheLines))
 
-Identidades das gerações preparadas (validadas como iguais entre baseline e
-candidato):
+Identidades das gerações preparadas. Cada braço foi validado contra seu
+contrato; a comparação científica usa somente a projeção arquitetural selada:
 
 $([string]::Join("`n", $sourceIdentityLines))
 
@@ -301,6 +329,10 @@ $([string]::Join("`n", $commandLines))
 - A única diferença arquitetural aceita é o sidecar candidato
   `_runtime_resources.rds`, validado pelo runtime candidato contra os hashes dos
   artefatos, coordenadas semânticas e bindings do run imutável.
+- As fontes normalizadas têm manifests/contratos próprios por braço. A projeção
+  de preparação remove somente `module`, `aggregation_notes`,
+  `source_generation_id`, `contract_sha256` e tamanho/hash da linha
+  `_unit_contract.csv`; todos os demais artefatos e campos permanecem estritos.
 - `_nonfinite_resolution_diagnostics.csv` é candidato-only conforme contrato.
 - Não foi introduzida tolerância numérica nova.
 $([string]::Join("`n", $oracleLines))
@@ -310,6 +342,8 @@ $([string]::Join("`n", $oracleLines))
 - Status: `$($preparation.status)`; passed: `$preparationPassed`.
 - WIOD13, WIOD16 e EU KLEMS foram preparados a partir das mesmas seis caches
   oficiais autenticadas.
+- As gerações normalizadas baseline e candidata foram autenticadas
+  separadamente antes da execução científica.
 - Arrays normativos foram comparados bit a bit, preservando `NA`, `NaN`,
   infinitos e zero assinado.
 - Promoção atômica e ausência de staging/locks foram verificadas.

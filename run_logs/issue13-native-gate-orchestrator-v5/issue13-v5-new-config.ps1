@@ -15,6 +15,7 @@ param(
   [string]$RepositoryRoot = 'D:\Trabalho\Code\wlvdb',
   [string]$SourceOrigin =
     'D:\Trabalho\Code\wlvdb-issue13-baseline\source_data',
+  [Parameter(Mandatory = $true)][string]$CandidateSourceOrigin,
   [string]$Rscript =
     'C:\Users\rodri\AppData\Local\Programs\R\R-4.6.1\bin\x64\Rscript.exe',
   [string]$RLibrary =
@@ -360,6 +361,8 @@ if ($oracleAncestorExit -ne 1) {
 
 $source = (Resolve-Path -LiteralPath (
   ConvertTo-Issue13V5FullPath $SourceOrigin $true)).Path
+$candidateSource = (Resolve-Path -LiteralPath (
+  ConvertTo-Issue13V5FullPath $CandidateSourceOrigin $true)).Path
 $rscriptFull = (Resolve-Path -LiteralPath (
   ConvertTo-Issue13V5FullPath $Rscript $true)).Path
 $library = (Resolve-Path -LiteralPath (
@@ -440,8 +443,95 @@ $persistentHash = [Convert]::ToHexString(
   [Security.Cryptography.SHA256]::HashData($persistentHashBytes)
 ).ToLowerInvariant()
 
+$sourceContractBindings = @(
+  [ordered]@{
+    arm = 'baseline'; source = 'wiodr13'
+    runtime_commit = $BaselineRuntimeCommit
+    manifest_relative_path = 'wiodr13/normalized/_source_manifest.csv'
+    manifest_sha256 =
+      'cd3ee98c7b823b1efa9b1272dca660a3977cc4a185b033263c2bef09cc1f73a8'
+    source_generation_id =
+      '65691585592c9cb6dc628c46606f004113f808e5b74c511c89678fae32032e2d'
+    contract_id = 'wiodr13_units_v2'; contract_version = '2'
+    contract_sha256 =
+      'f7e04664e357d6a334685e48eced6428dfdd410f5b9811785a0ad0f696cc65eb'
+    units_relative_path = 'contracts/units/wiodr13_v2-units.csv'
+    units_sha256 =
+      'ff1ab869e72d18879dc2e69c61c911425d73b612870c06317047accf9520ff11'
+    units_git_blob = 'c89f1ca1e463d05a0b0ec683bee16084d39f4ac3'
+    aggregations_relative_path =
+      'contracts/units/wiodr13_v2-aggregations.csv'
+    aggregations_sha256 =
+      'e830708911f5b6674f44e51e8625de9a072ccf5cd91395954e1040f81372004a'
+    aggregations_git_blob = '4d98444799af4c715f07a3b8a0ea4c1c1570a87c'
+  },
+  [ordered]@{
+    arm = 'baseline'; source = 'wiodr16'
+    runtime_commit = $BaselineRuntimeCommit
+    manifest_relative_path = 'wiodr16/normalized/_source_manifest.csv'
+    manifest_sha256 =
+      '091183d74d97f5bc22209e57be0314c5ea5e510ae3573eaf2b342237de903aa9'
+    source_generation_id =
+      'f135fddb4723ba3cdf29164cf1b7ec006693cc201feaf2063f91fa104e942a7a'
+    contract_id = 'wiodr16_units_v2'; contract_version = '2'
+    contract_sha256 =
+      '94b9f78e8977001fab92e8fa8528aea5b97a3f22809bec58a16a56f413a6acf7'
+    units_relative_path = 'contracts/units/wiodr16_v2-units.csv'
+    units_sha256 =
+      'dfd73aa1e7721a139b04345c1e9fc48dc0a0a875659b8385a73292b2fba90143'
+    units_git_blob = 'fcf432fd4ddc6fd54acf88ef809e241b5e3f0cf7'
+    aggregations_relative_path =
+      'contracts/units/wiodr16_v2-aggregations.csv'
+    aggregations_sha256 =
+      'bbee477efe375ffee47dc69ad86d9176d3e57d4292461d86423bbe68a9cbc642'
+    aggregations_git_blob = '339de049570be34158a5599de05d1eea4175cacd'
+  },
+  [ordered]@{
+    arm = 'candidate'; source = 'wiodr13'
+    runtime_commit = $CandidateCommit
+    manifest_relative_path = 'wiodr13/normalized/_source_manifest.csv'
+    manifest_sha256 =
+      'b454f0f05890374cebde8b1b3222da4b4b63b887f67283fe12c97a351adc0bb8'
+    source_generation_id =
+      'b16a64edd8f3cdf117002fda011e1ba19f17e3fa72936671bb98dffeb0207856'
+    contract_id = 'wiodr13_units_v2'; contract_version = '2'
+    contract_sha256 =
+      '1f2462835e70d5681d7a5b9b29be5f0598cdb35a9abd72d3d147a6636ae5c905'
+    units_relative_path = 'contracts/units/wiodr13_v2-units.csv'
+    units_sha256 =
+      'ff1ab869e72d18879dc2e69c61c911425d73b612870c06317047accf9520ff11'
+    units_git_blob = 'c89f1ca1e463d05a0b0ec683bee16084d39f4ac3'
+    aggregations_relative_path =
+      'contracts/units/wiodr13_v2-aggregations.csv'
+    aggregations_sha256 =
+      'c5c9779772101380514b6dbb937de48036280e66df382f2eb84f122ec91384d3'
+    aggregations_git_blob = '20fbc53bb31261b0a698ae6ac56b0344772e1e6a'
+  },
+  [ordered]@{
+    arm = 'candidate'; source = 'wiodr16'
+    runtime_commit = $CandidateCommit
+    manifest_relative_path = 'wiodr16/normalized/_source_manifest.csv'
+    manifest_sha256 =
+      '28dc13d3abb9856fb984b01eb60379e213e6e0cfae58e8fb08c3b882c19c1a35'
+    source_generation_id =
+      '1f747ab8d53abe8cc674b0842796a5c9b936b036a79b48715b9e04734f949976'
+    contract_id = 'wiodr16_units_v2'; contract_version = '2'
+    contract_sha256 =
+      '3b23ab671df4905dee50b35efd8dff8d4897f65f2b74a2677d7614d9137e801a'
+    units_relative_path = 'contracts/units/wiodr16_v2-units.csv'
+    units_sha256 =
+      'dfd73aa1e7721a139b04345c1e9fc48dc0a0a875659b8385a73292b2fba90143'
+    units_git_blob = 'fcf432fd4ddc6fd54acf88ef809e241b5e3f0cf7'
+    aggregations_relative_path =
+      'contracts/units/wiodr16_v2-aggregations.csv'
+    aggregations_sha256 =
+      '227c32c390e019a8ccb231db1bca898667bc31d75b599beda083799fa9d27278'
+    aggregations_git_blob = '516f2dc29ed594df42605811a18af49bc9328d71'
+  }
+)
+
 $config = [ordered]@{
-  schema = 'wlv-issue13-native-gate-config/2'
+  schema = 'wlv-issue13-native-gate-config/3'
   generation = 'v5'
   created_at_utc = [DateTime]::UtcNow.ToString('o')
   final_evidence_eligible = $true
@@ -469,6 +559,17 @@ $config = [ordered]@{
     directory_list_sha256 =
       '8b3a622a748f2489fe8cfd2a8273ec98ad4c372b2378d587a5ee2e3c5c916640'
   }
+  candidate_source_origin = $candidateSource
+  candidate_source_inventory = [ordered]@{
+    file_count = 76
+    directory_count = 6
+    total_bytes = 2035522216L
+    inventory_sha256 =
+      '22e90e9485d7cee19d1de786c3464106d9a857ad3d85d0c9f2b3d912a0f38026'
+    directory_list_sha256 =
+      'c75aa417f14cded3c3bb6028effc8acadd64a32e86fddc0f1278079acdb6f114'
+  }
+  source_contract_bindings = [object[]]$sourceContractBindings
   rscript = $rscriptFull
   r_library = $library
   baseline_commit = $baselineCommit
@@ -533,6 +634,11 @@ $config = [ordered]@{
     candidate_only_artifacts = @(
       '_nonfinite_resolution_diagnostics.csv',
       '_runtime_resources.rds'
+    )
+    preparation_architecture_projection = @(
+      'module', 'aggregation_notes', 'source_generation_id',
+      'contract_sha256', '_unit_contract.csv:size_bytes',
+      '_unit_contract.csv:sha256'
     )
   }
   performance = [ordered]@{

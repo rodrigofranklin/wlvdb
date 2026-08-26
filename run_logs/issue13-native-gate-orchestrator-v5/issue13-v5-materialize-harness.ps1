@@ -287,6 +287,220 @@ Add-Issue13V5ExactSource `
   (Join-Path $harnessStaging 'issue13-compare-lib.R') `
   $roleSource $roleReplacement
 
+$inventoryModeSource = @'
+                                      comparison_mode = c(
+                                        "strict", "cross_engine_run_v3"
+                                      )) {
+'@.TrimEnd("`r", "`n")
+$inventoryModeReplacement = @'
+                                      comparison_mode = c(
+                                        "strict", "cross_engine_run_v3",
+                                        "cross_engine_source_v1"
+                                      )) {
+'@.TrimEnd("`r", "`n")
+$compareLibrary = Join-Path $harnessStaging 'issue13-compare-lib.R'
+Add-Issue13V5ExactSource $compareLibrary `
+  $inventoryModeSource $inventoryModeReplacement
+
+$crossEngineSource = @'
+  cross_engine <- identical(comparison_mode, "cross_engine_run_v3")
+  if (cross_engine && (!identical(candidate$kind, "run") ||
+      !identical(baseline$kind, "run"))) {
+    stop("cross_engine_run_v3 accepts only authenticated run inventories.",
+      call. = FALSE
+    )
+  }
+'@.TrimEnd("`r", "`n")
+$crossEngineReplacement = @'
+  cross_engine_run <- identical(comparison_mode, "cross_engine_run_v3")
+  cross_engine_source <- identical(
+    comparison_mode, "cross_engine_source_v1"
+  )
+  cross_engine <- cross_engine_run || cross_engine_source
+  if (cross_engine_run && (!identical(candidate$kind, "run") ||
+      !identical(baseline$kind, "run"))) {
+    stop("cross_engine_run_v3 accepts only authenticated run inventories.",
+      call. = FALSE
+    )
+  }
+  if (cross_engine_source && (!identical(candidate$kind, "source") ||
+      !identical(baseline$kind, "source"))) {
+    stop("cross_engine_source_v1 accepts only authenticated source inventories.",
+      call. = FALSE
+    )
+  }
+'@.TrimEnd("`r", "`n")
+Add-Issue13V5ExactSource $compareLibrary `
+  $crossEngineSource $crossEngineReplacement
+
+$crossEngineRulesSource = @'
+  rules <- if (cross_engine) wlv13_cross_engine_run_rules() else NULL
+'@.TrimEnd("`r", "`n")
+$crossEngineRulesReplacement = @'
+  rules <- if (cross_engine_run) {
+    wlv13_cross_engine_run_rules()
+  } else if (cross_engine_source) {
+    list(
+      normalized = "file:_unit_contract.csv",
+      candidate_only = character()
+    )
+  } else {
+    NULL
+  }
+'@.TrimEnd("`r", "`n")
+Add-Issue13V5ExactSource $compareLibrary `
+  $crossEngineRulesSource $crossEngineRulesReplacement
+Add-Issue13V5ExactSource $compareLibrary `
+  '    } else if (cross_engine && identical(key, "file:_anomalies.csv")) {' `
+  '    } else if (cross_engine_run && identical(key, "file:_anomalies.csv")) {'
+
+$modeChoicesSource =
+  '  match.arg(options$comparison_mode, c("strict", "cross_engine_run_v3"))'
+$modeChoicesReplacement = @'
+  match.arg(options$comparison_mode, c(
+    "strict", "cross_engine_run_v3", "cross_engine_source_v1"
+  ))
+'@.TrimEnd("`r", "`n")
+foreach ($name in @('issue13-compare.R', 'issue13-compare-results.R')) {
+  Add-Issue13V5ExactSource (Join-Path $harnessStaging $name) `
+    $modeChoicesSource $modeChoicesReplacement
+}
+
+$preparationCompare = Join-Path $staging 'issue13-preparation-compare.R'
+$preparationCsvSource = @'
+  csv_names <- c(
+    "_normalization_contract.csv",
+    "_source_manifest.csv",
+    "_unit_contract.csv",
+    "countries.csv",
+    "demand.csv",
+    "sectors.csv"
+  )
+  csv <- lapply(csv_names, function(name) {
+    wlv_gate_compare_csv(
+      file.path(baseline, name),
+      file.path(candidate, name),
+      paste0(source, "/normalized/", name)
+    )
+  })
+  names(csv) <- csv_names
+'@.TrimEnd("`r", "`n")
+$preparationCsvReplacement = @'
+  csv_names <- c(
+    "_normalization_contract.csv", "countries.csv", "demand.csv",
+    "sectors.csv"
+  )
+  csv <- lapply(csv_names, function(name) {
+    wlv_gate_compare_csv(
+      file.path(baseline, name),
+      file.path(candidate, name),
+      paste0(source, "/normalized/", name)
+    )
+  })
+  names(csv) <- csv_names
+  unit_projection <- function(path) {
+    value <- wlv_gate_read_character_csv(path)
+    value <- value[setdiff(
+      names(value), c("module", "aggregation_notes")
+    )]
+    row.names(value) <- NULL
+    value
+  }
+  unit_contract_equal <- identical(
+    unit_projection(file.path(baseline, "_unit_contract.csv")),
+    unit_projection(file.path(candidate, "_unit_contract.csv"))
+  )
+  csv[["_unit_contract.csv"]] <- list(
+    passed = unit_contract_equal,
+    comparison_mode = "architecture-projected-unit-contract",
+    projected_fields = as.list(c("module", "aggregation_notes"))
+  )
+'@.TrimEnd("`r", "`n")
+Add-Issue13V5ExactSource $preparationCompare `
+  $preparationCsvSource $preparationCsvReplacement
+
+$preparationManifestSource = @'
+  manifest_tables_identical <- identical(
+    baseline_manifest_table,
+    candidate_manifest_table
+  )
+  passed <- isTRUE(baseline_manifest$passed) &&
+    isTRUE(candidate_manifest$passed) && manifest_tables_identical &&
+'@.TrimEnd("`r", "`n")
+$preparationManifestReplacement = @'
+  manifest_projection <- function(value) {
+    value <- value[value$artifact != "_unit_contract.csv", setdiff(
+      names(value), c("source_generation_id", "contract_sha256")
+    ), drop = FALSE]
+    row.names(value) <- NULL
+    value
+  }
+  manifest_tables_identical <- identical(
+    baseline_manifest_table,
+    candidate_manifest_table
+  )
+  manifest_tables_architecture_projected_equal <- identical(
+    manifest_projection(baseline_manifest_table),
+    manifest_projection(candidate_manifest_table)
+  )
+  csv[["_source_manifest.csv"]] <- list(
+    passed = manifest_tables_architecture_projected_equal,
+    comparison_mode = "architecture-projected-source-manifest",
+    projected_fields = as.list(c(
+      "source_generation_id", "contract_sha256",
+      "_unit_contract.csv:size_bytes", "_unit_contract.csv:sha256"
+    ))
+  )
+  passed <- isTRUE(baseline_manifest$passed) &&
+    isTRUE(candidate_manifest$passed) &&
+    manifest_tables_architecture_projected_equal &&
+'@.TrimEnd("`r", "`n")
+Add-Issue13V5ExactSource $preparationCompare `
+  $preparationManifestSource $preparationManifestReplacement
+Add-Issue13V5ExactSource $preparationCompare `
+  '    manifest_tables_identical = manifest_tables_identical,' `
+  @'
+    manifest_tables_identical = manifest_tables_identical,
+    manifest_tables_architecture_projected_equal =
+      manifest_tables_architecture_projected_equal,
+'@.TrimEnd("`r", "`n")
+
+Add-Issue13V5ExactSource $preparationCompare `
+  '      "wlv-issue13-preparation-rule-matrix/1") ||' `
+  '      "wlv-issue13-preparation-rule-matrix/2") ||'
+
+$ruleMatrixPath = Join-Path $staging 'issue13-preparation-rule-matrix.json'
+$ruleMatrix = [IO.File]::ReadAllText($ruleMatrixPath, $utf8) |
+  ConvertFrom-Json -DateKind String
+if ([string]$ruleMatrix.schema -cne
+      'wlv-issue13-preparation-rule-matrix/1' -or
+    @($ruleMatrix.comparison_modes.preparation_cross_engine.rules).Count -ne
+      10 -or
+    @($ruleMatrix.comparison_modes.fault_within_engine.rules).Count -ne 5) {
+  throw 'Canonical preparation rule matrix differs before V5 projection.'
+}
+$ruleMatrix.schema = 'wlv-issue13-preparation-rule-matrix/2'
+$ruleMatrix.comparison_modes.preparation_cross_engine.candidate =
+  $CandidateCommit
+$ruleMatrix.comparison_modes.fault_within_engine.candidate = $CandidateCommit
+$manifestRule = @(
+  $ruleMatrix.comparison_modes.preparation_cross_engine.rules |
+    Where-Object { [string]$_.id -ceq 'source-manifests' }
+)
+$contractRule = @(
+  $ruleMatrix.comparison_modes.preparation_cross_engine.rules |
+    Where-Object { [string]$_.id -ceq 'contracts-and-labels' }
+)
+if ($manifestRule.Count -ne 1 -or $contractRule.Count -ne 1) {
+  throw 'Preparation architecture rules are absent or ambiguous.'
+}
+$manifestRule[0].comparison =
+  'each arm has exact schema and authenticated artifacts; cross-engine projection removes source_generation_id, contract_sha256, and the _unit_contract.csv row size/hash'
+$contractRule[0].comparison =
+  'exact schema, ordering, labels, and UTF-8 content; only module and aggregation_notes are projected from _unit_contract.csv across engines'
+$ruleMatrixPayload = ($ruleMatrix | ConvertTo-Json -Depth 20) + "`n"
+Set-Issue13V5Utf8Text $ruleMatrixPath $ruleMatrixPayload
+
 $readme = Join-Path $harnessStaging 'README.md'
 $readmeValue = [IO.File]::ReadAllText($readme, $utf8) + @'
 
@@ -299,6 +513,10 @@ strict cc2 smoke is retained separately as negative evidence and is never
 imported as final scenario evidence. The candidate-only
 `_runtime_resources.rds` is accepted only after the candidate runtime validates
 its complete cryptographic and semantic binding.
+
+Baseline and candidate normalized sources are authenticated independently.
+Their scientific arrays remain bitwise comparable; only source-generation and
+aggregation-routing metadata are projected across the architectural cut.
 '@
 Set-Issue13V5Utf8Text $readme $readmeValue
 
@@ -346,7 +564,8 @@ $manifest = [ordered]@{
   }
   overlays = @(
     'authenticated-compatibility-oracle-cc2',
-    'authenticated-candidate-runtime-sidecar'
+    'authenticated-candidate-runtime-sidecar',
+    'authenticated-arm-specific-source-contracts'
   )
 }
 $manifestPath = Join-Path $staging 'v5-harness-manifest.json'

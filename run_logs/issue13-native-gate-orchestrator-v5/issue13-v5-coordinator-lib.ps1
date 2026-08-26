@@ -24,6 +24,13 @@ $script:Issue13V5SourceInventorySha256 =
   'c593624ebfa75fb350b8b6528c1d5b6535d71bfe672c7eb61729c1b02f784e26'
 $script:Issue13V5SourceDirectorySha256 =
   '8b3a622a748f2489fe8cfd2a8273ec98ad4c372b2378d587a5ee2e3c5c916640'
+$script:Issue13V5CandidateSourceFileCount = 76L
+$script:Issue13V5CandidateSourceDirectoryCount = 6L
+$script:Issue13V5CandidateSourceTotalBytes = 2035522216L
+$script:Issue13V5CandidateSourceInventorySha256 =
+  '22e90e9485d7cee19d1de786c3464106d9a857ad3d85d0c9f2b3d912a0f38026'
+$script:Issue13V5CandidateSourceDirectorySha256 =
+  'c75aa417f14cded3c3bb6028effc8acadd64a32e86fddc0f1278079acdb6f114'
 $script:Issue13V5AllowedRCommandSha256 =
   'cb09e749c6c1d9e1d5b93ea7c1cf4333d9f57f816fcc25967b04adb4e2595fc1'
 $script:Issue13V5ControllerFiles = @(
@@ -106,7 +113,8 @@ function Get-Issue13V5ConfiguredPaths([object]$Config) {
   foreach ($name in @(
       'repository_root', 'harness_runtime_root', 'harness_root',
       'harness_manifest_path', 'worktree_root', 'evidence_root',
-      'control_root', 'source_origin', 'rscript', 'r_library',
+      'control_root', 'source_origin', 'candidate_source_origin',
+      'rscript', 'r_library',
       'baseline_runtime_index'
     )) {
     $paths.Add([string]$Config.$name)
@@ -247,9 +255,203 @@ function Get-Issue13V5TreeInventory([string]$Root) {
   }
 }
 
+function Get-Issue13V5SourceBinding(
+  [object]$Config,
+  [ValidateSet('baseline', 'candidate')][string]$Arm
+) {
+  if ($Arm -ceq 'candidate') {
+    return [pscustomobject][ordered]@{
+      arm = 'candidate'
+      origin = [string]$Config.candidate_source_origin
+      inventory = $Config.candidate_source_inventory
+    }
+  }
+  [pscustomobject][ordered]@{
+    arm = 'baseline'
+    origin = [string]$Config.source_origin
+    inventory = $Config.source_inventory
+  }
+}
+
+function Get-Issue13V5SourceContractSha256([string[]]$Paths) {
+  if ($Paths.Count -ne 2 -or
+      @($Paths | Sort-Object -Unique).Count -ne 2 -or
+      @($Paths | Where-Object {
+        -not (Test-Path -LiteralPath $_ -PathType Leaf)
+      }).Count -ne 0) {
+    throw 'A V5 source contract must contain two unique files.'
+  }
+  $records = @($Paths | ForEach-Object {
+    [pscustomobject]@{
+      file = [IO.Path]::GetFileName([string]$_)
+      sha256 = Get-Issue13V5Sha256 ([string]$_)
+    }
+  } | Sort-Object file)
+  if (@($records.file | Sort-Object -Unique).Count -ne 2) {
+    throw 'V5 source contract filenames must be unique.'
+  }
+  $fields = @(
+    'wlv-source-contract-v1', '2', 'file', 'sha256', '2',
+    [string]$records[0].file, [string]$records[0].sha256,
+    [string]$records[1].file, [string]$records[1].sha256
+  )
+  $payload = [Text.StringBuilder]::new()
+  foreach ($field in $fields) {
+    $bytes = [Text.Encoding]::UTF8.GetBytes([string]$field)
+    $null = $payload.Append([string]$bytes.Length)
+    $null = $payload.Append(':')
+    $null = $payload.Append([string]$field)
+  }
+  Get-Issue13V5TextSha256 $payload.ToString()
+}
+
+function Assert-Issue13V5SourceContractBindings([object]$Config) {
+  $expected = @(
+    [pscustomobject]@{
+      arm = 'baseline'; source = 'wiodr13'
+      runtime_commit = $script:Issue13V5BaselineRuntimeCommit
+      manifest_sha256 =
+        'cd3ee98c7b823b1efa9b1272dca660a3977cc4a185b033263c2bef09cc1f73a8'
+      source_generation_id =
+        '65691585592c9cb6dc628c46606f004113f808e5b74c511c89678fae32032e2d'
+      contract_sha256 =
+        'f7e04664e357d6a334685e48eced6428dfdd410f5b9811785a0ad0f696cc65eb'
+      units_sha256 =
+        'ff1ab869e72d18879dc2e69c61c911425d73b612870c06317047accf9520ff11'
+      units_git_blob = 'c89f1ca1e463d05a0b0ec683bee16084d39f4ac3'
+      aggregations_sha256 =
+        'e830708911f5b6674f44e51e8625de9a072ccf5cd91395954e1040f81372004a'
+      aggregations_git_blob = '4d98444799af4c715f07a3b8a0ea4c1c1570a87c'
+    },
+    [pscustomobject]@{
+      arm = 'baseline'; source = 'wiodr16'
+      runtime_commit = $script:Issue13V5BaselineRuntimeCommit
+      manifest_sha256 =
+        '091183d74d97f5bc22209e57be0314c5ea5e510ae3573eaf2b342237de903aa9'
+      source_generation_id =
+        'f135fddb4723ba3cdf29164cf1b7ec006693cc201feaf2063f91fa104e942a7a'
+      contract_sha256 =
+        '94b9f78e8977001fab92e8fa8528aea5b97a3f22809bec58a16a56f413a6acf7'
+      units_sha256 =
+        'dfd73aa1e7721a139b04345c1e9fc48dc0a0a875659b8385a73292b2fba90143'
+      units_git_blob = 'fcf432fd4ddc6fd54acf88ef809e241b5e3f0cf7'
+      aggregations_sha256 =
+        'bbee477efe375ffee47dc69ad86d9176d3e57d4292461d86423bbe68a9cbc642'
+      aggregations_git_blob = '339de049570be34158a5599de05d1eea4175cacd'
+    },
+    [pscustomobject]@{
+      arm = 'candidate'; source = 'wiodr13'
+      runtime_commit = [string]$Config.candidate_commit
+      manifest_sha256 =
+        'b454f0f05890374cebde8b1b3222da4b4b63b887f67283fe12c97a351adc0bb8'
+      source_generation_id =
+        'b16a64edd8f3cdf117002fda011e1ba19f17e3fa72936671bb98dffeb0207856'
+      contract_sha256 =
+        '1f2462835e70d5681d7a5b9b29be5f0598cdb35a9abd72d3d147a6636ae5c905'
+      units_sha256 =
+        'ff1ab869e72d18879dc2e69c61c911425d73b612870c06317047accf9520ff11'
+      units_git_blob = 'c89f1ca1e463d05a0b0ec683bee16084d39f4ac3'
+      aggregations_sha256 =
+        'c5c9779772101380514b6dbb937de48036280e66df382f2eb84f122ec91384d3'
+      aggregations_git_blob = '20fbc53bb31261b0a698ae6ac56b0344772e1e6a'
+    },
+    [pscustomobject]@{
+      arm = 'candidate'; source = 'wiodr16'
+      runtime_commit = [string]$Config.candidate_commit
+      manifest_sha256 =
+        '28dc13d3abb9856fb984b01eb60379e213e6e0cfae58e8fb08c3b882c19c1a35'
+      source_generation_id =
+        '1f747ab8d53abe8cc674b0842796a5c9b936b036a79b48715b9e04734f949976'
+      contract_sha256 =
+        '3b23ab671df4905dee50b35efd8dff8d4897f65f2b74a2677d7614d9137e801a'
+      units_sha256 =
+        'dfd73aa1e7721a139b04345c1e9fc48dc0a0a875659b8385a73292b2fba90143'
+      units_git_blob = 'fcf432fd4ddc6fd54acf88ef809e241b5e3f0cf7'
+      aggregations_sha256 =
+        '227c32c390e019a8ccb231db1bca898667bc31d75b599beda083799fa9d27278'
+      aggregations_git_blob = '516f2dc29ed594df42605811a18af49bc9328d71'
+    }
+  )
+  $configured = @($Config.source_contract_bindings)
+  if ($configured.Count -ne 4) {
+    throw 'V5 config must bind four arm-specific source contracts.'
+  }
+  for ($index = 0; $index -lt $expected.Count; $index++) {
+    $want = $expected[$index]
+    $actual = $configured[$index]
+    $contractId = "$($want.source)_units_v2"
+    foreach ($field in @(
+        'arm', 'source', 'runtime_commit', 'manifest_sha256',
+        'source_generation_id', 'contract_sha256', 'units_sha256',
+        'units_git_blob', 'aggregations_sha256', 'aggregations_git_blob'
+      )) {
+      if ([string]$actual.$field -cne [string]$want.$field) {
+        throw "Source contract binding differs: $($want.arm)/$($want.source)/$field"
+      }
+    }
+    if ([string]$actual.contract_id -cne $contractId -or
+        [string]$actual.contract_version -cne '2' -or
+        [string]$actual.manifest_relative_path -cne
+          "$($want.source)/normalized/_source_manifest.csv" -or
+        [string]$actual.units_relative_path -cne
+          "contracts/units/$($want.source)_v2-units.csv" -or
+        [string]$actual.aggregations_relative_path -cne
+          "contracts/units/$($want.source)_v2-aggregations.csv") {
+      throw "Source contract path or identity differs: $($want.arm)/$($want.source)"
+    }
+    $sourceBinding = Get-Issue13V5SourceBinding $Config $want.arm
+    $manifestPath = Join-Path $sourceBinding.origin `
+      ([string]$actual.manifest_relative_path).Replace('/', '\')
+    if ((Get-Issue13V5Sha256 $manifestPath) -cne
+        [string]$want.manifest_sha256) {
+      throw "Source manifest changed: $($want.arm)/$($want.source)"
+    }
+    $manifest = @(Import-Csv -LiteralPath $manifestPath -Delimiter ',')
+    if ($manifest.Count -eq 0 -or
+        @($manifest.source_generation_id | Sort-Object -Unique).Count -ne 1 -or
+        @($manifest.contract_id | Sort-Object -Unique).Count -ne 1 -or
+        @($manifest.contract_version | Sort-Object -Unique).Count -ne 1 -or
+        @($manifest.contract_sha256 | Sort-Object -Unique).Count -ne 1 -or
+        [string]$manifest[0].source_generation_id -cne
+          [string]$want.source_generation_id -or
+        [string]$manifest[0].contract_id -cne $contractId -or
+        [string]$manifest[0].contract_version -cne '2' -or
+        [string]$manifest[0].contract_sha256 -cne
+          [string]$want.contract_sha256) {
+      throw "Source manifest contract differs: $($want.arm)/$($want.source)"
+    }
+    foreach ($kind in @('units', 'aggregations')) {
+      $relative = [string]$actual.($kind + '_relative_path')
+      $blob = (& git -C ([string]$Config.repository_root) rev-parse `
+        ([string]$want.runtime_commit + ':' + $relative) 2>$null).Trim()
+      if ($LASTEXITCODE -ne 0 -or $blob -cne
+          [string]$want.($kind + '_git_blob')) {
+        throw "Source contract Git blob differs: $($want.arm)/$($want.source)/$kind"
+      }
+    }
+    if ($want.arm -ceq 'candidate') {
+      $unitsPath = Join-Path ([string]$Config.repository_root) `
+        ([string]$actual.units_relative_path).Replace('/', '\')
+      $aggregationsPath = Join-Path ([string]$Config.repository_root) `
+        ([string]$actual.aggregations_relative_path).Replace('/', '\')
+      if ((Get-Issue13V5Sha256 $unitsPath) -cne
+          [string]$want.units_sha256 -or
+          (Get-Issue13V5Sha256 $aggregationsPath) -cne
+          [string]$want.aggregations_sha256 -or
+          (Get-Issue13V5SourceContractSha256 @(
+            $unitsPath, $aggregationsPath)) -cne
+          [string]$want.contract_sha256) {
+        throw "Candidate source contract digest differs: $($want.source)"
+      }
+    }
+  }
+  [object[]]$configured
+}
+
 function Assert-Issue13V5SourceInventory(
   [object]$Config,
   [string]$Root,
+  [ValidateSet('baseline', 'candidate')][string]$Arm = 'baseline',
   [switch]$PreparationOnly
 ) {
   $inventory = Get-Issue13V5TreeInventory $Root
@@ -276,7 +478,7 @@ function Assert-Issue13V5SourceInventory(
       }
     }
   } else {
-    $expected = $Config.source_inventory
+    $expected = (Get-Issue13V5SourceBinding $Config $Arm).inventory
     if ($inventory.file_count -ne [long]$expected.file_count -or
         $inventory.directory_count -ne [long]$expected.directory_count -or
         $inventory.total_bytes -ne [long]$expected.total_bytes -or
@@ -774,7 +976,7 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
   if ($legacyPaths.Count -ne 0) {
     throw 'V5 config contains a forbidden V4/V4R2 path.'
   }
-  if ([string]$config.schema -cne 'wlv-issue13-native-gate-config/2' -or
+  if ([string]$config.schema -cne 'wlv-issue13-native-gate-config/3' -or
       [string]$config.generation -cne 'v5' -or
       -not [bool]$config.final_evidence_eligible -or
       [bool]$config.reuse_policy.v4_evidence_allowed -or
@@ -803,7 +1005,17 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
       [string]$config.source_inventory.inventory_sha256 -cne
         $script:Issue13V5SourceInventorySha256 -or
       [string]$config.source_inventory.directory_list_sha256 -cne
-        $script:Issue13V5SourceDirectorySha256) {
+        $script:Issue13V5SourceDirectorySha256 -or
+      [long]$config.candidate_source_inventory.file_count -ne
+        $script:Issue13V5CandidateSourceFileCount -or
+      [long]$config.candidate_source_inventory.directory_count -ne
+        $script:Issue13V5CandidateSourceDirectoryCount -or
+      [long]$config.candidate_source_inventory.total_bytes -ne
+        $script:Issue13V5CandidateSourceTotalBytes -or
+      [string]$config.candidate_source_inventory.inventory_sha256 -cne
+        $script:Issue13V5CandidateSourceInventorySha256 -or
+      [string]$config.candidate_source_inventory.directory_list_sha256 -cne
+        $script:Issue13V5CandidateSourceDirectorySha256) {
     throw 'V5 config header or no-reuse policy is invalid.'
   }
   if (@($config.methods).Count -ne 12 -or
@@ -866,7 +1078,12 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
         "timestamps`npaths`nrun_id`nresult_id`n" +
           'provenance-dependent-container-bytes' -or
       [string]::Join("`n", @($config.comparison.candidate_only_artifacts)) `
-        -cne "_nonfinite_resolution_diagnostics.csv`n_runtime_resources.rds") {
+        -cne "_nonfinite_resolution_diagnostics.csv`n_runtime_resources.rds" -or
+      [string]::Join("`n", @(
+        $config.comparison.preparation_architecture_projection)) -cne
+        "module`naggregation_notes`nsource_generation_id`n" +
+          "contract_sha256`n_unit_contract.csv:size_bytes`n" +
+          '_unit_contract.csv:sha256') {
     throw 'V5 scientific comparison policy changed.'
   }
   if ([double]$config.performance.candidate_time_ratio_maximum -ne 1.2 -or
@@ -949,6 +1166,7 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
   foreach ($immutable in @(
       (ConvertTo-Issue13V5Path ([string]$config.repository_root))
       (ConvertTo-Issue13V5Path ([string]$config.source_origin))
+      (ConvertTo-Issue13V5Path ([string]$config.candidate_source_origin))
       (ConvertTo-Issue13V5Path ([string]$config.harness_runtime_root))
     )) {
     foreach ($root in $roots) {
@@ -1065,6 +1283,13 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
       [string]$config.source_inventory.inventory_sha256) {
     throw 'Official source origin changed after configuration.'
   }
+  $candidateSource = Assert-Issue13V5SourceInventory $config `
+    ([string]$config.candidate_source_origin) -Arm candidate
+  if ($candidateSource.inventory_sha256 -cne
+      [string]$config.candidate_source_inventory.inventory_sha256) {
+    throw 'Candidate source origin changed after configuration.'
+  }
+  $null = Assert-Issue13V5SourceContractBindings $config
   $headExists = & git -C ([string]$config.repository_root) cat-file -e `
     ([string]$config.candidate_commit + '^{commit}') 2>$null
   if ($LASTEXITCODE -ne 0) {
@@ -1112,6 +1337,7 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
     config = $config
     harness_inventory = $harnessInventory
     source_inventory = $source
+    candidate_source_inventory = $candidateSource
   }
 }
 
@@ -1600,6 +1826,7 @@ function Assert-Issue13V5ReportBinding(
       [string]$State.config_sha256,
       [string]$State.final_aggregate.sha256,
       [string]$Config.source_inventory.inventory_sha256,
+      [string]$Config.candidate_source_inventory.inventory_sha256,
       [string]$Config.strict_baseline_smoke.sha256,
       [string]$Config.compatibility_baseline_smoke.sha256,
       [string]$Config.baseline_overlay.sha256,

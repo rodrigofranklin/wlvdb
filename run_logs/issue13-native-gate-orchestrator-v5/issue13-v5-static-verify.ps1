@@ -109,7 +109,10 @@ foreach ($required in @(
     '$info.Environment.Remove($name)',
     'environment_removed = [object[]]$environmentRemoved',
     'V5 commands cannot override sanitized locale variable',
-    'Get-Issue13V5ConfiguredPaths', 'Test-Issue13V5LegacyPath'
+    'Get-Issue13V5ConfiguredPaths', 'Test-Issue13V5LegacyPath',
+    'Get-Issue13V5SourceBinding', 'Get-Issue13V5SourceContractSha256',
+    'Assert-Issue13V5SourceContractBindings', 'candidate_source_origin',
+    'wlv-issue13-native-gate-config/3'
   )) {
   if (-not $libraryText.Contains($required)) {
     throw "Coordinator library lacks required safety guard: $required"
@@ -143,6 +146,7 @@ $pathProjectionConfig = [pscustomobject]@{
   evidence_root = 'D:\root\v5-evidence'
   control_root = 'D:\root\v5-control'
   source_origin = 'D:\root\sources'
+  candidate_source_origin = 'D:\root\candidate-sources'
   rscript = 'D:\R\Rscript.exe'
   r_library = 'D:\R\library'
   baseline_runtime_index = 'D:\root\v5-index.json'
@@ -169,9 +173,36 @@ $projectedPaths = @(Get-Issue13V5ConfiguredPaths $pathProjectionConfig)
 $projectedLegacyPaths = @($projectedPaths | Where-Object {
   Test-Issue13V5LegacyPath $_
 })
-if ($projectedPaths.Count -ne 19 -or
+if ($projectedPaths.Count -ne 20 -or
     $projectedLegacyPaths.Count -ne 3) {
   throw 'Configured path projection failed its static cases.'
+}
+
+$wiodr13Contract = Get-Issue13V5SourceContractSha256 @(
+  (Join-Path $RepositoryRoot 'contracts\units\wiodr13_v2-units.csv'),
+  (Join-Path $RepositoryRoot 'contracts\units\wiodr13_v2-aggregations.csv')
+)
+$wiodr16Contract = Get-Issue13V5SourceContractSha256 @(
+  (Join-Path $RepositoryRoot 'contracts\units\wiodr16_v2-units.csv'),
+  (Join-Path $RepositoryRoot 'contracts\units\wiodr16_v2-aggregations.csv')
+)
+if ($wiodr13Contract -cne
+      '1f2462835e70d5681d7a5b9b29be5f0598cdb35a9abd72d3d147a6636ae5c905' -or
+    $wiodr16Contract -cne
+      '3b23ab671df4905dee50b35efd8dff8d4897f65f2b74a2677d7614d9137e801a') {
+  throw 'Candidate source contracts differ from the arm-specific bindings.'
+}
+
+$coordinatorText = [IO.File]::ReadAllText(
+  (Join-Path $root 'issue13-v5-coordinator.ps1'),
+  [Text.UTF8Encoding]::new($false, $true))
+foreach ($required in @(
+    'Get-Issue13V5SourceBinding', '-Arm ([string]$record.arm)',
+    "'cross_engine_source_v1'"
+  )) {
+  if (-not $coordinatorText.Contains($required)) {
+    throw "Coordinator lacks arm-specific source routing: $required"
+  }
 }
 
 $compareText = [IO.File]::ReadAllText(
@@ -223,6 +254,57 @@ if ($inventory.file_count -ne $expectedHarnessFileCount -or
     [string]$manifest.sealed_output_tooling.inventory_sha256 -cne
       $expectedHarnessInventorySha256) {
   throw 'Materialized V5 harness failed its static authentication.'
+}
+
+$materializedCompare = [IO.File]::ReadAllText(
+  (Join-Path $runtime 'issue13-evidence-harness\issue13-compare-lib.R'),
+  [Text.UTF8Encoding]::new($false, $true))
+$materializedPreparationCompare = [IO.File]::ReadAllText(
+  (Join-Path $runtime 'issue13-preparation-compare.R'),
+  [Text.UTF8Encoding]::new($false, $true))
+foreach ($required in @(
+    'cross_engine_source_v1',
+    'cross_engine_source && (!identical(candidate$kind, "source")',
+    'normalized = "file:_unit_contract.csv"'
+  )) {
+  if (-not $materializedCompare.Contains($required)) {
+    throw "Materialized comparison runtime lacks source projection: $required"
+  }
+}
+foreach ($required in @(
+    'manifest_tables_architecture_projected_equal',
+    'architecture-projected-source-manifest',
+    'architecture-projected-unit-contract',
+    'wlv-issue13-preparation-rule-matrix/2'
+  )) {
+  if (-not $materializedPreparationCompare.Contains($required)) {
+    throw "Materialized preparation runtime lacks projection: $required"
+  }
+}
+$ruleMatrixPath = Join-Path $runtime 'issue13-preparation-rule-matrix.json'
+$ruleMatrix = [IO.File]::ReadAllText(
+  $ruleMatrixPath, [Text.UTF8Encoding]::new($false, $true)) |
+  ConvertFrom-Json -DateKind String
+$preparationMode = $ruleMatrix.comparison_modes.preparation_cross_engine
+$faultMode = $ruleMatrix.comparison_modes.fault_within_engine
+$manifestRule = @($preparationMode.rules | Where-Object {
+  [string]$_.id -ceq 'source-manifests'
+})
+$contractRule = @($preparationMode.rules | Where-Object {
+  [string]$_.id -ceq 'contracts-and-labels'
+})
+if ([string]$ruleMatrix.schema -cne
+      'wlv-issue13-preparation-rule-matrix/2' -or
+    [string]$preparationMode.candidate -cne $CandidateCommit -or
+    [string]$faultMode.candidate -cne $CandidateCommit -or
+    @($preparationMode.ignored_artifacts).Count -ne 0 -or
+    [string]$preparationMode.numeric_tolerance -cne 'none-bitwise' -or
+    $manifestRule.Count -ne 1 -or $contractRule.Count -ne 1 -or
+    -not ([string]$manifestRule[0].comparison).Contains(
+      'source_generation_id, contract_sha256') -or
+    -not ([string]$contractRule[0].comparison).Contains(
+      'module and aggregation_notes')) {
+  throw 'Materialized preparation rule matrix is not the sealed V5 projection.'
 }
 
 [pscustomobject][ordered]@{

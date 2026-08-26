@@ -236,6 +236,7 @@ function Assert-Issue13V5WorktreeSetup(
   } elseif ($Deep -and ([string]$Record.kind -ceq 'full' -or $Fresh)) {
     $source = Assert-Issue13V5SourceInventory $Config `
       (Join-Path $Record.root 'source_data') `
+      -Arm ([string]$Record.arm) `
       -PreparationOnly:([string]$Record.kind -ceq 'preparation')
   }
   [pscustomobject]@{ git = $git; source = $source }
@@ -279,17 +280,25 @@ function Prepare-Issue13V5Worktrees(
     $null = Assert-Issue13V5GitWorktree $record.root $record.commit
     $sourceInventory = $null
     if ([string]$record.kind -ceq 'full') {
+      $sourceBinding = Get-Issue13V5SourceBinding $config `
+        ([string]$record.arm)
       $sourceInventory = Copy-Issue13V5WriteOnceTree `
-        ([string]$config.source_origin) (Join-Path $record.root 'source_data')
+        ([string]$sourceBinding.origin) (Join-Path $record.root 'source_data')
       $null = Assert-Issue13V5SourceInventory $config `
-        (Join-Path $record.root 'source_data')
+        (Join-Path $record.root 'source_data') -Arm ([string]$record.arm)
     } elseif ([string]$record.kind -ceq 'preparation') {
       $sourceInventory = Copy-Issue13V5PreparationCaches $config $record.root
     }
     $verified = Assert-Issue13V5WorktreeSetup $config $record -Deep -Fresh
     if ([string]$record.kind -cne 'fault') {
+      $physicalSource = if ([string]$record.kind -ceq 'preparation') {
+        [string]$config.source_origin
+      } else {
+        [string](Get-Issue13V5SourceBinding $config `
+          ([string]$record.arm)).origin
+      }
       $null = Assert-Issue13V5PhysicalCopy `
-        ([string]$config.source_origin) (Join-Path $record.root 'source_data') `
+        $physicalSource (Join-Path $record.root 'source_data') `
         $verified.source
     }
     $manifest = [ordered]@{
@@ -300,7 +309,12 @@ function Prepare-Issue13V5Worktrees(
       root = (Resolve-Path -LiteralPath $record.root).Path
       commit = [string]$record.commit
       tree = [string]$verified.git.tree
-      source_origin = [string]$config.source_origin
+      source_origin = if ([string]$record.kind -ceq 'full') {
+        [string](Get-Issue13V5SourceBinding $config `
+          ([string]$record.arm)).origin
+      } else {
+        [string]$config.source_origin
+      }
       source_inventory = $verified.source
       physical_copy_distinct = [string]$record.kind -cne 'fault'
       prepared_at_utc = [DateTime]::UtcNow.ToString('o')
@@ -502,7 +516,7 @@ function Invoke-Issue13V5OrdinaryArm(
   $binding = Get-Issue13V5PhaseBinding $Config $Phase $Arm
   $null = Assert-Issue13V5GitWorktree $binding.root $binding.commit
   $sourceBefore = Assert-Issue13V5SourceInventory $Config `
-    (Join-Path $binding.root 'source_data')
+    (Join-Path $binding.root 'source_data') -Arm $Arm
   $attemptRoot = Join-Path (Join-Path ([string]$Config.control_root) `
     'attempts') (Get-Issue13V5SafeId $scenarioId)
   $specRoot = Join-Path $attemptRoot 'specs'
@@ -620,7 +634,7 @@ function Invoke-Issue13V5OrdinaryArm(
     $scenarioId $binding.commit $expectedWorkers
   $null = Assert-Issue13V5NoTransactionResidue $binding.root
   $sourceAfter = Assert-Issue13V5SourceInventory $Config `
-    (Join-Path $binding.root 'source_data')
+    (Join-Path $binding.root 'source_data') -Arm $Arm
   if ($sourceBefore.inventory_sha256 -cne $sourceAfter.inventory_sha256 -or
       $sourceBefore.directory_list_sha256 -cne
         $sourceAfter.directory_list_sha256) {
@@ -793,7 +807,12 @@ function Complete-Issue13V5Pair(
       )) {
       $records.Add((Invoke-Issue13V5Comparison $Config `
         ('parity/prepare/' + $selector[0]) $candidateResult $selector[1] `
-        $baselineResult $selector[1] 'strict'))
+        $baselineResult $selector[1] `
+        $(if ($selector[0] -ceq 'euklems') {
+          'strict'
+        } else {
+          'cross_engine_source_v1'
+        })))
     }
   } elseif ([string]$Phase.kind -ceq 'paper0') {
     $records.Add((Invoke-Issue13V5Comparison $Config 'parity/paper/0' `
@@ -1238,6 +1257,7 @@ function Invoke-Issue13V5Report(
       [string]$Binding.sha256,
       [string]$State.final_aggregate.sha256,
       [string]$config.source_inventory.inventory_sha256,
+      [string]$config.candidate_source_inventory.inventory_sha256,
       [string]$config.strict_baseline_smoke.sha256,
       [string]$config.compatibility_baseline_smoke.sha256,
       [string]$config.baseline_overlay.sha256,
