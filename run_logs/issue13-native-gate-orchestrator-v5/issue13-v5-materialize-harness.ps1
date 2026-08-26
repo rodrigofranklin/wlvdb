@@ -366,6 +366,80 @@ foreach ($name in @('issue13-compare.R', 'issue13-compare-results.R')) {
     $modeChoicesSource $modeChoicesReplacement
 }
 
+$selftest = Join-Path $harnessStaging 'issue13-selftest.R'
+$selftestAggregateSource = @'
+aggregate_output <- file.path(aggregate_root, "output-pass")
+command <- file.path(R.home("bin"), "Rscript.exe")
+'@.TrimEnd("`r", "`n")
+$selftestAggregateReplacement = @'
+aggregate_output <- file.path(aggregate_root, "output-pass")
+aggregate_production_script <- file.path(script_dir, "issue13-aggregate.R")
+aggregate_template <- readLines(
+  aggregate_production_script, encoding = "UTF-8", warn = FALSE
+)
+script_dir_line <- which(aggregate_template ==
+  "script_dir <- dirname(script_path)"
+)
+override_start <- grep(
+  "issue13-v5-compatibility-baseline-override.R",
+  aggregate_template, fixed = TRUE
+)
+if (length(script_dir_line) != 1L || length(override_start) != 1L ||
+    override_start + 2L > length(aggregate_template) ||
+    !identical(aggregate_template[[override_start]],
+      "sys.source(file.path(script_dir, \"issue13-v5-compatibility-baseline-override.R\"),") ||
+    !identical(aggregate_template[[override_start + 1L]],
+      "  envir = environment()") ||
+    !identical(aggregate_template[[override_start + 2L]], ")")) {
+  stop("V5 aggregate self-test overlay anchor changed.", call. = FALSE)
+}
+aggregate_template[[script_dir_line]] <- sprintf(
+  "script_dir <- %s", deparse(script_dir)
+)
+aggregate_template <- aggregate_template[-seq.int(
+  override_start, override_start + 2L
+)]
+aggregate_selftest_script <- file.path(
+  temporary_root, "issue13-aggregate-core-selftest.R"
+)
+writeLines(
+  aggregate_template, aggregate_selftest_script,
+  useBytes = TRUE
+)
+command <- file.path(R.home("bin"), "Rscript.exe")
+'@.TrimEnd("`r", "`n")
+Add-Issue13V5ExactSource $selftest `
+  $selftestAggregateSource $selftestAggregateReplacement
+Add-Issue13V5ExactSource $selftest `
+  '  "--vanilla", file.path(script_dir, "issue13-aggregate.R"),' `
+  '  "--vanilla", aggregate_selftest_script,'
+$selftestStatusSource = @'
+status <- system2(command, shQuote(arguments), stdout = TRUE, stderr = TRUE)
+'@.TrimEnd("`r", "`n")
+$selftestStatusReplacement = @'
+policy_output <- file.path(aggregate_root, "output-v5-policy-reject")
+production_arguments <- arguments
+production_arguments[[which(
+  production_arguments == aggregate_selftest_script
+)]] <- aggregate_production_script
+production_arguments[[which(
+  production_arguments == aggregate_output
+)]] <- policy_output
+policy_status <- suppressWarnings(system2(
+  command, shQuote(production_arguments), stdout = TRUE, stderr = TRUE
+))
+policy_exit <- attr(policy_status, "status", exact = TRUE)
+if (is.null(policy_exit)) policy_exit <- 0L
+assert(!identical(policy_exit, 0L) && any(grepl(
+  "V5 requires the exact Issue #12 baseline origin.",
+  policy_status, fixed = TRUE
+)), "V5 aggregate accepted a synthetic unbound baseline profile.")
+
+status <- system2(command, shQuote(arguments), stdout = TRUE, stderr = TRUE)
+'@.TrimEnd("`r", "`n")
+Add-Issue13V5ExactSource $selftest `
+  $selftestStatusSource $selftestStatusReplacement
+
 $preparationCompare = Join-Path $staging 'issue13-preparation-compare.R'
 $preparationLibrary = Join-Path $staging 'issue13-prep-paper-lib.R'
 $sidecarPassSource = @'

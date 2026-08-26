@@ -265,6 +265,9 @@ $materializedPreparationCompare = [IO.File]::ReadAllText(
 $materializedPreparationLibrary = [IO.File]::ReadAllText(
   (Join-Path $runtime 'issue13-prep-paper-lib.R'),
   [Text.UTF8Encoding]::new($false, $true))
+$materializedSelftest = [IO.File]::ReadAllText(
+  (Join-Path $runtime 'issue13-evidence-harness\issue13-selftest.R'),
+  [Text.UTF8Encoding]::new($false, $true))
 foreach ($required in @(
     'cross_engine_source_v1',
     'cross_engine_source && (!identical(candidate$kind, "source")',
@@ -296,6 +299,16 @@ foreach ($required in @(
   )) {
   if (-not $materializedPreparationLibrary.Contains($required)) {
     throw "Materialized preparation library lacks sidecar gate: $required"
+  }
+}
+foreach ($required in @(
+    'issue13-aggregate-core-selftest.R',
+    'issue13-v5-compatibility-baseline-override.R',
+    'output-v5-policy-reject',
+    'V5 aggregate accepted a synthetic unbound baseline profile.'
+  )) {
+  if (-not $materializedSelftest.Contains($required)) {
+    throw "Materialized self-test lacks V5 aggregate separation: $required"
   }
 }
 $ruleMatrixPath = Join-Path $runtime 'issue13-preparation-rule-matrix.json'
