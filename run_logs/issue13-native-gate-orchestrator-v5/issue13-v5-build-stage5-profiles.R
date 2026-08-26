@@ -93,10 +93,16 @@ wlv13_v5d_capture_external_inventories <- function(
   r_library_path <- normalizePath(wlv13_v5d_capture_field(
     bridge_lines, "r_library_path"
   ), winslash = "/", mustWork = TRUE)
+  harness_runtime_path <- normalizePath(wlv13_v5d_capture_field(
+    bridge_lines, "harness_runtime_path"
+  ), winslash = "/", mustWork = TRUE)
   list(
     harness_path = harness_dir,
     harness_inventory_sha256 =
       wlv13_v5d_directory_inventory_sha256(harness_dir),
+    harness_runtime_path = harness_runtime_path,
+    harness_runtime_inventory_sha256 =
+      wlv13_v5d_directory_inventory_sha256(harness_runtime_path),
     r_library_path = r_library_path,
     r_library_inventory_sha256 =
       wlv13_v5d_directory_inventory_sha256(r_library_path)
@@ -118,14 +124,18 @@ wlv13_v5d_validate_stage5_capture <- function(
   stage_index_path <- paths[[5L]]
   harness_dir <- normalizePath(harness_dir, winslash = "/", mustWork = TRUE)
   inventory_names <- c(
-    "harness_path", "harness_inventory_sha256", "r_library_path",
+    "harness_path", "harness_inventory_sha256", "harness_runtime_path",
+    "harness_runtime_inventory_sha256", "r_library_path",
     "r_library_inventory_sha256"
   )
   if (!is.list(external_inventories) ||
       !identical(names(external_inventories), inventory_names) ||
       !identical(external_inventories$harness_path, harness_dir) ||
+      !identical(external_inventories$harness_runtime_path,
+        dirname(harness_dir)) ||
       any(!grepl("^[0-9a-f]{64}$", unlist(external_inventories[c(
-        "harness_inventory_sha256", "r_library_inventory_sha256"
+        "harness_inventory_sha256", "harness_runtime_inventory_sha256",
+        "r_library_inventory_sha256"
       )], use.names = FALSE)))) {
     stop("Capture external inventory cache is invalid.", call. = FALSE)
   }
@@ -135,13 +145,19 @@ wlv13_v5d_validate_stage5_capture <- function(
   bridge_header <- c(
     "schema", "baseline_base_commit", "baseline_base_tree",
     "baseline_runtime_commit", "baseline_runtime_tree",
-    "harness_path", "harness_inventory_sha256", "rscript_path",
+    "harness_path", "harness_inventory_sha256", "harness_runtime_path",
+    "harness_runtime_inventory_before_sha256",
+    "harness_runtime_inventory_after_sha256", "rscript_path",
     "rscript_sha256", "r_library_path",
     "r_library_inventory_before_sha256",
     "r_library_inventory_after_sha256", "tool_records", "baseline_worktree",
     "captured_methods", "verified_records",
     "seed_evidence_index_sha256", "source_wiodr13_manifest_sha256",
-    "source_wiodr16_manifest_sha256", "evidence_index",
+    "source_wiodr16_manifest_sha256",
+    "source_wiodr13_inventory_before_sha256",
+    "source_wiodr13_inventory_after_sha256",
+    "source_wiodr16_inventory_before_sha256",
+    "source_wiodr16_inventory_after_sha256", "evidence_index",
     "evidence_index_sha256"
   )
   bridge_keys <- sub("=.*$", "", bridge_lines[seq_along(bridge_header)])
@@ -163,7 +179,7 @@ wlv13_v5d_validate_stage5_capture <- function(
       "alternative_1", "alternative_2", "norow_w13", "ochoa_1",
       "ochoa_2", "petrovic", "wiodr13v09"
     ), collapse = ","),
-    verified_records = "7", tool_records = "5"
+    verified_records = "7", tool_records = "6"
   )
   bridge_fixed_valid <- all(vapply(names(bridge_fixed), function(key) {
     identical(wlv13_v5d_capture_field(bridge_lines, key),
@@ -181,6 +197,23 @@ wlv13_v5d_validate_stage5_capture <- function(
   ), function(key) {
     wlv13_v5d_capture_field(bridge_lines, key)
   }, character(1L))
+  bridge_harness_runtime_path <- normalizePath(wlv13_v5d_capture_field(
+    bridge_lines, "harness_runtime_path"
+  ), winslash = "/", mustWork = TRUE)
+  bridge_harness_runtime_hashes <- vapply(c(
+    "harness_runtime_inventory_before_sha256",
+    "harness_runtime_inventory_after_sha256"
+  ), function(key) {
+    wlv13_v5d_capture_field(bridge_lines, key)
+  }, character(1L))
+  bridge_source_inventory_hashes <- vapply(c(
+    "source_wiodr13_inventory_before_sha256",
+    "source_wiodr13_inventory_after_sha256",
+    "source_wiodr16_inventory_before_sha256",
+    "source_wiodr16_inventory_after_sha256"
+  ), function(key) {
+    wlv13_v5d_capture_field(bridge_lines, key)
+  }, character(1L))
   bridge_tooling_valid <-
     identical(wlv13_v5d_capture_field(
       bridge_lines, "harness_path"
@@ -188,6 +221,11 @@ wlv13_v5d_validate_stage5_capture <- function(
     identical(wlv13_v5d_capture_field(
       bridge_lines, "harness_inventory_sha256"
     ), external_inventories$harness_inventory_sha256) &&
+    identical(bridge_harness_runtime_path,
+      external_inventories$harness_runtime_path) &&
+    all(grepl("^[0-9a-f]{64}$", bridge_harness_runtime_hashes)) &&
+    all(bridge_harness_runtime_hashes ==
+      external_inventories$harness_runtime_inventory_sha256) &&
     identical(wlv13_v5d_capture_field(
       bridge_lines, "rscript_sha256"
     ), wlv13_sha256_file(bridge_rscript_path)) &&
@@ -195,13 +233,18 @@ wlv13_v5d_validate_stage5_capture <- function(
       external_inventories$r_library_path) &&
     all(grepl("^[0-9a-f]{64}$", bridge_r_library_hashes)) &&
     all(bridge_r_library_hashes ==
-      external_inventories$r_library_inventory_sha256)
-  if (length(bridge_lines) != length(bridge_header) + 5L + 7L ||
+      external_inventories$r_library_inventory_sha256) &&
+    all(grepl("^[0-9a-f]{64}$", bridge_source_inventory_hashes)) &&
+    identical(bridge_source_inventory_hashes[[1L]],
+      bridge_source_inventory_hashes[[2L]]) &&
+    identical(bridge_source_inventory_hashes[[3L]],
+      bridge_source_inventory_hashes[[4L]])
+  if (length(bridge_lines) != length(bridge_header) + 6L + 7L ||
       !identical(bridge_keys, bridge_header) ||
       !identical(bridge_lines[[1L]],
         "schema=issue13-v5-clean-bridge-capture/1") ||
       !bridge_fixed_valid || !bridge_tooling_valid ||
-      length(bridge_tool_lines) != 5L || length(bridge_records) != 7L ||
+      length(bridge_tool_lines) != 6L || length(bridge_records) != 7L ||
       !identical(wlv13_v5d_capture_field(
         bridge_lines, "evidence_index_sha256"
       ), wlv13_sha256_file(bridge_index_path)) ||
@@ -220,13 +263,14 @@ wlv13_v5d_validate_stage5_capture <- function(
   })
   bridge_tool_names <- c(
     "bridge_builder", "bridge_capture_script", "compare_override",
-    "diagnostics_override", "verifier"
+    "diagnostics_override", "metadata_equivalence", "verifier"
   )
   bridge_tool_files <- stats::setNames(c(
     "issue13-v5-build-diagnostic-bridges.R",
     "issue13-v5-capture-clean-bridge-evidence.ps1",
     "issue13-v5-compare-override.R",
     "issue13-v5-diagnostics-override.R",
+    "issue13-v5-metadata-equivalence.json",
     "issue13-v5-verify-diagnostic-evidence.R"
   ), bridge_tool_names)
   bridge_tool_root <- normalizePath(script_dir,
@@ -280,7 +324,9 @@ wlv13_v5d_validate_stage5_capture <- function(
   stage_header <- c(
     "schema", "baseline_base_commit", "baseline_base_tree",
     "baseline_runtime_commit", "baseline_runtime_tree", "harness_path",
-    "harness_inventory_sha256", "rscript_path", "rscript_sha256",
+    "harness_inventory_sha256", "harness_runtime_path",
+    "harness_runtime_inventory_before_sha256",
+    "harness_runtime_inventory_after_sha256", "rscript_path", "rscript_sha256",
     "r_library_path", "r_library_inventory_before_sha256",
     "r_library_inventory_after_sha256", "methods", "stages",
     "bridge_capture_record_sha256",
@@ -313,7 +359,7 @@ wlv13_v5d_validate_stage5_capture <- function(
     baseline_runtime_tree = "7da19c4f2913e857040ba228280f404b0e54eaab",
     methods = paste(wlv13_v5d_methods, collapse = ","),
     stages = "1,4,5",
-    recipe_records = "8", reference_records = "12",
+    recipe_records = "9", reference_records = "12",
     seed_records = "36", target_records = "36",
     worktree_records = "6"
   )
@@ -343,7 +389,11 @@ wlv13_v5d_validate_stage5_capture <- function(
   }, character(1L))
   inventory_valid <- all(grepl(sha, inventory_hashes)) &&
     identical(inventory_hashes[[1L]], inventory_hashes[[2L]]) &&
-    identical(inventory_hashes[[3L]], inventory_hashes[[4L]])
+    identical(inventory_hashes[[3L]], inventory_hashes[[4L]]) &&
+    identical(inventory_hashes[[1L]],
+      bridge_source_inventory_hashes[[1L]]) &&
+    identical(inventory_hashes[[3L]],
+      bridge_source_inventory_hashes[[3L]])
   stage_rscript_path <- normalizePath(wlv13_v5d_capture_field(
     stage_lines, "rscript_path"
   ), winslash = "/", mustWork = TRUE)
@@ -356,12 +406,29 @@ wlv13_v5d_validate_stage5_capture <- function(
   ), function(key) {
     wlv13_v5d_capture_field(stage_lines, key)
   }, character(1L))
+  stage_harness_runtime_path <- normalizePath(wlv13_v5d_capture_field(
+    stage_lines, "harness_runtime_path"
+  ), winslash = "/", mustWork = TRUE)
+  stage_harness_runtime_hashes <- vapply(c(
+    "harness_runtime_inventory_before_sha256",
+    "harness_runtime_inventory_after_sha256"
+  ), function(key) {
+    wlv13_v5d_capture_field(stage_lines, key)
+  }, character(1L))
   tooling_valid <- identical(wlv13_v5d_capture_field(
       stage_lines, "harness_path"
     ), harness_dir) &&
     identical(wlv13_v5d_capture_field(
       stage_lines, "harness_inventory_sha256"
     ), external_inventories$harness_inventory_sha256) &&
+    identical(stage_harness_runtime_path,
+      external_inventories$harness_runtime_path) &&
+    identical(stage_harness_runtime_path, bridge_harness_runtime_path) &&
+    all(grepl(sha, stage_harness_runtime_hashes)) &&
+    all(stage_harness_runtime_hashes ==
+      external_inventories$harness_runtime_inventory_sha256) &&
+    identical(stage_harness_runtime_hashes,
+      bridge_harness_runtime_hashes) &&
     identical(wlv13_v5d_capture_field(
       stage_lines, "rscript_path"
     ), wlv13_v5d_capture_field(bridge_lines, "rscript_path")) &&
@@ -379,12 +446,12 @@ wlv13_v5d_validate_stage5_capture <- function(
       external_inventories$r_library_inventory_sha256) &&
     identical(stage_r_library_hashes, bridge_r_library_hashes)
   if (length(stage_lines) !=
-        length(stage_header) + 8L + 6L + 12L + 36L + 36L ||
+        length(stage_header) + 9L + 6L + 12L + 36L + 36L ||
       !identical(stage_keys, stage_header) ||
       !identical(stage_lines[[1L]],
         "schema=issue13-v5-clean-stage5-capture/1") ||
       !fixed_valid || !hash_valid || !inventory_valid || !tooling_valid ||
-      length(recipe_lines) != 8L || length(worktree_lines) != 6L ||
+      length(recipe_lines) != 9L || length(worktree_lines) != 6L ||
       length(reference_lines) != 12L || length(seed_lines) != 36L ||
       length(target_lines) != 36L) {
     stop("The stage-five capture record is not exhaustive.", call. = FALSE)
@@ -396,7 +463,7 @@ wlv13_v5d_validate_stage5_capture <- function(
   })
   recipe_names <- c(
     "bridge_builder", "bridge_capture_script", "compare_override",
-    "diagnostics_override", "launcher", "stage5_builder",
+    "diagnostics_override", "launcher", "metadata_equivalence", "stage5_builder",
     "stage5_capture_script", "verifier"
   )
   recipe_files <- stats::setNames(c(
@@ -405,6 +472,7 @@ wlv13_v5d_validate_stage5_capture <- function(
     "issue13-v5-compare-override.R",
     "issue13-v5-diagnostics-override.R",
     "issue13-v5-run-stage5-evidence.R",
+    "issue13-v5-metadata-equivalence.json",
     "issue13-v5-build-stage5-profiles.R",
     "issue13-v5-capture-clean-stage5-evidence.ps1",
     "issue13-v5-verify-diagnostic-evidence.R"
@@ -743,6 +811,18 @@ wlv13_v5d_stage5_capture_mutation_selftest <- function(
     sub("^[^=]*=", "", mutation[[index]])
   ))
   expect_error(validate_mutation(mutation), "harness inventory")
+  mutation <- original
+  index <- line_index("^harness_runtime_path=")
+  mutation[[index]] <- paste0(mutation[[index]], "0")
+  expect_error(validate_mutation(mutation), "harness runtime path")
+  mutation <- original
+  index <- line_index("^harness_runtime_inventory_after_sha256=")
+  mutation[[index]] <- paste0(
+    "harness_runtime_inventory_after_sha256=", mutate_hash(
+      sub("^[^=]*=", "", mutation[[index]])
+    )
+  )
+  expect_error(validate_mutation(mutation), "harness runtime hash")
   mutation <- original
   index <- line_index("^rscript_sha256=")
   mutation[[index]] <- paste0("rscript_sha256=", mutate_hash(
@@ -1160,7 +1240,7 @@ wlv13_v5d_stage5_generator_main <- function(arguments = commandArgs(TRUE)) {
     stage_capture_path, evidence_path, evidence, harness_dir,
     external_inventories
   )
-  if (!identical(capture_assertions, 23L)) {
+  if (!identical(capture_assertions, 25L)) {
     stop("Stage-five capture mutation self-test is incomplete.",
       call. = FALSE
     )

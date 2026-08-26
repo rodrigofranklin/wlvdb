@@ -198,6 +198,8 @@ $rscriptPath = Resolve-ExistingFile $rscriptApplication.Source `
 $script:rscriptPath = $rscriptPath
 $script:rLibrary = Resolve-PhysicalExistingDirectory $RLibrary `
     "R library"
+$harnessRuntime = Resolve-PhysicalExistingDirectory `
+    (Split-Path -Parent $harness) "Harness runtime"
 $toolPaths = @{
     bridge_builder = Resolve-ExistingFile (Join-Path $controllerDir `
         "issue13-v5-build-diagnostic-bridges.R") "Bridge builder"
@@ -207,12 +209,17 @@ $toolPaths = @{
         "issue13-v5-compare-override.R") "Comparison override"
     diagnostics_override = Resolve-ExistingFile (Join-Path $controllerDir `
         "issue13-v5-diagnostics-override.R") "Diagnostic override"
+    metadata_equivalence = Resolve-ExistingFile (Join-Path $controllerDir `
+        "issue13-v5-metadata-equivalence.json") `
+        "Metadata equivalence manifest"
     verifier = $verifier
 }
 $toolRecordsBefore = @($toolPaths.Keys | Sort-Object | ForEach-Object {
     "tool_record;name=$_;sha256=$(Get-Sha256 $toolPaths[$_])"
 })
 $harnessInventoryBefore = Get-DirectoryInventorySha256 $harness
+$harnessRuntimeInventoryBefore = `
+    Get-DirectoryInventorySha256 $harnessRuntime
 $rLibraryInventoryBefore = Get-DirectoryInventorySha256 $script:rLibrary
 $rscriptSha256 = Get-Sha256 $rscriptPath
 foreach ($source in @("wiodr13", "wiodr16")) {
@@ -224,12 +231,15 @@ foreach ($source in @("wiodr13", "wiodr16")) {
     }
 }
 $sourceManifestHashes = @{}
+$sourceInventoriesBefore = @{}
 foreach ($source in @("wiodr13", "wiodr16")) {
     $sourceManifest = Join-Path $sourceData (
         $source + "\normalized\_source_manifest.csv"
     )
     $sourceManifestHashes[$source] = (Get-FileHash -LiteralPath `
         $sourceManifest -Algorithm SHA256).Hash.ToLowerInvariant()
+    $sourceInventoriesBefore[$source] = Get-DirectoryInventorySha256 `
+        (Join-Path $sourceData ($source + "\normalized"))
 }
 if (Test-Path -LiteralPath $CaptureRoot) {
     throw "CaptureRoot is write-once and must not already exist."
@@ -355,10 +365,22 @@ $toolRecordsAfter = @($toolPaths.Keys | Sort-Object | ForEach-Object {
     "tool_record;name=$_;sha256=$(Get-Sha256 $toolPaths[$_])"
 })
 $harnessInventoryAfter = Get-DirectoryInventorySha256 $harness
+$harnessRuntimeInventoryAfter = `
+    Get-DirectoryInventorySha256 $harnessRuntime
 $rLibraryInventoryAfter = Get-DirectoryInventorySha256 $script:rLibrary
+$sourceInventoriesAfter = @{}
+foreach ($source in @("wiodr13", "wiodr16")) {
+    $sourceInventoriesAfter[$source] = Get-DirectoryInventorySha256 `
+        (Join-Path $sourceData ($source + "\normalized"))
+}
 if (($toolRecordsAfter -join "`n") -cne ($toolRecordsBefore -join "`n") -or
     $harnessInventoryAfter -cne $harnessInventoryBefore -or
+    $harnessRuntimeInventoryAfter -cne $harnessRuntimeInventoryBefore -or
     $rLibraryInventoryAfter -cne $rLibraryInventoryBefore -or
+    $sourceInventoriesAfter['wiodr13'] -cne
+        $sourceInventoriesBefore['wiodr13'] -or
+    $sourceInventoriesAfter['wiodr16'] -cne
+        $sourceInventoriesBefore['wiodr16'] -or
     (Get-Sha256 $rscriptPath) -cne $rscriptSha256) {
     throw "Diagnostic capture tooling changed during execution."
 }
@@ -370,6 +392,9 @@ $captureRecord = @(
     "baseline_runtime_tree=$baselineRuntimeTree",
     "harness_path=$($harness.Replace('\', '/'))",
     "harness_inventory_sha256=$harnessInventoryBefore",
+    "harness_runtime_path=$($harnessRuntime.Replace('\', '/'))",
+    "harness_runtime_inventory_before_sha256=$harnessRuntimeInventoryBefore",
+    "harness_runtime_inventory_after_sha256=$harnessRuntimeInventoryAfter",
     "rscript_path=$($rscriptPath.Replace('\', '/'))",
     "rscript_sha256=$rscriptSha256",
     "r_library_path=$($script:rLibrary.Replace('\', '/'))",
@@ -382,6 +407,10 @@ $captureRecord = @(
     "seed_evidence_index_sha256=$((Get-FileHash -LiteralPath $seedPath -Algorithm SHA256).Hash.ToLowerInvariant())",
     "source_wiodr13_manifest_sha256=$($sourceManifestHashes['wiodr13'])",
     "source_wiodr16_manifest_sha256=$($sourceManifestHashes['wiodr16'])",
+    "source_wiodr13_inventory_before_sha256=$($sourceInventoriesBefore['wiodr13'])",
+    "source_wiodr13_inventory_after_sha256=$($sourceInventoriesAfter['wiodr13'])",
+    "source_wiodr16_inventory_before_sha256=$($sourceInventoriesBefore['wiodr16'])",
+    "source_wiodr16_inventory_after_sha256=$($sourceInventoriesAfter['wiodr16'])",
     "evidence_index=$($outputIndex.Replace('\', '/'))",
     "evidence_index_sha256=$((Get-FileHash -LiteralPath $outputIndex -Algorithm SHA256).Hash.ToLowerInvariant())"
 ) + $toolRecordsBefore + $verifiedRecords

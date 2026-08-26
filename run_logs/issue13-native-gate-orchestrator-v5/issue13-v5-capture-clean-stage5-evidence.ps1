@@ -322,6 +322,8 @@ $sourceData = Resolve-ExistingDirectory $BaselineSourceDataRoot `
 $bridgeCapture = Resolve-ExistingDirectory $BridgeCaptureRoot `
     "Bridge capture root"
 $script:harness = Resolve-ExistingDirectory $HarnessDir "Harness directory"
+$harnessRuntime = Resolve-PhysicalExistingDirectory `
+    (Split-Path -Parent $script:harness) "Harness runtime"
 $rscriptApplication = Get-Command -Name $RscriptCommand `
     -CommandType Application -ErrorAction Stop
 $script:rscriptPath = Resolve-ExistingFile $rscriptApplication.Source `
@@ -330,6 +332,8 @@ $script:rLibrary = Resolve-PhysicalExistingDirectory $RLibrary `
     "R library"
 $rscriptSha256 = Get-Sha256 $script:rscriptPath
 $harnessInventoryBefore = Get-DirectoryInventorySha256 $script:harness
+$harnessRuntimeInventoryBefore = `
+    Get-DirectoryInventorySha256 $harnessRuntime
 $rLibraryInventoryBefore = Get-DirectoryInventorySha256 $script:rLibrary
 $bridgeManifestPath = Resolve-ExistingFile $BridgeManifest "Bridge manifest"
 $script:controllerDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -355,6 +359,9 @@ $recipePaths = @{
     compare_override = Resolve-ExistingFile (Join-Path `
         $script:controllerDir "issue13-v5-compare-override.R") `
         "Comparison runtime override"
+    metadata_equivalence = Resolve-ExistingFile (Join-Path `
+        $script:controllerDir "issue13-v5-metadata-equivalence.json") `
+        "Metadata equivalence manifest"
 }
 $bridgeIndexPath = Resolve-ExistingFile (Join-Path $bridgeCapture `
     "diagnostic-bridge-evidence.csv") "Bridge evidence index"
@@ -365,11 +372,19 @@ $bridgeRecordLines = @([System.IO.File]::ReadAllLines(
 ))
 if ($bridgeRecordLines[0] -cne "schema=issue13-v5-clean-bridge-capture/1" -or
     (Get-CaptureValue $bridgeRecordLines "verified_records") -cne "7" -or
-    (Get-CaptureValue $bridgeRecordLines "tool_records") -cne "5" -or
+    (Get-CaptureValue $bridgeRecordLines "tool_records") -cne "6" -or
     (Get-CaptureValue $bridgeRecordLines "harness_path") -cne
         $script:harness.Replace('\', '/') -or
     (Get-CaptureValue $bridgeRecordLines "harness_inventory_sha256") -cne
         $harnessInventoryBefore -or
+    (Get-CaptureValue $bridgeRecordLines "harness_runtime_path") -cne
+        $harnessRuntime.Replace('\', '/') -or
+    (Get-CaptureValue $bridgeRecordLines `
+        "harness_runtime_inventory_before_sha256") -cne
+        $harnessRuntimeInventoryBefore -or
+    (Get-CaptureValue $bridgeRecordLines `
+        "harness_runtime_inventory_after_sha256") -cne
+        $harnessRuntimeInventoryBefore -or
     (Get-CaptureValue $bridgeRecordLines "rscript_path") -cne
         $script:rscriptPath.Replace('\', '/') -or
     (Get-CaptureValue $bridgeRecordLines "rscript_sha256") -cne
@@ -391,7 +406,7 @@ $bridgeToolRecords = @($bridgeRecordLines | Where-Object {
 })
 $bridgeToolNames = @(
     "bridge_builder", "bridge_capture_script", "compare_override",
-    "diagnostics_override", "verifier"
+    "diagnostics_override", "metadata_equivalence", "verifier"
 )
 $expectedBridgeToolRecords = @($bridgeToolNames | ForEach-Object {
     "tool_record;name=$_;sha256=$(Get-Sha256 $recipePaths[$_])"
@@ -430,6 +445,14 @@ $sourceInventoriesBefore = @{}
 foreach ($source in @("wiodr13", "wiodr16")) {
     $sourceInventoriesBefore[$source] = Get-DirectoryInventorySha256 `
         (Join-Path $sourceData ($source + "\normalized"))
+    if ((Get-CaptureValue $bridgeRecordLines `
+            ("source_" + $source + "_inventory_before_sha256")) -cne
+            $sourceInventoriesBefore[$source] -or
+        (Get-CaptureValue $bridgeRecordLines `
+            ("source_" + $source + "_inventory_after_sha256")) -cne
+            $sourceInventoriesBefore[$source]) {
+        throw "Bridge and stage-five source inventories differ for $source."
+    }
 }
 Assert-GitValue $repository ("rev-parse " + $baselineBaseCommit +
     "^{tree}") $baselineBaseTree "Baseline base tree"
@@ -672,8 +695,11 @@ foreach ($source in @("wiodr13", "wiodr16")) {
     }
 }
 $harnessInventoryAfter = Get-DirectoryInventorySha256 $script:harness
+$harnessRuntimeInventoryAfter = `
+    Get-DirectoryInventorySha256 $harnessRuntime
 $rLibraryInventoryAfter = Get-DirectoryInventorySha256 $script:rLibrary
 if ($harnessInventoryAfter -cne $harnessInventoryBefore -or
+    $harnessRuntimeInventoryAfter -cne $harnessRuntimeInventoryBefore -or
     $rLibraryInventoryAfter -cne $rLibraryInventoryBefore -or
     (Get-Sha256 $script:rscriptPath) -cne $rscriptSha256) {
     throw "Stage-five capture tooling changed during execution."
@@ -689,6 +715,9 @@ $captureRecord = @(
     "baseline_runtime_tree=$baselineRuntimeTree",
     "harness_path=$($script:harness.Replace('\', '/'))",
     "harness_inventory_sha256=$harnessInventoryBefore",
+    "harness_runtime_path=$($harnessRuntime.Replace('\', '/'))",
+    "harness_runtime_inventory_before_sha256=$harnessRuntimeInventoryBefore",
+    "harness_runtime_inventory_after_sha256=$harnessRuntimeInventoryAfter",
     "rscript_path=$($script:rscriptPath.Replace('\', '/'))",
     "rscript_sha256=$rscriptSha256",
     "r_library_path=$($script:rLibrary.Replace('\', '/'))",
