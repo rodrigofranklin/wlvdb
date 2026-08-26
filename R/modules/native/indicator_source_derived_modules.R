@@ -33,13 +33,14 @@ wlv_native_exchange_us_spec <- function(id, historical_v09 = FALSE) {
       function(ctx) {
         source <- ctx$input("source")
         lists <- ctx$input("lists")
+        runtime <- ctx$service("contract_runtime")
         numerator <- wlv_native_source_variable(source, "VA", lists)
         denominator <- wlv_native_source_variable(source, "VA_USD", lists)
         value <- if (historical_formula) {
           wlv_exchange_rate_by_sector_v09(
             numerator,
             denominator,
-            runtime = ctx$service("contract_runtime"),
+            runtime = runtime,
             module = module_name
           )
         } else {
@@ -47,7 +48,16 @@ wlv_native_exchange_us_spec <- function(id, historical_v09 = FALSE) {
         }
         value <- wlv_native_sector_array(value, lists)
         if (historical_formula) value[, , "USA"] <- 1
-        wlv_module_result(outputs = list(value = value))
+        state <- wlv_native_indicator_state_from_policy(
+          runtime,
+          value,
+          "exchange.r.us",
+          "after_stage_1"
+        )
+        wlv_module_result(outputs = list(
+          value = value,
+          semantic_state__value = state
+        ))
       }
     })
   )
@@ -346,6 +356,7 @@ wlv_indicator_go_price_r_id_wiodr16_spec <- function() {
   ),
   run = function(ctx) {
     lists <- ctx$input("lists")
+    runtime <- ctx$service("contract_runtime")
     source_value <- wlv_native_source_variable(ctx$input("source"), "GO_PI", lists)
     if (!"2000" %in% lists$years) {
       stop("Gross-output price normalization requires base year 2000.", call. = FALSE)
@@ -358,7 +369,16 @@ wlv_indicator_go_price_r_id_wiodr16_spec <- function() {
     dimnames(base) <- dimnames(source_value)
     value <- source_value / base
     value <- wlv_native_with_named_axes(value, c("year", "sector", "country"))
-    wlv_module_result(outputs = list(value = value))
+    state <- wlv_native_indicator_state_from_policy(
+      runtime,
+      value,
+      "go_price.r.id",
+      "after_stage_1"
+    )
+    wlv_module_result(outputs = list(
+      value = value,
+      semantic_state__value = state
+    ))
   }
 )
 }

@@ -212,6 +212,47 @@ wlv_native_source_variable <- function(source, variable, lists) {
   wlv_native_sector_array(value, lists)
 }
 
+wlv_native_indicator_state_from_policy <- function(
+    runtime,
+    value,
+    indicator,
+    checkpoint,
+    level = c("sector", "country")) {
+  level <- match.arg(level)
+  contract <- wlv_native_indicator_contract(indicator, level = level)
+  axes <- contract$axes
+  if (is.null(dimnames(value)) ||
+      !identical(names(dimnames(value)), axes)) {
+    stop("Policy-derived indicator states require canonical output axes.",
+      call. = FALSE
+    )
+  }
+  artifact <- if (identical(level, "sector")) {
+    "sea_sectors"
+  } else {
+    "sea_countries"
+  }
+  states <- wlv_contract_declared_states(
+    runtime,
+    artifact,
+    indicator,
+    value,
+    checkpoint
+  )
+  states[is.na(states)] <- "finite"
+  calculated <- attr(value, "wlv_state", exact = TRUE)
+  if (!is.null(calculated)) {
+    states <- wlv_contract_merge_state_arrays(states, calculated)
+  }
+  states[!is.na(value) | is.nan(value)] <- "finite"
+  wlv_semantic_state_encode(
+    value,
+    states,
+    target_key = wlv_native_indicator_key(indicator, level),
+    axes = axes
+  )
+}
+
 wlv_native_source_requirements <- function(extra = list()) {
   c(
     list(source = wlv_resource_ref(
