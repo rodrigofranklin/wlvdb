@@ -451,6 +451,119 @@ wlv13_v5d_historical_profile_binding_selftest <- function(
   )
 }
 
+wlv13_v5d_artifact_presence_valid <- function(count, required) {
+  if (!is.integer(count) || length(count) != 1L || is.na(count) || count < 0L ||
+      !is.logical(required) || length(required) != 1L || is.na(required)) {
+    return(FALSE)
+  }
+  count <= 1L && (!required || count == 1L)
+}
+
+wlv13_v5d_bridge_artifact <- function(
+    records, run_root, relative, required = TRUE) {
+  if (!is.data.frame(records) ||
+      !all(c("path", "sha256") %in% names(records))) {
+    stop("Bridge evidence inventory has an invalid artifact schema.",
+      call. = FALSE
+    )
+  }
+  row <- records[records$path == relative, , drop = FALSE]
+  if (!wlv13_v5d_artifact_presence_valid(nrow(row), required)) {
+    stop(sprintf("Bridge evidence artifact `%s` has invalid presence.",
+      relative
+    ), call. = FALSE)
+  }
+  if (!nrow(row)) return(NULL)
+  list(
+    path = normalizePath(file.path(run_root, relative),
+      winslash = "/", mustWork = TRUE
+    ),
+    sha256 = row$sha256[[1L]]
+  )
+}
+
+wlv13_v5d_artifact_presence_selftest <- function() {
+  cases <- expand.grid(
+    count = 0:2, required = c(TRUE, FALSE),
+    KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE
+  )
+  expected <- c(FALSE, TRUE, FALSE, TRUE, TRUE, FALSE)
+  observed <- vapply(seq_len(nrow(cases)), function(index) {
+    wlv13_v5d_artifact_presence_valid(
+      as.integer(cases$count[[index]]), cases$required[[index]]
+    )
+  }, logical(1L))
+  if (!identical(observed, expected)) {
+    stop("Artifact presence truth table changed.", call. = FALSE)
+  }
+  assertions <- as.integer(length(expected))
+  selftest_root <- tempfile("issue13-v5-artifact-presence-")
+  if (!dir.create(selftest_root)) {
+    stop("Could not create the artifact-presence self-test root.",
+      call. = FALSE
+    )
+  }
+  on.exit(unlink(selftest_root, recursive = TRUE, force = TRUE), add = TRUE)
+  relative <- "_artifact-presence-selftest.csv"
+  writeBin(charToRaw("artifact-presence-selftest"),
+    file.path(selftest_root, relative)
+  )
+  for (index in seq_len(nrow(cases))) {
+    count <- as.integer(cases$count[[index]])
+    records <- data.frame(
+      path = rep(relative, count),
+      sha256 = rep(strrep("a", 64L), count),
+      stringsAsFactors = FALSE, check.names = FALSE
+    )
+    resolved <- tryCatch(list(
+      accepted = TRUE,
+      value = wlv13_v5d_bridge_artifact(
+        records, selftest_root, relative, cases$required[[index]]
+      )
+    ), error = function(error) list(accepted = FALSE, value = error))
+    if (!identical(resolved$accepted, expected[[index]]) ||
+        (resolved$accepted && count == 0L && !is.null(resolved$value)) ||
+        (resolved$accepted && count == 1L &&
+          (!is.list(resolved$value) ||
+            !identical(resolved$value$sha256, strrep("a", 64L))))) {
+      stop("Artifact resolver truth table changed.", call. = FALSE)
+    }
+    assertions <- assertions + 1L
+  }
+  invalid_required <- list(
+    logical(), NA, c(TRUE, FALSE), 1L, "TRUE", list(TRUE)
+  )
+  for (value in invalid_required) {
+    if (wlv13_v5d_artifact_presence_valid(1L, value)) {
+      stop("Artifact presence accepted an invalid required flag.",
+        call. = FALSE
+      )
+    }
+    assertions <- assertions + 1L
+  }
+  mutants <- list(
+    legacy = function(count, required) {
+      count == (if (required) 1L else 0L)
+    },
+    missing_required = function(count, required) count <= 1L,
+    missing_optional = function(count, required) count == 1L,
+    duplicate_optional = function(count, required) !required || count == 1L
+  )
+  for (name in names(mutants)) {
+    mutant <- mutants[[name]]
+    mutant_observed <- vapply(seq_len(nrow(cases)), function(index) {
+      mutant(as.integer(cases$count[[index]]), cases$required[[index]])
+    }, logical(1L))
+    if (identical(mutant_observed, expected)) {
+      stop(sprintf("Artifact presence self-test accepted mutant `%s`.", name),
+        call. = FALSE
+      )
+    }
+    assertions <- assertions + 1L
+  }
+  list(assertions = assertions, cases = nrow(cases), mutants = length(mutants))
+}
+
 wlv13_v5d_bridge_authenticate_run <- function(
     project_root, run_root, method, expected_mode = "calculate") {
   if (!expected_mode %in% c("calculate", "recalculate")) {
@@ -577,23 +690,6 @@ wlv13_v5d_bridge_authenticate_run <- function(
       call. = FALSE
     )
   }
-  artifact <- function(relative, required = TRUE) {
-    row <- inventory$records[
-      inventory$records$path == relative, , drop = FALSE
-    ]
-    if (nrow(row) != as.integer(required)) {
-      stop(sprintf("Bridge evidence artifact `%s` has invalid presence.",
-        relative
-      ), call. = FALSE)
-    }
-    if (!nrow(row)) return(NULL)
-    list(
-      path = normalizePath(file.path(run_root, relative),
-        winslash = "/", mustWork = TRUE
-      ),
-      sha256 = row$sha256[[1L]]
-    )
-  }
   list(
     project_root = project_root,
     run_root = run_root,
@@ -607,9 +703,14 @@ wlv13_v5d_bridge_authenticate_run <- function(
     source_sha256 = source_sha256,
     run_manifest_sha256 = inventory$manifest_sha256,
     run_inventory_sha256 = wlv13_inventory_signature(inventory),
-    anomalies = artifact("_anomalies.csv"),
-    unit = artifact("_unit_contract.csv"),
-    nonfinite = artifact(
+    anomalies = wlv13_v5d_bridge_artifact(
+      inventory$records, run_root, "_anomalies.csv"
+    ),
+    unit = wlv13_v5d_bridge_artifact(
+      inventory$records, run_root, "_unit_contract.csv"
+    ),
+    nonfinite = wlv13_v5d_bridge_artifact(
+      inventory$records, run_root,
       "_nonfinite_resolution_diagnostics.csv", required = FALSE
     )
   )
@@ -971,6 +1072,12 @@ wlv13_v5d_bridge_generator_main <- function(arguments = commandArgs(TRUE)) {
     ),
     "Diagnostic bridge evidence index"
   )
+  presence_selftest <- wlv13_v5d_artifact_presence_selftest()
+  if (!identical(presence_selftest$assertions, 22L) ||
+      !identical(presence_selftest$cases, 6L) ||
+      !identical(presence_selftest$mutants, 4L)) {
+    stop("Artifact presence self-test is incomplete.", call. = FALSE)
+  }
   profile_selftest <- wlv13_v5d_historical_profile_binding_selftest(
     evidence, contract_project_root
   )
@@ -984,10 +1091,13 @@ wlv13_v5d_bridge_generator_main <- function(arguments = commandArgs(TRUE)) {
   )
   cat(sprintf(
     paste0(
-      "generated_rows=%d manifest_sha256=%s profile_assertions=%d ",
+      "generated_rows=%d manifest_sha256=%s presence_assertions=%d ",
+      "presence_cases=%d presence_mutants=%d profile_assertions=%d ",
       "profile_roots=%d divergent_profile_roots=%d\n"
     ),
     nrow(value), wlv13_sha256_file(arguments[[4L]]),
+    presence_selftest$assertions, presence_selftest$cases,
+    presence_selftest$mutants,
     profile_selftest$assertions, profile_selftest$unique_roots,
     profile_selftest$divergent_roots
   ))

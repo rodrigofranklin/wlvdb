@@ -65,9 +65,9 @@ wlv13_v5d_methods_by_source <- list(
   wiodr13 = c(
     "wiodr13", "alternative_1", "alternative_2", "norow_w13",
     "ochoa_1", "ochoa_2", "petrovic", "wiodr13v09",
-    "zerodep_1", "zerodep_2"
+    "zerodep_1"
   ),
-  wiodr16 = c("wiodr16", "wiodr16v09")
+  wiodr16 = c("wiodr16", "wiodr16v09", "zerodep_2")
 )
 
 wlv13_v5d_bridge_columns <- c(
@@ -286,7 +286,7 @@ wlv13_v5d_validate_bridge_manifest <- function(value) {
     all(value$strategy[anomaly] == "") &&
     all(nzchar(value$candidate_producer_id[anomaly])) &&
     all(value$candidate_write_action[anomaly] %in%
-      c("create", "patch", "replace"))
+      c("create", "patch", "replace", "preserve"))
   derivations <- if (valid) vapply(seq_len(nrow(value)), function(index) {
     wlv13_v5d_bridge_derivation(value[index, , drop = FALSE])
   }, character(1L)) else character()
@@ -2501,6 +2501,18 @@ wlv13_cross_engine_compare_anomalies <- function(
 # Mutation-oriented tests for all strict primitives.  The harness self-test
 # calls this after sourcing the override; no real run or external data is used.
 wlv13_v5d_selftest <- function() {
+  expected_methods_by_source <- list(
+    wiodr13 = c(
+      "wiodr13", "alternative_1", "alternative_2", "norow_w13",
+      "ochoa_1", "ochoa_2", "petrovic", "wiodr13v09", "zerodep_1"
+    ),
+    wiodr16 = c("wiodr16", "wiodr16v09", "zerodep_2")
+  )
+  if (!identical(wlv13_v5d_methods_by_source, expected_methods_by_source)) {
+    stop("V5 diagnostic self-test found an invalid method/source binding.",
+      call. = FALSE
+    )
+  }
   assertions <- 0L
   expect_true <- function(value, label) {
     if (!isTRUE(value)) {
@@ -2599,7 +2611,7 @@ wlv13_v5d_selftest <- function() {
     artifact = "sea_sectors", checkpoint = "after_stage_5", stage = "5",
     action = "mark_not_applicable", original_value = "0",
     policy_id = "fixture_v1", producer_id = "indicator.value.m.mv",
-    write_action = "replace"
+    write_action = "preserve"
   )
   fixture_bridges <- rbind(fixture_unit_bridges, fixture_anomaly_bridge)
   fixture_bridges <- fixture_bridges[
@@ -2906,7 +2918,7 @@ wlv13_v5d_selftest <- function() {
     anomaly_targets = data.frame(
       artifact = "sea_sectors", indicator = "value.m.mv", stage = "5",
       module = "indicator.value.m.mv",
-      producer_id = "indicator.value.m.mv", action = "replace",
+      producer_id = "indicator.value.m.mv", action = "preserve",
       stringsAsFactors = FALSE, check.names = FALSE
     )
   )

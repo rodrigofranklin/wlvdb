@@ -549,19 +549,19 @@ $bootstrapSourceSha256 = @{
   'issue13-v5-attest-delivery.ps1' =
     '2E1A9D527AB98C3EFCF296DB56E59FCE34461C9A7A0A979044EC70E2B54B981D'
   'issue13-v5-baseline-smoke.ps1' =
-    'EE03827B34DD13C052A071F9CFB190B570803DEAAC7A8B9A171E4A0A82F80AAF'
+    '12DF08AFFF554B24B60DCAE2E50EF43D6B08C56F6C80F2D07A2CE919F09E71F5'
   'issue13-v5-capture-clean-bridge-evidence.ps1' =
-    'A78F5C6535ADFF09F4248F1EA192F0058DCF4B129A0295E1C04357BC1747B6E6'
+    '38F6785C5974989FD7B832BE96CC248F6B0A90C382A366CFE911501D600F4942'
   'issue13-v5-capture-clean-stage5-evidence.ps1' =
-    'EDCFCE9759F8B73E2368A36ABA309FA3D330C91C417249D49B69A4194768BFF8'
+    '17609C95780A00ADFC897DBFB9C6140D6A44EC87F3F69E5718725D0B71FE6F2E'
   'issue13-v5-coordinator-lib.ps1' =
-    'F2C097288E0BA8BD2034EBF75AF3F085DB51DF5FBD35D2CE3B0B1754A3895C91'
+    'BBFB703DF93B70D62F9947AC7D10D6309DF9982A044E1941E05DC4AEF0AEFEF4'
   'issue13-v5-coordinator.ps1' =
     '57A284A2600AAC37B5879BA44EB6B4AB1953AB00590D4EA6720524195E0EBF28'
   'issue13-v5-materialize-harness.ps1' =
-    '44D7E19BF49E36506379538D035BDF180B14986D12154D0E83D283791E283A35'
+    '7B1699E966D4B68B47A5638F646CDEADF88EBEE62D057DDCB84295C88F6B8F92'
   'issue13-v5-new-config.ps1' =
-    'F5AFEEBFEA5FBCF1CDBEF034AF11E6EF9FBD0E2EE6E31C1DD70E1171BD9987DA'
+    'A638DA489DFE10DC0D3382B4FFAF370E1FD112C4675F9358EBC00FE1618FBD66'
   'issue13-v5-oracle-effect-generate.ps1' =
     '6C1E26154794A253974B7E51C5D15B054AE2D31E09736BF19B624F56EA3C30F9'
   'issue13-v5-oracle-effect-lib.ps1' =
@@ -1065,7 +1065,15 @@ if ($diagnosticsOverride -cnotin $script:Issue13V5ControllerFiles -or
     -not $diagnosticsOverrideText.Contains(
       'wlv13_v5d_compare_source_unit_contract <- function') -or
     -not $diagnosticsOverrideText.Contains(
-      'wlv13_v5d_read_stage5_profiles <- function')) {
+      'wlv13_v5d_read_stage5_profiles <- function') -or
+    -not $diagnosticsOverrideText.Contains(
+      'expected_methods_by_source <- list(') -or
+    -not $diagnosticsOverrideText.Contains(
+      'wiodr16 = c("wiodr16", "wiodr16v09", "zerodep_2")') -or
+    -not $diagnosticsOverrideText.Contains(
+      'c("create", "patch", "replace", "preserve")') -or
+    -not $diagnosticsOverrideText.Contains(
+      'write_action = "preserve"')) {
   throw 'V5 diagnostic override is missing, unpinned or structurally incomplete.'
 }
 $records.Add([ordered]@{
@@ -1122,12 +1130,29 @@ foreach ($required in @(
     'wlv13_v5d_generate_bridge_manifest <- function',
     'wlv13_v5d_scientific_profile_from_commit <- function',
     'wlv13_v5d_historical_profile_binding_selftest <- function',
+    'wlv13_v5d_artifact_presence_valid <- function',
+    'wlv13_v5d_bridge_artifact <- function',
+    'wlv13_v5d_artifact_presence_selftest <- function',
+    'missing_required = function(count, required) count <= 1L',
+    'missing_optional = function(count, required) count == 1L',
+    'duplicate_optional = function(count, required) !required || count == 1L',
+    'anomalies = wlv13_v5d_bridge_artifact(',
+    'unit = wlv13_v5d_bridge_artifact(',
+    'nonfinite = wlv13_v5d_bridge_artifact(',
+    'identical(presence_selftest$assertions, 22L)',
+    'identical(presence_selftest$cases, 6L)',
+    'identical(presence_selftest$mutants, 4L)',
     'identical(profile_selftest$assertions, 26L)'
   )) {
   if (-not $diagnosticControllerText[
       'issue13-v5-build-diagnostic-bridges.R'].Contains($required)) {
     throw "Diagnostic bridge builder lacks authenticated freeze: $required"
   }
+}
+if ($diagnosticControllerText[
+    'issue13-v5-build-diagnostic-bridges.R'].Contains(
+      'nrow(row) != as.integer(required)')) {
+  throw 'Diagnostic bridge builder contains the rejected legacy cardinality rule.'
 }
 foreach ($required in @(
     'schema=issue13-v5-clean-bridge-capture/2',
@@ -2217,13 +2242,13 @@ $issue13ExpectedAstSurfaces = @{
   }
   'issue13-v5-capture-clean-bridge-evidence.ps1' = @{
     command_count = 148
-    command_sha256 = '9E119DDC1B69636CA3BDD9D2897F3D274D39C10D2AD4152EEFEF93A9BE6A63E3'
+    command_sha256 = '3EC4C3F6DDC4D9F9116C9296F6FF590906B77560677F86EDD4E49C20EB3936B8'
     redirection_count = 0
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
   'issue13-v5-capture-clean-stage5-evidence.ps1' = @{
     command_count = 246
-    command_sha256 = '8E5FB54184961B8BFCF6C50AF53E92B94DE123FB6E6E31939375F36C045AED2B'
+    command_sha256 = 'E6BF20514A0D61CC1A0E54ACD1BE3C44BE7931F0D713E7FED9576894675995B2'
     redirection_count = 0
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
@@ -2276,26 +2301,26 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = '7F4027149DBBCCC5E186586FA06D6058EF6E3821AC51098E7521EBC767D5FE2D'
   }
   'issue13-v5-static-verify.ps1' = @{
-    command_count = 732
-    command_sha256 = 'B297CEAF051F95ACF17D679037BC537B66EF90E0161299321ADA50589ABEDBFD'
+    command_count = 740
+    command_sha256 = 'B36963B5DDDFEF3C25AC561BEB0F7CA0805F6D5940E6EB84AB16A21215AD1B1B'
     redirection_count = 0
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
 }
 $issue13ExpectedControllerSourceSha256 = @{
   'issue13-v5-attest-delivery.ps1' = '2E1A9D527AB98C3EFCF296DB56E59FCE34461C9A7A0A979044EC70E2B54B981D'
-  'issue13-v5-baseline-smoke.ps1' = 'EE03827B34DD13C052A071F9CFB190B570803DEAAC7A8B9A171E4A0A82F80AAF'
-  'issue13-v5-capture-clean-bridge-evidence.ps1' = 'A78F5C6535ADFF09F4248F1EA192F0058DCF4B129A0295E1C04357BC1747B6E6'
-  'issue13-v5-capture-clean-stage5-evidence.ps1' = 'EDCFCE9759F8B73E2368A36ABA309FA3D330C91C417249D49B69A4194768BFF8'
-  'issue13-v5-coordinator-lib.ps1' = 'F2C097288E0BA8BD2034EBF75AF3F085DB51DF5FBD35D2CE3B0B1754A3895C91'
+  'issue13-v5-baseline-smoke.ps1' = '12DF08AFFF554B24B60DCAE2E50EF43D6B08C56F6C80F2D07A2CE919F09E71F5'
+  'issue13-v5-capture-clean-bridge-evidence.ps1' = '38F6785C5974989FD7B832BE96CC248F6B0A90C382A366CFE911501D600F4942'
+  'issue13-v5-capture-clean-stage5-evidence.ps1' = '17609C95780A00ADFC897DBFB9C6140D6A44EC87F3F69E5718725D0B71FE6F2E'
+  'issue13-v5-coordinator-lib.ps1' = 'BBFB703DF93B70D62F9947AC7D10D6309DF9982A044E1941E05DC4AEF0AEFEF4'
   'issue13-v5-coordinator.ps1' = '57A284A2600AAC37B5879BA44EB6B4AB1953AB00590D4EA6720524195E0EBF28'
-  'issue13-v5-materialize-harness.ps1' = '44D7E19BF49E36506379538D035BDF180B14986D12154D0E83D283791E283A35'
-  'issue13-v5-new-config.ps1' = 'F5AFEEBFEA5FBCF1CDBEF034AF11E6EF9FBD0E2EE6E31C1DD70E1171BD9987DA'
+  'issue13-v5-materialize-harness.ps1' = '7B1699E966D4B68B47A5638F646CDEADF88EBEE62D057DDCB84295C88F6B8F92'
+  'issue13-v5-new-config.ps1' = 'A638DA489DFE10DC0D3382B4FFAF370E1FD112C4675F9358EBC00FE1618FBD66'
   'issue13-v5-oracle-effect-generate.ps1' = '6C1E26154794A253974B7E51C5D15B054AE2D31E09736BF19B624F56EA3C30F9'
   'issue13-v5-oracle-effect-lib.ps1' = '97B8F56562773DA71133CE1699AAACFA5F98D7B0B3EE0E1FD66C2ECD18B5930D'
   'issue13-v5-oracle-effect-validate.ps1' = '11912422CEB54A45A791E49E11688F974AB45A4CC0F2FB89145D90176AAB0140'
   'issue13-v5-render-report.ps1' = 'F7B11D7CD0AF8F867467AED19D220E135C6F69D6416413C81FC2AFDCD842153B'
-    'issue13-v5-static-verify.ps1' = '0C76165590E889AA3EFE9237D13D99ECE9B83E910F9698789BEE6052DCCF816F'
+    'issue13-v5-static-verify.ps1' = 'D1DE4628E81D99204D82D4757E2BF9CED4BEA152FFACC0A74FAA2879CE7BA9F4'
 }
 $issue13ExpectedDotSourceSignatures = @{
   'issue13-v5-attest-delivery.ps1' = @(
@@ -3388,6 +3413,175 @@ if (-not $outputLimitRejected -or
     $remainingOutputLimitRProcesses.Count -ne 0) {
   throw ('The real output-limit self-test did not fail closed: ' +
     $outputLimitMessage)
+}
+$artifactPresenceSelftestCode = @'
+arguments <- commandArgs(TRUE)
+if (length(arguments) != 1L) {
+  stop("Artifact-presence self-test received invalid arguments.", call. = FALSE)
+}
+environment <- new.env(parent = globalenv())
+sys.source(arguments[[1L]], envir = environment)
+value <- environment$wlv13_v5d_artifact_presence_selftest()
+expected_bindings <- list(
+  anomalies = quote(wlv13_v5d_bridge_artifact(
+    inventory$records, run_root, "_anomalies.csv"
+  )),
+  unit = quote(wlv13_v5d_bridge_artifact(
+    inventory$records, run_root, "_unit_contract.csv"
+  )),
+  nonfinite = quote(wlv13_v5d_bridge_artifact(
+    inventory$records, run_root,
+    "_nonfinite_resolution_diagnostics.csv", required = FALSE
+  ))
+)
+binding_names <- names(expected_bindings)
+binding_count <- function(consumer) {
+  consumer_body <- body(consumer)
+  consumer_result <- consumer_body[[length(consumer_body)]]
+  consumer_arguments <- if (is.call(consumer_result) &&
+      identical(consumer_result[[1L]], quote(list))) {
+    as.list(consumer_result)[-1L]
+  } else {
+    list()
+  }
+  sum(vapply(binding_names, function(name) {
+    identical(sum(names(consumer_arguments) == name), 1L) &&
+      identical(consumer_arguments[[name]], expected_bindings[[name]])
+  }, logical(1L)))
+}
+consumer <- environment$wlv13_v5d_bridge_authenticate_run
+consumer_bindings <- binding_count(consumer)
+expected_formals <- as.pairlist(alist(
+  project_root = , run_root = , method = , expected_mode = "calculate"
+))
+consumer_globals <- codetools::findGlobals(consumer, merge = FALSE)
+resolver_globals <- sum(
+  consumer_globals$functions == "wlv13_v5d_bridge_artifact"
+)
+forbidden_dynamic_functions <- c(
+  "assign", "delayedAssign", "makeActiveBinding", "eval", "evalq",
+  "parse", "source", "sys.source", "local", "do.call", "get", "mget",
+  "match.fun", "environment", "parent.frame", "sys.frame", "::", ":::",
+  ".Call", ".External", ".Internal", ".Primitive", "assignInNamespace",
+  "unlockBinding", "bindingIsLocked", "body<-", "formals<-", "environment<-",
+  "baseenv", "globalenv", "emptyenv", "as.environment", "new.env",
+  "parent.env", "sys.frames", "getNamespace", "getNamespaceInfo",
+  "loadNamespace", "namespaceImportFrom", "attach", "library", "require",
+  ".GlobalEnv"
+)
+dynamic_function_count <- function(target) {
+  sum(unique(all.names(body(target), functions = TRUE)) %in%
+    forbidden_dynamic_functions)
+}
+resolver_assignment_count <- function(expression) {
+  if (!is.call(expression) && !is.expression(expression) &&
+      !is.pairlist(expression)) return(0L)
+  contains_resolver <- function(node) {
+    if ((is.symbol(node) || is.character(node)) && length(node) == 1L) {
+      return(identical(as.character(node), "wlv13_v5d_bridge_artifact"))
+    }
+    if (!is.call(node) && !is.expression(node) && !is.pairlist(node)) {
+      return(FALSE)
+    }
+    any(vapply(as.list(node), contains_resolver, logical(1L)))
+  }
+  direct <- if (is.call(expression) && is.symbol(expression[[1L]]) &&
+      as.character(expression[[1L]]) %in% c("<-", "=", "<<-") &&
+      contains_resolver(expression[[2L]])) 1L else 0L
+  direct + sum(vapply(as.list(expression)[-1L],
+    resolver_assignment_count, integer(1L)
+  ))
+}
+consumer_dynamic_functions <- dynamic_function_count(consumer)
+consumer_resolver_assignments <- resolver_assignment_count(body(consumer))
+optional_mutant <- consumer
+optional_body <- body(optional_mutant)
+optional_result <- as.list(optional_body[[length(optional_body)]])
+nonfinite_index <- which(names(optional_result) == "nonfinite")
+if (!identical(length(nonfinite_index), 1L)) {
+  stop("Artifact-presence optional binding is not singular.", call. = FALSE)
+}
+nonfinite_call <- as.list(optional_result[[nonfinite_index]])
+nonfinite_call$required <- NULL
+optional_result[[nonfinite_index]] <- as.call(nonfinite_call)
+optional_body[[length(optional_body)]] <- as.call(optional_result)
+body(optional_mutant) <- optional_body
+optional_mutant_bindings <- binding_count(optional_mutant)
+shadow_mutant <- consumer
+shadow_body <- as.list(body(shadow_mutant))
+shadow_expression <- quote(assign(
+  "wlv13_v5d_bridge_artifact", function(...) stop("shadow"),
+  envir = environment()
+))
+shadow_body <- as.call(c(shadow_body[[1L]], list(shadow_expression),
+  shadow_body[-1L]))
+body(shadow_mutant) <- shadow_body
+shadow_mutant_dynamic_functions <- dynamic_function_count(shadow_mutant)
+compound_mutant <- consumer
+compound_body <- as.list(body(compound_mutant))
+compound_expression <- quote(
+  .GlobalEnv$wlv13_v5d_bridge_artifact <- function(...) stop("compound-shadow")
+)
+compound_body <- as.call(c(compound_body[[1L]], list(compound_expression),
+  compound_body[-1L]))
+body(compound_mutant) <- compound_body
+compound_mutant_dynamic_functions <- dynamic_function_count(compound_mutant)
+compound_mutant_assignments <- resolver_assignment_count(
+  body(compound_mutant)
+)
+if (!identical(value$assertions, 22L) ||
+    !identical(value$cases, 6L) ||
+    !identical(value$mutants, 4L) ||
+    !identical(consumer_bindings, 3L) ||
+    !identical(formals(consumer), expected_formals) ||
+    !identical(resolver_globals, 1L) ||
+    !identical(consumer_dynamic_functions, 0L) ||
+    !identical(consumer_resolver_assignments, 0L) ||
+    !identical(optional_mutant_bindings, 2L) ||
+    shadow_mutant_dynamic_functions < 2L ||
+    compound_mutant_dynamic_functions < 1L ||
+    !identical(compound_mutant_assignments, 1L)) {
+  stop("Artifact-presence executable contract changed.", call. = FALSE)
+}
+cat(sprintf(
+  paste0(
+    "presence_assertions=%d cases=%d mutants=%d consumer_bindings=%d ",
+    "resolver_globals=%d formals=%d dynamic=%d assignments=%d ",
+    "optional_mutant_bindings=%d shadow_dynamic=%d compound_dynamic=%d ",
+    "compound_assignments=%d\n"
+  ),
+  value$assertions, value$cases, value$mutants, consumer_bindings,
+  resolver_globals, length(formals(consumer)), consumer_dynamic_functions,
+  consumer_resolver_assignments, optional_mutant_bindings,
+  shadow_mutant_dynamic_functions, compound_mutant_dynamic_functions,
+  compound_mutant_assignments
+))
+'@
+$artifactPresenceExecution = Invoke-Issue13V5RscriptBounded `
+  -RscriptPath ([string]$script:Issue13V5RscriptLogicalPath) `
+  -Arguments @(
+    '--vanilla', '-e', $artifactPresenceSelftestCode,
+    (Join-Path $root 'issue13-v5-build-diagnostic-bridges.R')) `
+  -Label 'diagnostic-artifact-presence-selftest' `
+  -TimeoutSeconds 120 `
+  -ExpectedExitCodes @(0) `
+  -WorkingDirectory $RepositoryRoot `
+  -Environment (New-Issue13V5ClosedREnvironment `
+    'D:\Trabalho\Code\wlvdb\renv\library\windows\R-4.6\x86_64-w64-mingw32')
+$remainingArtifactPresenceRProcesses = [object[]]@(
+  Get-Process -Name R, Rgui, Rscript, Rterm -ErrorAction SilentlyContinue)
+$expectedArtifactPresenceOutput =
+  ('presence_assertions=22 cases=6 mutants=4 consumer_bindings=3 ' +
+    'resolver_globals=1 formals=4 dynamic=0 assignments=0 ' +
+    'optional_mutant_bindings=2 shadow_dynamic=2 compound_dynamic=1 ' +
+    'compound_assignments=1')
+if ([int]$artifactPresenceExecution.exit_code -ne 0 -or
+    [string]$artifactPresenceExecution.stdout.Trim() -cne
+      $expectedArtifactPresenceOutput -or
+    -not [string]::IsNullOrWhiteSpace(
+      [string]$artifactPresenceExecution.stderr) -or
+    $remainingArtifactPresenceRProcesses.Count -ne 0) {
+  throw 'The executable diagnostic artifact-presence self-test failed.'
 }
 $oracleSpec = Read-Issue13V5Json (
   Join-Path $root 'issue13-v5-oracle-effect-spec.json')
@@ -6592,6 +6786,46 @@ function Test-Issue13V5CapturePhysicalDataflow(
   }
   $true
 }
+function Test-Issue13V5CaptureGitArgumentSplat(
+  [Management.Automation.Language.ScriptBlockAst]$Ast
+) {
+  $definitions = @($Ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -ceq 'Assert-GitValue'
+    }, $true))
+  if ($definitions.Count -ne 1) { return $false }
+  $definition = $definitions[0]
+  $assignments = @($definition.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+        (Get-Issue13V5AssignmentBaseVariableName $node.Left) -ieq
+          '$gitArguments'
+    }, $true))
+  $calls = @($definition.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -ceq 'Invoke-Issue13V5SealedGit'
+    }, $true))
+  if ($assignments.Count -ne 1 -or $calls.Count -ne 1 -or
+      $assignments[0].Extent.EndOffset -ge $calls[0].Extent.StartOffset) {
+    return $false
+  }
+  $assignmentText = $assignments[0].Extent.Text.Replace("`r`n", "`n")
+  $expectedAssignment =
+    "[string[]]`$gitArguments = @('-C', `$Worktree) +`n" +
+      "        [string[]]`$Arguments.Split(' ')"
+  $elements = @($calls[0].CommandElements)
+  $assignmentText -ceq $expectedAssignment -and
+    $calls[0].InvocationOperator -eq
+      [Management.Automation.Language.TokenKind]::Unknown -and
+    $elements.Count -eq 2 -and
+    $elements[0].Extent.Text -ceq 'Invoke-Issue13V5SealedGit' -and
+    $elements[1] -is
+      [Management.Automation.Language.VariableExpressionAst] -and
+    $elements[1].Splatted -and
+    $elements[1].VariablePath.UserPath -ceq 'gitArguments'
+}
 $validatedCaptureAsts = @{}
 foreach ($captureName in @($expectedCaptureHeaders.Keys | Sort-Object)) {
   $capturePath = Join-Path $root $captureName
@@ -6681,6 +6915,7 @@ foreach ($captureName in @($expectedCaptureHeaders.Keys | Sort-Object)) {
         $sourceOriginHashAssignments[0].Extent.StartOffset -or
       $sourceOriginHashAssignments[0].Extent.EndOffset -ge
         $sharedCopyCalls[0].Extent.StartOffset -or
+      -not (Test-Issue13V5CaptureGitArgumentSplat $captureAst) -or
       -not (Test-Issue13V5OfficialSourcePinsWriteFree $captureAst)) {
     throw "Capture AST does not use one shared physical copy: $captureName"
   }
@@ -6701,6 +6936,22 @@ foreach ($captureName in @($expectedCaptureHeaders.Keys | Sort-Object)) {
       ([string[]]$expectedPhysicalCaptureCalls[$captureName]) `
       $expectedPhysicalAssignmentChains[$captureName])) {
     throw "Capture before/after physical proof AST changed: $captureName"
+  }
+}
+foreach ($captureName in @($validatedCaptureAsts.Keys | Sort-Object)) {
+  $captureText = $validatedCaptureAsts[$captureName].Extent.Text
+  $gitSplatMutantText = $captureText.Replace(
+    'Invoke-Issue13V5SealedGit @gitArguments',
+    'Invoke-Issue13V5SealedGit $gitArguments')
+  $gitSplatMutantTokens = $null
+  $gitSplatMutantErrors = $null
+  $gitSplatMutantAst = [Management.Automation.Language.Parser]::ParseInput(
+    $gitSplatMutantText, [ref]$gitSplatMutantTokens,
+    [ref]$gitSplatMutantErrors)
+  if ($gitSplatMutantText -ceq $captureText -or
+      $gitSplatMutantErrors.Count -ne 0 -or
+      (Test-Issue13V5CaptureGitArgumentSplat $gitSplatMutantAst)) {
+    throw "Capture Git-argument verifier accepted a mutant: $captureName"
   }
 }
 foreach ($captureName in @($validatedCaptureAsts.Keys | Sort-Object)) {
@@ -7043,9 +7294,9 @@ $commitETerminalSeal =
     [long]$oracleSpec.terminal_comparison_runtime.sealed_inventory.file_count -eq
       47L -and
     [long]$oracleSpec.terminal_comparison_runtime.sealed_inventory.total_bytes -eq
-      1633783L -and
+      1634230L -and
     [string]$oracleSpec.terminal_comparison_runtime.sealed_inventory.inventory_sha256 -ceq
-      'a81a648367cd4f97fc463d73ab49502a84d0b5c58ee23f0c43e8ba9346739940'
+      'b5c183f29097cd36900b3cbd8c0ff6f75f84396444c6b02d4c185cf8b8a77569'
 if (-not $commitETerminalSeal) {
   throw 'Commit E static verifier accepts only the exact terminal output seal.'
 }
@@ -7258,9 +7509,9 @@ if ([string]$oracleSpec.schema -cne 'wlv-issue13-v5-oracle-effect-spec/2' -or
     [string]$oracleTerminal.sealed_inventory.status -cne
       'sealed' -or
     [long]$oracleTerminal.sealed_inventory.file_count -ne 47L -or
-    [long]$oracleTerminal.sealed_inventory.total_bytes -ne 1633783L -or
+    [long]$oracleTerminal.sealed_inventory.total_bytes -ne 1634230L -or
     [string]$oracleTerminal.sealed_inventory.inventory_sha256 -cne
-      'a81a648367cd4f97fc463d73ab49502a84d0b5c58ee23f0c43e8ba9346739940' -or
+      'b5c183f29097cd36900b3cbd8c0ff6f75f84396444c6b02d4c185cf8b8a77569' -or
     [string]::Join("`n", @(
       $oracleTerminal.required_controller_files)) -cne
       [string]::Join("`n", $expectedControllerFiles) -or
@@ -9744,9 +9995,9 @@ $harnessBinding = Assert-Issue13V5HarnessBinding $staticConfig
 $manifest = $harnessBinding.manifest
 $inventory = $harnessBinding.inventory
 $expectedHarnessFileCount = 47L
-$expectedHarnessTotalBytes = 1633783L
+$expectedHarnessTotalBytes = 1634230L
 $expectedHarnessInventorySha256 =
-  'a81a648367cd4f97fc463d73ab49502a84d0b5c58ee23f0c43e8ba9346739940'
+  'b5c183f29097cd36900b3cbd8c0ff6f75f84396444c6b02d4c185cf8b8a77569'
 if ($inventory.file_count -ne $expectedHarnessFileCount -or
     $inventory.total_bytes -ne $expectedHarnessTotalBytes -or
     $inventory.inventory_sha256 -cne $expectedHarnessInventorySha256 -or

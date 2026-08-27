@@ -567,8 +567,9 @@ function Assert-GitValue(
     [string]$Expected,
     [string]$Label
 ) {
-    $actual = (Invoke-Issue13V5SealedGit `
-      -C $Worktree $Arguments.Split(" ")) -join "`n"
+    [string[]]$gitArguments = @('-C', $Worktree) +
+        [string[]]$Arguments.Split(' ')
+    $actual = (Invoke-Issue13V5SealedGit @gitArguments) -join "`n"
     if ($LASTEXITCODE -ne 0 -or $actual -cne $Expected) {
         throw "$Label mismatch. Expected $Expected; observed $actual."
     }
