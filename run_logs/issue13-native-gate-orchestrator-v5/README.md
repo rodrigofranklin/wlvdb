@@ -213,8 +213,10 @@ $rscript = 'C:\Users\rodri\AppData\Local\Programs\R\R-4.6.1\bin\x64\Rscript.exe'
 $rLibrary = 'D:\Trabalho\Code\wlvdb\renv\library\windows\R-4.6\x86_64-w64-mingw32'
 $controller = 'D:\Trabalho\Code\wlvdb\run_logs\issue13-native-gate-orchestrator-v5'
 $harness = 'D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5c6\issue13-evidence-harness'
+$pwsh = 'C:\Users\rodri\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\powershell\pwsh.exe'
 
-& (Join-Path $controller 'issue13-v5-capture-clean-bridge-evidence.ps1') `
+& $pwsh -NoLogo -NoProfile -NonInteractive -File `
+  (Join-Path $controller 'issue13-v5-capture-clean-bridge-evidence.ps1') `
   -RepositoryRoot D:\Trabalho\Code\wlvdb `
   -CaptureRoot D:\Trabalho\Code\wlvdb-issue13-v5d-bridge-capture-003 `
   -BaselineSourceDataRoot D:\Trabalho\Code\wlvdb-issue13-baseline\source_data `
@@ -223,7 +225,8 @@ $harness = 'D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5c6\issue13-evidenc
   -RscriptCommand $rscript `
   -RLibrary $rLibrary
 
-& (Join-Path $controller 'issue13-v5-capture-clean-stage5-evidence.ps1') `
+& $pwsh -NoLogo -NoProfile -NonInteractive -File `
+  (Join-Path $controller 'issue13-v5-capture-clean-stage5-evidence.ps1') `
   -RepositoryRoot D:\Trabalho\Code\wlvdb `
   -Stage5CaptureRoot D:\Trabalho\Code\wlvdb-issue13-v5d-stage5-capture-001 `
   -BaselineSourceDataRoot D:\Trabalho\Code\wlvdb-issue13-baseline\source_data `
@@ -266,8 +269,13 @@ EU KLEMS continua obrigatória.
 Depois de commitado o tooling, materialize uma cópia nova:
 
 ```powershell
+$repository = 'D:\Trabalho\Code\wlvdb'
+$controller = Join-Path $repository `
+  'run_logs\issue13-native-gate-orchestrator-v5'
+$pwsh = 'C:\Users\rodri\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\powershell\pwsh.exe'
 $candidate = (git rev-parse HEAD).Trim()
-./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-materialize-harness.ps1 `
+& $pwsh -NoLogo -NoProfile -NonInteractive -File `
+  (Join-Path $controller 'issue13-v5-materialize-harness.ps1') `
   -CandidateCommit $candidate `
   -Destination D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal `
   -ConfirmMaterialize
@@ -281,6 +289,11 @@ UNC, unidades mapeadas e unidades `SUBST` não podem substituir uma identidade
 física aceita; o smoke terminal os rejeita explicitamente e repete a validação
 depois de criar sua raiz. A cópia usa blobs Git crus autenticados, staging
 exclusivo e promoção atômica.
+
+Cada comando PowerShell deste fluxo deve começar em um processo selado novo,
+como nos exemplos com `& $pwsh -NoProfile -File`. Não invoque dois entrypoints
+no mesmo host: os tipos nativos compilados ficam no AppDomain, e uma segunda
+entrada é recusada de forma fail-closed como estado herdado.
 
 O selo incorporado neste freeze ainda é deliberadamente provisório:
 `39` arquivos, `594386` bytes e inventário SHA-256
@@ -308,7 +321,8 @@ Rscript --vanilla `
 Execute o preflight descartável do oráculo antes do gate longo:
 
 ```powershell
-./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-baseline-smoke.ps1 `
+& $pwsh -NoLogo -NoProfile -NonInteractive -File `
+  (Join-Path $controller 'issue13-v5-baseline-smoke.ps1') `
   -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal `
   -SmokeRoot D:\Trabalho\Code\wlvdb-issue13-v5-terminal-smoke-001 `
   -BaselineRuntimeCommit e2f4d6dae9a6d35c966b305fabac52e489faa3e7 `
@@ -341,7 +355,8 @@ $oraclePrimary = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-primary-terminal-
 $oracleReplay = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-replay-terminal-001'
 $oracleProof = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-proof-terminal-001.json'
 
-./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-oracle-effect-generate.ps1 `
+& $pwsh -NoLogo -NoProfile -NonInteractive -File `
+  (Join-Path $controller 'issue13-v5-oracle-effect-generate.ps1') `
   -RepositoryRoot D:\Trabalho\Code\wlvdb `
   -ExpectedCandidateCommit $candidate `
   -StrictSmokeSummary D:\Trabalho\Code\wlvdb-issue13-v5-cc2-smoke-003\baseline-smoke-summary.json `
@@ -386,7 +401,8 @@ Com o candidato já commitado e limpo, gere a configuração selada:
 
 ```powershell
 $candidate = (git rev-parse HEAD).Trim()
-./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-new-config.ps1 `
+& $pwsh -NoLogo -NoProfile -NonInteractive -File `
+  (Join-Path $controller 'issue13-v5-new-config.ps1') `
   -CandidateCommit $candidate `
   -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal `
   -BaselineRuntimeIndex D:\Trabalho\Code\wlvdb-issue13-native-final-index-v5-terminal\baseline-runtime-index.json `
@@ -412,34 +428,41 @@ $candidate = (git rev-parse HEAD).Trim()
 ```powershell
 $config = 'D:\Trabalho\Code\wlvdb-issue13-native-final-config-v5-terminal\gate-config.json'
 
-./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-static-verify.ps1 `
+& $pwsh -NoLogo -NoProfile -NonInteractive -File `
+  (Join-Path $controller 'issue13-v5-static-verify.ps1') `
   -CandidateCommit $candidate `
   -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal
 
-./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-coordinator.ps1 `
+& $pwsh -NoLogo -NoProfile -NonInteractive -File `
+  (Join-Path $controller 'issue13-v5-coordinator.ps1') `
   -Action ValidateConfig -ConfigPath $config
 
-./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-coordinator.ps1 `
+& $pwsh -NoLogo -NoProfile -NonInteractive -File `
+  (Join-Path $controller 'issue13-v5-coordinator.ps1') `
   -Action Initialize -ConfigPath $config
 
-./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-coordinator.ps1 `
+& $pwsh -NoLogo -NoProfile -NonInteractive -File `
+  (Join-Path $controller 'issue13-v5-coordinator.ps1') `
   -Action PrepareWorktrees -ConfigPath $config -ConfirmCreateWorktrees
 ```
 
 Para avançar uma unidade por vez:
 
 ```powershell
-./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-coordinator.ps1 `
+& $pwsh -NoLogo -NoProfile -NonInteractive -File `
+  (Join-Path $controller 'issue13-v5-coordinator.ps1') `
   -Action RunNext -ConfigPath $config -ConfirmExecuteR
 
-./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-coordinator.ps1 `
+& $pwsh -NoLogo -NoProfile -NonInteractive -File `
+  (Join-Path $controller 'issue13-v5-coordinator.ps1') `
   -Action Status -ConfigPath $config
 ```
 
 Para executar todo o restante, sem escrever o relatório prematuramente:
 
 ```powershell
-./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-coordinator.ps1 `
+& $pwsh -NoLogo -NoProfile -NonInteractive -File `
+  (Join-Path $controller 'issue13-v5-coordinator.ps1') `
   -Action RunAll -ConfigPath $config -ConfirmExecuteR
 ```
 
@@ -475,10 +498,12 @@ terminal para aquela geração.
 Depois de `Status` indicar 76 pares concluídos e dez falhas executadas:
 
 ```powershell
-./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-coordinator.ps1 `
+& $pwsh -NoLogo -NoProfile -NonInteractive -File `
+  (Join-Path $controller 'issue13-v5-coordinator.ps1') `
   -Action Aggregate -ConfigPath $config -ConfirmExecuteR
 
-./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-coordinator.ps1 `
+& $pwsh -NoLogo -NoProfile -NonInteractive -File `
+  (Join-Path $controller 'issue13-v5-coordinator.ps1') `
   -Action Report -ConfigPath $config -ConfirmWriteReport
 ```
 

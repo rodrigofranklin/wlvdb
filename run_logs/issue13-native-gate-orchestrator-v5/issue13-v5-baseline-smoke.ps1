@@ -453,8 +453,17 @@ if (-not $IsWindows) {
   throw 'The V5 baseline smoke is Windows-only.'
 }
 
-if (-not ('Issue13V5.BaselineSmokeNativePath' -as [type])) {
-  Add-Type -TypeDefinition @'
+$baselineSmokeNativePathAssembliesBefore =
+  [Reflection.Assembly[]]@([AppDomain]::CurrentDomain.GetAssemblies())
+$preexistingBaselineSmokeNativePathTypes = [type[]]@(
+  [AppDomain]::CurrentDomain.GetAssemblies() | ForEach-Object {
+    $_.GetType('Issue13V5.BaselineSmokeNativePath', $false, $true)
+  } | Where-Object { $null -ne $_ })
+if ($preexistingBaselineSmokeNativePathTypes.Count -ne 0) {
+  throw 'The baseline smoke native path type was preloaded.'
+}
+$baselineSmokeNativePathTypes = [object[]]@(
+  Add-Type -PassThru -ErrorAction Stop -TypeDefinition @'
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
@@ -522,8 +531,47 @@ namespace Issue13V5 {
     }
   }
 }
-'@
+'@)
+$baselineSmokeNativePathType =
+  'Issue13V5.BaselineSmokeNativePath' -as [type]
+$baselineSmokeNativePathNonTypes = [object[]]@(
+  $baselineSmokeNativePathTypes | Where-Object { $_ -isnot [type] })
+$baselineSmokeNativePathReturnedAssemblies = [Reflection.Assembly[]]@(
+  $baselineSmokeNativePathTypes | ForEach-Object { $_.Assembly } |
+    Select-Object -Unique)
+$baselineSmokeNativePathAssemblyWasPreexisting = [object[]]@(
+  $baselineSmokeNativePathAssembliesBefore | Where-Object {
+    [object]::ReferenceEquals(
+      $_, $baselineSmokeNativePathReturnedAssemblies[0])
+  })
+$loadedBaselineSmokeNativePathTypes = [type[]]@(
+  [AppDomain]::CurrentDomain.GetAssemblies() | ForEach-Object {
+    $_.GetType('Issue13V5.BaselineSmokeNativePath', $false, $true)
+  } | Where-Object { $null -ne $_ })
+$baselineSmokeNativePathMethods = [string[]]@(
+  $baselineSmokeNativePathTypes[0].GetMethods(
+    [Reflection.BindingFlags]'Public, Static, DeclaredOnly') |
+    ForEach-Object { $_.ToString() } | Sort-Object)
+if ($baselineSmokeNativePathTypes.Count -ne 1 -or
+    $baselineSmokeNativePathTypes[0] -isnot [type] -or
+    $baselineSmokeNativePathNonTypes.Count -ne 0 -or
+    $baselineSmokeNativePathReturnedAssemblies.Count -ne 1 -or
+    $baselineSmokeNativePathAssemblyWasPreexisting.Count -ne 0 -or
+    [string]$baselineSmokeNativePathTypes[0].FullName -cne
+      'Issue13V5.BaselineSmokeNativePath' -or
+    $loadedBaselineSmokeNativePathTypes.Count -ne 1 -or
+    $null -eq $baselineSmokeNativePathType -or
+    -not [object]::ReferenceEquals(
+      $baselineSmokeNativePathTypes[0], $baselineSmokeNativePathType) -or
+    -not [object]::ReferenceEquals(
+      $baselineSmokeNativePathTypes[0],
+      $loadedBaselineSmokeNativePathTypes[0]) -or
+    [string]::Join('|', $baselineSmokeNativePathMethods) -cne
+      'System.String DriveTarget(System.String)|System.String Resolve(System.String)') {
+  throw 'The baseline smoke native path type compilation was not singular.'
 }
+New-Variable -Name Issue13V5BaselineSmokeNativePathType `
+  -Scope Script -Option Constant -Value $baselineSmokeNativePathTypes[0]
 
 function Assert-Issue13V5BaselineSmokeLocalDrive(
   [string]$Path,
@@ -540,7 +588,8 @@ function Assert-Issue13V5BaselineSmokeLocalDrive(
     throw "$Label must use a ready fixed local drive: $full"
   }
   $driveName = $root.Substring(0, 2)
-  $target = [Issue13V5.BaselineSmokeNativePath]::DriveTarget($driveName)
+  $target = $script:Issue13V5BaselineSmokeNativePathType::DriveTarget(
+    $driveName)
   if ($target.StartsWith('\??\', [StringComparison]::OrdinalIgnoreCase) -or
       $target.StartsWith('\Device\Mup', [StringComparison]::OrdinalIgnoreCase) -or
       $target.StartsWith('\Device\LanmanRedirector',
@@ -571,7 +620,8 @@ function ConvertTo-Issue13V5BaselineSmokePhysicalPath(
     }
     $cursor = $parent.FullName
   }
-  $canonical = [Issue13V5.BaselineSmokeNativePath]::Resolve($cursor).
+  $canonical =
+    $script:Issue13V5BaselineSmokeNativePathType::Resolve($cursor).
     TrimEnd('\')
   for ($index = $missing.Count - 1; $index -ge 0; $index--) {
     $canonical = $canonical + '\' + $missing[$index]

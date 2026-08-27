@@ -584,9 +584,18 @@ function Get-Issue13OracleEffectUtf8Sha256 {
   }
 }
 
-if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT -and
-    -not ('Issue13V5.OracleEffectNativePath' -as [type])) {
-  Add-Type -TypeDefinition @'
+if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+  $oracleEffectNativePathAssembliesBefore =
+    [Reflection.Assembly[]]@([AppDomain]::CurrentDomain.GetAssemblies())
+  $preexistingOracleEffectNativePathTypes = [type[]]@(
+    [AppDomain]::CurrentDomain.GetAssemblies() | ForEach-Object {
+      $_.GetType('Issue13V5.OracleEffectNativePath', $false, $true)
+    } | Where-Object { $null -ne $_ })
+  if ($preexistingOracleEffectNativePathTypes.Count -ne 0) {
+    throw 'The oracle-effect native path type was preloaded.'
+  }
+  $oracleEffectNativePathTypes = [object[]]@(
+    Add-Type -PassThru -ErrorAction Stop -TypeDefinition @'
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
@@ -714,7 +723,56 @@ namespace Issue13V5 {
     }
   }
 }
-'@
+'@)
+  $oracleEffectNativePathTargetTypes = [type[]]@(
+    $oracleEffectNativePathTypes | Where-Object {
+      [string]$_.FullName -ceq 'Issue13V5.OracleEffectNativePath'
+    })
+  $oracleEffectNativePathReturnedNames = [string[]]@(
+    $oracleEffectNativePathTypes | ForEach-Object { $_.FullName } |
+      Sort-Object)
+  $oracleEffectNativePathNonTypes = [object[]]@(
+    $oracleEffectNativePathTypes | Where-Object { $_ -isnot [type] })
+  $oracleEffectNativePathReturnedAssemblies = [Reflection.Assembly[]]@(
+    $oracleEffectNativePathTypes | ForEach-Object { $_.Assembly } |
+      Select-Object -Unique)
+  $oracleEffectNativePathAssemblyWasPreexisting = [object[]]@(
+    $oracleEffectNativePathAssembliesBefore | Where-Object {
+      [object]::ReferenceEquals(
+        $_, $oracleEffectNativePathReturnedAssemblies[0])
+    })
+  $oracleEffectNativePathType =
+    'Issue13V5.OracleEffectNativePath' -as [type]
+  $loadedOracleEffectNativePathTypes = [type[]]@(
+    [AppDomain]::CurrentDomain.GetAssemblies() | ForEach-Object {
+      $_.GetType('Issue13V5.OracleEffectNativePath', $false, $true)
+    } | Where-Object { $null -ne $_ })
+  $oracleEffectNativePathMethods = [string[]]@(
+    $oracleEffectNativePathTargetTypes[0].GetMethods(
+      [Reflection.BindingFlags]'Public, Static, DeclaredOnly') |
+      ForEach-Object { $_.ToString() } | Sort-Object)
+  if ($oracleEffectNativePathTypes.Count -ne 3 -or
+      $oracleEffectNativePathTargetTypes.Count -ne 1 -or
+      $oracleEffectNativePathNonTypes.Count -ne 0 -or
+      $oracleEffectNativePathReturnedAssemblies.Count -ne 1 -or
+      $oracleEffectNativePathAssemblyWasPreexisting.Count -ne 0 -or
+      [string]::Join(',', $oracleEffectNativePathReturnedNames) -cne
+        ('Issue13V5.OracleEffectNativePath,' +
+          'Issue13V5.OracleEffectNativePath+ByHandleFileInformation,' +
+          'Issue13V5.OracleEffectNativePath+FileIdInformation') -or
+      $loadedOracleEffectNativePathTypes.Count -ne 1 -or
+      $null -eq $oracleEffectNativePathType -or
+      -not [object]::ReferenceEquals(
+        $oracleEffectNativePathTargetTypes[0], $oracleEffectNativePathType) -or
+      -not [object]::ReferenceEquals(
+        $oracleEffectNativePathTargetTypes[0],
+        $loadedOracleEffectNativePathTypes[0]) -or
+      [string]::Join('|', $oracleEffectNativePathMethods) -cne
+        'System.String DriveTarget(System.String)|System.String Identity(System.String)|System.String Resolve(System.String)') {
+    throw 'The oracle-effect native path type compilation was not singular.'
+  }
+  New-Variable -Name Issue13OracleEffectNativePathType `
+    -Scope Script -Option Constant -Value $oracleEffectNativePathTargetTypes[0]
 }
 
 function Test-Issue13OracleEffectForbiddenDriveTarget {
@@ -746,7 +804,7 @@ function ConvertTo-Issue13OracleEffectPhysicalPath {
   Assert-Issue13OracleEffect (
     $drive.IsReady -and $drive.DriveType -eq [IO.DriveType]::Fixed
   ) "$Label must use a ready fixed local drive: $full"
-  $target = [Issue13V5.OracleEffectNativePath]::DriveTarget(
+  $target = $script:Issue13OracleEffectNativePathType::DriveTarget(
     $root.Substring(0, 2))
   Assert-Issue13OracleEffect (
     -not (Test-Issue13OracleEffectForbiddenDriveTarget $target)
@@ -763,7 +821,7 @@ function ConvertTo-Issue13OracleEffectPhysicalPath {
     Assert-Issue13OracleEffect ($null -ne $parent) "Cannot find an existing ancestor for $Label path: $full"
     $cursor = $parent.FullName
   }
-  $canonical = [Issue13V5.OracleEffectNativePath]::Resolve($cursor).
+  $canonical = $script:Issue13OracleEffectNativePathType::Resolve($cursor).
     TrimEnd('\')
   for ($index = $missing.Count - 1; $index -ge 0; $index--) {
     $canonical = $canonical + '\' + $missing[$index]
@@ -785,7 +843,7 @@ function Get-Issue13OracleEffectRscriptIdentity {
       'Rscript.exe') 'comparison Rscript must name Rscript.exe exactly.'
   $physical = ConvertTo-Issue13OracleEffectPhysicalPath $logical `
     'comparison Rscript'
-  $rawIdentity = [Issue13V5.OracleEffectNativePath]::Identity($logical)
+  $rawIdentity = $script:Issue13OracleEffectNativePathType::Identity($logical)
   $parts = [string[]]$rawIdentity.Split(':')
   Assert-Issue13OracleEffect ($parts.Count -eq 3 -and
       $parts[0] -cmatch '^[0-9a-f]{16}$' -and

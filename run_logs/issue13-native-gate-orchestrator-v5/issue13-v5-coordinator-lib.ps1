@@ -724,9 +724,18 @@ function Test-Issue13V5ExactBoolean {
     ([bool]$Value -eq [bool]$Expected)
 }
 
-if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT -and
-    -not ('Issue13V5.CoordinatorNativePath' -as [type])) {
-  Add-Type -TypeDefinition @'
+if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+  $coordinatorNativePathAssembliesBefore =
+    [Reflection.Assembly[]]@([AppDomain]::CurrentDomain.GetAssemblies())
+  $preexistingCoordinatorNativePathTypes = [type[]]@(
+    [AppDomain]::CurrentDomain.GetAssemblies() | ForEach-Object {
+      $_.GetType('Issue13V5.CoordinatorNativePath', $false, $true)
+    } | Where-Object { $null -ne $_ })
+  if ($preexistingCoordinatorNativePathTypes.Count -ne 0) {
+    throw 'The coordinator native path type was preloaded.'
+  }
+  $coordinatorNativePathTypes = [object[]]@(
+    Add-Type -PassThru -ErrorAction Stop -TypeDefinition @'
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
@@ -854,8 +863,142 @@ namespace Issue13V5 {
     }
   }
 }
-'@
+'@)
+  $coordinatorNativePathTargetTypes = [type[]]@(
+    $coordinatorNativePathTypes | Where-Object {
+      [string]$_.FullName -ceq 'Issue13V5.CoordinatorNativePath'
+    })
+  $coordinatorNativePathReturnedNames = [string[]]@(
+    $coordinatorNativePathTypes | ForEach-Object { $_.FullName } |
+      Sort-Object)
+  $coordinatorNativePathNonTypes = [object[]]@(
+    $coordinatorNativePathTypes | Where-Object { $_ -isnot [type] })
+  $coordinatorNativePathReturnedAssemblies = [Reflection.Assembly[]]@(
+    $coordinatorNativePathTypes | ForEach-Object { $_.Assembly } |
+      Select-Object -Unique)
+  $coordinatorNativePathAssemblyWasPreexisting = [object[]]@(
+    $coordinatorNativePathAssembliesBefore | Where-Object {
+      [object]::ReferenceEquals(
+        $_, $coordinatorNativePathReturnedAssemblies[0])
+    })
+  $coordinatorNativePathType =
+    'Issue13V5.CoordinatorNativePath' -as [type]
+  $loadedCoordinatorNativePathTypes = [type[]]@(
+    [AppDomain]::CurrentDomain.GetAssemblies() | ForEach-Object {
+      $_.GetType('Issue13V5.CoordinatorNativePath', $false, $true)
+    } | Where-Object { $null -ne $_ })
+  $coordinatorNativePathMethods = [string[]]@(
+    $coordinatorNativePathTargetTypes[0].GetMethods(
+      [Reflection.BindingFlags]'Public, Static, DeclaredOnly') |
+      ForEach-Object { $_.ToString() } | Sort-Object)
+  if ($coordinatorNativePathTypes.Count -ne 3 -or
+      $coordinatorNativePathTargetTypes.Count -ne 1 -or
+      $coordinatorNativePathNonTypes.Count -ne 0 -or
+      $coordinatorNativePathReturnedAssemblies.Count -ne 1 -or
+      $coordinatorNativePathAssemblyWasPreexisting.Count -ne 0 -or
+      [string]::Join(',', $coordinatorNativePathReturnedNames) -cne
+        ('Issue13V5.CoordinatorNativePath,' +
+          'Issue13V5.CoordinatorNativePath+ByHandleFileInformation,' +
+          'Issue13V5.CoordinatorNativePath+FileIdInformation') -or
+      $loadedCoordinatorNativePathTypes.Count -ne 1 -or
+      $null -eq $coordinatorNativePathType -or
+      -not [object]::ReferenceEquals(
+        $coordinatorNativePathTargetTypes[0], $coordinatorNativePathType) -or
+      -not [object]::ReferenceEquals(
+        $coordinatorNativePathTargetTypes[0],
+        $loadedCoordinatorNativePathTypes[0]) -or
+      [string]::Join('|', $coordinatorNativePathMethods) -cne
+        'System.String DriveTarget(System.String)|System.String Identity(System.String)|System.String Resolve(System.String)') {
+    throw 'The coordinator native path type compilation was not singular.'
+  }
+  Set-Issue13V5ScriptConstant Issue13V5CoordinatorNativePathType `
+    $coordinatorNativePathTargetTypes[0]
 }
+
+$boundedStreamCaptureAssembliesBefore =
+  [Reflection.Assembly[]]@([AppDomain]::CurrentDomain.GetAssemblies())
+$preexistingBoundedStreamCaptureTypes = [type[]]@(
+  [AppDomain]::CurrentDomain.GetAssemblies() | ForEach-Object {
+    $_.GetType('Issue13V5.BoundedStreamCapture', $false, $true)
+  } | Where-Object { $null -ne $_ })
+if ($preexistingBoundedStreamCaptureTypes.Count -ne 0) {
+  throw 'The bounded stream capture type was preloaded.'
+}
+$boundedStreamCaptureTypes = [object[]]@(
+  Add-Type -PassThru -ErrorAction Stop -TypeDefinition @'
+using System;
+using System.IO;
+using System.Threading.Tasks;
+
+namespace Issue13V5 {
+  public static class BoundedStreamCapture {
+    public static async Task<long> CopyAsync(
+      Stream source, Stream destination, long maximumBytes) {
+      if (source == null) throw new ArgumentNullException(nameof(source));
+      if (destination == null) {
+        throw new ArgumentNullException(nameof(destination));
+      }
+      if (maximumBytes <= 0) {
+        throw new ArgumentOutOfRangeException(nameof(maximumBytes));
+      }
+      byte[] buffer = new byte[81920];
+      long total = 0;
+      while (true) {
+        int read = await source.ReadAsync(
+          buffer, 0, buffer.Length).ConfigureAwait(false);
+        if (read == 0) break;
+        if (total > maximumBytes - read) {
+          throw new InvalidDataException(
+            "Bounded process output exceeded its byte limit.");
+        }
+        await destination.WriteAsync(
+          buffer, 0, read).ConfigureAwait(false);
+        total += read;
+      }
+      await destination.FlushAsync().ConfigureAwait(false);
+      return total;
+    }
+  }
+}
+'@)
+$boundedStreamCaptureType = 'Issue13V5.BoundedStreamCapture' -as [type]
+$boundedStreamCaptureNonTypes = [object[]]@(
+  $boundedStreamCaptureTypes | Where-Object { $_ -isnot [type] })
+$boundedStreamCaptureReturnedAssemblies = [Reflection.Assembly[]]@(
+  $boundedStreamCaptureTypes | ForEach-Object { $_.Assembly } |
+    Select-Object -Unique)
+$boundedStreamCaptureAssemblyWasPreexisting = [object[]]@(
+  $boundedStreamCaptureAssembliesBefore | Where-Object {
+    [object]::ReferenceEquals(
+      $_, $boundedStreamCaptureReturnedAssemblies[0])
+  })
+$loadedBoundedStreamCaptureTypes = [type[]]@(
+  [AppDomain]::CurrentDomain.GetAssemblies() | ForEach-Object {
+    $_.GetType('Issue13V5.BoundedStreamCapture', $false, $true)
+  } | Where-Object { $null -ne $_ })
+$boundedStreamCaptureMethods = [string[]]@(
+  $boundedStreamCaptureTypes[0].GetMethods(
+    [Reflection.BindingFlags]'Public, Static, DeclaredOnly') |
+    ForEach-Object { $_.ToString() } | Sort-Object)
+if ($boundedStreamCaptureTypes.Count -ne 1 -or
+    $boundedStreamCaptureTypes[0] -isnot [type] -or
+    $boundedStreamCaptureNonTypes.Count -ne 0 -or
+    $boundedStreamCaptureReturnedAssemblies.Count -ne 1 -or
+    $boundedStreamCaptureAssemblyWasPreexisting.Count -ne 0 -or
+    [string]$boundedStreamCaptureTypes[0].FullName -cne
+      'Issue13V5.BoundedStreamCapture' -or
+    $loadedBoundedStreamCaptureTypes.Count -ne 1 -or
+    $null -eq $boundedStreamCaptureType -or
+    -not [object]::ReferenceEquals(
+      $boundedStreamCaptureTypes[0], $boundedStreamCaptureType) -or
+    -not [object]::ReferenceEquals(
+      $boundedStreamCaptureTypes[0], $loadedBoundedStreamCaptureTypes[0]) -or
+    [string]::Join('|', $boundedStreamCaptureMethods) -cne
+      'System.Threading.Tasks.Task`1[System.Int64] CopyAsync(System.IO.Stream, System.IO.Stream, Int64)') {
+  throw 'The bounded stream capture type compilation was not singular.'
+}
+Set-Issue13V5ScriptConstant Issue13V5BoundedStreamCaptureType `
+  $boundedStreamCaptureTypes[0]
 
 function Test-Issue13V5ForbiddenDriveTarget([string]$Target) {
   $Target.StartsWith('\??\', [StringComparison]::OrdinalIgnoreCase) -or
@@ -884,7 +1027,7 @@ function Assert-Issue13V5LocalDriveAliasFree(
   if (-not $drive.IsReady -or $drive.DriveType -ne [IO.DriveType]::Fixed) {
     throw "$Label must use a ready fixed local drive: $full"
   }
-  $target = [Issue13V5.CoordinatorNativePath]::DriveTarget(
+  $target = $script:Issue13V5CoordinatorNativePathType::DriveTarget(
     $root.Substring(0, 2))
   if (Test-Issue13V5ForbiddenDriveTarget $target) {
     throw "$Label must not use a SUBST or mapped-drive alias: $full"
@@ -914,7 +1057,7 @@ function ConvertTo-Issue13V5PhysicalPath(
     }
     $cursor = $parent.FullName
   }
-  $canonical = [Issue13V5.CoordinatorNativePath]::Resolve($cursor).
+  $canonical = $script:Issue13V5CoordinatorNativePathType::Resolve($cursor).
     TrimEnd('\')
   for ($index = $missing.Count - 1; $index -ge 0; $index--) {
     $canonical = $canonical + '\' + $missing[$index]
@@ -1055,7 +1198,7 @@ function Get-Issue13V5PhysicalItemIdentity(
   }
   $full = (Resolve-Path -LiteralPath $Path).Path
   $physical = ConvertTo-Issue13V5PhysicalPath $full $Label
-  $identity = [Issue13V5.CoordinatorNativePath]::Identity($full)
+  $identity = $script:Issue13V5CoordinatorNativePathType::Identity($full)
   $parts = [string[]]$identity.Split(':')
   if ($parts.Count -ne 3 -or $parts[0] -cnotmatch '^[0-9a-f]{16}$' -or
       $parts[1] -cnotmatch '^[0-9a-f]{32}$' -or
@@ -6159,6 +6302,8 @@ function Invoke-Issue13V5RscriptBounded(
   $processStarted = $false
   $stdoutTask = $null
   $stderrTask = $null
+  $stdoutBuffer = $null
+  $stderrBuffer = $null
   $primary = $null
   $timedOut = $false
   $stdoutText = ''
@@ -6172,10 +6317,32 @@ function Invoke-Issue13V5RscriptBounded(
       throw "Could not start bounded Rscript: $Label"
     }
     $processStarted = $true
-    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
-    $stderrTask = $process.StandardError.ReadToEndAsync()
+    $outputLimitBytes = 8L * 1024L * 1024L
+    $stdoutBuffer = [IO.MemoryStream]::new()
+    $stderrBuffer = [IO.MemoryStream]::new()
+    $stdoutTask = $script:Issue13V5BoundedStreamCaptureType::CopyAsync(
+      $process.StandardOutput.BaseStream, $stdoutBuffer, $outputLimitBytes)
+    $stderrTask = $script:Issue13V5BoundedStreamCaptureType::CopyAsync(
+      $process.StandardError.BaseStream, $stderrBuffer, $outputLimitBytes)
     $timeoutMilliseconds = [int]([int64]$TimeoutSeconds * 1000L)
-    $timedOut = -not $process.WaitForExit($timeoutMilliseconds)
+    $waitStopwatch = [Diagnostics.Stopwatch]::StartNew()
+    while (-not $process.HasExited) {
+      if ($stdoutTask.IsFaulted) {
+        $null = $stdoutTask.GetAwaiter().GetResult()
+      }
+      if ($stderrTask.IsFaulted) {
+        $null = $stderrTask.GetAwaiter().GetResult()
+      }
+      $remainingMilliseconds =
+        [int64]$timeoutMilliseconds - $waitStopwatch.ElapsedMilliseconds
+      if ($remainingMilliseconds -le 0) {
+        $timedOut = $true
+        break
+      }
+      $waitSlice = [int][Math]::Min(250L, $remainingMilliseconds)
+      $null = $process.WaitForExit($waitSlice)
+    }
+    $waitStopwatch.Stop()
     if ($timedOut) {
       Stop-Issue13V5ExternalProcess $process
     }
@@ -6183,8 +6350,10 @@ function Invoke-Issue13V5RscriptBounded(
     if (-not [Threading.Tasks.Task]::WaitAll($outputTasks, 30000)) {
       throw 'Bounded Rscript output streams did not close within 30 seconds.'
     }
-    $stdoutText = [string]$stdoutTask.GetAwaiter().GetResult()
-    $stderrText = [string]$stderrTask.GetAwaiter().GetResult()
+    $null = $stdoutTask.GetAwaiter().GetResult()
+    $null = $stderrTask.GetAwaiter().GetResult()
+    $stdoutText = $strictUtf8.GetString($stdoutBuffer.ToArray())
+    $stderrText = $strictUtf8.GetString($stderrBuffer.ToArray())
     $exitCode = if ($timedOut) { -999 } else { [int]$process.ExitCode }
   } catch {
     $primary = $_
@@ -6209,6 +6378,10 @@ function Invoke-Issue13V5RscriptBounded(
     if ($task.IsCompleted) {
       try { $task.Dispose() } catch { $cleanupFailures.Add($_.Exception) }
     }
+  }
+  foreach ($buffer in @($stdoutBuffer, $stderrBuffer)) {
+    if ($null -eq $buffer) { continue }
+    try { $buffer.Dispose() } catch { $cleanupFailures.Add($_.Exception) }
   }
   try {
     $process.Dispose()

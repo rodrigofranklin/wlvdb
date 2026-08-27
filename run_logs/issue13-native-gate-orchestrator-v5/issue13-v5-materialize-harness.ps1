@@ -534,8 +534,18 @@ function ConvertTo-Issue13V5FullPath([string]$Path) {
   [IO.Path]::GetFullPath($Path)
 }
 
-if ($IsWindows -and -not ('Issue13V5.NativePath' -as [type])) {
-  Add-Type -TypeDefinition @'
+if ($IsWindows) {
+  $materializerNativePathAssembliesBefore =
+    [Reflection.Assembly[]]@([AppDomain]::CurrentDomain.GetAssemblies())
+  $preexistingMaterializerNativePathTypes = [type[]]@(
+    [AppDomain]::CurrentDomain.GetAssemblies() | ForEach-Object {
+      $_.GetType('Issue13V5.NativePath', $false, $true)
+    } | Where-Object { $null -ne $_ })
+  if ($preexistingMaterializerNativePathTypes.Count -ne 0) {
+    throw 'The materializer native path type was preloaded.'
+  }
+  $materializerNativePathTypes = [object[]]@(
+    Add-Type -PassThru -ErrorAction Stop -TypeDefinition @'
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
@@ -603,7 +613,46 @@ namespace Issue13V5 {
     }
   }
 }
-'@
+'@)
+  $materializerNativePathType = 'Issue13V5.NativePath' -as [type]
+  $materializerNativePathNonTypes = [object[]]@(
+    $materializerNativePathTypes | Where-Object { $_ -isnot [type] })
+  $materializerNativePathReturnedAssemblies = [Reflection.Assembly[]]@(
+    $materializerNativePathTypes | ForEach-Object { $_.Assembly } |
+      Select-Object -Unique)
+  $materializerNativePathAssemblyWasPreexisting = [object[]]@(
+    $materializerNativePathAssembliesBefore | Where-Object {
+      [object]::ReferenceEquals(
+        $_, $materializerNativePathReturnedAssemblies[0])
+    })
+  $loadedMaterializerNativePathTypes = [type[]]@(
+    [AppDomain]::CurrentDomain.GetAssemblies() | ForEach-Object {
+      $_.GetType('Issue13V5.NativePath', $false, $true)
+    } | Where-Object { $null -ne $_ })
+  $materializerNativePathMethods = [string[]]@(
+    $materializerNativePathTypes[0].GetMethods(
+      [Reflection.BindingFlags]'Public, Static, DeclaredOnly') |
+      ForEach-Object { $_.ToString() } | Sort-Object)
+  if ($materializerNativePathTypes.Count -ne 1 -or
+      $materializerNativePathTypes[0] -isnot [type] -or
+      $materializerNativePathNonTypes.Count -ne 0 -or
+      $materializerNativePathReturnedAssemblies.Count -ne 1 -or
+      $materializerNativePathAssemblyWasPreexisting.Count -ne 0 -or
+      [string]$materializerNativePathTypes[0].FullName -cne
+        'Issue13V5.NativePath' -or
+      $loadedMaterializerNativePathTypes.Count -ne 1 -or
+      $null -eq $materializerNativePathType -or
+      -not [object]::ReferenceEquals(
+        $materializerNativePathTypes[0], $materializerNativePathType) -or
+      -not [object]::ReferenceEquals(
+        $materializerNativePathTypes[0],
+        $loadedMaterializerNativePathTypes[0]) -or
+      [string]::Join('|', $materializerNativePathMethods) -cne
+        'System.String DriveTarget(System.String)|System.String Resolve(System.String)') {
+    throw 'The materializer native path type compilation was not singular.'
+  }
+  New-Variable -Name Issue13V5MaterializerNativePathType `
+    -Scope Script -Option Constant -Value $materializerNativePathTypes[0]
 }
 
 function Assert-Issue13V5AliasFreeLocalPath(
@@ -619,7 +668,8 @@ function Assert-Issue13V5AliasFreeLocalPath(
   if ($drive.DriveType -ne [IO.DriveType]::Fixed) {
     throw "$Label must use a fixed local drive."
   }
-  $target = [Issue13V5.NativePath]::DriveTarget($root.Substring(0, 2))
+  $target = $script:Issue13V5MaterializerNativePathType::DriveTarget(
+    $root.Substring(0, 2))
   if ($target.StartsWith('\??\', [StringComparison]::OrdinalIgnoreCase) -or
       $target.StartsWith('\Device\Mup\',
         [StringComparison]::OrdinalIgnoreCase) -or
@@ -649,7 +699,8 @@ function ConvertTo-Issue13V5CanonicalPath([string]$Path) {
     }
     $cursor = $parent.FullName
   }
-  $canonical = [Issue13V5.NativePath]::Resolve($cursor).TrimEnd('\')
+  $canonical =
+    $script:Issue13V5MaterializerNativePathType::Resolve($cursor).TrimEnd('\')
   for ($index = $missing.Count - 1; $index -ge 0; $index--) {
     $canonical = $canonical + '\' + $missing[$index]
   }

@@ -549,23 +549,23 @@ $bootstrapSourceSha256 = @{
   'issue13-v5-attest-delivery.ps1' =
     '2E1A9D527AB98C3EFCF296DB56E59FCE34461C9A7A0A979044EC70E2B54B981D'
   'issue13-v5-baseline-smoke.ps1' =
-    'E80FD0E2F5826327E4B4DDA9448A308F7D75F093AC7815D2C49C5C2A988923D9'
+    '922B0A8A4A1DCE61F628C30DC15D2734D24BA6814EF032BB313DB04233382437'
   'issue13-v5-capture-clean-bridge-evidence.ps1' =
     'A78F5C6535ADFF09F4248F1EA192F0058DCF4B129A0295E1C04357BC1747B6E6'
   'issue13-v5-capture-clean-stage5-evidence.ps1' =
     'EDCFCE9759F8B73E2368A36ABA309FA3D330C91C417249D49B69A4194768BFF8'
   'issue13-v5-coordinator-lib.ps1' =
-    '7E19FA2641D93365F06B34F46F261F42DF0101D05F66449F41E939C9A8DC783F'
+    'A99CDED9165CCAC9A93A1AF640FB0DC850C26A815A1C694294E7B5DC5A8F47A5'
   'issue13-v5-coordinator.ps1' =
     '57A284A2600AAC37B5879BA44EB6B4AB1953AB00590D4EA6720524195E0EBF28'
   'issue13-v5-materialize-harness.ps1' =
-    '4AD7246EC16144A5C513EC48074E68F118AA4B787E8B880A129DC196DAA43F0F'
+    '82FDD0994B51D6BA784D0AE9B0949C07080796C02AA24240BEDEB44DDB3F2B46'
   'issue13-v5-new-config.ps1' =
     '9BFADFAE89098FA2113434843A1FD9528C4F4548E583AFA11FCB2205F29224C3'
   'issue13-v5-oracle-effect-generate.ps1' =
     '6C1E26154794A253974B7E51C5D15B054AE2D31E09736BF19B624F56EA3C30F9'
   'issue13-v5-oracle-effect-lib.ps1' =
-    '0680DDFD0B2A80A7CAB3F7F8F1A2B003D167744E8030AB3B7688822964EB1FCC'
+    '6CCA4757A9754D5DC778200EE37901D232A45A94021E36200BAA53334CEA5290'
   'issue13-v5-oracle-effect-validate.ps1' =
     '11912422CEB54A45A791E49E11688F974AB45A4CC0F2FB89145D90176AAB0140'
   'issue13-v5-render-report.ps1' =
@@ -1762,6 +1762,159 @@ function Test-Issue13V5CommandCollisionGuardFirst(
     $earlierCommands.Count -eq 1 -and
     [object]::ReferenceEquals($earlierCommands[0], $guardCommands[0])
 }
+function Test-Issue13V5BootstrapRuntimeLeaseRetention(
+  [Management.Automation.Language.ScriptBlockAst]$Guard
+) {
+  if ($null -eq $Guard) { return $false }
+  $runtimeAssignments = @($Guard.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+        $node.Left -is
+          [Management.Automation.Language.VariableExpressionAst] -and
+        $node.Left.VariablePath.UserPath -ieq 'runtimeFileLeases'
+    }, $true))
+  $getDataAssignments = @($Guard.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+        $node.Left -is
+          [Management.Automation.Language.VariableExpressionAst] -and
+        $node.Left.VariablePath.UserPath -ieq 'leaseSets' -and
+        [regex]::Replace($node.Right.Extent.Text, '[\s`]', '') -ceq
+          ("[AppDomain]::CurrentDomain.GetData(" +
+            "'wlv.issue13.v5.powershell.runtime.leases')")
+    }, $true))
+  $leaseSetAssignments = @($Guard.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+        $node.Left -is
+          [Management.Automation.Language.VariableExpressionAst] -and
+        $node.Left.VariablePath.UserPath -ieq 'leaseSets'
+    }, $true))
+  $newListAssignments = @($Guard.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+        $node.Left -is
+          [Management.Automation.Language.VariableExpressionAst] -and
+        $node.Left.VariablePath.UserPath -ieq 'leaseSets' -and
+        [regex]::Replace($node.Right.Extent.Text, '[\s`]', '') -ceq
+          '[Collections.Generic.List[object]]::new()'
+    }, $true))
+  $countChecks = @($Guard.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.IfStatementAst] -and
+        $node.Clauses.Count -eq 1 -and $null -eq $node.ElseClause -and
+        [regex]::Replace(
+          $node.Clauses[0].Item1.Extent.Text, '[\s`()]', '') -ceq
+          '$runtimeFileLeases.Count-ne11'
+    }, $true))
+  $runtimeMembers = @($Guard.FindAll({
+      param($node)
+      $node -is
+        [Management.Automation.Language.InvokeMemberExpressionAst] -and
+        $node.Expression.Extent.Text -ceq '$runtimeFileLeases'
+    }, $true))
+  $leaseSetMembers = @($Guard.FindAll({
+      param($node)
+      $node -is
+        [Management.Automation.Language.InvokeMemberExpressionAst] -and
+        $node.Expression.Extent.Text -ceq '$leaseSets'
+    }, $true))
+  $setDataCalls = @($Guard.FindAll({
+      param($node)
+      $node -is
+        [Management.Automation.Language.InvokeMemberExpressionAst] -and
+        $node.Member.Extent.Text -ceq 'SetData' -and
+        [regex]::Replace($node.Expression.Extent.Text, '[\s`]', '') -ceq
+          '[AppDomain]::CurrentDomain'
+    }, $true))
+  if ($runtimeAssignments.Count -ne 1 -or
+      [regex]::Replace(
+        $runtimeAssignments[0].Right.Extent.Text, '[\s`]', '') -cne
+        '[Collections.Generic.List[IO.FileStream]]::new()' -or
+      $getDataAssignments.Count -ne 1 -or
+      $leaseSetAssignments.Count -ne 2 -or
+      $newListAssignments.Count -ne 1 -or $countChecks.Count -ne 1 -or
+      $runtimeMembers.Count -ne 2 -or $leaseSetMembers.Count -ne 1 -or
+      $setDataCalls.Count -ne 1) {
+    return $false
+  }
+  $runtimeMemberSignatures = [Collections.Generic.List[string]]::new()
+  foreach ($member in $runtimeMembers) {
+    $runtimeMemberSignatures.Add(
+      [regex]::Replace($member.Extent.Text, '[\s`]', ''))
+  }
+  if ([string]::Join("`n", $runtimeMemberSignatures.ToArray()) -cne
+      [string]::Join("`n", @(
+        '$runtimeFileLeases.Add($stream)',
+        '$runtimeFileLeases.Clear()'
+      )) -or
+      [regex]::Replace(
+        $leaseSetMembers[0].Extent.Text, '[\s`]', '') -cne
+        '$leaseSets.Add($runtimeFileLeases)' -or
+      [regex]::Replace($setDataCalls[0].Extent.Text, '[\s`]', '') -cne
+        ("[AppDomain]::CurrentDomain.SetData(" +
+          "'wlv.issue13.v5.powershell.runtime.leases',`$leaseSets)")) {
+    return $false
+  }
+  $nodes = [ordered]@{
+    runtime_assignment = $runtimeAssignments[0]
+    runtime_add = $runtimeMembers[0]
+    runtime_clear = $runtimeMembers[1]
+    count_check = $countChecks[0]
+    get_data = $getDataAssignments[0]
+    new_list = $newListAssignments[0]
+    lease_set_add = $leaseSetMembers[0]
+    set_data = $setDataCalls[0]
+  }
+  $chains = @{}
+  foreach ($name in $nodes.Keys) {
+    $types = [Collections.Generic.List[string]]::new()
+    $current = $nodes[$name]
+    while ($null -ne $current -and
+        -not [object]::ReferenceEquals($current, $Guard)) {
+      $types.Add($current.GetType().Name)
+      $current = $current.Parent
+    }
+    if ($null -eq $current) { return $false }
+    $chains[$name] = [string]::Join('>', $types.ToArray())
+  }
+  $chains.runtime_assignment -ceq 'AssignmentStatementAst>NamedBlockAst' -and
+    $chains.runtime_add -ceq
+      ('InvokeMemberExpressionAst>CommandExpressionAst>PipelineAst>' +
+        'StatementBlockAst>TryStatementAst>StatementBlockAst>' +
+        'ForEachStatementAst>StatementBlockAst>TryStatementAst>' +
+        'NamedBlockAst') -and
+    $chains.runtime_clear -ceq
+      ('InvokeMemberExpressionAst>CommandExpressionAst>PipelineAst>' +
+        'StatementBlockAst>IfStatementAst>NamedBlockAst') -and
+    $chains.count_check -ceq 'IfStatementAst>NamedBlockAst' -and
+    $chains.get_data -ceq 'AssignmentStatementAst>NamedBlockAst' -and
+    $chains.new_list -ceq
+      'AssignmentStatementAst>StatementBlockAst>IfStatementAst>NamedBlockAst' -and
+    $chains.lease_set_add -ceq
+      'InvokeMemberExpressionAst>CommandExpressionAst>PipelineAst>NamedBlockAst' -and
+    $chains.set_data -ceq
+      'InvokeMemberExpressionAst>CommandExpressionAst>PipelineAst>NamedBlockAst' -and
+    $newListAssignments[0].Parent.Parent -is
+      [Management.Automation.Language.IfStatementAst] -and
+    $newListAssignments[0].Parent.Parent.Clauses.Count -eq 1 -and
+    $null -eq $newListAssignments[0].Parent.Parent.ElseClause -and
+    [regex]::Replace(
+      $newListAssignments[0].Parent.Parent.Clauses[0].Item1.Extent.Text,
+      '[\s`()]', '') -ceq
+      '$leaseSets-isnot[Collections.Generic.List[object]]' -and
+    $runtimeAssignments[0].Extent.EndOffset -lt
+      $runtimeMembers[0].Extent.StartOffset -and
+    $runtimeMembers[0].Extent.EndOffset -lt $countChecks[0].Extent.StartOffset -and
+    $countChecks[0].Extent.EndOffset -lt
+      $getDataAssignments[0].Extent.StartOffset -and
+    $getDataAssignments[0].Extent.EndOffset -lt
+      $newListAssignments[0].Extent.StartOffset -and
+    $newListAssignments[0].Extent.EndOffset -lt
+      $leaseSetMembers[0].Extent.StartOffset -and
+    $leaseSetMembers[0].Extent.EndOffset -lt
+      $setDataCalls[0].Extent.StartOffset
+}
 function Get-Issue13V5ControllerSourceSha256(
   [string]$Text,
   [string]$FileName
@@ -2035,8 +2188,8 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = '2637588ECE5D0693F068560BB7ADDA69DBE15A91B08B1853C82B7A2B046ECFD0'
   }
   'issue13-v5-baseline-smoke.ps1' = @{
-    command_count = 160
-    command_sha256 = 'EC8F7391F01DCDCC2C0F717486D82E8D60FA19D28E66C47C637AACD2C7277D64'
+    command_count = 171
+    command_sha256 = 'E7455E63672050E96BE19EA54AC1F1624B034DC0C12ED20C301E02DF72BD4F17'
     redirection_count = 4
     redirection_sha256 = '3ADEEFA5B4469B07E9149CD294980C3F82241C9EE64016075D92540C0A44D3CA'
   }
@@ -2053,8 +2206,8 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
   'issue13-v5-coordinator-lib.ps1' = @{
-    command_count = 1143
-    command_sha256 = '90258C9C6A304BB712680AD66F0A993436642F12E682284D5F1F1431B1C3DCA2'
+    command_count = 1169
+    command_sha256 = 'ACC2BDE3A990CC90ECECB2F7F3FFFB93C291BAA0F0B912D3C844A344978D6900'
     redirection_count = 16
     redirection_sha256 = 'A27C1F1A1A78A655A820FF3FB0CF52CDB0B3A4DF14EE3A8B21EADCFCD395E8EE'
   }
@@ -2065,8 +2218,8 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = '085831E9BDB8C3100B84B1D27450520F0DCA253440E9644501B931C9273D75D7'
   }
   'issue13-v5-materialize-harness.ps1' = @{
-    command_count = 242
-    command_sha256 = 'FDB6B7F1CD717BBCC809673E45965E2FF9B5818B860A3C0CCFA763CEFFA0A304'
+    command_count = 253
+    command_sha256 = '9C6BF911675776008B635BFFE8EFA11D35D7A7C54B4E170BEDB6CB84C9F267BC'
     redirection_count = 4
     redirection_sha256 = '5FE6646416132F2444D3AC9C63EBDF8DCEAE6E18DC5242C675574BC026FF9352'
   }
@@ -2083,8 +2236,8 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
   'issue13-v5-oracle-effect-lib.ps1' = @{
-    command_count = 875
-    command_sha256 = 'D876FDA6EFC484B8BD5DBEB39FE299B244571E1C1EE2571BF6DBABEF37B08EDF'
+    command_count = 889
+    command_sha256 = '6B70A7CE2938CA3A54CFE0291A8297D1FB62C51BF383C5F0B86FDA3598D725EA'
     redirection_count = 0
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
@@ -2101,26 +2254,26 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = '7F4027149DBBCCC5E186586FA06D6058EF6E3821AC51098E7521EBC767D5FE2D'
   }
   'issue13-v5-static-verify.ps1' = @{
-    command_count = 701
-    command_sha256 = '8EF895638990C916B041F4BC49D70234B80A6237974BA17A1A7BE4C3814A2E54'
+    command_count = 725
+    command_sha256 = '25D551487DBF76FEDC6C0AD178F770436C6E148373FC184664C9B12CCA8324F7'
     redirection_count = 0
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
 }
 $issue13ExpectedControllerSourceSha256 = @{
   'issue13-v5-attest-delivery.ps1' = '2E1A9D527AB98C3EFCF296DB56E59FCE34461C9A7A0A979044EC70E2B54B981D'
-  'issue13-v5-baseline-smoke.ps1' = 'E80FD0E2F5826327E4B4DDA9448A308F7D75F093AC7815D2C49C5C2A988923D9'
+  'issue13-v5-baseline-smoke.ps1' = '922B0A8A4A1DCE61F628C30DC15D2734D24BA6814EF032BB313DB04233382437'
   'issue13-v5-capture-clean-bridge-evidence.ps1' = 'A78F5C6535ADFF09F4248F1EA192F0058DCF4B129A0295E1C04357BC1747B6E6'
   'issue13-v5-capture-clean-stage5-evidence.ps1' = 'EDCFCE9759F8B73E2368A36ABA309FA3D330C91C417249D49B69A4194768BFF8'
-  'issue13-v5-coordinator-lib.ps1' = '7E19FA2641D93365F06B34F46F261F42DF0101D05F66449F41E939C9A8DC783F'
+  'issue13-v5-coordinator-lib.ps1' = 'A99CDED9165CCAC9A93A1AF640FB0DC850C26A815A1C694294E7B5DC5A8F47A5'
   'issue13-v5-coordinator.ps1' = '57A284A2600AAC37B5879BA44EB6B4AB1953AB00590D4EA6720524195E0EBF28'
-  'issue13-v5-materialize-harness.ps1' = '4AD7246EC16144A5C513EC48074E68F118AA4B787E8B880A129DC196DAA43F0F'
+  'issue13-v5-materialize-harness.ps1' = '82FDD0994B51D6BA784D0AE9B0949C07080796C02AA24240BEDEB44DDB3F2B46'
   'issue13-v5-new-config.ps1' = '9BFADFAE89098FA2113434843A1FD9528C4F4548E583AFA11FCB2205F29224C3'
   'issue13-v5-oracle-effect-generate.ps1' = '6C1E26154794A253974B7E51C5D15B054AE2D31E09736BF19B624F56EA3C30F9'
-  'issue13-v5-oracle-effect-lib.ps1' = '0680DDFD0B2A80A7CAB3F7F8F1A2B003D167744E8030AB3B7688822964EB1FCC'
+  'issue13-v5-oracle-effect-lib.ps1' = '6CCA4757A9754D5DC778200EE37901D232A45A94021E36200BAA53334CEA5290'
   'issue13-v5-oracle-effect-validate.ps1' = '11912422CEB54A45A791E49E11688F974AB45A4CC0F2FB89145D90176AAB0140'
   'issue13-v5-render-report.ps1' = 'F7B11D7CD0AF8F867467AED19D220E135C6F69D6416413C81FC2AFDCD842153B'
-    'issue13-v5-static-verify.ps1' = 'B05E4C243A0956195E89C18C181ECA07A0F78AD2210E6831DCEC9125B16103A6'
+    'issue13-v5-static-verify.ps1' = 'BCB16FEB4BB65108E0443ADD43A4AB98B19C6C5B729B540612624FC88143B670'
 }
 $issue13ExpectedDotSourceSignatures = @{
   'issue13-v5-attest-delivery.ps1' = @(
@@ -2590,6 +2743,573 @@ $newConfigText = $issue13ControllerPowerShellTexts[
   'issue13-v5-new-config.ps1']
 $oracleLibraryText = $issue13ControllerPowerShellTexts[
   'issue13-v5-oracle-effect-lib.ps1']
+function Test-Issue13V5StaticAddTypeAuthority(
+  [Management.Automation.Language.ScriptBlockAst]$Ast,
+  [string]$TypeName,
+  [string]$PreexistingVariable,
+  [string]$TypesVariable,
+  [string]$TypeVariable,
+  [string]$LoadedVariable,
+  [string]$MethodsVariable,
+  [string]$AssembliesBeforeVariable,
+  [string]$NonTypesVariable,
+  [string]$ReturnedAssembliesVariable,
+  [string]$AssemblyWasPreexistingVariable,
+  [string]$CapturedVariable,
+  [string]$CapturedValueExpression,
+  [string]$ExpectedUseMembers,
+  [long]$ExpectedReturnedCount,
+  [string]$ExpectedReturnedNames,
+  [string]$ExpectedMethods,
+  [string]$PreloadedMessage,
+  [string]$CompilationMessage
+) {
+  $writes = @{}
+  foreach ($variableName in [string[]]@(
+      $PreexistingVariable, $TypesVariable, $TypeVariable,
+      $LoadedVariable, $MethodsVariable, $AssembliesBeforeVariable,
+      $NonTypesVariable, $ReturnedAssembliesVariable,
+      $AssemblyWasPreexistingVariable)) {
+    $writes[$variableName] = @($Ast.FindAll({
+        param($node)
+        $node -is
+          [Management.Automation.Language.AssignmentStatementAst] -and
+          $node.Left -is
+            [Management.Automation.Language.VariableExpressionAst] -and
+          $node.Left.VariablePath.UserPath -ceq $variableName
+      }, $true))
+    if ($writes[$variableName].Count -ne 1) { return $false }
+  }
+  $preexistingAssignment = $writes[$PreexistingVariable][0]
+  $typesAssignment = $writes[$TypesVariable][0]
+  $typeAssignment = $writes[$TypeVariable][0]
+  $loadedAssignment = $writes[$LoadedVariable][0]
+  $methodsAssignment = $writes[$MethodsVariable][0]
+  $assembliesBeforeAssignment = $writes[$AssembliesBeforeVariable][0]
+  $nonTypesAssignment = $writes[$NonTypesVariable][0]
+  $returnedAssembliesAssignment = $writes[$ReturnedAssembliesVariable][0]
+  $assemblyWasPreexistingAssignment =
+    $writes[$AssemblyWasPreexistingVariable][0]
+  $precheckNormalized = [regex]::Replace(
+    [string]$preexistingAssignment.Extent.Text, '[\s`]', '')
+  $loadedNormalized = [regex]::Replace(
+    [string]$loadedAssignment.Extent.Text, '[\s`]', '')
+  $expectedPreexisting =
+    ('$' + $PreexistingVariable + '=[type[]]@(' +
+      '[AppDomain]::CurrentDomain.GetAssemblies()|ForEach-Object{' +
+      '$_.GetType(''' + $TypeName + ''',$false,$true)}|' +
+      'Where-Object{$null-ne$_})')
+  $expectedLoaded =
+    ('$' + $LoadedVariable + '=[type[]]@(' +
+      '[AppDomain]::CurrentDomain.GetAssemblies()|ForEach-Object{' +
+      '$_.GetType(''' + $TypeName + ''',$false,$true)}|' +
+      'Where-Object{$null-ne$_})')
+  if ($precheckNormalized -cne $expectedPreexisting -or
+      $loadedNormalized -cne $expectedLoaded) {
+    return $false
+  }
+  if ([regex]::Replace(
+        [string]$assembliesBeforeAssignment.Extent.Text, '[\s`]', '') -cne
+      ('$' + $AssembliesBeforeVariable +
+        '=[Reflection.Assembly[]]@(' +
+        '[AppDomain]::CurrentDomain.GetAssemblies())') -or
+      -not [regex]::Replace(
+        [string]$nonTypesAssignment.Extent.Text, '[\s`]', '').Contains(
+          ('$' + $TypesVariable +
+            '|Where-Object{$_-isnot[type]}')) -or
+      -not [regex]::Replace(
+        [string]$returnedAssembliesAssignment.Extent.Text,
+        '[\s`]', '').Contains(
+          ('$' + $TypesVariable +
+            '|ForEach-Object{$_.Assembly}|Select-Object-Unique')) -or
+      -not [regex]::Replace(
+        [string]$assemblyWasPreexistingAssignment.Extent.Text,
+        '[\s`]', '').Contains(
+          ('$' + $AssembliesBeforeVariable +
+            '|Where-Object{[object]::ReferenceEquals($_,$' +
+            $ReturnedAssembliesVariable + '[0])}'))) {
+    return $false
+  }
+  $normalizedPreloadedMessage = [regex]::Replace(
+    $PreloadedMessage, '[\s`]', '')
+  $precheckIfs = @($Ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.IfStatementAst] -and
+        [regex]::Replace(
+          [string]$node.Extent.Text, '[\s`]', '') -ceq
+          ('if($' + $PreexistingVariable + '.Count-ne0){throw''' +
+            $normalizedPreloadedMessage + '''}')
+    }, $true))
+  $validationIfs = @($Ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.IfStatementAst] -and
+        [object]::ReferenceEquals(
+          $node.Parent, $typesAssignment.Parent) -and
+        [string]$node.Extent.Text -cmatch
+          [regex]::Escape("throw '$CompilationMessage'")
+    }, $true))
+  $addTypeCalls = @($typesAssignment.Right.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -ceq 'Add-Type'
+    }, $true))
+  if ($precheckIfs.Count -ne 1 -or $validationIfs.Count -ne 1 -or
+      $addTypeCalls.Count -ne 1) {
+    return $false
+  }
+  $addTypeCall = $addTypeCalls[0]
+  $parameters = @($addTypeCall.CommandElements | Where-Object {
+      $_ -is [Management.Automation.Language.CommandParameterAst]
+    })
+  if ($addTypeCall.InvocationOperator -ne
+        [Management.Automation.Language.TokenKind]::Unknown -or
+      $addTypeCall.CommandElements.Count -ne 6 -or
+      [string]::Join(',', [string[]]@(
+        $parameters | ForEach-Object { $_.ParameterName })) -cne
+        'PassThru,ErrorAction,TypeDefinition' -or
+      $addTypeCall.CommandElements[3].Extent.Text -cne 'Stop') {
+    return $false
+  }
+  $typeNormalized = [regex]::Replace(
+    [string]$typeAssignment.Extent.Text, '[\s`]', '')
+  if ($typeNormalized -cne
+      ('$' + $TypeVariable + '=''' + $TypeName + '''-as[type]')) {
+    return $false
+  }
+  $validation = $validationIfs[0]
+  $validationNormalized = [regex]::Replace(
+    [string]$validation.Extent.Text, '[\s`]', '')
+  $referenceEqualsCalls = @($validation.FindAll({
+      param($node)
+      $node -is
+        [Management.Automation.Language.InvokeMemberExpressionAst] -and
+        $node.Static -and
+        $node.Expression -is
+          [Management.Automation.Language.TypeExpressionAst] -and
+        $node.Expression.TypeName.FullName -ceq 'object' -and
+        $node.Member.Extent.Text -ceq 'ReferenceEquals'
+    }, $true))
+  $captureCommands = @($Ast.FindAll({
+      param($node)
+      if ($node -isnot [Management.Automation.Language.CommandAst]) {
+        return $false
+      }
+      $normalized = [regex]::Replace(
+        [string]$node.Extent.Text, '[\s`]', '')
+      $normalized -ceq
+        ('Set-Issue13V5ScriptConstant' + $CapturedVariable +
+          $CapturedValueExpression) -or
+        $normalized -ceq
+          ('New-Variable-Name' + $CapturedVariable +
+            '-ScopeScript-OptionConstant-Value' +
+            $CapturedValueExpression)
+    }, $true))
+  $capturedUses = @($Ast.FindAll({
+      param($node)
+      $node -is
+        [Management.Automation.Language.InvokeMemberExpressionAst] -and
+        $node.Static -and
+        $node.Expression -is
+          [Management.Automation.Language.VariableExpressionAst] -and
+        $node.Expression.VariablePath.UserPath -ceq
+          ('script:' + $CapturedVariable)
+    }, $true))
+  $nominalTypeUses = @($Ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.TypeExpressionAst] -and
+        $node.TypeName.FullName -ceq $TypeName
+    }, $true))
+  $capturedUseMembers = [string]::Join(',', [string[]]@(
+      $capturedUses | ForEach-Object { $_.Member.Extent.Text }))
+  $expectedMethodsNormalized = [regex]::Replace(
+    $ExpectedMethods, '[\s`]', '')
+  $methodsAssignmentNormalized = [regex]::Replace(
+    [string]$methodsAssignment.Extent.Text, '[\s`]', '')
+  $returnedNameChecks = [Collections.Generic.List[bool]]::new()
+  foreach ($expectedReturnedName in [string[]]($ExpectedReturnedNames -split
+      '\|')) {
+    $returnedNameChecks.Add(
+      $validationNormalized.Contains($expectedReturnedName))
+  }
+  $sameContainer =
+    [object]::ReferenceEquals(
+      $preexistingAssignment.Parent, $precheckIfs[0].Parent) -and
+    [object]::ReferenceEquals(
+      $preexistingAssignment.Parent, $typesAssignment.Parent) -and
+    [object]::ReferenceEquals(
+      $preexistingAssignment.Parent, $typeAssignment.Parent) -and
+    [object]::ReferenceEquals(
+      $preexistingAssignment.Parent, $loadedAssignment.Parent) -and
+    [object]::ReferenceEquals(
+      $preexistingAssignment.Parent, $methodsAssignment.Parent) -and
+    [object]::ReferenceEquals(
+      $preexistingAssignment.Parent, $assembliesBeforeAssignment.Parent) -and
+    [object]::ReferenceEquals(
+      $preexistingAssignment.Parent, $nonTypesAssignment.Parent) -and
+    [object]::ReferenceEquals(
+      $preexistingAssignment.Parent, $returnedAssembliesAssignment.Parent) -and
+    [object]::ReferenceEquals(
+      $preexistingAssignment.Parent,
+      $assemblyWasPreexistingAssignment.Parent) -and
+    [object]::ReferenceEquals(
+      $preexistingAssignment.Parent, $validation.Parent)
+  $sameContainer -and
+    $assembliesBeforeAssignment.Extent.StartOffset -lt
+      $preexistingAssignment.Extent.StartOffset -and
+    $preexistingAssignment.Extent.StartOffset -lt
+      $precheckIfs[0].Extent.StartOffset -and
+    $precheckIfs[0].Extent.StartOffset -lt $typesAssignment.Extent.StartOffset -and
+    $typesAssignment.Extent.StartOffset -lt $typeAssignment.Extent.StartOffset -and
+    $typeAssignment.Extent.StartOffset -lt $loadedAssignment.Extent.StartOffset -and
+    $loadedAssignment.Extent.StartOffset -lt
+      $methodsAssignment.Extent.StartOffset -and
+    $methodsAssignment.Extent.StartOffset -lt $validation.Extent.StartOffset -and
+    $captureCommands.Count -eq 1 -and
+    $captureCommands[0].Extent.StartOffset -gt $validation.Extent.StartOffset -and
+    $capturedUseMembers -ceq $ExpectedUseMembers -and
+    $nominalTypeUses.Count -eq 0 -and
+    $methodsAssignmentNormalized.Contains(
+      '|ForEach-Object{$_.ToString()}|Sort-Object)') -and
+    $referenceEqualsCalls.Count -eq 2 -and
+    $validationNormalized.Contains(
+      ('$' + $TypesVariable + '.Count-ne' + $ExpectedReturnedCount)) -and
+    $validationNormalized.Contains(
+      ('$' + $NonTypesVariable + '.Count-ne0')) -and
+    $validationNormalized.Contains(
+      ('$' + $ReturnedAssembliesVariable + '.Count-ne1')) -and
+    $validationNormalized.Contains(
+      ('$' + $AssemblyWasPreexistingVariable + '.Count-ne0')) -and
+    $validationNormalized.Contains(
+      ('$' + $LoadedVariable + '.Count-ne1')) -and
+    $validationNormalized.Contains(
+      ("[string]::Join('|',`$$MethodsVariable)-cne'" +
+        $expectedMethodsNormalized + "'")) -and
+    -not $returnedNameChecks.Contains($false) -and
+    [regex]::Replace(
+      [string]$typesAssignment.Right.Extent.Text, '[\s`]', '').StartsWith(
+        '[object[]]@(Add-Type-PassThru-ErrorActionStop-TypeDefinition')
+}
+$addTypeAuthoritySpecs = [object[]]@(
+  [pscustomobject]@{
+    file = 'issue13-v5-coordinator-lib.ps1'
+    type_name = 'Issue13V5.CoordinatorNativePath'
+    preexisting = 'preexistingCoordinatorNativePathTypes'
+    types = 'coordinatorNativePathTypes'
+    type = 'coordinatorNativePathType'
+    loaded = 'loadedCoordinatorNativePathTypes'
+    methods = 'coordinatorNativePathMethods'
+    assemblies_before = 'coordinatorNativePathAssembliesBefore'
+    non_types = 'coordinatorNativePathNonTypes'
+    returned_assemblies = 'coordinatorNativePathReturnedAssemblies'
+    assembly_was_preexisting =
+      'coordinatorNativePathAssemblyWasPreexisting'
+    captured = 'Issue13V5CoordinatorNativePathType'
+    captured_value = '$coordinatorNativePathTargetTypes[0]'
+    use_members = 'DriveTarget,Resolve,Identity'
+    returned_count = 3L
+    returned_names =
+      ('Issue13V5.CoordinatorNativePath|' +
+        'Issue13V5.CoordinatorNativePath+ByHandleFileInformation|' +
+        'Issue13V5.CoordinatorNativePath+FileIdInformation')
+    expected_methods =
+      ('System.String DriveTarget(System.String)|' +
+        'System.String Identity(System.String)|' +
+        'System.String Resolve(System.String)')
+    preloaded_message = 'The coordinator native path type was preloaded.'
+    compilation_message =
+      'The coordinator native path type compilation was not singular.'
+  },
+  [pscustomobject]@{
+    file = 'issue13-v5-coordinator-lib.ps1'
+    type_name = 'Issue13V5.BoundedStreamCapture'
+    preexisting = 'preexistingBoundedStreamCaptureTypes'
+    types = 'boundedStreamCaptureTypes'
+    type = 'boundedStreamCaptureType'
+    loaded = 'loadedBoundedStreamCaptureTypes'
+    methods = 'boundedStreamCaptureMethods'
+    assemblies_before = 'boundedStreamCaptureAssembliesBefore'
+    non_types = 'boundedStreamCaptureNonTypes'
+    returned_assemblies = 'boundedStreamCaptureReturnedAssemblies'
+    assembly_was_preexisting =
+      'boundedStreamCaptureAssemblyWasPreexisting'
+    captured = 'Issue13V5BoundedStreamCaptureType'
+    captured_value = '$boundedStreamCaptureTypes[0]'
+    use_members = 'CopyAsync,CopyAsync'
+    returned_count = 1L
+    returned_names = 'Issue13V5.BoundedStreamCapture'
+    expected_methods =
+      ('System.Threading.Tasks.Task`1[System.Int64] ' +
+        'CopyAsync(System.IO.Stream, System.IO.Stream, Int64)')
+    preloaded_message = 'The bounded stream capture type was preloaded.'
+    compilation_message =
+      'The bounded stream capture type compilation was not singular.'
+  },
+  [pscustomobject]@{
+    file = 'issue13-v5-baseline-smoke.ps1'
+    type_name = 'Issue13V5.BaselineSmokeNativePath'
+    preexisting = 'preexistingBaselineSmokeNativePathTypes'
+    types = 'baselineSmokeNativePathTypes'
+    type = 'baselineSmokeNativePathType'
+    loaded = 'loadedBaselineSmokeNativePathTypes'
+    methods = 'baselineSmokeNativePathMethods'
+    assemblies_before = 'baselineSmokeNativePathAssembliesBefore'
+    non_types = 'baselineSmokeNativePathNonTypes'
+    returned_assemblies = 'baselineSmokeNativePathReturnedAssemblies'
+    assembly_was_preexisting =
+      'baselineSmokeNativePathAssemblyWasPreexisting'
+    captured = 'Issue13V5BaselineSmokeNativePathType'
+    captured_value = '$baselineSmokeNativePathTypes[0]'
+    use_members = 'DriveTarget,Resolve'
+    returned_count = 1L
+    returned_names = 'Issue13V5.BaselineSmokeNativePath'
+    expected_methods =
+      ('System.String DriveTarget(System.String)|' +
+        'System.String Resolve(System.String)')
+    preloaded_message = 'The baseline smoke native path type was preloaded.'
+    compilation_message =
+      'The baseline smoke native path type compilation was not singular.'
+  },
+  [pscustomobject]@{
+    file = 'issue13-v5-materialize-harness.ps1'
+    type_name = 'Issue13V5.NativePath'
+    preexisting = 'preexistingMaterializerNativePathTypes'
+    types = 'materializerNativePathTypes'
+    type = 'materializerNativePathType'
+    loaded = 'loadedMaterializerNativePathTypes'
+    methods = 'materializerNativePathMethods'
+    assemblies_before = 'materializerNativePathAssembliesBefore'
+    non_types = 'materializerNativePathNonTypes'
+    returned_assemblies = 'materializerNativePathReturnedAssemblies'
+    assembly_was_preexisting =
+      'materializerNativePathAssemblyWasPreexisting'
+    captured = 'Issue13V5MaterializerNativePathType'
+    captured_value = '$materializerNativePathTypes[0]'
+    use_members = 'DriveTarget,Resolve'
+    returned_count = 1L
+    returned_names = 'Issue13V5.NativePath'
+    expected_methods =
+      ('System.String DriveTarget(System.String)|' +
+        'System.String Resolve(System.String)')
+    preloaded_message = 'The materializer native path type was preloaded.'
+    compilation_message =
+      'The materializer native path type compilation was not singular.'
+  },
+  [pscustomobject]@{
+    file = 'issue13-v5-oracle-effect-lib.ps1'
+    type_name = 'Issue13V5.OracleEffectNativePath'
+    preexisting = 'preexistingOracleEffectNativePathTypes'
+    types = 'oracleEffectNativePathTypes'
+    type = 'oracleEffectNativePathType'
+    loaded = 'loadedOracleEffectNativePathTypes'
+    methods = 'oracleEffectNativePathMethods'
+    assemblies_before = 'oracleEffectNativePathAssembliesBefore'
+    non_types = 'oracleEffectNativePathNonTypes'
+    returned_assemblies = 'oracleEffectNativePathReturnedAssemblies'
+    assembly_was_preexisting =
+      'oracleEffectNativePathAssemblyWasPreexisting'
+    captured = 'Issue13OracleEffectNativePathType'
+    captured_value = '$oracleEffectNativePathTargetTypes[0]'
+    use_members = 'DriveTarget,Resolve,Identity'
+    returned_count = 3L
+    returned_names =
+      ('Issue13V5.OracleEffectNativePath|' +
+        'Issue13V5.OracleEffectNativePath+ByHandleFileInformation|' +
+        'Issue13V5.OracleEffectNativePath+FileIdInformation')
+    expected_methods =
+      ('System.String DriveTarget(System.String)|' +
+        'System.String Identity(System.String)|' +
+        'System.String Resolve(System.String)')
+    preloaded_message = 'The oracle-effect native path type was preloaded.'
+    compilation_message =
+      'The oracle-effect native path type compilation was not singular.'
+  },
+  [pscustomobject]@{
+    file = 'issue13-v5-static-verify.ps1'
+    type_name = 'Issue13V5.NativePath'
+    preexisting = 'preexistingStaticMaterializerNativePathTypes'
+    types = 'staticMaterializerNativePathTypes'
+    type = 'staticMaterializerNativePathType'
+    loaded = 'loadedStaticMaterializerNativePathTypes'
+    methods = 'staticMaterializerNativePathMethods'
+    assemblies_before = 'staticMaterializerNativePathAssembliesBefore'
+    non_types = 'staticMaterializerNativePathNonTypes'
+    returned_assemblies = 'staticMaterializerNativePathReturnedAssemblies'
+    assembly_was_preexisting =
+      'staticMaterializerNativePathAssemblyWasPreexisting'
+    captured = 'Issue13V5StaticMaterializerNativePathType'
+    captured_value = '$staticMaterializerNativePathTypes[0]'
+    use_members = 'DriveTarget'
+    returned_count = 1L
+    returned_names = 'Issue13V5.NativePath'
+    expected_methods =
+      ('System.String DriveTarget(System.String)|' +
+        'System.String Resolve(System.String)')
+    preloaded_message =
+      'The static verifier materializer native path type was preloaded.'
+    compilation_message =
+      'The static materializer native path type was not singular.'
+  })
+foreach ($addTypeAuthoritySpec in $addTypeAuthoritySpecs) {
+  $addTypeAuthorityAst = if (
+      [string]$addTypeAuthoritySpec.file -ceq
+        'issue13-v5-static-verify.ps1') {
+    $bootstrapStaticAst
+  } else {
+    $issue13ControllerPowerShellAsts[[string]$addTypeAuthoritySpec.file]
+  }
+  if (-not (Test-Issue13V5StaticAddTypeAuthority `
+      $addTypeAuthorityAst `
+      ([string]$addTypeAuthoritySpec.type_name) `
+      ([string]$addTypeAuthoritySpec.preexisting) `
+      ([string]$addTypeAuthoritySpec.types) `
+      ([string]$addTypeAuthoritySpec.type) `
+      ([string]$addTypeAuthoritySpec.loaded) `
+      ([string]$addTypeAuthoritySpec.methods) `
+      ([string]$addTypeAuthoritySpec.assemblies_before) `
+      ([string]$addTypeAuthoritySpec.non_types) `
+      ([string]$addTypeAuthoritySpec.returned_assemblies) `
+      ([string]$addTypeAuthoritySpec.assembly_was_preexisting) `
+      ([string]$addTypeAuthoritySpec.captured) `
+      ([string]$addTypeAuthoritySpec.captured_value) `
+      ([string]$addTypeAuthoritySpec.use_members) `
+      ([long]$addTypeAuthoritySpec.returned_count) `
+      ([string]$addTypeAuthoritySpec.returned_names) `
+      ([string]$addTypeAuthoritySpec.expected_methods) `
+      ([string]$addTypeAuthoritySpec.preloaded_message) `
+      ([string]$addTypeAuthoritySpec.compilation_message))) {
+    throw ('Add-Type authority is not fail-closed: ' +
+      [string]$addTypeAuthoritySpec.type_name)
+  }
+  $addTypeAuthorityText = [string]$addTypeAuthorityAst.Extent.Text
+  $addTypeAuthorityMutants = [string[]]@(
+    $addTypeAuthorityText.Replace(
+      ('$' + [string]$addTypeAuthoritySpec.preexisting + '.Count -ne 0'),
+      ('$' + [string]$addTypeAuthoritySpec.preexisting + '.Count -eq 0')),
+    $addTypeAuthorityText.Replace('-PassThru', '-WhatIf'),
+    $addTypeAuthorityText.Replace('-ErrorAction Stop', '-ErrorAction Continue'),
+    $addTypeAuthorityText.Replace(
+      "GetType('$([string]$addTypeAuthoritySpec.type_name)', `$false, `$true)",
+      "GetType('$([string]$addTypeAuthoritySpec.type_name)', `$false, `$false)"),
+    $addTypeAuthorityText.Replace(
+      '| Where-Object { $null -ne $_ })', ')'),
+    $addTypeAuthorityText.Replace(
+      '[object]::ReferenceEquals(', '[object]::Equals('),
+    $addTypeAuthorityText.Replace(
+      ('$' + [string]$addTypeAuthoritySpec.loaded + '.Count -ne 1'),
+      ('$' + [string]$addTypeAuthoritySpec.loaded + '.Count -lt 2')),
+    $addTypeAuthorityText.Replace(
+      '.ToString()', '.Name'),
+    $addTypeAuthorityText.Replace(
+      '-isnot [type]', '-is [type]'),
+    $addTypeAuthorityText.Replace(
+      'Select-Object -Unique', 'Select-Object'),
+    $addTypeAuthorityText.Replace(
+      ('$script:' + [string]$addTypeAuthoritySpec.captured),
+      ('[' + [string]$addTypeAuthoritySpec.type_name + ']')),
+    $addTypeAuthorityText.Replace(
+      ('$' + [string]$addTypeAuthoritySpec.types + '.Count -ne ' +
+        [long]$addTypeAuthoritySpec.returned_count),
+      ('$' + [string]$addTypeAuthoritySpec.types + '.Count -lt ' +
+        ([long]$addTypeAuthoritySpec.returned_count + 1L))))
+  foreach ($addTypeAuthorityMutant in $addTypeAuthorityMutants) {
+    $addTypeAuthorityMutantTokens = $null
+    $addTypeAuthorityMutantErrors = $null
+    $addTypeAuthorityMutantAst =
+      [Management.Automation.Language.Parser]::ParseInput(
+        $addTypeAuthorityMutant, [ref]$addTypeAuthorityMutantTokens,
+        [ref]$addTypeAuthorityMutantErrors)
+    if ($addTypeAuthorityMutant -ceq $addTypeAuthorityText -or
+        $addTypeAuthorityMutantErrors.Count -ne 0 -or
+        (Test-Issue13V5StaticAddTypeAuthority `
+          $addTypeAuthorityMutantAst `
+          ([string]$addTypeAuthoritySpec.type_name) `
+          ([string]$addTypeAuthoritySpec.preexisting) `
+          ([string]$addTypeAuthoritySpec.types) `
+          ([string]$addTypeAuthoritySpec.type) `
+          ([string]$addTypeAuthoritySpec.loaded) `
+          ([string]$addTypeAuthoritySpec.methods) `
+          ([string]$addTypeAuthoritySpec.assemblies_before) `
+          ([string]$addTypeAuthoritySpec.non_types) `
+          ([string]$addTypeAuthoritySpec.returned_assemblies) `
+          ([string]$addTypeAuthoritySpec.assembly_was_preexisting) `
+          ([string]$addTypeAuthoritySpec.captured) `
+          ([string]$addTypeAuthoritySpec.captured_value) `
+          ([string]$addTypeAuthoritySpec.use_members) `
+          ([long]$addTypeAuthoritySpec.returned_count) `
+          ([string]$addTypeAuthoritySpec.returned_names) `
+          ([string]$addTypeAuthoritySpec.expected_methods) `
+          ([string]$addTypeAuthoritySpec.preloaded_message) `
+          ([string]$addTypeAuthoritySpec.compilation_message))) {
+      throw 'Add-Type authority verifier accepted a preload/identity mutant.'
+    }
+  }
+}
+$boundedTypeSpoofScript = @'
+$null = Add-Type -ErrorAction Stop -TypeDefinition 'using System.IO; using System.Threading.Tasks; namespace issue13v5 { public static class boundedstreamcapture { public static Task<long> CopyAsync(Stream source, Stream destination, long maximumBytes) { return Task.FromResult(0L); } } }'
+$libraryPath = [Environment]::GetEnvironmentVariable(
+  'ISSUE13_V5_SPOOF_LIBRARY_PATH')
+try {
+  . $libraryPath
+  'TYPE_SPOOF_ACCEPTED'
+} catch {
+  'TYPE_SPOOF_REJECTED:' +
+    [string]$_.Exception.GetBaseException().Message
+}
+'@
+$boundedTypeSpoofEncoded = [Convert]::ToBase64String(
+  [Text.Encoding]::Unicode.GetBytes($boundedTypeSpoofScript))
+$boundedTypeSpoofExecution = Invoke-Issue13V5PwshTransient `
+  -Arguments @(
+    '-NoLogo', '-NoProfile', '-NonInteractive',
+    '-EncodedCommand', $boundedTypeSpoofEncoded) `
+  -Label 'bounded-stream-type-preload-selftest' `
+  -TimeoutSeconds 120 `
+  -ExpectedExitCodes @(0) `
+  -WorkingDirectory $RepositoryRoot `
+  -Environment ([ordered]@{
+      ISSUE13_V5_SPOOF_LIBRARY_PATH =
+        (Join-Path $root 'issue13-v5-coordinator-lib.ps1')
+    })
+$expectedBoundedTypeSpoofOutput =
+  'TYPE_SPOOF_REJECTED:The bounded stream capture type was preloaded.'
+if ([int]$boundedTypeSpoofExecution.exit_code -ne 0 -or
+    [string]$boundedTypeSpoofExecution.stdout.Trim() -cne
+      $expectedBoundedTypeSpoofOutput -or
+    -not [string]::IsNullOrWhiteSpace(
+      [string]$boundedTypeSpoofExecution.stderr)) {
+  throw 'A preloaded bounded stream type was not rejected dynamically.'
+}
+$preexistingOutputLimitRProcesses = [object[]]@(
+  Get-Process -Name R, Rgui, Rscript, Rterm -ErrorAction SilentlyContinue)
+if ($preexistingOutputLimitRProcesses.Count -ne 0) {
+  throw 'The output-limit self-test requires no preexisting R process.'
+}
+$outputLimitRejected = $false
+$outputLimitMessage = ''
+try {
+  $null = Invoke-Issue13V5RscriptBounded `
+    -RscriptPath ([string]$script:Issue13V5RscriptLogicalPath) `
+    -Arguments @(
+      '--vanilla', '-e', 'cat(strrep("A", 9437184L))') `
+    -Label 'bounded-stream-output-limit-selftest' `
+    -TimeoutSeconds 120 `
+    -ExpectedExitCodes @(0) `
+    -WorkingDirectory $RepositoryRoot `
+    -Environment (New-Issue13V5ClosedREnvironment `
+      'D:\Trabalho\Code\wlvdb\renv\library\windows\R-4.6\x86_64-w64-mingw32')
+} catch {
+  $outputLimitMessage =
+    [string]$_.Exception.GetBaseException().Message
+  $outputLimitRejected = $outputLimitMessage.Contains(
+    'Bounded process output exceeded its byte limit.')
+}
+$remainingOutputLimitRProcesses = [object[]]@(
+  Get-Process -Name R, Rgui, Rscript, Rterm -ErrorAction SilentlyContinue)
+if (-not $outputLimitRejected -or
+    $remainingOutputLimitRProcesses.Count -ne 0) {
+  throw ('The real output-limit self-test did not fail closed: ' +
+    $outputLimitMessage)
+}
 $oracleSpec = Read-Issue13V5Json (
   Join-Path $root 'issue13-v5-oracle-effect-spec.json')
 $oracleSchema = Read-Issue13V5Json (
@@ -2878,6 +3598,7 @@ foreach ($externalLifecycleMutantText in $externalLifecycleMutantTexts) {
 function Test-Issue13V5StaticBoundedRscriptLifecycle(
   [Management.Automation.Language.ScriptBlockAst]$Ast
 ) {
+  $sourceText = [string]$Ast.Extent.Text
   $definitions = @(Get-Issue13V5StaticTopLevelFunctions $Ast `
       'Invoke-Issue13V5RscriptBounded')
   if ($definitions.Count -ne 1) { return $false }
@@ -2913,7 +3634,7 @@ function Test-Issue13V5StaticBoundedRscriptLifecycle(
         [Management.Automation.Language.InvokeMemberExpressionAst] -and
         $node.Member.Extent.Text -ceq 'WaitForExit' -and
         $null -ne $node.Arguments -and $node.Arguments.Count -eq 1 -and
-        $node.Arguments[0].Extent.Text -ceq '$timeoutMilliseconds'
+        $node.Arguments[0].Extent.Text -ceq '$waitSlice'
     }, $true))
   $reads = @($definition.FindAll({
       param($node)
@@ -2921,6 +3642,21 @@ function Test-Issue13V5StaticBoundedRscriptLifecycle(
         [Management.Automation.Language.InvokeMemberExpressionAst] -and
         $node.Member.Extent.Text -ceq 'ReadToEndAsync'
     }, $true))
+  $boundedCaptures = @($definition.FindAll({
+      param($node)
+      $node -is
+        [Management.Automation.Language.InvokeMemberExpressionAst] -and
+        $node.Static -and $node.Member.Extent.Text -ceq 'CopyAsync' -and
+        $node.Expression -is
+          [Management.Automation.Language.VariableExpressionAst] -and
+        $node.Expression.VariablePath.UserPath -ceq
+          'script:Issue13V5BoundedStreamCaptureType'
+    }, $true))
+  $captureSignatures = [Collections.Generic.List[string]]::new()
+  foreach ($capture in $boundedCaptures) {
+    $captureSignatures.Add(
+      [regex]::Replace($capture.Extent.Text, '[\s`]', ''))
+  }
   $processDisposals = @($definition.FindAll({
       param($node)
       $node -is
@@ -2936,21 +3672,47 @@ function Test-Issue13V5StaticBoundedRscriptLifecycle(
     }, $true))
   if ($enterCalls.Count -ne 1 -or $exitCalls.Count -ne 1 -or
       $stopCalls.Count -ne 2 -or $environmentCalls.Count -ne 1 -or
-      $waits.Count -ne 1 -or $reads.Count -ne 2 -or
+      $waits.Count -ne 1 -or $reads.Count -ne 0 -or
+      $boundedCaptures.Count -ne 2 -or
+      [string]::Join("`n", $captureSignatures.ToArray()) -cne
+        [string]::Join("`n", @(
+          ('$script:Issue13V5BoundedStreamCaptureType::CopyAsync(' +
+            '$process.StandardOutput.BaseStream,$stdoutBuffer,' +
+            '$outputLimitBytes)'),
+          ('$script:Issue13V5BoundedStreamCaptureType::CopyAsync(' +
+            '$process.StandardError.BaseStream,$stderrBuffer,' +
+            '$outputLimitBytes)')
+        )) -or
       $processDisposals.Count -ne 1 -or $dynamicCalls.Count -ne 0) {
     return $false
   }
   $startOffset = $text.IndexOf('$process.Start()',
     [StringComparison]::Ordinal)
   $waitOffset = $text.IndexOf(
-    '$process.WaitForExit($timeoutMilliseconds)',
+    '$process.WaitForExit($waitSlice)',
     [StringComparison]::Ordinal)
   $cleanupOffset = $text.IndexOf(
     '$cleanupFailures = [Collections.Generic.List[Exception]]::new()',
     [StringComparison]::Ordinal)
+  $stdoutBufferNullOffset = $text.IndexOf(
+    '$stdoutBuffer = $null', [StringComparison]::Ordinal)
+  $stderrBufferNullOffset = $text.IndexOf(
+    '$stderrBuffer = $null', [StringComparison]::Ordinal)
+  $stdoutBufferCreateOffset = $text.IndexOf(
+    '$stdoutBuffer = [IO.MemoryStream]::new()',
+    [StringComparison]::Ordinal)
+  $stderrBufferCreateOffset = $text.IndexOf(
+    '$stderrBuffer = [IO.MemoryStream]::new()',
+    [StringComparison]::Ordinal)
   $enterCalls[0].Extent.StartOffset -lt $startOffset +
       $definition.Extent.StartOffset -and
     $startOffset -ge 0 -and $waitOffset -gt $startOffset -and
+    $stdoutBufferNullOffset -ge 0 -and
+    $stderrBufferNullOffset -gt $stdoutBufferNullOffset -and
+    $stdoutBufferCreateOffset -gt $startOffset -and
+    $stderrBufferCreateOffset -gt $stdoutBufferCreateOffset -and
+    $stdoutBufferNullOffset -lt $startOffset -and
+    $stderrBufferNullOffset -lt $startOffset -and
     $cleanupOffset -gt $waitOffset -and
     $exitCalls[0].Extent.StartOffset -gt
       $cleanupOffset + $definition.Extent.StartOffset -and
@@ -2964,6 +3726,19 @@ function Test-Issue13V5StaticBoundedRscriptLifecycle(
     $text.Contains('$start.RedirectStandardError = $true') -and
     $text.Contains('$start.WorkingDirectory = $resolvedWorkingDirectory') -and
     $text.Contains('Assert-Issue13V5NoReparseAncestors') -and
+    $sourceText.Contains('public static async Task<long> CopyAsync(') -and
+    $sourceText.Contains('byte[] buffer = new byte[81920]') -and
+    $sourceText.Contains('if (total > maximumBytes - read)') -and
+    $sourceText.Contains('Bounded process output exceeded its byte limit.') -and
+    $sourceText.Contains('source.ReadAsync(') -and
+    $sourceText.Contains('destination.WriteAsync(') -and
+    $text.Contains('$outputLimitBytes = 8L * 1024L * 1024L') -and
+    $text.Contains('$stdoutTask.IsFaulted') -and
+    $text.Contains('$stderrTask.IsFaulted') -and
+    $text.Contains('$waitStopwatch.ElapsedMilliseconds') -and
+    $text.Contains('$strictUtf8.GetString($stdoutBuffer.ToArray())') -and
+    $text.Contains('$strictUtf8.GetString($stderrBuffer.ToArray())') -and
+    $text.Contains('foreach ($buffer in @($stdoutBuffer, $stderrBuffer))') -and
     $text.Contains('[Threading.Tasks.Task]::WaitAll($outputTasks, 30000)') -and
     $text.Contains('$exitCode = if ($timedOut) { -999 } else') -and
     $text.Contains('if ($timedOut -and $validateExitCode)') -and
@@ -2979,12 +3754,27 @@ if (-not (Test-Issue13V5StaticBoundedRscriptLifecycle $centralAst)) {
 }
 $boundedRscriptMutantTexts = @(
   $centralText.Replace(
-    '$process.WaitForExit($timeoutMilliseconds)', '$process.WaitForExit()'),
+    '$process.WaitForExit($waitSlice)', '$process.WaitForExit()'),
   $centralText.Replace(
     'Stop-Issue13V5ExternalProcess $process', '$null = $process'),
   $centralText.Replace(
     'Exit-Issue13V5RscriptExecutableLease $lease', '$lease.handle.Dispose()'),
-  $centralText.Replace('ReadToEndAsync()', 'ReadToEnd()'),
+  $centralText.Replace(
+    '$script:Issue13V5BoundedStreamCaptureType::CopyAsync',
+    '$script:Issue13V5BoundedStreamCaptureType::CopyToAsync'),
+  $centralText.Replace(
+    '$outputLimitBytes = 8L * 1024L * 1024L',
+    '$outputLimitBytes = [long]::MaxValue'),
+  $centralText.Replace(
+    'if (total > maximumBytes - read)', 'if (false)'),
+  $centralText.Replace(
+    'byte[] buffer = new byte[81920]',
+    'byte[] buffer = new byte[int.MaxValue]'),
+  $centralText.Replace(
+    '$stdoutBuffer = $null', '$null = $null'),
+  $centralText.Replace(
+    '$stderrBuffer = $null', '$null = $null'),
+  $centralText.Replace('$stdoutTask.IsFaulted', '$false'),
   $centralText.Replace(
     'timed_out = [bool]$timedOut', 'timed_out = $false'),
   $centralText.Replace(
@@ -3388,8 +4178,18 @@ if ($canonicalGuardStatements.Count -lt 2 -or
 }
 $canonicalGuardText =
   $canonicalGuardStatements[0].Right.Expression.ScriptBlock.Extent.Text
+$canonicalGuardBlock =
+  $canonicalGuardStatements[0].Right.Expression.ScriptBlock
 $canonicalGuardAssignmentText =
   $canonicalGuardStatements[0].Extent.Text
+$staticAliasGuardBlock =
+  $bootstrapStaticAst.EndBlock.Statements[0].Right.Expression.ScriptBlock
+if (-not (Test-Issue13V5BootstrapRuntimeLeaseRetention `
+      $canonicalGuardBlock) -or
+    -not (Test-Issue13V5BootstrapRuntimeLeaseRetention `
+      $staticAliasGuardBlock)) {
+  throw 'The PowerShell bootstrap does not retain its authenticated leases.'
+}
 foreach ($guardNeedle in [string[]]@(
     '[StringComparer]::OrdinalIgnoreCase',
     '$trustedRuntimeFiles.Count -ne 11',
@@ -3427,13 +4227,76 @@ foreach ($guardedEntrypointPath in $guardedEntrypointAsts.Keys) {
   } else {
     [string[]]@()
   }
+  $guardedRetentionBlock = $guardedEntrypointAsts[
+    $guardedEntrypointPath].EndBlock.Statements[0].Right.Expression.ScriptBlock
   if (-not (Test-Issue13V5CommandCollisionGuardFirst `
       $guardedEntrypointAsts[$guardedEntrypointPath] `
       $canonicalGuardText) -or
+      -not (Test-Issue13V5BootstrapRuntimeLeaseRetention `
+        $guardedRetentionBlock) -or
       -not (Test-Issue13V5BootstrapImports `
         $guardedEntrypointAsts[$guardedEntrypointPath] `
         $guardedDotSources)) {
     throw "Command-collision guard is absent or late: $guardedEntrypointPath"
+  }
+}
+$canonicalRuntimeMembers = @($canonicalGuardBlock.FindAll({
+  param($node)
+  $node -is [Management.Automation.Language.InvokeMemberExpressionAst] -and
+    $node.Expression.Extent.Text -ceq '$runtimeFileLeases'
+}, $true))
+$canonicalLeaseSetMembers = @($canonicalGuardBlock.FindAll({
+  param($node)
+  $node -is [Management.Automation.Language.InvokeMemberExpressionAst] -and
+    $node.Expression.Extent.Text -ceq '$leaseSets'
+}, $true))
+$canonicalSetDataCalls = @($canonicalGuardBlock.FindAll({
+  param($node)
+  $node -is [Management.Automation.Language.InvokeMemberExpressionAst] -and
+    $node.Member.Extent.Text -ceq 'SetData' -and
+    [regex]::Replace($node.Expression.Extent.Text, '[\s`]', '') -ceq
+      '[AppDomain]::CurrentDomain'
+}, $true))
+if ($canonicalRuntimeMembers.Count -ne 2 -or
+    $canonicalLeaseSetMembers.Count -ne 1 -or
+    $canonicalSetDataCalls.Count -ne 1) {
+  throw 'Cannot construct bootstrap lease-retention mutants.'
+}
+$canonicalRuntimeAddText = $canonicalRuntimeMembers[0].Extent.Text
+$canonicalLeaseSetAddText = $canonicalLeaseSetMembers[0].Extent.Text
+$canonicalSetDataText = $canonicalSetDataCalls[0].Extent.Text
+$leaseRetentionMutantTexts = @(
+  $canonicalGuardText.Replace(
+    $canonicalRuntimeAddText,
+    $canonicalRuntimeAddText.Replace('$stream', '$null')),
+  $canonicalGuardText.Replace(
+    $canonicalLeaseSetAddText,
+    $canonicalLeaseSetAddText.Replace('$runtimeFileLeases', '$null')),
+  $canonicalGuardText.Replace(
+    $canonicalLeaseSetAddText,
+    'if ($false) { ' + $canonicalLeaseSetAddText + ' }'),
+  $canonicalGuardText.Replace(
+    $canonicalLeaseSetAddText,
+    $canonicalLeaseSetAddText + "`n  `$leaseSets.Clear()"),
+  $canonicalGuardText.Replace(
+    $canonicalSetDataText,
+    $canonicalSetDataText.Replace('$leaseSets', '$null')),
+  $canonicalGuardText.Replace(
+    $canonicalSetDataText,
+    'if ($false) { ' + $canonicalSetDataText + ' }')
+)
+foreach ($leaseRetentionMutantText in $leaseRetentionMutantTexts) {
+  $leaseRetentionMutantTokens = $null
+  $leaseRetentionMutantErrors = $null
+  $leaseRetentionMutantAst =
+    [Management.Automation.Language.Parser]::ParseInput(
+      $leaseRetentionMutantText, [ref]$leaseRetentionMutantTokens,
+      [ref]$leaseRetentionMutantErrors)
+  if ($leaseRetentionMutantText -ceq $canonicalGuardText -or
+      $leaseRetentionMutantErrors.Count -ne 0 -or
+      (Test-Issue13V5BootstrapRuntimeLeaseRetention `
+        $leaseRetentionMutantAst)) {
+    throw 'Bootstrap lease-retention verifier accepted a structural mutant.'
   }
 }
 $guardInvocationText =
@@ -5277,8 +6140,10 @@ function Test-Issue13V5MaterializerTargetDataflow(
     param($node)
     $node -is [Management.Automation.Language.InvokeMemberExpressionAst] -and
       $node.Static -and
-      (Test-Issue13V5TypeExpression `
-        $node.Expression 'Issue13V5.NativePath') -and
+      $node.Expression -is
+        [Management.Automation.Language.VariableExpressionAst] -and
+      $node.Expression.VariablePath.UserPath -ceq
+        'script:Issue13V5MaterializerNativePathType' -and
       $node.Member.Extent.Text -ieq 'DriveTarget'
   }, $true))
   $assignments = @(Get-Issue13V5VariableWriteAsts $definition '$target')
@@ -5339,8 +6204,10 @@ $materializerDriveTargetCalls = @($materializerAliasDefinitions[0].FindAll({
   param($node)
   $node -is [Management.Automation.Language.InvokeMemberExpressionAst] -and
     $node.Static -and
-    (Test-Issue13V5TypeExpression `
-      $node.Expression 'Issue13V5.NativePath') -and
+    $node.Expression -is
+      [Management.Automation.Language.VariableExpressionAst] -and
+    $node.Expression.VariablePath.UserPath -ceq
+      'script:Issue13V5MaterializerNativePathType' -and
     $node.Member.Extent.Text -ieq 'DriveTarget'
 }, $true))
 $materializerDriveTargetAssignment = if (
@@ -5386,7 +6253,20 @@ if ($materializerErrors.Count -ne 0 -or
       '$root.Substring(0, 2)' -or
     $materializerTargetChecks.Count -ne 4 -or
     $materializerAddTypeCalls.Count -ne 1 -or
-    $materializerAddTypeCalls[0].CommandElements.Count -ne 3 -or
+    $materializerAddTypeCalls[0].CommandElements.Count -ne 6 -or
+    $materializerAddTypeCalls[0].CommandElements[1] -isnot
+      [Management.Automation.Language.CommandParameterAst] -or
+    $materializerAddTypeCalls[0].CommandElements[1].ParameterName -cne
+      'PassThru' -or
+    $materializerAddTypeCalls[0].CommandElements[2] -isnot
+      [Management.Automation.Language.CommandParameterAst] -or
+    $materializerAddTypeCalls[0].CommandElements[2].ParameterName -cne
+      'ErrorAction' -or
+    $materializerAddTypeCalls[0].CommandElements[3].Extent.Text -cne 'Stop' -or
+    $materializerAddTypeCalls[0].CommandElements[4] -isnot
+      [Management.Automation.Language.CommandParameterAst] -or
+    $materializerAddTypeCalls[0].CommandElements[4].ParameterName -cne
+      'TypeDefinition' -or
     $materializerText.IndexOf(
       'QueryDosDevice', [StringComparison]::Ordinal) -lt 0 -or
     $materializerAliasText.IndexOf(
@@ -5398,7 +6278,7 @@ if ($materializerErrors.Count -ne 0 -or
   throw 'Harness materializer lacks fixed alias-free root isolation.'
 }
 $materializerNativeSource =
-  [string]$materializerAddTypeCalls[0].CommandElements[2].Value
+  [string]$materializerAddTypeCalls[0].CommandElements[5].Value
 $materializerTargetStatement =
   [string]$materializerTargetAssignments[0].Extent.Text
 if ($materializerText.IndexOf(
@@ -5804,9 +6684,59 @@ foreach ($captureName in @($validatedCaptureAsts.Keys | Sort-Object)) {
 }
 
 if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
-  if (-not ('Issue13V5.NativePath' -as [type])) {
-    Add-Type -TypeDefinition $materializerNativeSource
+  $staticMaterializerNativePathAssembliesBefore =
+    [Reflection.Assembly[]]@([AppDomain]::CurrentDomain.GetAssemblies())
+  $preexistingStaticMaterializerNativePathTypes = [type[]]@(
+    [AppDomain]::CurrentDomain.GetAssemblies() | ForEach-Object {
+      $_.GetType('Issue13V5.NativePath', $false, $true)
+    } | Where-Object { $null -ne $_ })
+  if ($preexistingStaticMaterializerNativePathTypes.Count -ne 0) {
+    throw 'The static verifier materializer native path type was preloaded.'
   }
+  $staticMaterializerNativePathTypes = [object[]]@(
+    Add-Type -PassThru -ErrorAction Stop `
+      -TypeDefinition $materializerNativeSource)
+  $staticMaterializerNativePathType = 'Issue13V5.NativePath' -as [type]
+  $staticMaterializerNativePathNonTypes = [object[]]@(
+    $staticMaterializerNativePathTypes | Where-Object { $_ -isnot [type] })
+  $staticMaterializerNativePathReturnedAssemblies = [Reflection.Assembly[]]@(
+    $staticMaterializerNativePathTypes | ForEach-Object { $_.Assembly } |
+      Select-Object -Unique)
+  $staticMaterializerNativePathAssemblyWasPreexisting = [object[]]@(
+    $staticMaterializerNativePathAssembliesBefore | Where-Object {
+      [object]::ReferenceEquals(
+        $_, $staticMaterializerNativePathReturnedAssemblies[0])
+    })
+  $loadedStaticMaterializerNativePathTypes = [type[]]@(
+    [AppDomain]::CurrentDomain.GetAssemblies() | ForEach-Object {
+      $_.GetType('Issue13V5.NativePath', $false, $true)
+    } | Where-Object { $null -ne $_ })
+  $staticMaterializerNativePathMethods = [string[]]@(
+    $staticMaterializerNativePathTypes[0].GetMethods(
+      [Reflection.BindingFlags]'Public, Static, DeclaredOnly') |
+      ForEach-Object { $_.ToString() } | Sort-Object)
+  if ($staticMaterializerNativePathTypes.Count -ne 1 -or
+      $staticMaterializerNativePathTypes[0] -isnot [type] -or
+      $staticMaterializerNativePathNonTypes.Count -ne 0 -or
+      $staticMaterializerNativePathReturnedAssemblies.Count -ne 1 -or
+      $staticMaterializerNativePathAssemblyWasPreexisting.Count -ne 0 -or
+      [string]$staticMaterializerNativePathTypes[0].FullName -cne
+        'Issue13V5.NativePath' -or
+      $loadedStaticMaterializerNativePathTypes.Count -ne 1 -or
+      $null -eq $staticMaterializerNativePathType -or
+      -not [object]::ReferenceEquals(
+        $staticMaterializerNativePathTypes[0],
+        $staticMaterializerNativePathType) -or
+      -not [object]::ReferenceEquals(
+        $staticMaterializerNativePathTypes[0],
+        $loadedStaticMaterializerNativePathTypes[0]) -or
+      [string]::Join('|', $staticMaterializerNativePathMethods) -cne
+        'System.String DriveTarget(System.String)|System.String Resolve(System.String)') {
+    throw 'The static materializer native path type was not singular.'
+  }
+  New-Variable -Name Issue13V5StaticMaterializerNativePathType `
+    -Scope Script -Option Constant `
+    -Value $staticMaterializerNativePathTypes[0]
   $physicalSelftestParent = [IO.Path]::GetFullPath(
     [IO.Path]::GetTempPath()).TrimEnd('\')
   $physicalSelftestRoot = Join-Path $physicalSelftestParent (
@@ -5854,7 +6784,8 @@ if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
       }
       $deliveryAliasCreated = $true
       $materializerAliasTarget =
-        [Issue13V5.NativePath]::DriveTarget($deliveryAliasDrive)
+        $script:Issue13V5StaticMaterializerNativePathType::DriveTarget(
+          $deliveryAliasDrive)
       if (-not $materializerAliasTarget.StartsWith(
           '\??\', [StringComparison]::OrdinalIgnoreCase)) {
         throw 'Materializer native helper did not expose the SUBST target.'
