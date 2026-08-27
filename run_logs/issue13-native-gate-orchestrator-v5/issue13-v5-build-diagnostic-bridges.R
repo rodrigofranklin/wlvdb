@@ -757,11 +757,14 @@ wlv13_v5d_derive_unit_bridges <- function(
     wlv13_read_csv_semantic(candidate$unit$path), columns,
     "Candidate bridge unit evidence"
   )
-  nonmodule <- setdiff(columns, "module")
-  if (!identical(baseline_value[nonmodule], candidate_value[nonmodule]) ||
+  if (!wlv13_v5d_unit_bridge_projection_equal(
+      baseline_value, candidate_value) ||
       !all(baseline_value$source == source) ||
       !all(candidate_value$source == source)) {
-    stop("Unit bridge evidence differs outside the module field.",
+    stop(paste0(
+      "Unit bridge evidence differs outside the module and ",
+      "aggregation-notes architecture fields."
+    ),
       call. = FALSE
     )
   }
@@ -806,6 +809,69 @@ wlv13_v5d_derive_unit_bridges <- function(
     )
   })
   do.call(rbind, rows)
+}
+
+wlv13_v5d_unit_bridge_projection_equal <- function(baseline, candidate) {
+  identical(
+    wlv13_cross_engine_unit_projection(baseline),
+    wlv13_cross_engine_unit_projection(candidate)
+  )
+}
+
+wlv13_v5d_unit_bridge_projection_selftest <- function() {
+  columns <- wlv13_cross_engine_schema("_unit_contract.csv")
+  architecture_columns <- c("module", "aggregation_notes")
+  scientific_columns <- setdiff(columns, architecture_columns)
+  if (length(scientific_columns) != 24L) {
+    stop("Unit bridge projection self-test schema changed.", call. = FALSE)
+  }
+  baseline <- as.data.frame(stats::setNames(lapply(columns, function(column) {
+    paste0(column, c("-a", "-b"))
+  }), columns), stringsAsFactors = FALSE, check.names = FALSE)
+  baseline$source <- rep("wiodr13", 2L)
+  candidate <- baseline
+  candidate$module <- c("candidate-a", "candidate-b")
+  candidate$aggregation_notes <- c("candidate-note", "")
+
+  assertions <- 0L
+  if (!wlv13_v5d_unit_bridge_projection_equal(baseline, candidate)) {
+    stop("Unit bridge projection rejected architecture-only changes.",
+      call. = FALSE
+    )
+  }
+  assertions <- assertions + 1L
+
+  for (column in scientific_columns) {
+    mutant <- candidate
+    mutant[[column]][[1L]] <- paste0(mutant[[column]][[1L]], "-mutant")
+    if (wlv13_v5d_unit_bridge_projection_equal(baseline, mutant)) {
+      stop(sprintf(
+        "Unit bridge projection accepted scientific mutant `%s`.", column
+      ), call. = FALSE)
+    }
+    assertions <- assertions + 1L
+  }
+
+  structural_mutants <- list(
+    reordered = candidate[2:1, , drop = FALSE],
+    missing = candidate[-1L, , drop = FALSE],
+    duplicated = rbind(candidate, candidate[1L, , drop = FALSE]),
+    extra_column = within(candidate, extra_column <- "mutant")
+  )
+  for (name in names(structural_mutants)) {
+    if (wlv13_v5d_unit_bridge_projection_equal(
+        baseline, structural_mutants[[name]])) {
+      stop(sprintf(
+        "Unit bridge projection accepted structural mutant `%s`.", name
+      ), call. = FALSE)
+    }
+    assertions <- assertions + 1L
+  }
+  list(
+    assertions = assertions,
+    scientific_columns = length(scientific_columns),
+    structural_mutants = length(structural_mutants)
+  )
 }
 
 wlv13_v5d_derive_anomaly_bridges <- function(
@@ -1064,6 +1130,12 @@ wlv13_v5d_bridge_generator_main <- function(arguments = commandArgs(TRUE)) {
   source(file.path(harness_dir, "issue13-compare-lib.R"))
   source(file.path(script_dir, "issue13-v5-compare-override.R"))
   source(file.path(script_dir, "issue13-v5-diagnostics-override.R"))
+  unit_projection_selftest <- wlv13_v5d_unit_bridge_projection_selftest()
+  if (!identical(unit_projection_selftest$assertions, 29L) ||
+      !identical(unit_projection_selftest$scientific_columns, 24L) ||
+      !identical(unit_projection_selftest$structural_mutants, 4L)) {
+    stop("Unit bridge projection self-test is incomplete.", call. = FALSE)
+  }
   evidence <- wlv13_v5d_normalize_table(
     wlv13_read_csv_semantic(evidence_path),
     c(
@@ -1093,13 +1165,15 @@ wlv13_v5d_bridge_generator_main <- function(arguments = commandArgs(TRUE)) {
     paste0(
       "generated_rows=%d manifest_sha256=%s presence_assertions=%d ",
       "presence_cases=%d presence_mutants=%d profile_assertions=%d ",
-      "profile_roots=%d divergent_profile_roots=%d\n"
+      "profile_roots=%d divergent_profile_roots=%d ",
+      "unit_projection_assertions=%d\n"
     ),
     nrow(value), wlv13_sha256_file(arguments[[4L]]),
     presence_selftest$assertions, presence_selftest$cases,
     presence_selftest$mutants,
     profile_selftest$assertions, profile_selftest$unique_roots,
-    profile_selftest$divergent_roots
+    profile_selftest$divergent_roots,
+    unit_projection_selftest$assertions
   ))
   invisible(value)
 }
