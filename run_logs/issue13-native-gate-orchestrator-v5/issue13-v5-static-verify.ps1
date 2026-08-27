@@ -549,7 +549,7 @@ $bootstrapSourceSha256 = @{
   'issue13-v5-attest-delivery.ps1' =
     '2E1A9D527AB98C3EFCF296DB56E59FCE34461C9A7A0A979044EC70E2B54B981D'
   'issue13-v5-baseline-smoke.ps1' =
-    '922B0A8A4A1DCE61F628C30DC15D2734D24BA6814EF032BB313DB04233382437'
+    '0F040EB03F3A7AEEFAACF6B0437C5C12D11A3803C9C163B5134D22D928CF3DF6'
   'issue13-v5-capture-clean-bridge-evidence.ps1' =
     'A78F5C6535ADFF09F4248F1EA192F0058DCF4B129A0295E1C04357BC1747B6E6'
   'issue13-v5-capture-clean-stage5-evidence.ps1' =
@@ -559,9 +559,9 @@ $bootstrapSourceSha256 = @{
   'issue13-v5-coordinator.ps1' =
     '57A284A2600AAC37B5879BA44EB6B4AB1953AB00590D4EA6720524195E0EBF28'
   'issue13-v5-materialize-harness.ps1' =
-    '82FDD0994B51D6BA784D0AE9B0949C07080796C02AA24240BEDEB44DDB3F2B46'
+    '8CBD99EA71B7C21DAB3CAF66E0BB79729C91557982AA9A9B93DD0AF90EB309C7'
   'issue13-v5-new-config.ps1' =
-    '9BFADFAE89098FA2113434843A1FD9528C4F4548E583AFA11FCB2205F29224C3'
+    '221ED165A1EE746A296C881C9E104612FB5E0A97803C68490F544F6ADED68AEF'
   'issue13-v5-oracle-effect-generate.ps1' =
     '6C1E26154794A253974B7E51C5D15B054AE2D31E09736BF19B624F56EA3C30F9'
   'issue13-v5-oracle-effect-lib.ps1' =
@@ -2019,6 +2019,11 @@ $issue13CriticalPowerShellNames = @(
   'Set-Issue13V5ScriptConstant',
   'Assert-Issue13V5OfficialSourceDataInventory',
   'Assert-Issue13V5BaselineSmokeRscriptSeal',
+  'Get-Issue13V5BaselineSmokeSha256',
+  'Get-Issue13V5BaselineSmokeTextSha256',
+  'Assert-Issue13V5BaselineSmokeSourceInventory',
+  'Assert-Issue13V5BaselineSmokeNoConcurrentR',
+  'Write-Issue13V5BaselineSmokeJson',
   'Invoke-Issue13V5DeliveryGit',
   'Invoke-Issue13V5DeliveryAttestation',
   'Resolve-Issue13V5DeliveryOutput',
@@ -2026,8 +2031,14 @@ $issue13CriticalPowerShellNames = @(
   'Test-Issue13V5PathContained',
   'Assert-Issue13V5PathsDisjoint',
   'Assert-Issue13V5NoReparseAncestors',
+  'Assert-Issue13V5MaterializerNoReparseAncestors',
   'Assert-Issue13V5AliasFreeLocalPath',
   'ConvertTo-Issue13V5CanonicalPath',
+  'Get-Issue13V5MaterializerSha256',
+  'Get-Issue13V5MaterializerBytesSha256',
+  'Get-Issue13V5MaterializerGitLine',
+  'ConvertFrom-Issue13V5MaterializerGitTreeBytes',
+  'Get-Issue13V5NewConfigSha256',
   'Assert-Issue13V5Config',
   'Assert-Issue13V5ConfigPathIsolation',
   'Assert-Issue13V5OracleComparisonIsolation',
@@ -2093,7 +2104,11 @@ $issue13CriticalDefinitionOwners = @{
   )
   'issue13-v5-baseline-smoke.ps1' = @(
     'Assert-Issue13V5BaselineSmokeRscriptSeal',
-    'Write-Issue13V5Json'
+    'Get-Issue13V5BaselineSmokeSha256',
+    'Get-Issue13V5BaselineSmokeTextSha256',
+    'Assert-Issue13V5BaselineSmokeSourceInventory',
+    'Assert-Issue13V5BaselineSmokeNoConcurrentR',
+    'Write-Issue13V5BaselineSmokeJson'
   )
   'issue13-v5-coordinator-lib.ps1' = @(
     'Set-Issue13V5ScriptConstant',
@@ -2151,11 +2166,18 @@ $issue13CriticalDefinitionOwners = @{
   'issue13-v5-materialize-harness.ps1' = @(
     'Assert-Issue13V5AliasFreeLocalPath',
     'ConvertTo-Issue13V5CanonicalPath',
-    'Assert-Issue13V5NoReparseAncestors',
+    'Assert-Issue13V5MaterializerNoReparseAncestors',
+    'Get-Issue13V5MaterializerSha256',
+    'Get-Issue13V5MaterializerBytesSha256',
     'Invoke-Issue13V5GitBytes',
+    'Get-Issue13V5MaterializerGitLine',
+    'ConvertFrom-Issue13V5MaterializerGitTreeBytes',
     'Get-Issue13V5TrackedSourceTooling'
   )
-  'issue13-v5-new-config.ps1' = @('Assert-Issue13V5FreshRoot')
+  'issue13-v5-new-config.ps1' = @(
+    'Assert-Issue13V5FreshRoot',
+    'Get-Issue13V5NewConfigSha256'
+  )
   'issue13-v5-oracle-effect-lib.ps1' = @(
     'Resolve-Issue13OracleEffectFile',
     'ConvertTo-Issue13OracleEffectPhysicalPath',
@@ -2189,7 +2211,7 @@ $issue13ExpectedAstSurfaces = @{
   }
   'issue13-v5-baseline-smoke.ps1' = @{
     command_count = 171
-    command_sha256 = 'E7455E63672050E96BE19EA54AC1F1624B034DC0C12ED20C301E02DF72BD4F17'
+    command_sha256 = '3E630B55C45D19309A066EA5E989B0A22073D35719BC22CE5B3BAB43FBA01E3A'
     redirection_count = 4
     redirection_sha256 = '3ADEEFA5B4469B07E9149CD294980C3F82241C9EE64016075D92540C0A44D3CA'
   }
@@ -2219,13 +2241,13 @@ $issue13ExpectedAstSurfaces = @{
   }
   'issue13-v5-materialize-harness.ps1' = @{
     command_count = 253
-    command_sha256 = '9C6BF911675776008B635BFFE8EFA11D35D7A7C54B4E170BEDB6CB84C9F267BC'
+    command_sha256 = '591C255AC8391AF3C3D407AA1EC5C3C55C4856BE212C92EDCEFD36EBD3CFA40F'
     redirection_count = 4
     redirection_sha256 = '5FE6646416132F2444D3AC9C63EBDF8DCEAE6E18DC5242C675574BC026FF9352'
   }
   'issue13-v5-new-config.ps1' = @{
-    command_count = 173
-    command_sha256 = '203E3AC75B09FC4322282CDC01337EA2676EA2BAA21B91225C2BE77F073581D6'
+    command_count = 161
+    command_sha256 = 'CE9E21B28841EF1E4222BF74823A812D29FC055493374AC51AB6B54FB5A29685'
     redirection_count = 3
     redirection_sha256 = 'F5308A7B6632030C8FB84F968127215DAEBCBFF41DA11F9D9F9E7D902B8D4F47'
   }
@@ -2254,26 +2276,26 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = '7F4027149DBBCCC5E186586FA06D6058EF6E3821AC51098E7521EBC767D5FE2D'
   }
   'issue13-v5-static-verify.ps1' = @{
-    command_count = 725
-    command_sha256 = '25D551487DBF76FEDC6C0AD178F770436C6E148373FC184664C9B12CCA8324F7'
+    command_count = 732
+    command_sha256 = 'B297CEAF051F95ACF17D679037BC537B66EF90E0161299321ADA50589ABEDBFD'
     redirection_count = 0
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
 }
 $issue13ExpectedControllerSourceSha256 = @{
   'issue13-v5-attest-delivery.ps1' = '2E1A9D527AB98C3EFCF296DB56E59FCE34461C9A7A0A979044EC70E2B54B981D'
-  'issue13-v5-baseline-smoke.ps1' = '922B0A8A4A1DCE61F628C30DC15D2734D24BA6814EF032BB313DB04233382437'
+  'issue13-v5-baseline-smoke.ps1' = '0F040EB03F3A7AEEFAACF6B0437C5C12D11A3803C9C163B5134D22D928CF3DF6'
   'issue13-v5-capture-clean-bridge-evidence.ps1' = 'A78F5C6535ADFF09F4248F1EA192F0058DCF4B129A0295E1C04357BC1747B6E6'
   'issue13-v5-capture-clean-stage5-evidence.ps1' = 'EDCFCE9759F8B73E2368A36ABA309FA3D330C91C417249D49B69A4194768BFF8'
   'issue13-v5-coordinator-lib.ps1' = 'A99CDED9165CCAC9A93A1AF640FB0DC850C26A815A1C694294E7B5DC5A8F47A5'
   'issue13-v5-coordinator.ps1' = '57A284A2600AAC37B5879BA44EB6B4AB1953AB00590D4EA6720524195E0EBF28'
-  'issue13-v5-materialize-harness.ps1' = '82FDD0994B51D6BA784D0AE9B0949C07080796C02AA24240BEDEB44DDB3F2B46'
-  'issue13-v5-new-config.ps1' = '9BFADFAE89098FA2113434843A1FD9528C4F4548E583AFA11FCB2205F29224C3'
+  'issue13-v5-materialize-harness.ps1' = '8CBD99EA71B7C21DAB3CAF66E0BB79729C91557982AA9A9B93DD0AF90EB309C7'
+  'issue13-v5-new-config.ps1' = '221ED165A1EE746A296C881C9E104612FB5E0A97803C68490F544F6ADED68AEF'
   'issue13-v5-oracle-effect-generate.ps1' = '6C1E26154794A253974B7E51C5D15B054AE2D31E09736BF19B624F56EA3C30F9'
   'issue13-v5-oracle-effect-lib.ps1' = '6CCA4757A9754D5DC778200EE37901D232A45A94021E36200BAA53334CEA5290'
   'issue13-v5-oracle-effect-validate.ps1' = '11912422CEB54A45A791E49E11688F974AB45A4CC0F2FB89145D90176AAB0140'
   'issue13-v5-render-report.ps1' = 'F7B11D7CD0AF8F867467AED19D220E135C6F69D6416413C81FC2AFDCD842153B'
-    'issue13-v5-static-verify.ps1' = 'BCB16FEB4BB65108E0443ADD43A4AB98B19C6C5B729B540612624FC88143B670'
+    'issue13-v5-static-verify.ps1' = 'D11E77E23963704D110D30293C25F769046E6B01721466AF3158C01178F4A580'
 }
 $issue13ExpectedDotSourceSignatures = @{
   'issue13-v5-attest-delivery.ps1' = @(
@@ -2326,6 +2348,27 @@ function Test-Issue13V5CriticalDefinitionOwnership(
   }, $true) | ForEach-Object { $_.Name })
   [string]::Join("`n", [string[]]@($actual)) -ceq
     [string]::Join("`n", [string[]]@($ExpectedNames))
+}
+function Test-Issue13V5ImportedFunctionNamespaceIsolation(
+  [Management.Automation.Language.ScriptBlockAst]$ImportedAst,
+  [Management.Automation.Language.ScriptBlockAst]$ConsumerAst
+) {
+  $importedNames = [Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::OrdinalIgnoreCase)
+  foreach ($definition in @($ImportedAst.FindAll({
+        param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst]
+      }, $true))) {
+    $null = $importedNames.Add(
+      (Get-Issue13V5PowerShellCommandLeaf $definition.Name))
+  }
+  $collisions = @($ConsumerAst.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+        $importedNames.Contains(
+          (Get-Issue13V5PowerShellCommandLeaf $node.Name))
+    }, $true))
+  $importedNames.Count -ne 0 -and $collisions.Count -eq 0
 }
 function Test-Issue13V5BootstrapImports(
   [Management.Automation.Language.ScriptBlockAst]$Ast,
@@ -2414,6 +2457,42 @@ foreach ($controllerPowerShellName in @($expectedControllerFiles |
   if ($criticalHashAfter -cne $criticalFileSha256) {
     throw "Controller source changed while authenticating: $controllerPowerShellName"
   }
+}
+
+$coordinatorNamespaceAst = $issue13ControllerPowerShellAsts[
+  'issue13-v5-coordinator-lib.ps1']
+$coordinatorImportSignature =
+  "([IO.Path]::Combine(`$PSScriptRoot, 'issue13-v5-coordinator-lib.ps1'))"
+$coordinatorNamespaceConsumers = @(
+  $issue13ExpectedDotSourceSignatures.Keys | Where-Object {
+    $issue13ControllerPowerShellAsts.ContainsKey($_) -and
+      @($issue13ExpectedDotSourceSignatures[$_]) -ccontains
+        $coordinatorImportSignature
+  })
+if ($coordinatorNamespaceConsumers.Count -ne 9 -or
+    @($coordinatorNamespaceConsumers | Where-Object {
+      -not (Test-Issue13V5ImportedFunctionNamespaceIsolation `
+        $coordinatorNamespaceAst $issue13ControllerPowerShellAsts[$_])
+    }).Count -ne 0) {
+  throw 'A coordinator consumer shadows an imported function definition.'
+}
+$namespaceValidTokens = $null
+$namespaceValidErrors = $null
+$namespaceValidAst = [Management.Automation.Language.Parser]::ParseInput(
+  'function Invoke-Issue13V5NamespaceUnique {}',
+  [ref]$namespaceValidTokens, [ref]$namespaceValidErrors)
+$namespaceMutantTokens = $null
+$namespaceMutantErrors = $null
+$namespaceMutantAst = [Management.Automation.Language.Parser]::ParseInput(
+  'function get-issue13v5sha256 {}',
+  [ref]$namespaceMutantTokens, [ref]$namespaceMutantErrors)
+if ($namespaceValidErrors.Count -ne 0 -or
+    $namespaceMutantErrors.Count -ne 0 -or
+    -not (Test-Issue13V5ImportedFunctionNamespaceIsolation `
+      $coordinatorNamespaceAst $namespaceValidAst) -or
+    (Test-Issue13V5ImportedFunctionNamespaceIsolation `
+      $coordinatorNamespaceAst $namespaceMutantAst)) {
+  throw 'Imported-function namespace isolation accepted a shadow mutant.'
 }
 
 # These variable-write helpers are needed by the Commit E checks below.  Keep

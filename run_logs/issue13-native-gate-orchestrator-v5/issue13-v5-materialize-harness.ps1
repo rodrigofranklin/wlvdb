@@ -718,7 +718,7 @@ function Test-Issue13V5PathOverlap([string]$Left, [string]$Right) {
       [StringComparison]::OrdinalIgnoreCase)
 }
 
-function Assert-Issue13V5NoReparseAncestors(
+function Assert-Issue13V5MaterializerNoReparseAncestors(
   [string]$Path,
   [string]$Label
 ) {
@@ -747,7 +747,7 @@ function Assert-Issue13V5TreeHasNoReparsePoints(
   [string]$Root,
   [string]$Label
 ) {
-  $rootFull = Assert-Issue13V5NoReparseAncestors $Root $Label
+  $rootFull = Assert-Issue13V5MaterializerNoReparseAncestors $Root $Label
   if (-not (Test-Path -LiteralPath $rootFull -PathType Container)) {
     throw "$Label is not an existing directory: $rootFull"
   }
@@ -763,11 +763,11 @@ function Assert-Issue13V5TreeHasNoReparsePoints(
   $rootFull
 }
 
-function Get-Issue13V5Sha256([string]$Path) {
+function Get-Issue13V5MaterializerSha256([string]$Path) {
   (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
-function Get-Issue13V5BytesSha256([byte[]]$Bytes) {
+function Get-Issue13V5MaterializerBytesSha256([byte[]]$Bytes) {
   [Convert]::ToHexString(
     [Security.Cryptography.SHA256]::HashData($Bytes)
   ).ToLowerInvariant()
@@ -791,7 +791,7 @@ function Invoke-Issue13V5GitBytes(
   Invoke-Issue13V5GitRaw $Repository $Arguments
 }
 
-function Get-Issue13V5GitLine(
+function Get-Issue13V5MaterializerGitLine(
   [string]$Repository,
   [string[]]$Arguments,
   [string]$Label
@@ -805,7 +805,7 @@ function Get-Issue13V5GitLine(
   $value
 }
 
-function ConvertFrom-Issue13V5GitTreeBytes(
+function ConvertFrom-Issue13V5MaterializerGitTreeBytes(
   [byte[]]$Bytes,
   [string]$Label
 ) {
@@ -881,11 +881,11 @@ function Get-Issue13V5TrackedSourceTooling(
   }
   $pathPayload = [Text.Encoding]::UTF8.GetBytes(
     [string]::Join("`n", $sourceToolingFiles))
-  $pathListSha256 = Get-Issue13V5BytesSha256 $pathPayload
+  $pathListSha256 = Get-Issue13V5MaterializerBytesSha256 $pathPayload
   if ($pathListSha256 -cne $expectedSourcePathListSha256) {
     throw 'The canonical V5 source path allowlist changed.'
   }
-  $head = Get-Issue13V5GitLine $Repository @('rev-parse', 'HEAD') `
+  $head = Get-Issue13V5MaterializerGitLine $Repository @('rev-parse', 'HEAD') `
     'V5 repository HEAD'
   if ($head -cne $Commit) {
     throw 'The canonical V5 source is not evaluated at the candidate commit.'
@@ -897,7 +897,7 @@ function Get-Issue13V5TrackedSourceTooling(
     throw 'The candidate repository has tracked working-tree changes.'
   }
 
-  $rootListing = ConvertFrom-Issue13V5GitTreeBytes (
+  $rootListing = ConvertFrom-Issue13V5MaterializerGitTreeBytes (
     (Invoke-Issue13V5GitBytes $Repository @(
         'ls-tree', '-z', $Commit, '--', $sourceToolingRelativeRoot)).stdout) `
     'Canonical source root tree'
@@ -907,7 +907,7 @@ function Get-Issue13V5TrackedSourceTooling(
       $rootListing[0].type -cne 'tree') {
     throw 'The candidate commit lacks the exact canonical source root tree.'
   }
-  $rootEntries = ConvertFrom-Issue13V5GitTreeBytes (
+  $rootEntries = ConvertFrom-Issue13V5MaterializerGitTreeBytes (
     (Invoke-Issue13V5GitBytes $Repository @(
         'ls-tree', '-z', ($Commit + ':' + $sourceToolingRelativeRoot))).stdout) `
     'Canonical source top-level tree'
@@ -919,7 +919,7 @@ function Get-Issue13V5TrackedSourceTooling(
       $harnessEntry[0].type -cne 'tree') {
     throw 'The candidate commit lacks the canonical source harness tree.'
   }
-  $harnessEntries = ConvertFrom-Issue13V5GitTreeBytes (
+  $harnessEntries = ConvertFrom-Issue13V5MaterializerGitTreeBytes (
     (Invoke-Issue13V5GitBytes $Repository @(
         'ls-tree', '-z', ($Commit + ':' + $sourceToolingRelativeRoot +
           '/issue13-evidence-harness'))).stdout) `
@@ -948,7 +948,7 @@ function Get-Issue13V5TrackedSourceTooling(
   foreach ($treeObject in @(
       [string]$rootListing[0].object,
       [string]$harnessEntry[0].object)) {
-    $type = Get-Issue13V5GitLine $Repository @(
+    $type = Get-Issue13V5MaterializerGitLine $Repository @(
       'cat-file', '-t', $treeObject) 'Canonical source tree type'
     if ($type -cne 'tree') {
       throw 'A canonical source tree object is not a Git tree.'
@@ -970,7 +970,7 @@ function Get-Issue13V5TrackedSourceTooling(
         Equals($localBytes, $blobBytes)) {
       throw "Canonical source bytes differ from the candidate: $relative"
     }
-    $hashObject = Get-Issue13V5GitLine $Repository @(
+    $hashObject = Get-Issue13V5MaterializerGitLine $Repository @(
       'hash-object', '--no-filters', '--', $repositoryPath) `
       "Canonical source hash-object $relative"
     if ($hashObject -cne [string]$entry.object -or
@@ -981,7 +981,7 @@ function Get-Issue13V5TrackedSourceTooling(
         relative_path = $relative
         repository_path = $repositoryPath
         size_bytes = [long]$localBytes.LongLength
-        sha256 = Get-Issue13V5BytesSha256 $localBytes
+        sha256 = Get-Issue13V5MaterializerBytesSha256 $localBytes
         mode = [string]$entry.mode
         type = [string]$entry.type
         blob = [string]$entry.object
@@ -1002,7 +1002,7 @@ function Get-Issue13V5TrackedSourceTooling(
     directory_count = 1L
     total_bytes = [long](($records | Measure-Object size_bytes -Sum).Sum)
     path_list_sha256 = $pathListSha256
-    inventory_sha256 = Get-Issue13V5BytesSha256 $inventoryPayload
+    inventory_sha256 = Get-Issue13V5MaterializerBytesSha256 $inventoryPayload
     trees = [object[]]@(
       [pscustomobject][ordered]@{
         relative_path = '.'
@@ -1060,7 +1060,7 @@ function Get-Issue13V5Inventory(
     [pscustomobject][ordered]@{
       relative_path = $relative
       size_bytes = [long]$_.Length
-      sha256 = Get-Issue13V5Sha256 $_.FullName
+      sha256 = Get-Issue13V5MaterializerSha256 $_.FullName
     }
   } | Sort-Object relative_path)
   $lines = @($records | ForEach-Object {
@@ -1108,7 +1108,8 @@ function Copy-Issue13V5AuthenticatedFile(
       }
       $offset += $read
     }
-    if ((Get-Issue13V5BytesSha256 $bytes) -cne $ExpectedSha256) {
+    if ((Get-Issue13V5MaterializerBytesSha256 $bytes) -cne
+        $ExpectedSha256) {
       throw "Authenticated V5 source content changed: $Source"
     }
     $destinationStream = [IO.FileStream]::new(
@@ -1133,7 +1134,7 @@ function Get-Issue13V5ControllerPins(
     TrimStart('\').Replace('\', '/')
   @($controllerFiles | ForEach-Object {
     $candidatePath = Join-Path $PSScriptRoot $_
-    $null = Assert-Issue13V5NoReparseAncestors $candidatePath `
+    $null = Assert-Issue13V5MaterializerNoReparseAncestors $candidatePath `
       "V5 controller source $_"
     $path = (Resolve-Path -LiteralPath $candidatePath).Path
     $relative = $relativeRoot + '/' + $_
@@ -1148,7 +1149,7 @@ function Get-Issue13V5ControllerPins(
     [ordered]@{
       name = $_
       relative_path = $relative
-      sha256 = Get-Issue13V5BytesSha256 $controllerBytes
+      sha256 = Get-Issue13V5MaterializerBytesSha256 $controllerBytes
       git_blob = $currentBlob
     }
   })
@@ -1174,7 +1175,8 @@ function Add-Issue13V5ExactSource(
 $repository = (Invoke-Issue13V5SealedGit `
   -C $PSScriptRoot rev-parse --show-toplevel 2>$null).Trim()
 $repository = Assert-Issue13V5AliasFreeLocalPath $repository 'V5 repository'
-$repository = Assert-Issue13V5NoReparseAncestors $repository 'V5 repository'
+$repository = Assert-Issue13V5MaterializerNoReparseAncestors `
+  $repository 'V5 repository'
 $head = (Invoke-Issue13V5SealedGit `
   -C $repository rev-parse HEAD 2>$null).Trim()
 $trackedStatus = @(Invoke-Issue13V5SealedGit `
@@ -1194,13 +1196,13 @@ if ([string]::IsNullOrWhiteSpace($SourceRuntimeRoot)) {
 }
 $SourceRuntimeRoot = Assert-Issue13V5AliasFreeLocalPath `
   $SourceRuntimeRoot 'Canonical V5 tooling source'
-$null = Assert-Issue13V5NoReparseAncestors $SourceRuntimeRoot `
+$null = Assert-Issue13V5MaterializerNoReparseAncestors $SourceRuntimeRoot `
   'Canonical V5 tooling source'
 $source = Assert-Issue13V5TreeHasNoReparsePoints `
   (Resolve-Path -LiteralPath $SourceRuntimeRoot).Path `
   'Canonical V5 tooling source'
 $Destination = Assert-Issue13V5AliasFreeLocalPath $Destination 'V5 destination'
-$destinationFull = Assert-Issue13V5NoReparseAncestors $Destination `
+$destinationFull = Assert-Issue13V5MaterializerNoReparseAncestors $Destination `
   'V5 destination'
 $sourceFull = ConvertTo-Issue13V5FullPath $source
 $repositoryCanonical = ConvertTo-Issue13V5CanonicalPath $repository
@@ -1230,7 +1232,7 @@ $parent = Split-Path -Parent $destinationFull
 if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
   $null = New-Item -ItemType Directory -Path $parent
 }
-$parent = Assert-Issue13V5NoReparseAncestors `
+$parent = Assert-Issue13V5MaterializerNoReparseAncestors `
   (Resolve-Path -LiteralPath $parent).Path 'V5 destination parent'
 $parentCanonical = ConvertTo-Issue13V5CanonicalPath $parent
 if ((ConvertTo-Issue13V5CanonicalPath $destinationFull) -cne
@@ -1251,7 +1253,7 @@ $null = Assert-Issue13V5TreeHasNoReparsePoints $staging `
 foreach ($record in @($sourceInventory.records)) {
   $from = Join-Path $source ([string]$record.relative_path).Replace('/', '\')
   $to = Join-Path $staging ([string]$record.relative_path).Replace('/', '\')
-  $null = Assert-Issue13V5NoReparseAncestors $from `
+  $null = Assert-Issue13V5MaterializerNoReparseAncestors $from `
     "V5 tracked tooling source $($record.relative_path)"
   $toParent = Split-Path -Parent $to
   if (-not (Test-Path -LiteralPath $toParent -PathType Container)) {
@@ -1259,9 +1261,10 @@ foreach ($record in @($sourceInventory.records)) {
   }
   Copy-Issue13V5AuthenticatedFile $from $to `
     ([long]$record.size_bytes) ([string]$record.sha256)
-  $null = Assert-Issue13V5NoReparseAncestors $to `
+  $null = Assert-Issue13V5MaterializerNoReparseAncestors $to `
     "V5 copied runtime file $($record.relative_path)"
-  if ((Get-Issue13V5Sha256 $to) -cne [string]$record.sha256) {
+  if ((Get-Issue13V5MaterializerSha256 $to) -cne
+      [string]$record.sha256) {
     throw "V5 harness copy failed authentication: $($record.relative_path)"
   }
 }
@@ -1281,7 +1284,8 @@ foreach ($name in @(
   $from = Join-Path $PSScriptRoot $name
   $to = Join-Path $harnessStaging $name
   Copy-Item -LiteralPath $from -Destination $to
-  if ((Get-Issue13V5Sha256 $to) -cne (Get-Issue13V5Sha256 $from)) {
+  if ((Get-Issue13V5MaterializerSha256 $to) -cne
+      (Get-Issue13V5MaterializerSha256 $from)) {
     throw "V5 overlay copy failed authentication: $name"
   }
 }
@@ -2812,12 +2816,12 @@ $manifest = [ordered]@{
 $manifestPath = Join-Path $staging 'v5-harness-manifest.json'
 $manifestJson = $manifest | ConvertTo-Json -Depth 20
 Set-Issue13V5Utf8Text $manifestPath ($manifestJson + "`n")
-$manifestSha256 = Get-Issue13V5Sha256 $manifestPath
+$manifestSha256 = Get-Issue13V5MaterializerSha256 $manifestPath
 
 if (Test-Path -LiteralPath $destinationFull) {
   throw 'The V5 destination appeared during materialization.'
 }
-$null = Assert-Issue13V5NoReparseAncestors $destinationFull `
+$null = Assert-Issue13V5MaterializerNoReparseAncestors $destinationFull `
   'V5 destination before promotion'
 if ((ConvertTo-Issue13V5CanonicalPath $destinationFull) -cne
       $destinationCanonical -or
@@ -2840,7 +2844,8 @@ $installedManifest = Join-Path $destinationFull 'v5-harness-manifest.json'
 if (-not (Test-Path -LiteralPath $installedManifest -PathType Leaf)) {
   throw 'The V5 harness was not installed atomically.'
 }
-if ((Get-Issue13V5Sha256 $installedManifest) -cne $manifestSha256) {
+if ((Get-Issue13V5MaterializerSha256 $installedManifest) -cne
+    $manifestSha256) {
   throw 'The V5 harness manifest changed during atomic installation.'
 }
 $installedInventory = Get-Issue13V5Inventory $destinationFull 'output'
@@ -2867,7 +2872,7 @@ if (($controllerPinsInstalled | ConvertTo-Json -Depth 10 -Compress) -cne
   status = 'materialized'
   destination = (Resolve-Path -LiteralPath $destinationFull).Path
   manifest_path = (Resolve-Path -LiteralPath $installedManifest).Path
-  manifest_sha256 = Get-Issue13V5Sha256 $installedManifest
+  manifest_sha256 = Get-Issue13V5MaterializerSha256 $installedManifest
   baseline_commit = $baselineCommit
   source_inventory_sha256 = $sourceInventory.inventory_sha256
   output_inventory_sha256 = $outputInventory.inventory_sha256

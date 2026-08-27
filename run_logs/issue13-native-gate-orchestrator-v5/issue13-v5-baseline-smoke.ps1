@@ -657,7 +657,7 @@ function Assert-Issue13V5BaselineSmokeRscriptSeal(
         [string]$current.physical_path,
         [string]$ExpectedIdentity.physical_path,
         [StringComparison]::OrdinalIgnoreCase) -or
-      (Get-Issue13V5Sha256 $Path) -cne $ExpectedSha256) {
+      (Get-Issue13V5BaselineSmokeSha256 $Path) -cne $ExpectedSha256) {
     throw 'Rscript executable changed after its physical seal.'
   }
   $current
@@ -683,11 +683,11 @@ $methods = @(
 $localeEnvironmentNames = @('LANG', 'LC_ALL', 'LC_CTYPE')
 $utf8 = [Text.UTF8Encoding]::new($false, $true)
 
-function Get-Issue13V5Sha256([string]$Path) {
+function Get-Issue13V5BaselineSmokeSha256([string]$Path) {
   (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
-function Get-Issue13V5TextSha256([string]$Value) {
+function Get-Issue13V5BaselineSmokeTextSha256([string]$Value) {
   $bytes = [Text.Encoding]::UTF8.GetBytes($Value)
   [Convert]::ToHexString(
     [Security.Cryptography.SHA256]::HashData($bytes)
@@ -706,7 +706,7 @@ function Get-Issue13V5SourceInventory([string]$Root) {
         relative_path = $_.FullName.Substring($rootFull.Length + 1).
           Replace('\', '/')
         size_bytes = [long]$_.Length
-        sha256 = Get-Issue13V5Sha256 $_.FullName
+        sha256 = Get-Issue13V5BaselineSmokeSha256 $_.FullName
       }
     } | Sort-Object relative_path)
   $fileLines = @($files | ForEach-Object {
@@ -718,15 +718,18 @@ function Get-Issue13V5SourceInventory([string]$Root) {
     file_count = [long]$files.Count
     directory_count = [long]$directories.Count
     total_bytes = [long](($files | Measure-Object size_bytes -Sum).Sum)
-    inventory_sha256 = Get-Issue13V5TextSha256 (
+    inventory_sha256 = Get-Issue13V5BaselineSmokeTextSha256 (
       [string]::Join("`n", $fileLines))
-    directory_list_sha256 = Get-Issue13V5TextSha256 (
+    directory_list_sha256 = Get-Issue13V5BaselineSmokeTextSha256 (
       [string]::Join("`n", $directories))
     records = $files
   }
 }
 
-function Assert-Issue13V5SourceInventory([object]$Inventory, [string]$Label) {
+function Assert-Issue13V5BaselineSmokeSourceInventory(
+  [object]$Inventory,
+  [string]$Label
+) {
   if ([long]$Inventory.file_count -ne 84 -or
       [long]$Inventory.directory_count -ne 5 -or
       [long]$Inventory.total_bytes -ne 2946498269L -or
@@ -736,7 +739,7 @@ function Assert-Issue13V5SourceInventory([object]$Inventory, [string]$Label) {
   }
 }
 
-function Assert-Issue13V5NoConcurrentR {
+function Assert-Issue13V5BaselineSmokeNoConcurrentR {
   $processes = @(Get-CimInstance Win32_Process -ErrorAction Stop |
     Where-Object { $_.Name -in @(
       'R.exe', 'Rscript.exe', 'Rterm.exe', 'Rgui.exe', 'Rcmd.exe', 'Rfe.exe'
@@ -751,7 +754,10 @@ function Assert-Issue13V5NoConcurrentR {
   }
 }
 
-function Write-Issue13V5Json([object]$Value, [string]$Path) {
+function Write-Issue13V5BaselineSmokeJson(
+  [object]$Value,
+  [string]$Path
+) {
   if (Test-Path -LiteralPath $Path) {
     throw "Refusing to overwrite V5 smoke JSON: $Path"
   }
@@ -800,11 +806,12 @@ function Assert-Issue13V5SmokeHarness(
     harness_runtime_root = $RuntimeRoot
     harness_root = (Join-Path $RuntimeRoot 'issue13-evidence-harness')
     harness_manifest_path = $ManifestPath
-    harness_manifest_sha256 = Get-Issue13V5Sha256 $ManifestPath
+    harness_manifest_sha256 = Get-Issue13V5BaselineSmokeSha256 $ManifestPath
   }
   $binding = Assert-Issue13V5HarnessBinding $bindingConfig
   if ((-not [string]::IsNullOrWhiteSpace($ExpectedManifestSha256) -and
-        (Get-Issue13V5Sha256 $ManifestPath) -cne $ExpectedManifestSha256) -or
+        (Get-Issue13V5BaselineSmokeSha256 $ManifestPath) -cne
+          $ExpectedManifestSha256) -or
       [long]$binding.inventory.file_count -ne $expectedHarnessFileCount -or
       [long]$binding.inventory.total_bytes -ne $expectedHarnessTotalBytes -or
       [string]$binding.inventory.inventory_sha256 -cne
@@ -920,11 +927,12 @@ if ($smoke -match '(?i)(^|[\\/])[^\\/]*v4(?:r[0-9]+)?[^\\/]*($|[\\/])' -or
 $harnessBinding = Assert-Issue13V5SmokeHarness $runtimeRoot `
   $harnessManifestPath $repository
 $harnessManifest = $harnessBinding.manifest
-$harnessManifestSha256 = Get-Issue13V5Sha256 $harnessManifestPath
+$harnessManifestSha256 =
+  Get-Issue13V5BaselineSmokeSha256 $harnessManifestPath
 
 $sourceInventory = Get-Issue13V5SourceInventory $source
-Assert-Issue13V5SourceInventory $sourceInventory 'Source origin'
-Assert-Issue13V5NoConcurrentR
+Assert-Issue13V5BaselineSmokeSourceInventory $sourceInventory 'Source origin'
+Assert-Issue13V5BaselineSmokeNoConcurrentR
 
 $null = New-Item -ItemType Directory -Path $smoke
 $null = Assert-Issue13V5NoReparseAncestors $smoke 'Created smoke root'
@@ -973,7 +981,7 @@ $smokeAction = {
     $elapsedSeconds = $null
     $peakRssBytes = $null
     try {
-      Assert-Issue13V5NoConcurrentR
+      Assert-Issue13V5BaselineSmokeNoConcurrentR
       $null = Assert-Issue13V5SmokeHarness $runtimeRoot `
         $harnessManifestPath $repository $harnessManifestSha256
       $null = Invoke-Issue13V5SealedGit `
@@ -1006,12 +1014,13 @@ $smokeAction = {
         Copy-Item -LiteralPath $from -Destination $to
         if ((Get-Item -LiteralPath $to).Length -ne
               [long]$sourceRecord.size_bytes -or
-            (Get-Issue13V5Sha256 $to) -cne [string]$sourceRecord.sha256) {
+            (Get-Issue13V5BaselineSmokeSha256 $to) -cne
+              [string]$sourceRecord.sha256) {
           throw "Copied source file differs for $method/$relativeNative."
         }
       }
       $copiedInventory = Get-Issue13V5SourceInventory $targetSource
-      Assert-Issue13V5SourceInventory $copiedInventory `
+      Assert-Issue13V5BaselineSmokeSourceInventory $copiedInventory `
         "Copied source for $method"
 
       $null = New-Item -ItemType Directory -Path $methodEvidence
@@ -1132,7 +1141,7 @@ $smokeAction = {
               [StringComparison]::OrdinalIgnoreCase) -or
             [string]$telemetry[1] -cnotmatch '^[0-9a-f]{64}$' -or
             -not (Test-Path -LiteralPath $expectedPath -PathType Leaf) -or
-            (Get-Issue13V5Sha256 $expectedPath) -cne
+            (Get-Issue13V5BaselineSmokeSha256 $expectedPath) -cne
               [string]$telemetry[1]) {
           throw "Baseline smoke telemetry binding differs for $method."
         }
@@ -1149,15 +1158,15 @@ $smokeAction = {
         throw "Baseline smoke worktree changed during execution for $method."
       }
       $afterInventory = Get-Issue13V5SourceInventory $targetSource
-      Assert-Issue13V5SourceInventory $afterInventory `
+      Assert-Issue13V5BaselineSmokeSourceInventory $afterInventory `
         "Post-execution source for $method"
       if ([string]$afterInventory.inventory_sha256 -cne
           [string]$copiedInventory.inventory_sha256) {
         throw "Baseline smoke changed source_data for $method."
       }
       $status = 'passed'
-      $resultSha = Get-Issue13V5Sha256 $resultPath
-      $metricsSha = Get-Issue13V5Sha256 $metricsPath
+      $resultSha = Get-Issue13V5BaselineSmokeSha256 $resultPath
+      $metricsSha = Get-Issue13V5BaselineSmokeSha256 $metricsPath
       $elapsedSeconds = [double]$metrics.elapsed_seconds
       $peakRssBytes = [long]$metrics.peak_rss_bytes
     } catch {
@@ -1190,7 +1199,7 @@ $null = Invoke-Issue13V5WithCleanup `
   -Cleanup $baselineCleanup `
   -Action $environmentAction
 
-Assert-Issue13V5NoConcurrentR
+Assert-Issue13V5BaselineSmokeNoConcurrentR
 $null = Assert-Issue13V5BaselineSmokeRscriptSeal `
   $rscriptFull $rscriptIdentity $rscriptSha256
 $null = Assert-Issue13V5SmokeHarness $runtimeRoot `
@@ -1224,12 +1233,12 @@ $summary = [ordered]@{
     'Disposable smoke worktrees must never be reused by the final V5 gate.'
 }
 $summaryPath = Join-Path $smoke 'baseline-smoke-summary.json'
-Write-Issue13V5Json $summary $summaryPath
+Write-Issue13V5BaselineSmokeJson $summary $summaryPath
 
 [pscustomobject][ordered]@{
   status = [string]$summary.status
   summary_path = (Resolve-Path -LiteralPath $summaryPath).Path
-  summary_sha256 = Get-Issue13V5Sha256 $summaryPath
+  summary_sha256 = Get-Issue13V5BaselineSmokeSha256 $summaryPath
   passed_count = $passedCount
   failed_count = 12 - $passedCount
 }

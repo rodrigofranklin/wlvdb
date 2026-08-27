@@ -525,45 +525,8 @@ function Assert-Issue13V5FreshRoot([string]$Path, [string]$Label) {
   $full
 }
 
-function Get-Issue13V5Sha256([string]$Path) {
+function Get-Issue13V5NewConfigSha256([string]$Path) {
   (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
-}
-
-function Get-Issue13V5HarnessInventory([string]$Root) {
-  $harnessDirectory = Join-Path $Root 'issue13-evidence-harness'
-  $rootDirectories = @(Get-ChildItem -LiteralPath $Root -Directory -Force)
-  $harnessDirectories = @(
-    Get-ChildItem -LiteralPath $harnessDirectory -Directory -Recurse -Force)
-  if ($rootDirectories.Count -ne 1 -or
-      $rootDirectories[0].Name -cne 'issue13-evidence-harness' -or
-      $harnessDirectories.Count -ne 0) {
-    throw 'V5 harness must be a flat, fully inventoried two-level tree.'
-  }
-  $files = @(
-    @(Get-ChildItem -LiteralPath $Root -File -Force | Where-Object {
-      $_.Name -cne 'v5-harness-manifest.json'
-    }),
-    @(Get-ChildItem -LiteralPath $harnessDirectory -File -Force)
-  ) | ForEach-Object { $_ }
-  $records = @($files | ForEach-Object {
-    [pscustomobject]@{
-      relative_path = $_.FullName.Substring($Root.Length + 1).Replace('\', '/')
-      size_bytes = [long]$_.Length
-      sha256 = Get-Issue13V5Sha256 $_.FullName
-    }
-  } | Sort-Object relative_path)
-  $lines = @($records | ForEach-Object {
-    [string]$_.relative_path + '|' + [string]$_.size_bytes + '|' +
-      [string]$_.sha256
-  })
-  $bytes = [Text.Encoding]::UTF8.GetBytes([string]::Join("`n", $lines))
-  [pscustomobject]@{
-    file_count = [long]$records.Count
-    total_bytes = [long](($records | Measure-Object size_bytes -Sum).Sum)
-    inventory_sha256 = [Convert]::ToHexString(
-      [Security.Cryptography.SHA256]::HashData($bytes)
-    ).ToLowerInvariant()
-  }
 }
 
 $repository = (Resolve-Path -LiteralPath (
@@ -592,7 +555,7 @@ $library = (Resolve-Path -LiteralPath (
   ConvertTo-Issue13V5FullPath $RLibrary $true)).Path
 $rscriptIdentity = Get-Issue13V5PhysicalItemIdentity `
   $rscriptFull 'V5 config Rscript executable'
-$rscriptSha256 = Get-Issue13V5Sha256 $rscriptFull
+$rscriptSha256 = Get-Issue13V5NewConfigSha256 $rscriptFull
 if ([IO.Path]::GetFileName($rscriptFull) -cne 'Rscript.exe' -or
     [long]$rscriptIdentity.link_count -ne 1L -or
     [long](Get-Item -LiteralPath $rscriptFull).Length -ne 94720L -or
@@ -601,7 +564,7 @@ if ([IO.Path]::GetFileName($rscriptFull) -cne 'Rscript.exe' -or
 }
 $strictSmokeBinding = [pscustomobject][ordered]@{
   path = $strictSmokePath
-  sha256 = Get-Issue13V5Sha256 $strictSmokePath
+  sha256 = Get-Issue13V5NewConfigSha256 $strictSmokePath
   passed_count = 5L
   failed_count = 7L
   final_evidence_eligible = $false
@@ -617,7 +580,8 @@ $pinConfig = [pscustomobject][ordered]@{
   harness_runtime_root = $harnessRuntime
   harness_root = $harness
   harness_manifest_path = $harnessManifestPath
-  harness_manifest_sha256 = Get-Issue13V5Sha256 $harnessManifestPath
+  harness_manifest_sha256 =
+    Get-Issue13V5NewConfigSha256 $harnessManifestPath
   rscript = $rscriptFull
   r_library = $library
   strict_baseline_smoke = $strictSmokeBinding
@@ -686,7 +650,7 @@ if ([string]$preparationEquivalence.schema -cne
 $preparationEquivalenceBinding = [ordered]@{
   schema = 'wlv-issue13-preparation-equivalence/1'
   path = $preparationEquivalencePath
-  sha256 = Get-Issue13V5Sha256 $preparationEquivalencePath
+  sha256 = Get-Issue13V5NewConfigSha256 $preparationEquivalencePath
   sources = @('wiodr13', 'wiodr16')
   artifacts = @('_unit_contract.csv', '_source_manifest.csv')
   profile_count = 2
@@ -702,7 +666,8 @@ $strictSmoke = Get-Content -LiteralPath $strictSmokePath -Raw |
 $compatibilitySmoke = Get-Content -LiteralPath $compatibilitySmokePath -Raw |
   ConvertFrom-Json -DateKind String
 if ($BaselineRuntimeCommit -cne $expectedBaselineRuntimeCommit -or
-    (Get-Issue13V5Sha256 $overlayPatch) -cne $expectedOverlaySha256) {
+    (Get-Issue13V5NewConfigSha256 $overlayPatch) -cne
+      $expectedOverlaySha256) {
   throw 'The requested baseline runtime or patch differs from the sealed oracle.'
 }
 $expectedBaselineScenarios = [Collections.Generic.List[string]]::new()
@@ -736,7 +701,7 @@ if ([string]$index.schema -cne 'wlv-issue13-baseline-runtime-index/1' -or
         ([string]$index.profiles[0].overlay_patch_path) $true),
       $overlayPatch, [StringComparison]::OrdinalIgnoreCase) -or
     [string]$index.profiles[0].overlay_patch_sha256 -cne
-      (Get-Issue13V5Sha256 $overlayPatch) -or
+      (Get-Issue13V5NewConfigSha256 $overlayPatch) -or
     [string]$index.profiles[0].overlay_patch_id -cne
       $expectedOverlayPatchId -or
     @($index.scenarios).Count -ne 76 -or
@@ -750,7 +715,8 @@ if ([string]$index.schema -cne 'wlv-issue13-baseline-runtime-index/1' -or
   throw 'The V5 baseline index is not the authenticated compatibility oracle.'
 }
 if ([string]$strictSmoke.schema -cne 'wlv-issue13-v5-baseline-smoke/1' -or
-    (Get-Issue13V5Sha256 $strictSmokePath) -cne $strictSmokeSha256 -or
+    (Get-Issue13V5NewConfigSha256 $strictSmokePath) -cne
+      $strictSmokeSha256 -or
     -not (Test-Issue13V5ExactBoolean `
       $strictSmoke.final_evidence_eligible $false) -or
     [string]$strictSmoke.purpose -cne
@@ -789,7 +755,7 @@ if ([string]$compatibilitySmoke.schema -cne
     [string]$compatibilitySmoke.source_inventory_sha256 -cne
       'c593624ebfa75fb350b8b6528c1d5b6535d71bfe672c7eb61729c1b02f784e26' -or
     [string]$compatibilitySmoke.harness_manifest_sha256 -cne
-      (Get-Issue13V5Sha256 $harnessManifestPath) -or
+      (Get-Issue13V5NewConfigSha256 $harnessManifestPath) -or
     [string]::Join("`n", @($compatibilitySmoke.records.method)) -cne
       [string]::Join("`n", $methods) -or
     @($compatibilitySmoke.records | Where-Object status -cne 'passed').Count `
@@ -805,8 +771,9 @@ $null = Assert-Issue13V5BaselineSmokeEvidence $pinConfig $strictSmokePath `
   $strictSmokeHarnessSha256 $false $strictFailedMethods $strictSmokeSha256
 $null = Assert-Issue13V5BaselineSmokeEvidence $pinConfig `
   $compatibilitySmokePath 'compatibility-oracle-executability-preflight' `
-  $BaselineRuntimeCommit (Get-Issue13V5Sha256 $harnessManifestPath) `
-  $true @() (Get-Issue13V5Sha256 $compatibilitySmokePath)
+  $BaselineRuntimeCommit `
+  (Get-Issue13V5NewConfigSha256 $harnessManifestPath) `
+  $true @() (Get-Issue13V5NewConfigSha256 $compatibilitySmokePath)
 
 $null = Invoke-Issue13V5SealedGit `
   -C $repository cat-file -e ($BaselineRuntimeCommit + '^{commit}')
@@ -910,12 +877,12 @@ $oracleEffect = [ordered]@{
   authorized_patch_id = $expectedOverlayPatchId
   oracle_smoke = [ordered]@{
     path = $oracleEffectSmokePath
-    sha256 = Get-Issue13V5Sha256 $oracleEffectSmokePath
+    sha256 = Get-Issue13V5NewConfigSha256 $oracleEffectSmokePath
     final_evidence_eligible = $false
   }
   proof = [ordered]@{
     path = $oracleProofPath
-    sha256 = Get-Issue13V5Sha256 $oracleProofPath
+    sha256 = Get-Issue13V5NewConfigSha256 $oracleProofPath
     schema = 'wlv-issue13-v5-oracle-effect-proof/2'
   }
   comparisons = [ordered]@{
@@ -932,7 +899,7 @@ $oracleEffect = [ordered]@{
   comparison_harness = [ordered]@{
     expected_candidate_commit = $CandidateCommit
     manifest_path = $harnessManifestPath
-    manifest_sha256 = Get-Issue13V5Sha256 $harnessManifestPath
+    manifest_sha256 = Get-Issue13V5NewConfigSha256 $harnessManifestPath
     generation = 'v5-terminal'
     final_evidence_eligible = $true
     reuses_candidate_evidence = $false
@@ -969,7 +936,8 @@ $oracleValidationConfig = [pscustomobject]@{
   baseline_commit = $baselineCommit
   baseline_runtime_commit = $BaselineRuntimeCommit
   harness_manifest_path = $harnessManifestPath
-  harness_manifest_sha256 = Get-Issue13V5Sha256 $harnessManifestPath
+  harness_manifest_sha256 =
+    Get-Issue13V5NewConfigSha256 $harnessManifestPath
   rscript = $rscriptFull
   r_library = $library
   strict_baseline_smoke = $strictSmokeBinding
@@ -978,7 +946,7 @@ $oracleValidationConfig = [pscustomobject]@{
   }
   baseline_overlay = [pscustomobject]@{
     path = $overlayPatch
-    sha256 = Get-Issue13V5Sha256 $overlayPatch
+    sha256 = Get-Issue13V5NewConfigSha256 $overlayPatch
   }
   oracle_effect = [pscustomobject]$oracleEffect
 }
@@ -1181,7 +1149,8 @@ $config = [ordered]@{
   harness_runtime_root = $harnessRuntime
   harness_root = $harness
   harness_manifest_path = $harnessManifestPath
-  harness_manifest_sha256 = Get-Issue13V5Sha256 $harnessManifestPath
+  harness_manifest_sha256 =
+    Get-Issue13V5NewConfigSha256 $harnessManifestPath
   worktree_root = $worktrees
   evidence_root = $evidence
   control_root = $control
@@ -1214,13 +1183,13 @@ $config = [ordered]@{
   baseline_profile = $baselineProfile
   baseline_overlay = [ordered]@{
     path = $overlayPatch
-    sha256 = Get-Issue13V5Sha256 $overlayPatch
+    sha256 = Get-Issue13V5NewConfigSha256 $overlayPatch
     patch_id = [string]$index.profiles[0].overlay_patch_id
   }
   strict_baseline_smoke = $strictSmokeBinding
   compatibility_baseline_smoke = [ordered]@{
     path = $compatibilitySmokePath
-    sha256 = Get-Issue13V5Sha256 $compatibilitySmokePath
+    sha256 = Get-Issue13V5NewConfigSha256 $compatibilitySmokePath
     passed_count = 12
     failed_count = 0
     final_evidence_eligible = $false
@@ -1229,7 +1198,7 @@ $config = [ordered]@{
   candidate_commit = $CandidateCommit
   candidate_seed_commit = $CandidateCommit
   baseline_runtime_index = $runtimeIndex
-  baseline_runtime_index_sha256 = Get-Issue13V5Sha256 $runtimeIndex
+  baseline_runtime_index_sha256 = Get-Issue13V5NewConfigSha256 $runtimeIndex
   methods = $methodRoots
   supplemental_roots = [ordered]@{
     baseline_preparation = Join-Path $worktrees 'baseline-preparation'
@@ -1336,7 +1305,7 @@ if ([string]$roundtrip.generation -cne 'v5' -or
     [string]$roundtrip.baseline_runtime_commit -cne $BaselineRuntimeCommit -or
     @($roundtrip.matrix.science_phases).Count -ne 74 -or
     [string]$roundtrip.oracle_effect.proof.sha256 -cne
-      (Get-Issue13V5Sha256 $oracleProofPath) -or
+      (Get-Issue13V5NewConfigSha256 $oracleProofPath) -or
     [string]$roundtrip.oracle_effect.comparisons.primary.inventory.
       inventory_sha256 -cne
       [string]$oraclePrimaryInventory.inventory_sha256 -or
@@ -1380,7 +1349,7 @@ if (-not [string]::Equals($installed, $payload, [StringComparison]::Ordinal)) {
 [pscustomobject][ordered]@{
   status = 'created'
   config_path = (Resolve-Path -LiteralPath $finalOutputFull).Path
-  config_sha256 = Get-Issue13V5Sha256 $finalOutputFull
+  config_sha256 = Get-Issue13V5NewConfigSha256 $finalOutputFull
   baseline_commit = $baselineCommit
   baseline_runtime_commit = $BaselineRuntimeCommit
   candidate_commit = $CandidateCommit
@@ -1388,8 +1357,9 @@ if (-not [string]::Equals($installed, $payload, [StringComparison]::Ordinal)) {
   scenarios = 162
   comparisons = 202
   faults = 10
-  oracle_effect_proof_sha256 = Get-Issue13V5Sha256 $oracleProofPath
-  oracle_effect_smoke_sha256 = Get-Issue13V5Sha256 $oracleEffectSmokePath
+  oracle_effect_proof_sha256 = Get-Issue13V5NewConfigSha256 $oracleProofPath
+  oracle_effect_smoke_sha256 =
+    Get-Issue13V5NewConfigSha256 $oracleEffectSmokePath
   oracle_effect_primary_inventory_sha256 =
     [string]$oraclePrimaryInventory.inventory_sha256
   oracle_effect_replay_inventory_sha256 =
