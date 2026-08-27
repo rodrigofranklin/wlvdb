@@ -90,6 +90,7 @@ Rscript --vanilla "$Issue13HarnessRoot\issue13-build-recalc-bundle.R" `
   --seed-commit <SHA_DO_FULL_CANDIDATE> `
   --seed-result D:\evidence\scenarios\candidate__calculate__alternative_2__workers1\scenario-result.json `
   --channel issue13-candidate-alternative2-s4-select-mv `
+  --r-library D:\gate\renv\library\windows\R-4.6\x86_64-w64-mingw32 `
   --output D:\evidence\specs\candidate-alternative2-s4-select-mv `
   --evidence-root D:\evidence
 ```
@@ -193,7 +194,7 @@ Rscript --vanilla "$Issue13HarnessRoot\issue13-build-prep-fault-specs.R" `
   --candidate-root D:\gate\candidate-prep `
   --candidate-commit <SHA_CANDIDATE> `
   --fault-root D:\gate\candidate-fault `
-  --r-library D:\gate\library `
+  --r-library D:\gate\renv\library\windows\R-4.6\x86_64-w64-mingw32 `
   --channel-prefix issue13-prep-fault-
 
 Rscript --vanilla "$Issue13HarnessRoot\issue13-audit-prep-fault-plan.R" `

@@ -651,7 +651,16 @@ $script:Issue13V5OracleClearedREnvironment = @(
   'LANG', 'LC_ALL', 'LC_CTYPE',
   'R_ARCH', 'R_DEFAULT_PACKAGES', 'R_ENVIRON', 'R_ENVIRON_USER', 'R_HOME',
   'R_LIBS', 'R_LIBS_SITE', 'R_PROFILE', 'R_PROFILE_USER', 'R_STARTUP_DEBUG',
-  'RENV_CONFIG_AUTOLOADER_ENABLED', 'RENV_PATHS_LIBRARY', 'RENV_PATHS_ROOT'
+  'RENV_ACTIVATE_PROJECT', 'RENV_AUTOLOAD_ENABLED',
+  'RENV_AUTOLOADER_ENABLED',
+  'RENV_CONFIG_AUTOLOADER_ENABLED', 'RENV_CONFIG_EXTERNAL_LIBRARIES',
+  'RENV_CONFIG_STARTUP_QUIET', 'RENV_CONFIG_SYNCHRONIZED_CHECK',
+  'RENV_CONFIG_USER_PROFILE', 'RENV_PATHS_LIBRARY_ROOT',
+  'RENV_PATHS_LIBRARY_ROOT_ASIS', 'RENV_PATHS_LOCKFILE',
+  'RENV_PATHS_PREFIX', 'RENV_PATHS_PREFIX_AUTO', 'RENV_PATHS_RENV',
+  'RENV_PATHS_ROOT', 'RENV_PATHS_SANDBOX', 'RENV_PATHS_VERSION',
+  'RENV_PROCESS_TYPE', 'RENV_PROFILE', 'RENV_PROJECT',
+  'RENV_SANDBOX_LOCKING_ENABLED', 'RENV_STARTUP_DIAGNOSTICS'
 )
 $script:Issue13V5Methods = @(
   'wiodr13', 'wiodr16', 'alternative_1', 'alternative_2', 'norow_w13',
@@ -2550,6 +2559,38 @@ function Set-Issue13V5ProcessStartInfoEnvironment(
   }
 }
 
+function Get-Issue13V5RenvLibraryRoot(
+  [Parameter(Mandatory = $true)][string]$RLibrary
+) {
+  if ([string]::IsNullOrWhiteSpace($RLibrary)) {
+    throw 'The renv library root requires an R library path.'
+  }
+  $library = [IO.Path]::GetFullPath($RLibrary).TrimEnd('\', '/')
+  if (-not [IO.Directory]::Exists($library)) {
+    throw 'The renv library path does not exist.'
+  }
+  $architecture = [IO.DirectoryInfo]::new($library)
+  $version = $architecture.Parent
+  $platform = if ($null -eq $version) { $null } else { $version.Parent }
+  $root = if ($null -eq $platform) { $null } else { $platform.Parent }
+  if ($null -eq $architecture -or $null -eq $version -or
+      $null -eq $platform -or $null -eq $root -or
+      $architecture.Name -cnotmatch '^[A-Za-z0-9._+-]+$' -or
+      $version.Name -cnotmatch '^R-[0-9]+[.][0-9]+$' -or
+      $platform.Name -cnotmatch '^[A-Za-z0-9._+-]+$' -or
+      $root.Name -cne 'library') {
+    throw 'The R library does not have the sealed renv profile layout.'
+  }
+  $reconstructed = [IO.Path]::GetFullPath([IO.Path]::Combine(
+      $root.FullName, $platform.Name, $version.Name, $architecture.Name
+    )).TrimEnd('\', '/')
+  if (-not [string]::Equals(
+      $reconstructed, $library, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'The sealed renv library root reconstruction differs.'
+  }
+  $root.FullName.TrimEnd('\', '/')
+}
+
 function New-Issue13V5ClosedREnvironment(
   [Parameter(Mandatory = $true)][string]$RLibrary
 ) {
@@ -2561,6 +2602,15 @@ function New-Issue13V5ClosedREnvironment(
     $environment[$name] = $null
   }
   $environment['R_LIBS_USER'] = $RLibrary
+  $environment['RENV_PATHS_LIBRARY'] =
+    Get-Issue13V5RenvLibraryRoot $RLibrary
+  $environment['RENV_CONFIG_AUTO_SNAPSHOT'] = 'FALSE'
+  $environment['RENV_CONFIG_CACHE_ENABLED'] = 'FALSE'
+  $environment['RENV_CONFIG_LOCKING_ENABLED'] = 'FALSE'
+  $environment['RENV_CONFIG_SANDBOX_ENABLED'] = 'FALSE'
+  $environment['RENV_CONFIG_UPDATES_CHECK'] = 'FALSE'
+  $environment['RENV_CONFIG_USER_ENVIRON'] = 'FALSE'
+  $environment['RENV_CONFIG_USER_LIBRARY'] = 'FALSE'
   $environment['TZ'] = 'UTC'
   $environment
 }
@@ -2801,12 +2851,20 @@ function Assert-Issue13V5OracleEffectBindings([object]$Config) {
     $oracle.comparison_harness.source_tooling `
     'Oracle-effect source tooling binding'
   $null = Assert-Issue13V5ExactPropertyNames $oracle.r_library @(
-    'path', 'environment_variable', 'environment', 'r_version', 'platform',
+    'path', 'environment_variable', 'environment', 'activation',
+    'r_version', 'platform',
     'lib_paths', 'required_packages', 'loaded_packages', 'inventory_sha256'
   ) 'Oracle-effect R library binding'
   $null = Assert-Issue13V5ExactPropertyNames $oracle.r_library.environment @(
     'set', 'cleared'
   ) 'Oracle-effect R environment binding'
+  $null = Assert-Issue13V5ExactPropertyNames $oracle.r_library.activation @(
+    'mode', 'verified', 'renv_version', 'captured_console_line_count',
+    'renv_library_root', 'project_inventory_sha256',
+    'project_library_absent_before', 'project_library_absent_after',
+    'r_library_inventory_before_sha256',
+    'r_library_inventory_after_sha256'
+  ) 'Oracle-effect isolated renv activation binding'
   foreach ($record in @($oracle.r_library.environment.set)) {
     $null = Assert-Issue13V5ExactPropertyNames $record @(
       'name', 'value'
@@ -2910,6 +2968,7 @@ function Assert-Issue13V5OracleEffectBindings([object]$Config) {
   $requiredExpected = [string[]]@(
     $script:Issue13V5OracleRequiredRPackages | Sort-Object)
   $setRecords = @($oracle.r_library.environment.set)
+  $renvLibraryRoot = Get-Issue13V5RenvLibraryRoot $rLibraryPath
   $rLibrarySet = @($setRecords | Where-Object {
     [string]$_.name -ceq 'R_LIBS_USER' -and
     [string]::Equals(
@@ -2917,15 +2976,77 @@ function Assert-Issue13V5OracleEffectBindings([object]$Config) {
       (ConvertTo-Issue13V5Path $rLibraryPath),
       [StringComparison]::OrdinalIgnoreCase)
   })
+  $renvLibrarySet = @($setRecords | Where-Object {
+    [string]$_.name -ceq 'RENV_PATHS_LIBRARY' -and
+    [string]::Equals(
+      (ConvertTo-Issue13V5Path ([string]$_.value)),
+      (ConvertTo-Issue13V5Path $renvLibraryRoot),
+      [StringComparison]::OrdinalIgnoreCase)
+  })
   $tzSet = @($setRecords | Where-Object {
     [string]$_.name -ceq 'TZ' -and [string]$_.value -ceq 'UTC'
+  })
+  $sandboxSet = @($setRecords | Where-Object {
+    [string]$_.name -ceq 'RENV_CONFIG_SANDBOX_ENABLED' -and
+    [string]$_.value -ceq 'FALSE'
+  })
+  $autoSnapshotSet = @($setRecords | Where-Object {
+    [string]$_.name -ceq 'RENV_CONFIG_AUTO_SNAPSHOT' -and
+    [string]$_.value -ceq 'FALSE'
+  })
+  $cacheSet = @($setRecords | Where-Object {
+    [string]$_.name -ceq 'RENV_CONFIG_CACHE_ENABLED' -and
+    [string]$_.value -ceq 'FALSE'
+  })
+  $lockingSet = @($setRecords | Where-Object {
+    [string]$_.name -ceq 'RENV_CONFIG_LOCKING_ENABLED' -and
+    [string]$_.value -ceq 'FALSE'
+  })
+  $updatesSet = @($setRecords | Where-Object {
+    [string]$_.name -ceq 'RENV_CONFIG_UPDATES_CHECK' -and
+    [string]$_.value -ceq 'FALSE'
+  })
+  $userEnvironSet = @($setRecords | Where-Object {
+    [string]$_.name -ceq 'RENV_CONFIG_USER_ENVIRON' -and
+    [string]$_.value -ceq 'FALSE'
+  })
+  $userLibrarySet = @($setRecords | Where-Object {
+    [string]$_.name -ceq 'RENV_CONFIG_USER_LIBRARY' -and
+    [string]$_.value -ceq 'FALSE'
   })
   if ([string]::Join("`n", $clearedObserved) -cne
         [string]::Join("`n", $clearedExpected) -or
       [string]::Join("`n", $requiredObserved) -cne
         [string]::Join("`n", $requiredExpected) -or
-      $setRecords.Count -ne 2 -or $rLibrarySet.Count -ne 1 -or
-      $tzSet.Count -ne 1 -or @($oracle.r_library.lib_paths).Count -lt 1 -or
+      $setRecords.Count -ne 10 -or $rLibrarySet.Count -ne 1 -or
+      $renvLibrarySet.Count -ne 1 -or $sandboxSet.Count -ne 1 -or
+      $autoSnapshotSet.Count -ne 1 -or $cacheSet.Count -ne 1 -or
+      $lockingSet.Count -ne 1 -or $updatesSet.Count -ne 1 -or
+      $userEnvironSet.Count -ne 1 -or $userLibrarySet.Count -ne 1 -or
+      $tzSet.Count -ne 1 -or
+      [string]$oracle.r_library.activation.mode -cne
+        'isolated-project-copy' -or
+      -not (Test-Issue13V5ExactBoolean `
+        $oracle.r_library.activation.verified $true) -or
+      [string]$oracle.r_library.activation.renv_version -cne '1.2.4' -or
+      [long]$oracle.r_library.activation.captured_console_line_count -lt 0L -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path (
+          [string]$oracle.r_library.activation.renv_library_root)),
+        (ConvertTo-Issue13V5Path $renvLibraryRoot),
+        [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$oracle.r_library.activation.project_inventory_sha256 -cnotmatch
+        '^[0-9a-f]{64}$' -or
+      -not (Test-Issue13V5ExactBoolean `
+        $oracle.r_library.activation.project_library_absent_before $true) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $oracle.r_library.activation.project_library_absent_after $true) -or
+      [string]$oracle.r_library.activation.r_library_inventory_before_sha256 `
+        -cnotmatch '^[0-9a-f]{64}$' -or
+      [string]$oracle.r_library.activation.r_library_inventory_before_sha256 `
+        -cne [string]$oracle.r_library.activation.
+          r_library_inventory_after_sha256 -or
+      @($oracle.r_library.lib_paths).Count -lt 1 -or
       -not [string]::Equals(
         (ConvertTo-Issue13V5Path ([string]$oracle.r_library.lib_paths[0])),
         (ConvertTo-Issue13V5Path $rLibraryPath),
@@ -5055,7 +5176,12 @@ function Assert-Issue13V5BaselineSmokeEvidence(
         'expected_worker_processes'
       ) "Strict smoke process spec $method"
       $null = Assert-Issue13V5ExactPropertyNames $processDocument.environment @(
-        'R_LIBS_USER') "Strict smoke process environment $method"
+        'R_LIBS_USER', 'RENV_PATHS_LIBRARY',
+        'RENV_CONFIG_AUTO_SNAPSHOT', 'RENV_CONFIG_CACHE_ENABLED',
+        'RENV_CONFIG_LOCKING_ENABLED',
+        'RENV_CONFIG_SANDBOX_ENABLED', 'RENV_CONFIG_UPDATES_CHECK',
+        'RENV_CONFIG_USER_ENVIRON', 'RENV_CONFIG_USER_LIBRARY', 'TZ'
+      ) "Strict smoke process environment $method"
       $null = Assert-Issue13V5ExactPropertyNames $scenarioDocument @(
         'schema', 'scenario_id', 'project_root', 'expected_commit', 'kind',
         'method', 'channel', 'checkpoint_path', 'workers',
@@ -5167,6 +5293,27 @@ function Assert-Issue13V5BaselineSmokeEvidence(
               [string]$processDocument.environment.R_LIBS_USER)),
             (ConvertTo-Issue13V5Path ([string]$Config.r_library)),
             [StringComparison]::OrdinalIgnoreCase) -or
+          -not [string]::Equals(
+            (ConvertTo-Issue13V5Path (
+              [string]$processDocument.environment.RENV_PATHS_LIBRARY)),
+            (ConvertTo-Issue13V5Path (
+              (Get-Issue13V5RenvLibraryRoot ([string]$Config.r_library)))),
+            [StringComparison]::OrdinalIgnoreCase) -or
+          [string]$processDocument.environment.RENV_CONFIG_AUTO_SNAPSHOT -cne
+            'FALSE' -or
+          [string]$processDocument.environment.RENV_CONFIG_CACHE_ENABLED -cne
+            'FALSE' -or
+          [string]$processDocument.environment.RENV_CONFIG_LOCKING_ENABLED -cne
+            'FALSE' -or
+          [string]$processDocument.environment.RENV_CONFIG_SANDBOX_ENABLED -cne
+            'FALSE' -or
+          [string]$processDocument.environment.RENV_CONFIG_UPDATES_CHECK -cne
+            'FALSE' -or
+          [string]$processDocument.environment.RENV_CONFIG_USER_ENVIRON -cne
+            'FALSE' -or
+          [string]$processDocument.environment.RENV_CONFIG_USER_LIBRARY -cne
+            'FALSE' -or
+          [string]$processDocument.environment.TZ -cne 'UTC' -or
           -not [string]::Equals(
             (ConvertTo-Issue13V5Path ([string]$bundleDocument.r_library)),
             (ConvertTo-Issue13V5Path ([string]$Config.r_library)),

@@ -355,8 +355,30 @@ wlv13_validate_scenario <- function(id) {
   ))
   process_spec_ok <- tryCatch({
     process_spec <- wlv13_json_read(metrics$process_spec_path, simplify = FALSE)
+    process_environment <- process_spec$environment
     identical(process_spec$schema, "wlv-issue13-process-spec/1") &&
       identical(process_spec$scenario_id, id) &&
+      identical(names(process_environment), c(
+        "R_LIBS_USER", "RENV_PATHS_LIBRARY",
+        "RENV_CONFIG_AUTO_SNAPSHOT", "RENV_CONFIG_CACHE_ENABLED",
+        "RENV_CONFIG_LOCKING_ENABLED",
+        "RENV_CONFIG_SANDBOX_ENABLED", "RENV_CONFIG_UPDATES_CHECK",
+        "RENV_CONFIG_USER_ENVIRON", "RENV_CONFIG_USER_LIBRARY", "TZ"
+      )) &&
+      identical(
+        normalizePath(process_environment$RENV_PATHS_LIBRARY,
+          winslash = "/", mustWork = TRUE
+        ),
+        wlv13_renv_library_root(process_environment$R_LIBS_USER)
+      ) &&
+      identical(process_environment$RENV_CONFIG_AUTO_SNAPSHOT, "FALSE") &&
+      identical(process_environment$RENV_CONFIG_CACHE_ENABLED, "FALSE") &&
+      identical(process_environment$RENV_CONFIG_LOCKING_ENABLED, "FALSE") &&
+      identical(process_environment$RENV_CONFIG_SANDBOX_ENABLED, "FALSE") &&
+      identical(process_environment$RENV_CONFIG_UPDATES_CHECK, "FALSE") &&
+      identical(process_environment$RENV_CONFIG_USER_ENVIRON, "FALSE") &&
+      identical(process_environment$RENV_CONFIG_USER_LIBRARY, "FALSE") &&
+      identical(process_environment$TZ, "UTC") &&
       identical(as.integer(process_spec$expected_worker_processes),
         expected_workers) &&
       identical(

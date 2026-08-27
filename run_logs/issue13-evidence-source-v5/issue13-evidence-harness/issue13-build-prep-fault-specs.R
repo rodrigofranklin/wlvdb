@@ -129,7 +129,7 @@ write_pair <- function(scenario, timeout_seconds, requires_seed_channel = FALSE)
     sample_interval_ms = 2000L,
     shutdown_grace_seconds = 60,
     expected_worker_processes = 0L,
-    environment = list(R_LIBS_USER = r_library)
+    environment = wlv13_r_environment(r_library)
   )
   wlv13_json_write(process, process_path)
   records[[id]] <<- list(

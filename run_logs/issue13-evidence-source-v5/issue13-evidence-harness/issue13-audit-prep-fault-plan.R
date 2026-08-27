@@ -291,7 +291,13 @@ audited <- lapply(seq_along(plan$records), function(index) {
       !identical(as.integer(process$expected_exit_codes), 0L) ||
       !identical(as.integer(process$expected_worker_processes), 0L) ||
       !identical(as.integer(process$sample_interval_ms), 2000L) ||
-      !identical(names(process$environment), "R_LIBS_USER") ||
+      !identical(names(process$environment), c(
+        "R_LIBS_USER", "RENV_PATHS_LIBRARY",
+        "RENV_CONFIG_AUTO_SNAPSHOT", "RENV_CONFIG_CACHE_ENABLED",
+        "RENV_CONFIG_LOCKING_ENABLED",
+        "RENV_CONFIG_SANDBOX_ENABLED", "RENV_CONFIG_UPDATES_CHECK",
+        "RENV_CONFIG_USER_ENVIRON", "RENV_CONFIG_USER_LIBRARY", "TZ"
+      )) ||
       as.numeric(process$timeout_seconds) <= 0 ||
       as.numeric(process$shutdown_grace_seconds) < 30) {
     stop(sprintf("Scenario/process spec contract failed for `%s`.", id),
@@ -308,6 +314,17 @@ audited <- lapply(seq_along(plan$records), function(index) {
   if (!identical(arguments, expected_arguments) ||
       !identical(normalizePath(process$environment$R_LIBS_USER,
         winslash = "/", mustWork = TRUE), r_library) ||
+      !identical(normalizePath(process$environment$RENV_PATHS_LIBRARY,
+        winslash = "/", mustWork = TRUE),
+        wlv13_renv_library_root(r_library)) ||
+      !identical(process$environment$RENV_CONFIG_AUTO_SNAPSHOT, "FALSE") ||
+      !identical(process$environment$RENV_CONFIG_CACHE_ENABLED, "FALSE") ||
+      !identical(process$environment$RENV_CONFIG_LOCKING_ENABLED, "FALSE") ||
+      !identical(process$environment$RENV_CONFIG_SANDBOX_ENABLED, "FALSE") ||
+      !identical(process$environment$RENV_CONFIG_UPDATES_CHECK, "FALSE") ||
+      !identical(process$environment$RENV_CONFIG_USER_ENVIRON, "FALSE") ||
+      !identical(process$environment$RENV_CONFIG_USER_LIBRARY, "FALSE") ||
+      !identical(process$environment$TZ, "UTC") ||
       file.exists(checkpoint_path) || dir.exists(checkpoint_path) ||
       any(grepl(
         "^\\.execution-checkpoint(?:\\.started)?\\.json-[0-9a-f]+(?:\\.tmp)?$",

@@ -531,20 +531,94 @@ function Get-DirectoryInventorySha256([string]$Root) {
     return (Get-TextSha256 ($records -join "`n"))
 }
 
+$script:rscriptInvocationCount = 0L
+$script:rEnvironmentSetSha256 = ''
+$script:rEnvironmentClearedSha256 = ''
+$script:rEnvironmentSetCount = 0L
+$script:rEnvironmentClearedCount = 0L
+$script:projectLibraryCheckCount = 0L
+
 function Invoke-SealedRscript(
     [string[]]$Arguments,
     [int]$TimeoutSeconds,
     [string]$WorkingDirectory
 ) {
+    $projectLibrary = Join-Path $WorkingDirectory 'renv\library'
+    if ([IO.Directory]::Exists($projectLibrary) -or
+        [IO.File]::Exists($projectLibrary)) {
+        throw "Project-local renv library exists before sealed Rscript."
+    }
     $environment = New-Issue13V5ClosedREnvironment $script:rLibrary
-    $result = Invoke-Issue13V5RscriptBounded `
-        -RscriptPath $script:rscriptPath `
-        -Arguments $Arguments `
-        -Label "Bridge capture sealed Rscript" `
-        -TimeoutSeconds $TimeoutSeconds `
-        -ExpectedExitCodes $null `
-        -WorkingDirectory $WorkingDirectory `
-        -Environment $environment
+    $result = $null
+    try {
+        $result = Invoke-Issue13V5RscriptBounded `
+            -RscriptPath $script:rscriptPath `
+            -Arguments $Arguments `
+            -Label "Bridge capture sealed Rscript" `
+            -TimeoutSeconds $TimeoutSeconds `
+            -ExpectedExitCodes $null `
+            -WorkingDirectory $WorkingDirectory `
+            -Environment $environment
+    } finally {
+        if ([IO.Directory]::Exists($projectLibrary) -or
+            [IO.File]::Exists($projectLibrary)) {
+            throw "Sealed Rscript created a project-local renv library."
+        }
+    }
+    $forbiddenOutput = @($result.combined_lines | Where-Object {
+        $_ -cmatch '(?i)(Bootstrapping renv|Downloading renv|Installing renv|Installing package)'
+    })
+    if ($forbiddenOutput.Count -ne 0) {
+        throw "Sealed Rscript attempted bootstrap, download, or installation."
+    }
+    $setLines = [string[]]@($result.environment_set | ForEach-Object {
+        $value = [string]$_.value
+        if ([string]$_.name -cin @('R_LIBS_USER', 'RENV_PATHS_LIBRARY')) {
+            $value = $value.Replace('\', '/')
+        }
+        [string]$_.name + '=' + $value
+    })
+    [Array]::Sort($setLines, [StringComparer]::Ordinal)
+    $clearedNames = [string[]]@($result.environment_cleared)
+    [Array]::Sort($clearedNames, [StringComparer]::Ordinal)
+    $expectedSetLines = [string[]]@(
+        'RENV_CONFIG_AUTO_SNAPSHOT=FALSE',
+        'RENV_CONFIG_CACHE_ENABLED=FALSE',
+        'RENV_CONFIG_LOCKING_ENABLED=FALSE',
+        'RENV_CONFIG_SANDBOX_ENABLED=FALSE',
+        'RENV_CONFIG_UPDATES_CHECK=FALSE',
+        'RENV_CONFIG_USER_ENVIRON=FALSE',
+        'RENV_CONFIG_USER_LIBRARY=FALSE',
+        ('RENV_PATHS_LIBRARY=' +
+            (Get-Issue13V5RenvLibraryRoot $script:rLibrary).Replace('\', '/')),
+        ('R_LIBS_USER=' + $script:rLibrary.Replace('\', '/')),
+        'TZ=UTC'
+    )
+    [Array]::Sort($expectedSetLines, [StringComparer]::Ordinal)
+    $expectedClearedNames = [string[]]@(
+        $script:Issue13V5OracleClearedREnvironment)
+    [Array]::Sort($expectedClearedNames, [StringComparer]::Ordinal)
+    $setSha256 = Get-TextSha256 ([string]::Join("`n", $setLines))
+    $clearedSha256 = Get-TextSha256 (
+        [string]::Join("`n", $clearedNames))
+    if ([string]::Join("`n", $setLines) -cne
+            [string]::Join("`n", $expectedSetLines) -or
+        [string]::Join("`n", $clearedNames) -cne
+            [string]::Join("`n", $expectedClearedNames) -or
+        $setLines.Count -ne 10 -or $clearedNames.Count -ne 35) {
+        throw "Sealed Rscript applied a different R environment contract."
+    }
+    if ($script:rscriptInvocationCount -eq 0L) {
+        $script:rEnvironmentSetSha256 = $setSha256
+        $script:rEnvironmentClearedSha256 = $clearedSha256
+        $script:rEnvironmentSetCount = [long]$setLines.Count
+        $script:rEnvironmentClearedCount = [long]$clearedNames.Count
+    } elseif ($script:rEnvironmentSetSha256 -cne $setSha256 -or
+        $script:rEnvironmentClearedSha256 -cne $clearedSha256) {
+        throw "Sealed Rscript environment changed between invocations."
+    }
+    $script:rscriptInvocationCount++
+    $script:projectLibraryCheckCount += 2L
     $script:rscriptExitCode = [int]$result.exit_code
     return [object[]]$result.combined_lines
 }
@@ -592,6 +666,11 @@ $repository = Resolve-PhysicalExistingDirectory $RepositoryRoot "Repository root
 $sourceData = Resolve-PhysicalExistingDirectory $BaselineSourceDataRoot "Source-data root"
 $harness = Resolve-PhysicalExistingDirectory $HarnessDir "Harness directory"
 $seedPath = Resolve-PhysicalExistingFile $SeedEvidenceIndex "Seed evidence index"
+$seedSha256 = Get-Sha256 $seedPath
+if ($seedSha256 -cne
+    "917aca5671cbb7e4060b28c311e0f1397cbe19d6faedfb854a34205a5f457a94") {
+    throw "Seed evidence index is not the protected terminal seed."
+}
 $controllerDir = Resolve-PhysicalExistingDirectory `
     $PSScriptRoot "Controller directory"
 $verifier = Resolve-PhysicalExistingFile (Join-Path $controllerDir `
@@ -718,6 +797,13 @@ if ($LASTEXITCODE -ne 0) {
     throw "Could not create the clean baseline evidence worktree."
 }
 Assert-CleanWorktree $baselineRoot "Fresh baseline evidence worktree"
+$baselineProjectLibrary = Join-Path $baselineRoot 'renv\library'
+$projectLibraryAbsentBefore =
+    -not [IO.Directory]::Exists($baselineProjectLibrary) -and
+    -not [IO.File]::Exists($baselineProjectLibrary)
+if (-not $projectLibraryAbsentBefore) {
+    throw "Fresh baseline worktree contains a project-local renv library."
+}
 
 $sourceSnapshot = Join-Path $baselineRoot "source_data"
 if (Test-Path -LiteralPath $sourceSnapshot) {
@@ -734,6 +820,7 @@ if ($sourceDataSnapshotInventoryBefore -cne
     throw "Physical source-data snapshot differs from its authenticated origin."
 }
 Assert-CleanWorktree $baselineRoot "Baseline evidence worktree after source snapshot"
+$calculationLogRecords = [Collections.Generic.List[string]]::new()
 
 foreach ($method in $captureMethods) {
     Assert-CleanWorktree $baselineRoot "Baseline before $method"
@@ -750,6 +837,8 @@ foreach ($method in $captureMethods) {
     if ($script:rscriptExitCode -ne 0) {
         throw "Baseline calculation failed for $method. See $logPath"
     }
+    $calculationLogRecords.Add(
+        $method + '|' + (Get-Sha256 $logPath))
     $after = @(Get-RunDirectories $baselineRoot $method)
     $created = @($after | Where-Object { $_ -notin $before })
     if ($created.Count -ne 1) {
@@ -783,6 +872,21 @@ foreach ($method in $captureMethods) {
 }
 
 Assert-CleanWorktree $baselineRoot "Completed baseline evidence worktree"
+$projectLibraryAbsentAfter =
+    -not [IO.Directory]::Exists($baselineProjectLibrary) -and
+    -not [IO.File]::Exists($baselineProjectLibrary)
+if (-not $projectLibraryAbsentAfter -or
+    $script:rscriptInvocationCount -ne 14L -or
+    $script:projectLibraryCheckCount -ne 28L -or
+    $script:rEnvironmentSetCount -ne 10L -or
+    $script:rEnvironmentClearedCount -ne 35L -or
+    $calculationLogRecords.Count -ne 7L) {
+    throw "Bridge capture renv environment/activation evidence is incomplete."
+}
+$calculationLogLines = [string[]]$calculationLogRecords.ToArray()
+[Array]::Sort($calculationLogLines, [StringComparer]::Ordinal)
+$calculationLogInventorySha256 = Get-TextSha256 (
+    [string]::Join("`n", $calculationLogLines))
 $ordered = foreach ($method in $methods) {
     $row = @($seed | Where-Object { $_.method -ceq $method })
     if ($row.Count -ne 1) {
@@ -853,7 +957,7 @@ if (($toolRecordsAfter -join "`n") -cne ($toolRecordsBefore -join "`n") -or
     throw "Diagnostic capture tooling changed during execution."
 }
 $captureRecord = @(
-    "schema=issue13-v5-clean-bridge-capture/2",
+    "schema=issue13-v5-clean-bridge-capture/3",
     "baseline_base_commit=$baselineBaseCommit",
     "baseline_base_tree=$baselineBaseTree",
     "baseline_runtime_commit=$baselineRuntimeCommit",
@@ -870,11 +974,22 @@ $captureRecord = @(
     "r_library_path=$($script:rLibrary.Replace('\', '/'))",
     "r_library_inventory_before_sha256=$rLibraryInventoryBefore",
     "r_library_inventory_after_sha256=$rLibraryInventoryAfter",
+    "renv_library_root_path=$((Get-Issue13V5RenvLibraryRoot $script:rLibrary).Replace('\', '/'))",
+    "r_environment_set_count=$($script:rEnvironmentSetCount)",
+    "r_environment_set_sha256=$($script:rEnvironmentSetSha256)",
+    "r_environment_cleared_count=$($script:rEnvironmentClearedCount)",
+    "r_environment_cleared_sha256=$($script:rEnvironmentClearedSha256)",
+    "rscript_invocation_count=$($script:rscriptInvocationCount)",
+    "project_library_check_count=$($script:projectLibraryCheckCount)",
+    "project_library_path=$($baselineProjectLibrary.Replace('\', '/'))",
+    "project_library_absent_before=$($projectLibraryAbsentBefore.ToString().ToLowerInvariant())",
+    "project_library_absent_after=$($projectLibraryAbsentAfter.ToString().ToLowerInvariant())",
+    "calculation_log_inventory_sha256=$calculationLogInventorySha256",
     "tool_records=$($toolRecordsBefore.Count)",
     "baseline_worktree=$($baselineRoot.Replace('\', '/'))",
     "captured_methods=$($captureMethods -join ',')",
     "verified_records=$($verifiedRecords.Count)",
-    "seed_evidence_index_sha256=$((Get-FileHash -LiteralPath $seedPath -Algorithm SHA256).Hash.ToLowerInvariant())",
+    "seed_evidence_index_sha256=$seedSha256",
     "source_data_origin_path=$($sourceData.Replace('\', '/'))",
     "source_data_snapshot_path=$($sourceSnapshot.Replace('\', '/'))",
     "source_data_origin_inventory_before_sha256=$sourceDataOriginInventoryBefore",

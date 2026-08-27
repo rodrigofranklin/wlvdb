@@ -143,7 +143,7 @@ records <- lapply(seq_along(fault_records), function(index) {
     sample_interval_ms = 1000L,
     shutdown_grace_seconds = 60,
     expected_worker_processes = 0L,
-    environment = list(R_LIBS_USER = plan$r_library)
+    environment = wlv13_r_environment(plan$r_library)
   )
   wlv13_json_write(process_spec, process_spec_path)
   list(

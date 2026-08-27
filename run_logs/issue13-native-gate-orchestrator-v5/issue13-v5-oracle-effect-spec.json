@@ -2,7 +2,7 @@
   "schema": "wlv-issue13-v5-oracle-effect-spec/2",
   "purpose": "closed-authorized-oracle-effect-cc2-to-e2f",
   "status": "requires-terminal-primary-and-replay-comparisons",
-  "proof_schema_sha256": "4411f49461962fc3684ea7e4d08aaa3c5b07da2393b903dfbfa2671954322be0",
+  "proof_schema_sha256": "f86fb70b9bbd2e7c0851ab239f62ab14ea85268855082ea143d71992b2016063",
   "final_evidence_eligible": false,
   "scope_note": "This auxiliary proof closes only the effect of the authorized baseline oracle. It is not a substitute for the final V5 scientific gate.",
   "oracle": {
@@ -116,15 +116,32 @@
       "sha256": "3ad097e10d867e09eb7e54d8ed1f8ef933779b82be56482a04a27d65536d15f9"
     },
     "r_environment_set": {
+      "RENV_CONFIG_AUTO_SNAPSHOT": "FALSE",
+      "RENV_CONFIG_CACHE_ENABLED": "FALSE",
+      "RENV_CONFIG_LOCKING_ENABLED": "FALSE",
+      "RENV_CONFIG_SANDBOX_ENABLED": "FALSE",
+      "RENV_CONFIG_UPDATES_CHECK": "FALSE",
+      "RENV_CONFIG_USER_ENVIRON": "FALSE",
+      "RENV_CONFIG_USER_LIBRARY": "FALSE",
+      "RENV_PATHS_LIBRARY": "configured-renv-library-root",
       "R_LIBS_USER": "configured-r-library",
       "TZ": "UTC"
     },
     "r_environment_cleared": [
-      "LANG", "LC_ALL", "LC_CTYPE", "R_ARCH", "R_DEFAULT_PACKAGES",
+      "LANG", "LC_ALL", "LC_CTYPE", "RENV_ACTIVATE_PROJECT",
+      "RENV_AUTOLOADER_ENABLED",
+      "RENV_AUTOLOAD_ENABLED",
+      "RENV_CONFIG_AUTOLOADER_ENABLED", "RENV_CONFIG_EXTERNAL_LIBRARIES",
+      "RENV_CONFIG_STARTUP_QUIET", "RENV_CONFIG_SYNCHRONIZED_CHECK",
+      "RENV_CONFIG_USER_PROFILE", "RENV_PATHS_LIBRARY_ROOT",
+      "RENV_PATHS_LIBRARY_ROOT_ASIS", "RENV_PATHS_LOCKFILE",
+      "RENV_PATHS_PREFIX", "RENV_PATHS_PREFIX_AUTO", "RENV_PATHS_RENV",
+      "RENV_PATHS_ROOT", "RENV_PATHS_SANDBOX", "RENV_PATHS_VERSION",
+      "RENV_PROCESS_TYPE", "RENV_PROFILE", "RENV_PROJECT",
+      "RENV_SANDBOX_LOCKING_ENABLED",
+      "RENV_STARTUP_DIAGNOSTICS", "R_ARCH", "R_DEFAULT_PACKAGES",
       "R_ENVIRON", "R_ENVIRON_USER", "R_HOME", "R_LIBS", "R_LIBS_SITE",
-      "R_PROFILE", "R_PROFILE_USER", "R_STARTUP_DEBUG",
-      "RENV_CONFIG_AUTOLOADER_ENABLED", "RENV_PATHS_LIBRARY",
-      "RENV_PATHS_ROOT"
+      "R_PROFILE", "R_PROFILE_USER", "R_STARTUP_DEBUG"
     ],
     "required_r_packages": ["fst", "jsonlite", "openssl"],
     "sealed_inventory": {

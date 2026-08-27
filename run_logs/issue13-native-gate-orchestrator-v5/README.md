@@ -239,10 +239,11 @@ $pwsh = 'C:\Users\rodri\.cache\codex-runtimes\codex-primary-runtime\dependencies
 
 Esses comandos documentam a receita; não afirmam que as capturas terminaram.
 Uma raiz que recebeu qualquer saída nunca é apagada nem reutilizada. Em cada
-invocação R, os capturadores usam `--vanilla`, removem `LANG`, `LC_ALL`,
-`LC_CTYPE` e as 13 variáveis de startup/`renv` seladas, fixam
-`R_LIBS_USER=$rLibrary` e `TZ=UTC`, e restauram exatamente o ambiente anterior
-em `finally`. O caminho físico e o inventário recursivo da biblioteca R são
+invocação R, os capturadores usam `--vanilla`, removem o conjunto exato de 35
+variáveis de locale/startup/`renv`, fixam `R_LIBS_USER=$rLibrary`,
+`RENV_PATHS_LIBRARY=<raiz-renv>`, `TZ=UTC` e sete opções `RENV_CONFIG_*` como
+`FALSE`, e restauram exatamente o ambiente anterior em `finally`. O caminho
+físico e o inventário recursivo da biblioteca R são
 registrados antes e depois; o mesmo ocorre com o runtime inteiro que contém o
 harness e com as árvores normalizadas WIOD13/WIOD16. O manifesto exaustivo de
 metadados é uma ferramenta nominalmente pinada no registro. Qualquer diferença
@@ -382,9 +383,10 @@ com falhas, coordenadas e diagnósticos fechados pelo patch autorizado. Seu
 - a biblioteca R física, com versão/plataforma, `.libPaths()`, inventário
   recursivo e os namespaces carregados; `fst`, `jsonlite` e `openssl` devem
   resolver dentro de `RLibrary`;
-- o ambiente de cada comando, com `R_LIBS_USER=RLibrary`, `TZ=UTC` em
-  `environment_set` e o conjunto exato das 16 variáveis em
-  `environment_cleared`;
+- o ambiente de cada comando, com o set exato de dez entradas
+  (`R_LIBS_USER`, `RENV_PATHS_LIBRARY`, `TZ` e sete opções
+  `RENV_CONFIG_*=FALSE`) em `environment_set` e o conjunto exato de 35
+  variáveis em `environment_cleared`;
 - `runtime_immutability`, com snapshots completos `before` e `after`
   idênticos e `immutable=true`.
 

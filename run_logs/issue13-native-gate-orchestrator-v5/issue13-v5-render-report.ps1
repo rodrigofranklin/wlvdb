@@ -1152,8 +1152,16 @@ $expectedOracleCleared = [string[]]@(
   'LANG', 'LC_ALL', 'LC_CTYPE', 'R_ARCH', 'R_DEFAULT_PACKAGES',
   'R_ENVIRON', 'R_ENVIRON_USER', 'R_HOME', 'R_LIBS', 'R_LIBS_SITE',
   'R_PROFILE', 'R_PROFILE_USER', 'R_STARTUP_DEBUG',
-  'RENV_CONFIG_AUTOLOADER_ENABLED', 'RENV_PATHS_LIBRARY',
-  'RENV_PATHS_ROOT'
+  'RENV_ACTIVATE_PROJECT', 'RENV_AUTOLOAD_ENABLED',
+  'RENV_AUTOLOADER_ENABLED',
+  'RENV_CONFIG_AUTOLOADER_ENABLED', 'RENV_CONFIG_EXTERNAL_LIBRARIES',
+  'RENV_CONFIG_STARTUP_QUIET', 'RENV_CONFIG_SYNCHRONIZED_CHECK',
+  'RENV_CONFIG_USER_PROFILE', 'RENV_PATHS_LIBRARY_ROOT',
+  'RENV_PATHS_LIBRARY_ROOT_ASIS', 'RENV_PATHS_LOCKFILE',
+  'RENV_PATHS_PREFIX', 'RENV_PATHS_PREFIX_AUTO', 'RENV_PATHS_RENV',
+  'RENV_PATHS_ROOT', 'RENV_PATHS_SANDBOX', 'RENV_PATHS_VERSION',
+  'RENV_PROCESS_TYPE', 'RENV_PROFILE', 'RENV_PROJECT',
+  'RENV_SANDBOX_LOCKING_ENABLED', 'RENV_STARTUP_DIAGNOSTICS'
 ) | Sort-Object
 $observedOracleCleared = [string[]]@(
   $oracleRLibrary.environment.cleared) | Sort-Object
@@ -1161,6 +1169,39 @@ $oracleEnvironmentSet = @($oracleRLibrary.environment.set)
 $oracleLibsUserSet = @($oracleEnvironmentSet | Where-Object {
   [string]$_.name -ceq 'R_LIBS_USER' -and
   [string]$_.value -ceq [string]$config.r_library
+})
+$oracleRenvLibrarySet = @($oracleEnvironmentSet | Where-Object {
+  [string]$_.name -ceq 'RENV_PATHS_LIBRARY' -and
+  [string]$_.value -ceq
+    (Get-Issue13V5RenvLibraryRoot ([string]$config.r_library))
+})
+$oracleSandboxSet = @($oracleEnvironmentSet | Where-Object {
+  [string]$_.name -ceq 'RENV_CONFIG_SANDBOX_ENABLED' -and
+  [string]$_.value -ceq 'FALSE'
+})
+$oracleAutoSnapshotSet = @($oracleEnvironmentSet | Where-Object {
+  [string]$_.name -ceq 'RENV_CONFIG_AUTO_SNAPSHOT' -and
+  [string]$_.value -ceq 'FALSE'
+})
+$oracleCacheSet = @($oracleEnvironmentSet | Where-Object {
+  [string]$_.name -ceq 'RENV_CONFIG_CACHE_ENABLED' -and
+  [string]$_.value -ceq 'FALSE'
+})
+$oracleLockingSet = @($oracleEnvironmentSet | Where-Object {
+  [string]$_.name -ceq 'RENV_CONFIG_LOCKING_ENABLED' -and
+  [string]$_.value -ceq 'FALSE'
+})
+$oracleUpdatesSet = @($oracleEnvironmentSet | Where-Object {
+  [string]$_.name -ceq 'RENV_CONFIG_UPDATES_CHECK' -and
+  [string]$_.value -ceq 'FALSE'
+})
+$oracleUserEnvironSet = @($oracleEnvironmentSet | Where-Object {
+  [string]$_.name -ceq 'RENV_CONFIG_USER_ENVIRON' -and
+  [string]$_.value -ceq 'FALSE'
+})
+$oracleUserLibrarySet = @($oracleEnvironmentSet | Where-Object {
+  [string]$_.name -ceq 'RENV_CONFIG_USER_LIBRARY' -and
+  [string]$_.value -ceq 'FALSE'
 })
 $oracleTzSet = @($oracleEnvironmentSet | Where-Object {
   [string]$_.name -ceq 'TZ' -and [string]$_.value -ceq 'UTC'
@@ -1177,8 +1218,28 @@ $oracleLoadedRequiredPackages = [string[]]@(
     ForEach-Object { [string]$_.name } | Sort-Object)
 if ([string]$oracleRLibrary.path -cne [string]$config.r_library -or
     [string]$oracleRLibrary.environment_variable -cne 'R_LIBS_USER' -or
-    $oracleEnvironmentSet.Count -ne 2 -or $oracleLibsUserSet.Count -ne 1 -or
-    $oracleTzSet.Count -ne 1 -or
+    [string]$oracleRLibrary.activation.mode -cne 'isolated-project-copy' -or
+    -not (Test-Issue13V5ExactBoolean `
+      $oracleRLibrary.activation.verified $true) -or
+    [string]$oracleRLibrary.activation.renv_version -cne '1.2.4' -or
+    [long]$oracleRLibrary.activation.captured_console_line_count -lt 0L -or
+    [string]$oracleRLibrary.activation.renv_library_root -cne
+      (Get-Issue13V5RenvLibraryRoot ([string]$config.r_library)) -or
+    [string]$oracleRLibrary.activation.project_inventory_sha256 -cnotmatch
+      '^[0-9a-f]{64}$' -or
+    -not (Test-Issue13V5ExactBoolean `
+      $oracleRLibrary.activation.project_library_absent_before $true) -or
+    -not (Test-Issue13V5ExactBoolean `
+      $oracleRLibrary.activation.project_library_absent_after $true) -or
+    [string]$oracleRLibrary.activation.r_library_inventory_before_sha256 `
+      -cne [string]$oracleRLibrary.activation.
+        r_library_inventory_after_sha256 -or
+    $oracleEnvironmentSet.Count -ne 10 -or $oracleLibsUserSet.Count -ne 1 -or
+    $oracleRenvLibrarySet.Count -ne 1 -or $oracleSandboxSet.Count -ne 1 -or
+    $oracleAutoSnapshotSet.Count -ne 1 -or $oracleCacheSet.Count -ne 1 -or
+    $oracleLockingSet.Count -ne 1 -or $oracleUpdatesSet.Count -ne 1 -or
+    $oracleUserEnvironSet.Count -ne 1 -or
+    $oracleUserLibrarySet.Count -ne 1 -or $oracleTzSet.Count -ne 1 -or
     @(Compare-Object $expectedOracleCleared $observedOracleCleared `
       -CaseSensitive).Count -ne 0 -or
     @(Compare-Object $expectedOraclePackages $oracleRequiredPackages `
@@ -1704,9 +1765,10 @@ substitui o gate V5 final.
   `$($oracleRscript.item_id)`, links `$($oracleRscript.link_count)`,
   `$($oracleRscript.size_bytes)` bytes, SHA-256 `$($oracleRscript.sha256)`;
   biblioteca R
-  `$($oracleRLibrary.path)` via `R_LIBS_USER`; inventário
+  `$($oracleRLibrary.path)` via `R_LIBS_USER`, com raiz `renv` explícita em
+  `RENV_PATHS_LIBRARY`; inventário
   `$($oracleRLibrary.inventory_sha256)`; os dez comandos usam `--vanilla`,
-  `TZ=UTC` e removem as 16 variáveis de ambiente seladas.
+  `TZ=UTC` e removem as 35 variáveis de ambiente seladas.
 - Runtime R antes/depois: `$oracleRuntimeInventorySha256`; imutável: `TRUE`;
   versão `$($oracleRLibrary.r_version)`; plataforma
   `$($oracleRLibrary.platform)`; pacotes obrigatórios `fst,jsonlite,openssl`.

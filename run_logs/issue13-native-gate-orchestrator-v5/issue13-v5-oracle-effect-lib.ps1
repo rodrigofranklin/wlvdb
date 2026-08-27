@@ -431,11 +431,29 @@ $script:Issue13OracleEffectControllerRoot =
 $script:Issue13OracleEffectRequiredRPackages = @('fst', 'jsonlite', 'openssl')
 $script:Issue13OracleEffectRClearedEnvironment = @(
   'LANG', 'LC_ALL', 'LC_CTYPE',
+  'RENV_ACTIVATE_PROJECT', 'RENV_AUTOLOADER_ENABLED',
+  'RENV_AUTOLOAD_ENABLED',
+  'RENV_CONFIG_AUTOLOADER_ENABLED', 'RENV_CONFIG_EXTERNAL_LIBRARIES',
+  'RENV_CONFIG_STARTUP_QUIET', 'RENV_CONFIG_SYNCHRONIZED_CHECK',
+  'RENV_CONFIG_USER_PROFILE', 'RENV_PATHS_LIBRARY_ROOT',
+  'RENV_PATHS_LIBRARY_ROOT_ASIS', 'RENV_PATHS_LOCKFILE',
+  'RENV_PATHS_PREFIX', 'RENV_PATHS_PREFIX_AUTO', 'RENV_PATHS_RENV',
+  'RENV_PATHS_ROOT', 'RENV_PATHS_SANDBOX', 'RENV_PATHS_VERSION',
+  'RENV_PROCESS_TYPE', 'RENV_PROFILE', 'RENV_PROJECT',
+  'RENV_SANDBOX_LOCKING_ENABLED', 'RENV_STARTUP_DIAGNOSTICS',
   'R_ARCH', 'R_DEFAULT_PACKAGES', 'R_ENVIRON', 'R_ENVIRON_USER', 'R_HOME',
-  'R_LIBS', 'R_LIBS_SITE', 'R_PROFILE', 'R_PROFILE_USER', 'R_STARTUP_DEBUG',
-  'RENV_CONFIG_AUTOLOADER_ENABLED', 'RENV_PATHS_LIBRARY', 'RENV_PATHS_ROOT'
+  'R_LIBS', 'R_LIBS_SITE', 'R_PROFILE', 'R_PROFILE_USER', 'R_STARTUP_DEBUG'
 )
-$script:Issue13OracleEffectRSetEnvironment = [ordered]@{ TZ = 'UTC' }
+$script:Issue13OracleEffectRSetEnvironment = [ordered]@{
+  RENV_CONFIG_AUTO_SNAPSHOT = 'FALSE'
+  RENV_CONFIG_CACHE_ENABLED = 'FALSE'
+  RENV_CONFIG_LOCKING_ENABLED = 'FALSE'
+  RENV_CONFIG_SANDBOX_ENABLED = 'FALSE'
+  RENV_CONFIG_UPDATES_CHECK = 'FALSE'
+  RENV_CONFIG_USER_ENVIRON = 'FALSE'
+  RENV_CONFIG_USER_LIBRARY = 'FALSE'
+  TZ = 'UTC'
+}
 $script:Issue13OracleEffectControllerFiles = @(
   'README.md',
   'issue13-v5-aggregate-hardening.R',
@@ -1564,14 +1582,48 @@ function Get-Issue13OracleEffectExpectedController {
   }
 }
 
+function Get-Issue13OracleEffectRenvLibraryRoot {
+  param([Parameter(Mandatory = $true)][string]$RLibrary)
+  Assert-Issue13OracleEffect (-not [string]::IsNullOrWhiteSpace($RLibrary)) `
+    'renv library root requires an R library path.'
+  $library = [IO.Path]::GetFullPath($RLibrary).TrimEnd('\', '/')
+  $architecture = [IO.DirectoryInfo]::new($library)
+  $version = $architecture.Parent
+  $platform = if ($null -eq $version) { $null } else { $version.Parent }
+  $root = if ($null -eq $platform) { $null } else { $platform.Parent }
+  Assert-Issue13OracleEffect (
+    $null -ne $version -and $null -ne $platform -and $null -ne $root -and
+    $architecture.Name -cmatch '^[A-Za-z0-9._+-]+$' -and
+    $version.Name -cmatch '^R-[0-9]+[.][0-9]+$' -and
+    $platform.Name -cmatch '^[A-Za-z0-9._+-]+$' -and
+    $root.Name -ceq 'library'
+  ) 'R library lacks the sealed renv profile layout.'
+  $reconstructed = [IO.Path]::GetFullPath([IO.Path]::Combine(
+      $root.FullName, $platform.Name, $version.Name, $architecture.Name
+    )).TrimEnd('\', '/')
+  Assert-Issue13OracleEffect (
+    [string]::Equals(
+      $reconstructed, $library, [StringComparison]::OrdinalIgnoreCase)
+  ) 'sealed renv library root reconstruction differs.'
+  $root.FullName.TrimEnd('\', '/')
+}
+
 function Get-Issue13OracleEffectEnvironmentContract {
   param([Parameter(Mandatory = $true)][string]$RLibrary)
+  $values = [ordered]@{}
+  $values['R_LIBS_USER'] = $RLibrary
+  $values['RENV_PATHS_LIBRARY'] =
+    Get-Issue13OracleEffectRenvLibraryRoot $RLibrary
+  foreach ($entry in $script:Issue13OracleEffectRSetEnvironment.GetEnumerator()) {
+    $values[[string]$entry.Key] = [string]$entry.Value
+  }
+  $setNames = [string[]]@($values.Keys)
+  [Array]::Sort($setNames, [StringComparer]::Ordinal)
   $set = @(
-    [pscustomobject][ordered]@{ name = 'R_LIBS_USER'; value = $RLibrary }
-    foreach ($entry in $script:Issue13OracleEffectRSetEnvironment.GetEnumerator()) {
+    foreach ($name in $setNames) {
       [pscustomobject][ordered]@{
-        name = [string]$entry.Key
-        value = [string]$entry.Value
+        name = $name
+        value = [string]$values[$name]
       }
     }
   )
@@ -1848,18 +1900,174 @@ function Get-Issue13OracleEffectDirectoryInventory {
 function Get-Issue13OracleEffectRRuntime {
   param(
     [Parameter(Mandatory = $true)][string]$Rscript,
-    [Parameter(Mandatory = $true)][string]$RLibrary
+    [Parameter(Mandatory = $true)][string]$RLibrary,
+    [Parameter(Mandatory = $true)][string]$ProjectRoot
   )
   $rscriptPath = Resolve-Issue13OracleEffectFile $Rscript 'comparison Rscript'
   $libraryPath = Resolve-Issue13OracleEffectDirectory $RLibrary `
     'comparison R library'
+  $projectPath = Resolve-Issue13OracleEffectDirectory $ProjectRoot `
+    'activation source project'
   Assert-Issue13OracleEffectNoReparseTree $libraryPath `
     'comparison R library'
+  Assert-Issue13OracleEffectNoReparseTree $projectPath `
+    'activation source project'
+  $renvLibraryRoot = Get-Issue13OracleEffectRenvLibraryRoot $libraryPath
+  $activationSource = Resolve-Issue13OracleEffectFile `
+    (Join-Path $projectPath 'renv\activate.R') 'renv activation source'
+  $lockfileSource = Resolve-Issue13OracleEffectFile `
+    (Join-Path $projectPath 'renv.lock') 'renv activation lockfile'
+  $settingsSource = Resolve-Issue13OracleEffectFile `
+    (Join-Path $projectPath 'renv\settings.json') 'renv activation settings'
+  $ignoreSource = Resolve-Issue13OracleEffectFile `
+    (Join-Path $projectPath 'renv\.gitignore') 'renv activation ignore file'
+  $descriptionSource = Resolve-Issue13OracleEffectFile `
+    (Join-Path $projectPath 'DESCRIPTION') 'renv activation DESCRIPTION'
+  $probeCopies = [object[]]@(
+    [pscustomobject][ordered]@{
+      relative_path = 'DESCRIPTION'
+      source = $descriptionSource
+      size_bytes = [int64](Get-Item -LiteralPath $descriptionSource).Length
+      sha256 = Get-Issue13OracleEffectSha256 $descriptionSource
+    }
+    [pscustomobject][ordered]@{
+      relative_path = 'renv.lock'
+      source = $lockfileSource
+      size_bytes = [int64](Get-Item -LiteralPath $lockfileSource).Length
+      sha256 = Get-Issue13OracleEffectSha256 $lockfileSource
+    }
+    [pscustomobject][ordered]@{
+      relative_path = 'renv/.gitignore'
+      source = $ignoreSource
+      size_bytes = [int64](Get-Item -LiteralPath $ignoreSource).Length
+      sha256 = Get-Issue13OracleEffectSha256 $ignoreSource
+    }
+    [pscustomobject][ordered]@{
+      relative_path = 'renv/activate.R'
+      source = $activationSource
+      size_bytes = [int64](Get-Item -LiteralPath $activationSource).Length
+      sha256 = Get-Issue13OracleEffectSha256 $activationSource
+    }
+    [pscustomobject][ordered]@{
+      relative_path = 'renv/settings.json'
+      source = $settingsSource
+      size_bytes = [int64](Get-Item -LiteralPath $settingsSource).Length
+      sha256 = Get-Issue13OracleEffectSha256 $settingsSource
+    }
+  )
+  Assert-Issue13OracleEffect (
+    $probeCopies.Count -eq 5 -and
+    @($probeCopies.relative_path | Select-Object -Unique).Count -eq 5 -and
+    [string]::Join("`n", @($probeCopies.relative_path)) -ceq
+      "DESCRIPTION`nrenv.lock`nrenv/.gitignore`nrenv/activate.R`nrenv/settings.json"
+  ) 'renv activation probe input inventory is not exact.'
+  $libraryInventoryBefore = Get-Issue13OracleEffectDirectoryInventory `
+    $libraryPath 'comparison R library before activation probe'
   $expression = @'
+arguments <- commandArgs(TRUE)
+if (length(arguments) != 1L) {
+  stop("activation probe received invalid arguments", call. = FALSE)
+}
+project <- normalizePath(arguments[[1L]], winslash = "/", mustWork = TRUE)
+activation <- file.path(project, "renv", "activate.R")
+project_library <- file.path(project, "renv", "library")
+Sys.setenv(RENV_PROJECT = project)
+leaf <- normalizePath(Sys.getenv("R_LIBS_USER"),
+  winslash = "/", mustWork = TRUE)
+root <- normalizePath(Sys.getenv("RENV_PATHS_LIBRARY"),
+  winslash = "/", mustWork = TRUE)
+project_entries <- sort(list.files(
+  project, all.files = TRUE, recursive = TRUE, full.names = FALSE,
+  include.dirs = TRUE, no.. = TRUE
+), method = "radix")
+expected_entries <- sort(c(
+  "DESCRIPTION", "renv", "renv.lock", "renv/.gitignore",
+  "renv/activate.R", "renv/settings.json"
+), method = "radix")
+if (!identical(project_entries, expected_entries) ||
+    file.exists(file.path(project, ".Renviron")) ||
+    file.exists(file.path(project, ".Rprofile")) ||
+    file.exists(file.path(project, "renv", "profile")) ||
+    file.exists(file.path(project, "renv", "settings.R")) ||
+    file.exists(project_library)) {
+  stop("isolated activation project contains an implicit input", call. = FALSE)
+}
+renv_namespace <- loadNamespace("renv", lib.loc = leaf)
+root_environ <- get("renv_paths_root", envir = renv_namespace)(".Renviron")
+if (file.exists(root_environ)) {
+  stop("renv root environment file is an implicit input", call. = FALSE)
+}
+root_projects <- get("renv_paths_root", envir = renv_namespace)("projects")
+root_renvignore <- get("renv_paths_root", envir = renv_namespace)("renvignore")
+capture_root_file <- function(path) {
+  if (!file.exists(path)) return(list(exists = FALSE, bytes = raw()))
+  size <- file.info(path)$size
+  if (is.na(size) || size < 0 || size > .Machine$integer.max) {
+    stop("renv global state file has an invalid size", call. = FALSE)
+  }
+  list(
+    exists = TRUE,
+    bytes = readBin(path, what = "raw", n = as.integer(size))
+  )
+}
+global_projects_before <- capture_root_file(root_projects)
+global_renvignore_before <- capture_root_file(root_renvignore)
+unloadNamespace("renv")
+activation_messages <- character()
+activation_output <- capture.output({
+  activation_messages <- capture.output(
+    suppressWarnings(source(activation, local = TRUE)), type = "message"
+  )
+}, type = "output")
+activation_console <- c(activation_output, activation_messages)
+forbidden_activation <- grepl(
+  paste(c(
+    "bootstrapping renv", "downloading renv", "installing renv",
+    "installing package"
+  ), collapse = "|"),
+  activation_console, ignore.case = TRUE, perl = TRUE
+)
+if (any(forbidden_activation) || file.exists(project_library)) {
+  stop("renv activation attempted bootstrap, install, or local library use",
+    call. = FALSE
+  )
+}
+project_entries_after <- sort(list.files(
+  project, all.files = TRUE, recursive = TRUE, full.names = FALSE,
+  include.dirs = TRUE, no.. = TRUE
+), method = "radix")
+if (!identical(project_entries_after, expected_entries)) {
+  stop("renv activation changed the isolated project shape", call. = FALSE)
+}
+if (!identical(capture_root_file(root_projects), global_projects_before) ||
+    !identical(capture_root_file(root_renvignore), global_renvignore_before)) {
+  stop("renv activation changed global cache state", call. = FALSE)
+}
+if (!identical(
+    normalizePath(.libPaths()[[1L]], winslash = "/", mustWork = TRUE), leaf
+  ) || !identical(as.character(utils::packageVersion("renv")), "1.2.4")) {
+  stop("renv activation did not bind the sealed library", call. = FALSE)
+}
+renv_path <- normalizePath(
+  getNamespaceInfo(asNamespace("renv"), "path"),
+  winslash = "/", mustWork = TRUE
+)
+if (!startsWith(tolower(renv_path), paste0(tolower(leaf), "/"))) {
+  stop("renv namespace is outside the sealed leaf", call. = FALSE)
+}
 required <- c("fst", "jsonlite", "openssl")
 for (package in required) {
   if (!requireNamespace(package, quietly = TRUE)) {
     stop(sprintf("required package is unavailable: %s", package), call. = FALSE)
+  }
+  package_path <- normalizePath(
+    getNamespaceInfo(asNamespace(package), "path"),
+    winslash = "/", mustWork = TRUE
+  )
+  if (!startsWith(tolower(package_path), paste0(tolower(leaf), "/"))) {
+    stop(sprintf("required package is outside sealed leaf: %s", package),
+      call. = FALSE
+    )
   }
 }
 clean <- function(value) {
@@ -1871,6 +2079,8 @@ clean <- function(value) {
 }
 cat("R_VERSION\t", clean(R.version.string), "\n", sep = "")
 cat("R_PLATFORM\t", clean(R.version$platform), "\n", sep = "")
+cat("ACTIVATION\tTRUE\t1.2.4\t", length(activation_console), "\t",
+    clean(root), "\t", clean(leaf), "\n", sep = "")
 for (path in .libPaths()) {
   cat("LIB\t", clean(normalizePath(path, winslash = "/", mustWork = TRUE)),
       "\n", sep = "")
@@ -1883,15 +2093,181 @@ for (package in sort(loadedNamespaces(), method = "radix")) {
       if (package %in% required) "TRUE" else "FALSE", "\n", sep = "")
 }
 '@
-  $probeEnvironment = New-Issue13V5ClosedREnvironment $libraryPath
-  $probeResult = Invoke-Issue13V5RscriptBounded `
-    -RscriptPath $rscriptPath `
-    -Arguments @('--vanilla', '-e', $expression) `
-    -Label 'Oracle-effect R runtime probe' `
-    -TimeoutSeconds 600 `
-    -ExpectedExitCodes $null `
-    -WorkingDirectory $script:Issue13OracleEffectControllerRoot `
-    -Environment $probeEnvironment
+  $temporaryBase = Resolve-Issue13OracleEffectDirectory `
+    ([IO.Path]::GetTempPath()) 'renv activation probe parent'
+  $temporaryLeaf =
+    'issue13-oracle-renv-' + [Guid]::NewGuid().ToString('N')
+  Assert-Issue13OracleEffect (
+    $temporaryLeaf -cmatch '^issue13-oracle-renv-[0-9a-f]{32}$'
+  ) 'renv activation probe leaf is not canonical.'
+  $temporaryRoot = [IO.Path]::GetFullPath(
+    [IO.Path]::Combine($temporaryBase, $temporaryLeaf))
+  Assert-Issue13OracleEffect (
+    [string]::Equals(
+      [IO.Directory]::GetParent($temporaryRoot).FullName.TrimEnd('\', '/'),
+      $temporaryBase.TrimEnd('\', '/'),
+      [StringComparison]::OrdinalIgnoreCase)
+  ) 'renv activation probe root is not a fresh direct child.'
+  Assert-Issue13OracleEffectPathsDisjoint $temporaryRoot $libraryPath `
+    'renv activation probe/R library isolation'
+  Assert-Issue13OracleEffectPathsDisjoint $temporaryRoot $projectPath `
+    'renv activation probe/source project isolation'
+  Assert-Issue13OracleEffectPathsDisjoint $temporaryRoot `
+    $script:Issue13OracleEffectControllerRoot `
+    'renv activation probe/controller isolation'
+  $probeState = [pscustomobject][ordered]@{
+    result = $null
+    project_inventory_before = $null
+    project_inventory_after = $null
+    project_library_absent_before = $false
+    project_library_absent_after = $false
+    library_inventory_after = $null
+    temporary_root_owned = $false
+  }
+  $probeAction = {
+    $createdRoot = New-Item -Path $temporaryRoot -ItemType Directory `
+      -ErrorAction Stop
+    $probeState.temporary_root_owned = $true
+    Assert-Issue13OracleEffect (
+      [string]::Equals(
+        [IO.Path]::GetFullPath([string]$createdRoot.FullName).TrimEnd('\', '/'),
+        $temporaryRoot, [StringComparison]::OrdinalIgnoreCase) -and
+      @((Get-ChildItem -LiteralPath $temporaryRoot -Force)).Count -eq 0
+    ) 'renv activation probe root was not created exclusively.'
+    $createdRenv = New-Item -Path ([IO.Path]::Combine(
+        $temporaryRoot, 'renv')) -ItemType Directory -ErrorAction Stop
+    Assert-Issue13OracleEffect (
+      [string]::Equals(
+        [IO.Path]::GetFullPath([string]$createdRenv.FullName).TrimEnd('\', '/'),
+        [IO.Path]::Combine($temporaryRoot, 'renv'),
+        [StringComparison]::OrdinalIgnoreCase)
+    ) 'renv activation probe directory creation differed.'
+    foreach ($copy in $probeCopies) {
+      $target = [IO.Path]::GetFullPath(
+        [IO.Path]::Combine(
+          $temporaryRoot, ([string]$copy.relative_path).Replace('/', '\')))
+      [IO.File]::Copy([string]$copy.source, $target, $false)
+      Assert-Issue13OracleEffect (
+        [int64](Get-Item -LiteralPath $target).Length -eq
+          [int64]$copy.size_bytes -and
+        (Get-Issue13OracleEffectSha256 $target) -ceq [string]$copy.sha256 -and
+        (Get-Issue13OracleEffectSha256 ([string]$copy.source)) -ceq
+          [string]$copy.sha256
+      ) 'renv activation probe copy differs from authenticated source.'
+    }
+    Assert-Issue13OracleEffectNoReparseTree $temporaryRoot `
+      'renv activation probe project'
+    $projectEntries = @(Get-ChildItem -LiteralPath $temporaryRoot `
+      -Recurse -Force)
+    $projectFiles = @($projectEntries | Where-Object { -not $_.PSIsContainer })
+    $projectDirectories = @($projectEntries | Where-Object { $_.PSIsContainer })
+    $projectRelativeFiles = [string[]]@($projectFiles | ForEach-Object {
+      $_.FullName.Substring($temporaryRoot.Length + 1).Replace('\', '/')
+    })
+    $projectRelativeDirectories = [string[]]@(
+      $projectDirectories | ForEach-Object {
+        $_.FullName.Substring($temporaryRoot.Length + 1).Replace('\', '/')
+      })
+    [Array]::Sort($projectRelativeFiles, [StringComparer]::Ordinal)
+    [Array]::Sort($projectRelativeDirectories, [StringComparer]::Ordinal)
+    Assert-Issue13OracleEffect (
+      [string]::Join("`n", $projectRelativeFiles) -ceq
+        "DESCRIPTION`nrenv.lock`nrenv/.gitignore`nrenv/activate.R`nrenv/settings.json" -and
+      [string]::Join("`n", $projectRelativeDirectories) -ceq 'renv' -and
+      -not [IO.File]::Exists((Join-Path $temporaryRoot '.Rprofile')) -and
+      -not [IO.Directory]::Exists((Join-Path $temporaryRoot '.Rprofile')) -and
+      -not [IO.File]::Exists((Join-Path $temporaryRoot 'renv\settings.R')) -and
+      -not [IO.Directory]::Exists((Join-Path $temporaryRoot 'renv\settings.R'))
+    ) 'renv activation probe project contains an unauthenticated input.'
+    $probeState.project_inventory_before =
+      Get-Issue13OracleEffectDirectoryInventory $temporaryRoot `
+        'renv activation probe project before execution'
+    $projectLibrary = Join-Path $temporaryRoot 'renv\library'
+    $probeState.project_library_absent_before =
+      -not [IO.Directory]::Exists($projectLibrary) -and
+      -not [IO.File]::Exists($projectLibrary)
+    Assert-Issue13OracleEffect $probeState.project_library_absent_before `
+      'isolated project library exists before renv activation.'
+    $probeEnvironment = New-Issue13V5ClosedREnvironment $libraryPath
+    $probeState.result = Invoke-Issue13V5RscriptBounded `
+      -RscriptPath $rscriptPath `
+      -Arguments @('--vanilla', '-e', $expression, $temporaryRoot) `
+      -Label 'Oracle-effect isolated renv activation probe' `
+      -TimeoutSeconds 600 `
+      -ExpectedExitCodes $null `
+      -WorkingDirectory $temporaryRoot `
+      -Environment $probeEnvironment
+    $expectedEnvironment = Get-Issue13OracleEffectEnvironmentContract `
+      $libraryPath
+    Assert-Issue13OracleEffect (
+      (@($probeState.result.environment_set) |
+          ConvertTo-Json -Depth 10 -Compress) -ceq
+        (@($expectedEnvironment.set) |
+          ConvertTo-Json -Depth 10 -Compress) -and
+      [string]::Join(
+        "`n", @($probeState.result.environment_cleared)) -ceq
+        [string]::Join(
+          "`n", @($expectedEnvironment.cleared))
+    ) 'renv activation probe process environment differs.'
+  }
+  $probeCleanup = {
+    if (-not $probeState.temporary_root_owned -or
+        -not [IO.Directory]::Exists($temporaryRoot)) { return }
+    Assert-Issue13OracleEffectNoReparseTree $temporaryRoot `
+      'renv activation probe project cleanup'
+    $projectLibrary = Join-Path $temporaryRoot 'renv\library'
+    $probeState.project_library_absent_after =
+      -not [IO.Directory]::Exists($projectLibrary) -and
+      -not [IO.File]::Exists($projectLibrary)
+    $probeState.project_inventory_after =
+      Get-Issue13OracleEffectDirectoryInventory $temporaryRoot `
+        'renv activation probe project after execution'
+    $projectEntriesAfter = @(Get-ChildItem -LiteralPath $temporaryRoot `
+      -Recurse -Force)
+    $projectFilesAfter = @($projectEntriesAfter | Where-Object {
+        -not $_.PSIsContainer
+      })
+    $projectDirectoriesAfter = @($projectEntriesAfter | Where-Object {
+        $_.PSIsContainer
+      })
+    $projectRelativeFilesAfter = [string[]]@(
+      $projectFilesAfter | ForEach-Object {
+        $_.FullName.Substring($temporaryRoot.Length + 1).Replace('\', '/')
+      })
+    $projectRelativeDirectoriesAfter = [string[]]@(
+      $projectDirectoriesAfter | ForEach-Object {
+        $_.FullName.Substring($temporaryRoot.Length + 1).Replace('\', '/')
+      })
+    [Array]::Sort($projectRelativeFilesAfter, [StringComparer]::Ordinal)
+    [Array]::Sort($projectRelativeDirectoriesAfter, [StringComparer]::Ordinal)
+    $projectShapeUnchanged =
+      [string]::Join("`n", $projectRelativeFilesAfter) -ceq
+        "DESCRIPTION`nrenv.lock`nrenv/.gitignore`nrenv/activate.R`nrenv/settings.json" -and
+      [string]::Join("`n", $projectRelativeDirectoriesAfter) -ceq 'renv'
+    $probeState.library_inventory_after =
+      Get-Issue13OracleEffectDirectoryInventory $libraryPath `
+        'comparison R library after activation probe'
+    $projectUnchanged = $projectShapeUnchanged -and
+      ($probeState.project_inventory_before | ConvertTo-Json -Compress) -ceq
+      ($probeState.project_inventory_after | ConvertTo-Json -Compress)
+    $libraryUnchanged =
+      ($libraryInventoryBefore | ConvertTo-Json -Compress) -ceq
+      ($probeState.library_inventory_after | ConvertTo-Json -Compress)
+    [IO.Directory]::Delete($temporaryRoot, $true)
+    Assert-Issue13OracleEffect (
+      -not [IO.Directory]::Exists($temporaryRoot) -and
+      -not [IO.File]::Exists($temporaryRoot)
+    ) 'renv activation probe project survived cleanup.'
+    Assert-Issue13OracleEffect $probeState.project_library_absent_after `
+      'renv activation wrote a project-local library.'
+    Assert-Issue13OracleEffect $projectUnchanged `
+      'renv activation changed the isolated project copy.'
+    Assert-Issue13OracleEffect $libraryUnchanged `
+      'renv activation changed the sealed R library.'
+  }
+  Invoke-Issue13V5WithCleanup $probeAction $probeCleanup `
+    'Oracle-effect isolated renv activation lifecycle failed'
+  $probeResult = $probeState.result
   $probe = [pscustomobject]@{
     native = [string[]]$probeResult.combined_lines
     exit_code = [long]$probeResult.exit_code
@@ -1902,15 +2278,40 @@ for (package in sort(loadedNamespaces(), method = "radix")) {
     "R runtime probe failed: $($native -join ' ')"
   $versionRows = @($native | Where-Object { $_.StartsWith("R_VERSION`t") })
   $platformRows = @($native | Where-Object { $_.StartsWith("R_PLATFORM`t") })
+  $activationRows = @($native | Where-Object {
+      $_.StartsWith("ACTIVATION`t")
+    })
   $libRows = @($native | Where-Object { $_.StartsWith("LIB`t") })
   $requiredRows = @($native | Where-Object { $_.StartsWith("REQUIRED`t") })
   $packageRows = @($native | Where-Object { $_.StartsWith("PACKAGE`t") })
-  $recognized = $versionRows.Count + $platformRows.Count + $libRows.Count +
-    $requiredRows.Count + $packageRows.Count
+  $recognized = $versionRows.Count + $platformRows.Count +
+    $activationRows.Count + $libRows.Count + $requiredRows.Count +
+    $packageRows.Count
   Assert-Issue13OracleEffect ($recognized -eq $native.Count -and
       $versionRows.Count -eq 1 -and $platformRows.Count -eq 1 -and
-      $libRows.Count -gt 0 -and $packageRows.Count -gt 0) `
+      $activationRows.Count -eq 1 -and $libRows.Count -gt 0 -and
+      $packageRows.Count -gt 0) `
     'R runtime probe returned an unexpected or incomplete line.'
+  $activationFields = [string[]]$activationRows[0].Split("`t")
+  $activationRoot = if ($activationFields.Count -eq 6) {
+    Resolve-Issue13OracleEffectDirectory $activationFields[4] `
+      'effective renv library root'
+  } else { '' }
+  $activationLeaf = if ($activationFields.Count -eq 6) {
+    Resolve-Issue13OracleEffectDirectory $activationFields[5] `
+      'effective renv library leaf'
+  } else { '' }
+  $capturedLineCount = 0L
+  $capturedLineParsed = $activationFields.Count -eq 6 -and
+    [long]::TryParse([string]$activationFields[3], [ref]$capturedLineCount)
+  Assert-Issue13OracleEffect (
+    $activationFields.Count -eq 6 -and
+    $activationFields[1] -ceq 'TRUE' -and
+    $activationFields[2] -ceq '1.2.4' -and $capturedLineParsed -and
+    $capturedLineCount -ge 0L -and
+    (Test-Issue13OracleEffectPathEqual $activationRoot $renvLibraryRoot) -and
+    (Test-Issue13OracleEffectPathEqual $activationLeaf $libraryPath)
+  ) 'R runtime probe returned an invalid activation record.'
   $libPaths = [string[]]@($libRows | ForEach-Object {
     $fields = [string[]]$_.Split("`t")
     Assert-Issue13OracleEffect ($fields.Count -eq 2) `
@@ -1966,6 +2367,10 @@ for (package in sort(loadedNamespaces(), method = "radix")) {
   $payload = [string]::Join("`n", @(
     'r-version|' + $versionRows[0].Substring("R_VERSION`t".Length)
     'r-platform|' + $platformRows[0].Substring("R_PLATFORM`t".Length)
+    'activation|isolated-project-copy|1.2.4|' +
+      [string]$capturedLineCount + '|' + $activationRoot + '|' +
+      [string]$probeState.project_inventory_before.inventory_sha256 + '|' +
+      [string]$libraryInventoryBefore.inventory_sha256
     @($libPaths | ForEach-Object { 'lib|' + $_ })
     @($environment.set | ForEach-Object {
       'set|' + [string]$_.name + '|' + [string]$_.value
@@ -1982,6 +2387,23 @@ for (package in sort(loadedNamespaces(), method = "radix")) {
     path = $libraryPath
     environment_variable = 'R_LIBS_USER'
     environment = $environment
+    activation = [pscustomobject][ordered]@{
+      mode = 'isolated-project-copy'
+      verified = $true
+      renv_version = '1.2.4'
+      captured_console_line_count = [long]$capturedLineCount
+      renv_library_root = $activationRoot
+      project_inventory_sha256 =
+        [string]$probeState.project_inventory_before.inventory_sha256
+      project_library_absent_before =
+        [bool]$probeState.project_library_absent_before
+      project_library_absent_after =
+        [bool]$probeState.project_library_absent_after
+      r_library_inventory_before_sha256 =
+        [string]$libraryInventoryBefore.inventory_sha256
+      r_library_inventory_after_sha256 =
+        [string]$probeState.library_inventory_after.inventory_sha256
+    }
     r_version = $versionRows[0].Substring("R_VERSION`t".Length)
     platform = $platformRows[0].Substring("R_PLATFORM`t".Length)
     lib_paths = $libPaths
@@ -2001,8 +2423,10 @@ function Test-Issue13OracleEffectNegativeSelfTests {
   & $mustReject {
     $null = Get-Issue13OracleEffectSafeRelativePath '../escape' 'self-test path'
   } 'relative-path traversal'
-  $anchor = [IO.Path]::GetFullPath((Join-Path `
-        ([IO.Path]::GetTempPath()) 'issue13-oracle-selftest'))
+  $anchorRoot = [IO.Path]::GetFullPath((Join-Path `
+        ([IO.Path]::GetTempPath()) 'issue13-oracle-selftest\library'))
+  $anchor = [IO.Path]::GetFullPath((Join-Path $anchorRoot `
+        'windows\R-4.6\x86_64-w64-mingw32'))
   & $mustReject {
     Assert-Issue13OracleEffectPathsDisjoint $anchor (Join-Path $anchor 'nested') `
       'self-test overlap'
@@ -2106,12 +2530,62 @@ function Test-Issue13OracleEffectNegativeSelfTests {
     $null = Assert-Issue13OracleEffectHarnessManifestEnvelope $extraOutputField
   } 'extra harness output-tooling field'
   $contract = Get-Issue13OracleEffectEnvironmentContract $anchor
+  $sortedCleared = [string[]]@($contract.cleared)
+  [Array]::Sort($sortedCleared, [StringComparer]::Ordinal)
+  Assert-Issue13OracleEffect (
+    [string]::Join("`n", @($contract.cleared)) -ceq
+      [string]::Join("`n", $sortedCleared)
+  ) 'negative self-test cleared R environment is not ordinal.'
   Assert-Issue13OracleEffectExactSet @($contract.cleared) `
     $script:Issue13OracleEffectRClearedEnvironment `
     'negative self-test cleared R environment'
   Assert-Issue13OracleEffect (@($contract.set | Where-Object {
         $_.name -ceq 'R_LIBS_USER' -and $_.value -ceq $anchor
       }).Count -eq 1) 'negative self-test lacks the exact R_LIBS_USER binding.'
+  Assert-Issue13OracleEffect (@($contract.set | Where-Object {
+        $_.name -ceq 'RENV_PATHS_LIBRARY' -and $_.value -ceq $anchorRoot
+      }).Count -eq 1) `
+    'negative self-test lacks the exact RENV_PATHS_LIBRARY binding.'
+  Assert-Issue13OracleEffect (
+    @($contract.set).Count -eq 10 -and
+    [string]::Join("`n", @($contract.set | ForEach-Object {
+          [string]$_.name
+        })) -ceq [string]::Join("`n", @(
+          'RENV_CONFIG_AUTO_SNAPSHOT', 'RENV_CONFIG_CACHE_ENABLED',
+          'RENV_CONFIG_LOCKING_ENABLED', 'RENV_CONFIG_SANDBOX_ENABLED',
+          'RENV_CONFIG_UPDATES_CHECK', 'RENV_CONFIG_USER_ENVIRON',
+          'RENV_CONFIG_USER_LIBRARY', 'RENV_PATHS_LIBRARY',
+          'R_LIBS_USER', 'TZ'
+        )) -and
+    @($contract.set | Where-Object {
+        $_.name -ceq 'RENV_CONFIG_AUTO_SNAPSHOT' -and $_.value -ceq 'FALSE'
+      }).Count -eq 1 -and
+    @($contract.set | Where-Object {
+        $_.name -ceq 'RENV_CONFIG_CACHE_ENABLED' -and $_.value -ceq 'FALSE'
+      }).Count -eq 1 -and
+    @($contract.set | Where-Object {
+        $_.name -ceq 'RENV_CONFIG_LOCKING_ENABLED' -and $_.value -ceq 'FALSE'
+      }).Count -eq 1 -and
+    @($contract.set | Where-Object {
+        $_.name -ceq 'RENV_CONFIG_SANDBOX_ENABLED' -and $_.value -ceq 'FALSE'
+      }).Count -eq 1 -and
+    @($contract.set | Where-Object {
+        $_.name -ceq 'RENV_CONFIG_UPDATES_CHECK' -and $_.value -ceq 'FALSE'
+      }).Count -eq 1 -and
+    @($contract.set | Where-Object {
+        $_.name -ceq 'RENV_CONFIG_USER_ENVIRON' -and $_.value -ceq 'FALSE'
+      }).Count -eq 1 -and
+    @($contract.set | Where-Object {
+        $_.name -ceq 'RENV_CONFIG_USER_LIBRARY' -and $_.value -ceq 'FALSE'
+      }).Count -eq 1 -and
+    @($contract.set | Where-Object {
+        $_.name -ceq 'TZ' -and $_.value -ceq 'UTC'
+      }).Count -eq 1
+  ) 'negative self-test lacks the exact renv configuration bindings.'
+  & $mustReject {
+    $null = Get-Issue13OracleEffectEnvironmentContract `
+      (Join-Path $anchor 'unexpected')
+  } 'invalid renv profile layout'
   & $mustReject {
     Assert-Issue13OracleEffectExactSet `
       @($contract.cleared | Where-Object { $_ -cne 'R_LIBS_SITE' }) `
@@ -2268,7 +2742,7 @@ function Test-Issue13OracleEffectSpec {
       'requires-terminal-primary-and-replay-comparisons') `
     'the static spec must require fresh terminal primary/replay comparisons.'
   Assert-Issue13OracleEffect ($Spec.proof_schema_sha256 -ceq `
-      '4411f49461962fc3684ea7e4d08aaa3c5b07da2393b903dfbfa2671954322be0') `
+      'f86fb70b9bbd2e7c0851ab239f62ab14ea85268855082ea143d71992b2016063') `
     'proof schema hash differs.'
   Assert-Issue13OracleEffect (
     Test-Issue13OracleEffectExactBoolean $Spec.final_evidence_eligible $false
@@ -2308,16 +2782,38 @@ function Test-Issue13OracleEffectSpec {
       $terminal.r_library_environment_variable -ceq 'R_LIBS_USER') `
     'terminal comparison runtime contract differs.'
   Assert-Issue13OracleEffectExactProperties $terminal.r_environment_set @(
-    'R_LIBS_USER', 'TZ'
+    'RENV_CONFIG_AUTO_SNAPSHOT', 'RENV_CONFIG_CACHE_ENABLED',
+    'RENV_CONFIG_LOCKING_ENABLED',
+    'RENV_CONFIG_SANDBOX_ENABLED', 'RENV_CONFIG_UPDATES_CHECK',
+    'RENV_CONFIG_USER_ENVIRON', 'RENV_CONFIG_USER_LIBRARY',
+    'RENV_PATHS_LIBRARY', 'R_LIBS_USER', 'TZ'
   ) 'terminal R environment set contract'
   Assert-Issue13OracleEffect (
     [string]$terminal.r_environment_set.R_LIBS_USER -ceq `
       'configured-r-library' -and
+    [string]$terminal.r_environment_set.RENV_PATHS_LIBRARY -ceq `
+      'configured-renv-library-root' -and
+    [string]$terminal.r_environment_set.RENV_CONFIG_AUTO_SNAPSHOT -ceq `
+      'FALSE' -and
+    [string]$terminal.r_environment_set.RENV_CONFIG_CACHE_ENABLED -ceq `
+      'FALSE' -and
+    [string]$terminal.r_environment_set.RENV_CONFIG_LOCKING_ENABLED -ceq `
+      'FALSE' -and
+    [string]$terminal.r_environment_set.RENV_CONFIG_SANDBOX_ENABLED -ceq `
+      'FALSE' -and
+    [string]$terminal.r_environment_set.RENV_CONFIG_UPDATES_CHECK -ceq `
+      'FALSE' -and
+    [string]$terminal.r_environment_set.RENV_CONFIG_USER_ENVIRON -ceq `
+      'FALSE' -and
+    [string]$terminal.r_environment_set.RENV_CONFIG_USER_LIBRARY -ceq `
+      'FALSE' -and
     [string]$terminal.r_environment_set.TZ -ceq 'UTC'
   ) 'terminal R environment set values differ.'
-  Assert-Issue13OracleEffectExactSet @($terminal.r_environment_cleared) `
-    $script:Issue13OracleEffectRClearedEnvironment `
-    'terminal cleared R environment variables'
+  Assert-Issue13OracleEffect (
+    [string]::Join("`n", @($terminal.r_environment_cleared)) -ceq
+      [string]::Join(
+        "`n", $script:Issue13OracleEffectRClearedEnvironment)
+  ) 'terminal cleared R environment variables differ or were reordered.'
   Assert-Issue13OracleEffectExactSet @($terminal.required_r_packages) `
     $script:Issue13OracleEffectRequiredRPackages 'terminal required R packages'
   Assert-Issue13OracleEffectExactSet @($terminal.required_controller_files) `
@@ -3546,7 +4042,7 @@ function Get-Issue13OracleEffectInputContext {
   $rscriptIdentity = Get-Issue13OracleEffectRscriptIdentity $Rscript `
     $spec.terminal_comparison_runtime.rscript
   $rRuntime = Get-Issue13OracleEffectRRuntime `
-    $rscriptIdentity.logical_path $RLibrary
+    $rscriptIdentity.logical_path $RLibrary $oracleIdentity.repository_root
   $strictRoot = Split-Path -Parent $strictPath
   $oracleRoot = Split-Path -Parent $oraclePath
   $strictScenarios = @{}
@@ -4228,7 +4724,7 @@ function Get-Issue13OracleEffectEvidence {
   $null = Assert-Issue13OracleEffectRscriptIdentity $context.rscript `
     $currentRscript 'terminal proof Rscript identity'
   $currentRLibrary = Get-Issue13OracleEffectRRuntime `
-    $currentRscript.logical_path $RLibrary
+    $currentRscript.logical_path $RLibrary $RepositoryRoot
   $contextRuntimeSnapshot = [pscustomobject][ordered]@{
     rscript = $context.rscript
     r_library = $context.r_library

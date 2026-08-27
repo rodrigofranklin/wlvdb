@@ -13,7 +13,7 @@ sys.source(file.path(script_dir, "issue13-matrix.R"), envir = environment())
 options <- wlv13_parse_cli(commandArgs(trailingOnly = TRUE))
 wlv13_cli_required(options, c(
   "arm", "method", "workers", "project_root", "runtime_commit", "channel",
-  "output", "evidence_root"
+  "output", "evidence_root", "r_library"
 ))
 arm <- match.arg(options$arm, wlv13_arms)
 method <- match.arg(options$method, wlv13_methods)
@@ -68,11 +68,7 @@ rscript <- if ("rscript" %in% names(options)) {
     "Rscript"
   }), winslash = "/", mustWork = TRUE)
 }
-r_library <- if ("r_library" %in% names(options)) {
-  wlv13_normalize_existing_dir(options$r_library, "R library")
-} else {
-  NULL
-}
+r_library <- wlv13_normalize_existing_dir(options$r_library, "R library")
 timeout <- if ("timeout_seconds" %in% names(options)) {
   wlv13_integer(suppressWarnings(as.numeric(options$timeout_seconds)),
     "timeout_seconds", 1L
@@ -104,7 +100,7 @@ process_spec <- list(
     scenario_spec_path, scenario_evidence
   ),
   working_directory = project_root,
-  environment = if (is.null(r_library)) NULL else list(R_LIBS_USER = r_library),
+  environment = wlv13_r_environment(r_library),
   expected_exit_codes = list(0L),
   timeout_seconds = timeout,
   sample_interval_ms = 1000L,

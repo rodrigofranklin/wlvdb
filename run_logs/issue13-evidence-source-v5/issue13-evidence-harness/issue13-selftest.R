@@ -35,6 +35,52 @@ if (!dir.create(temporary_root, recursive = TRUE, showWarnings = FALSE)) {
 }
 on.exit(unlink(temporary_root, recursive = TRUE, force = TRUE), add = TRUE)
 
+renv_library <- file.path(
+  temporary_root, "renv", "library", "windows", "R-4.6",
+  "x86_64-w64-mingw32"
+)
+if (!dir.create(renv_library, recursive = TRUE, showWarnings = FALSE)) {
+  stop("Cannot create the sealed renv layout self-test.", call. = FALSE)
+}
+renv_environment <- wlv13_r_environment(renv_library)
+assert(
+  identical(names(renv_environment), c(
+    "R_LIBS_USER", "RENV_PATHS_LIBRARY",
+    "RENV_CONFIG_AUTO_SNAPSHOT", "RENV_CONFIG_CACHE_ENABLED",
+    "RENV_CONFIG_LOCKING_ENABLED",
+    "RENV_CONFIG_SANDBOX_ENABLED", "RENV_CONFIG_UPDATES_CHECK",
+    "RENV_CONFIG_USER_ENVIRON", "RENV_CONFIG_USER_LIBRARY", "TZ"
+  )) &&
+    identical(renv_environment$R_LIBS_USER,
+      normalizePath(renv_library, winslash = "/", mustWork = TRUE)
+    ) &&
+    identical(renv_environment$RENV_PATHS_LIBRARY,
+      normalizePath(file.path(temporary_root, "renv", "library"),
+        winslash = "/", mustWork = TRUE
+      )
+    ) &&
+    identical(renv_environment$RENV_CONFIG_AUTO_SNAPSHOT, "FALSE") &&
+    identical(renv_environment$RENV_CONFIG_CACHE_ENABLED, "FALSE") &&
+    identical(renv_environment$RENV_CONFIG_LOCKING_ENABLED, "FALSE") &&
+    identical(renv_environment$RENV_CONFIG_SANDBOX_ENABLED, "FALSE") &&
+    identical(renv_environment$RENV_CONFIG_UPDATES_CHECK, "FALSE") &&
+    identical(renv_environment$RENV_CONFIG_USER_ENVIRON, "FALSE") &&
+    identical(renv_environment$RENV_CONFIG_USER_LIBRARY, "FALSE") &&
+    identical(renv_environment$TZ, "UTC"),
+  "The explicit renv library environment binding differs."
+)
+assert_error(
+  wlv13_r_environment(NULL), "r_library.*required",
+  "The monitored R environment accepted an absent library."
+)
+invalid_renv_library <- file.path(temporary_root, "invalid-library")
+dir.create(invalid_renv_library, recursive = TRUE)
+assert_error(
+  wlv13_renv_library_root(invalid_renv_library),
+  "sealed renv profile layout",
+  "An invalid renv library layout was accepted."
+)
+
 write_text <- function(value, path) {
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
   writeLines(enc2utf8(value), path, useBytes = TRUE)
@@ -596,7 +642,7 @@ write_process_evidence <- function(id, project_root, workers, directory,
     executable = "Rscript",
     arguments = list("--vanilla"),
     working_directory = project_root,
-    environment = NULL,
+    environment = renv_environment,
     expected_exit_codes = list(0L),
     timeout_seconds = 60,
     sample_interval_ms = 100L,
@@ -1217,6 +1263,7 @@ assert(!isTRUE(missing_aggregate$passed),
 )
 
 cat("issue13 harness synthetic self-tests: PASS\n")
+cat("  environment: explicit ten-field renv/R library binding\n")
 cat("  comparator: diagnostic multiset + chunked NA/NaN state gate\n")
 cat("  aggregate: 162 scenarios, 202 comparisons, one evidence-derived defect\n")
 cat(paste0(

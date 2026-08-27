@@ -132,9 +132,11 @@ zerodep_2
 
 Cada comando usa `--vanilla`, o `issue13-compare-results.R` do harness terminal,
 o executável informado em `Rscript` e o harness como diretório de trabalho. O
-processo limpa `R_LIBS`, `R_LIBS_SITE`, perfis/environs R e variáveis `renv`
-relevantes, fixa `R_LIBS_USER=RLibrary` e `TZ=UTC`, e restaura o ambiente do
-processo ao terminar. Candidate e baseline são
+processo limpa o conjunto exato de 35 variáveis de locale/startup/`renv`, fixa
+o set exato de dez entradas (`R_LIBS_USER=RLibrary`,
+`RENV_PATHS_LIBRARY=<raiz-renv>`, `TZ=UTC` e sete opções
+`RENV_CONFIG_*=FALSE`) e restaura o ambiente do processo ao terminar.
+Candidate e baseline são
 obtidos somente dos summaries autenticados e dos cenários
 `baseline__calculate__<method>__workers1`; não há parâmetros livres para runs.
 

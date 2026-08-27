@@ -37,6 +37,52 @@ wlv13_scalar_text <- function(value, name, pattern = NULL) {
   value
 }
 
+wlv13_renv_library_root <- function(r_library) {
+  library <- wlv13_normalize_existing_dir(r_library, "R library")
+  architecture <- basename(library)
+  version_path <- dirname(library)
+  version <- basename(version_path)
+  platform_path <- dirname(version_path)
+  platform <- basename(platform_path)
+  root <- dirname(platform_path)
+  valid_component <- "^[A-Za-z0-9._+-]+$"
+  reconstructed <- normalizePath(
+    file.path(root, platform, version, architecture),
+    winslash = "/", mustWork = TRUE
+  )
+  if (!grepl(valid_component, architecture, perl = TRUE) ||
+      !grepl("^R-[0-9]+[.][0-9]+$", version, perl = TRUE) ||
+      !grepl(valid_component, platform, perl = TRUE) ||
+      !identical(basename(root), "library") ||
+      !identical(reconstructed, library)) {
+    stop("The R library does not have the sealed renv profile layout.",
+      call. = FALSE
+    )
+  }
+  root
+}
+
+wlv13_r_environment <- function(r_library) {
+  if (is.null(r_library)) {
+    stop("`r_library` is required for every monitored R process.",
+      call. = FALSE
+    )
+  }
+  library <- wlv13_normalize_existing_dir(r_library, "R library")
+  list(
+    R_LIBS_USER = library,
+    RENV_PATHS_LIBRARY = wlv13_renv_library_root(library),
+    RENV_CONFIG_AUTO_SNAPSHOT = "FALSE",
+    RENV_CONFIG_CACHE_ENABLED = "FALSE",
+    RENV_CONFIG_LOCKING_ENABLED = "FALSE",
+    RENV_CONFIG_SANDBOX_ENABLED = "FALSE",
+    RENV_CONFIG_UPDATES_CHECK = "FALSE",
+    RENV_CONFIG_USER_ENVIRON = "FALSE",
+    RENV_CONFIG_USER_LIBRARY = "FALSE",
+    TZ = "UTC"
+  )
+}
+
 wlv13_id <- function(value, name = "id") {
   wlv13_scalar_text(value, name, "^[a-z0-9][a-z0-9._/-]*$")
 }

@@ -543,20 +543,119 @@ function Get-DirectoryInventorySha256([string]$Root) {
     return (Get-TextSha256 $recordText)
 }
 
+$script:rscriptInvocationCount = 0L
+$script:rEnvironmentSetSha256 = ''
+$script:rEnvironmentClearedSha256 = ''
+$script:rEnvironmentSetCount = 0L
+$script:rEnvironmentClearedCount = 0L
+$script:projectLibraryCheckCount = 0L
+$script:stageWorktreeKeysByPath = @{}
+
+function Test-StageProjectLibraryAbsent([string]$Worktree) {
+    $projectLibrary = Join-Path $Worktree 'renv\library'
+    return (-not [IO.Directory]::Exists($projectLibrary) -and
+        -not [IO.File]::Exists($projectLibrary))
+}
+
 function Invoke-SealedRscript(
     [string[]]$Arguments,
     [int]$TimeoutSeconds,
     [string]$WorkingDirectory
 ) {
+    $workingDirectoryPath = [IO.Path]::GetFullPath($WorkingDirectory).
+        TrimEnd('\', '/')
+    $guardProjectLibrary = $true
+    if ($guardProjectLibrary) {
+        if (-not (Test-StageProjectLibraryAbsent $workingDirectoryPath)) {
+            throw "Project-local renv library exists before sealed Rscript."
+        }
+        $script:projectLibraryCheckCount++
+    }
     $environment = New-Issue13V5ClosedREnvironment $script:rLibrary
-    $result = Invoke-Issue13V5RscriptBounded `
-        -RscriptPath $script:rscriptPath `
-        -Arguments $Arguments `
-        -Label "Stage 5 capture sealed Rscript" `
-        -TimeoutSeconds $TimeoutSeconds `
-        -ExpectedExitCodes $null `
-        -WorkingDirectory $WorkingDirectory `
-        -Environment $environment
+    $result = $null
+    try {
+        $result = Invoke-Issue13V5RscriptBounded `
+            -RscriptPath $script:rscriptPath `
+            -Arguments $Arguments `
+            -Label "Stage 5 capture sealed Rscript" `
+            -TimeoutSeconds $TimeoutSeconds `
+            -ExpectedExitCodes $null `
+            -WorkingDirectory $WorkingDirectory `
+            -Environment $environment
+    } finally {
+        if ($guardProjectLibrary) {
+            if (-not (Test-StageProjectLibraryAbsent $workingDirectoryPath)) {
+                throw "Sealed Rscript created a project-local renv library."
+            }
+            $script:projectLibraryCheckCount++
+        }
+    }
+    $forbiddenOutput = @($result.combined_lines | Where-Object {
+        $_ -cmatch '(?i)(Bootstrapping renv|Downloading renv|Installing renv|Installing package)'
+    })
+    if ($forbiddenOutput.Count -ne 0) {
+        throw "Sealed Rscript attempted bootstrap, download, or installation."
+    }
+    $setLines = [string[]]@($result.environment_set | ForEach-Object {
+        $value = [string]$_.value
+        if ([string]$_.name -cin @('R_LIBS_USER', 'RENV_PATHS_LIBRARY')) {
+            $value = $value.Replace('\', '/')
+        }
+        [string]$_.name + '=' + $value
+    })
+    [Array]::Sort($setLines, [StringComparer]::Ordinal)
+    $clearedNames = [string[]]@($result.environment_cleared)
+    [Array]::Sort($clearedNames, [StringComparer]::Ordinal)
+    $expectedSetLines = [string[]]@(
+        'RENV_CONFIG_AUTO_SNAPSHOT=FALSE',
+        'RENV_CONFIG_CACHE_ENABLED=FALSE',
+        'RENV_CONFIG_LOCKING_ENABLED=FALSE',
+        'RENV_CONFIG_SANDBOX_ENABLED=FALSE',
+        'RENV_CONFIG_UPDATES_CHECK=FALSE',
+        'RENV_CONFIG_USER_ENVIRON=FALSE',
+        'RENV_CONFIG_USER_LIBRARY=FALSE',
+        ('RENV_PATHS_LIBRARY=' +
+            (Get-Issue13V5RenvLibraryRoot $script:rLibrary).Replace('\', '/')),
+        ('R_LIBS_USER=' + $script:rLibrary.Replace('\', '/')),
+        'TZ=UTC'
+    )
+    [Array]::Sort($expectedSetLines, [StringComparer]::Ordinal)
+    $expectedClearedNames = [string[]]@(
+        'LANG', 'LC_ALL', 'LC_CTYPE', 'R_ARCH', 'R_DEFAULT_PACKAGES',
+        'R_ENVIRON', 'R_ENVIRON_USER', 'R_HOME', 'R_LIBS', 'R_LIBS_SITE',
+        'R_PROFILE', 'R_PROFILE_USER', 'R_STARTUP_DEBUG',
+        'RENV_ACTIVATE_PROJECT', 'RENV_AUTOLOAD_ENABLED',
+        'RENV_AUTOLOADER_ENABLED', 'RENV_CONFIG_AUTOLOADER_ENABLED',
+        'RENV_CONFIG_EXTERNAL_LIBRARIES', 'RENV_CONFIG_STARTUP_QUIET',
+        'RENV_CONFIG_SYNCHRONIZED_CHECK', 'RENV_CONFIG_USER_PROFILE',
+        'RENV_PATHS_LIBRARY_ROOT', 'RENV_PATHS_LIBRARY_ROOT_ASIS',
+        'RENV_PATHS_LOCKFILE', 'RENV_PATHS_PREFIX',
+        'RENV_PATHS_PREFIX_AUTO', 'RENV_PATHS_RENV', 'RENV_PATHS_ROOT',
+        'RENV_PATHS_SANDBOX', 'RENV_PATHS_VERSION', 'RENV_PROCESS_TYPE',
+        'RENV_PROFILE', 'RENV_PROJECT', 'RENV_SANDBOX_LOCKING_ENABLED',
+        'RENV_STARTUP_DIAGNOSTICS'
+    )
+    [Array]::Sort($expectedClearedNames, [StringComparer]::Ordinal)
+    $setSha256 = Get-TextSha256 ([string]::Join("`n", $setLines))
+    $clearedSha256 = Get-TextSha256 (
+        [string]::Join("`n", $clearedNames))
+    if ([string]::Join("`n", $setLines) -cne
+            [string]::Join("`n", $expectedSetLines) -or
+        [string]::Join("`n", $clearedNames) -cne
+            [string]::Join("`n", $expectedClearedNames) -or
+        $setLines.Count -ne 10 -or $clearedNames.Count -ne 35) {
+        throw "Sealed Rscript applied a different R environment contract."
+    }
+    if ($script:rscriptInvocationCount -eq 0L) {
+        $script:rEnvironmentSetSha256 = $setSha256
+        $script:rEnvironmentClearedSha256 = $clearedSha256
+        $script:rEnvironmentSetCount = [long]$setLines.Count
+        $script:rEnvironmentClearedCount = [long]$clearedNames.Count
+    } elseif ($script:rEnvironmentSetSha256 -cne $setSha256 -or
+        $script:rEnvironmentClearedSha256 -cne $clearedSha256) {
+        throw "Sealed Rscript environment changed between invocations."
+    }
+    $script:rscriptInvocationCount++
     $script:rscriptExitCode = [int]$result.exit_code
     return [object[]]$result.combined_lines
 }
@@ -635,7 +734,7 @@ function Invoke-EvidenceVerifier(
         $script:controllerDir, $ProjectRoot, $RunRoot, $Method, $Mode,
         $ParentRunId, $Stage
     )
-    $output = @(Invoke-SealedRscript $arguments 600 $ProjectRoot)
+    $output = @(Invoke-SealedRscript $arguments 600 $script:harness)
     $output | Set-Content -LiteralPath $LogPath -Encoding utf8
     $records = @($output | Where-Object { $_ -cmatch '^evidence_record;' })
     if ($script:rscriptExitCode -ne 0 -or $records.Count -ne 1) {
@@ -786,6 +885,104 @@ $bridgeRecordPath = Resolve-PhysicalExistingFile (Join-Path $bridgeCapture `
 $bridgeRecordLines = @([System.IO.File]::ReadAllLines(
     $bridgeRecordPath, [System.Text.Encoding]::UTF8
 ))
+$bridgeHeader = @(
+    'schema', 'baseline_base_commit', 'baseline_base_tree',
+    'baseline_runtime_commit', 'baseline_runtime_tree', 'harness_path',
+    'harness_inventory_sha256', 'harness_runtime_path',
+    'harness_runtime_inventory_before_sha256',
+    'harness_runtime_inventory_after_sha256', 'rscript_path',
+    'rscript_sha256', 'fsutil_path', 'fsutil_sha256', 'r_library_path',
+    'r_library_inventory_before_sha256',
+    'r_library_inventory_after_sha256', 'renv_library_root_path',
+    'r_environment_set_count', 'r_environment_set_sha256',
+    'r_environment_cleared_count', 'r_environment_cleared_sha256',
+    'rscript_invocation_count', 'project_library_check_count',
+    'project_library_path', 'project_library_absent_before',
+    'project_library_absent_after', 'calculation_log_inventory_sha256',
+    'tool_records', 'baseline_worktree', 'captured_methods',
+    'verified_records', 'seed_evidence_index_sha256',
+    'source_data_origin_path', 'source_data_snapshot_path',
+    'source_data_origin_inventory_before_sha256',
+    'source_data_origin_inventory_after_sha256',
+    'source_data_snapshot_inventory_before_sha256',
+    'source_data_snapshot_inventory_after_sha256',
+    'source_data_origin_physical_path',
+    'source_data_snapshot_physical_path', 'source_data_physical_file_count',
+    'source_data_physical_directory_count',
+    'source_data_origin_physical_before_sha256',
+    'source_data_origin_physical_after_sha256',
+    'source_data_snapshot_physical_before_sha256',
+    'source_data_snapshot_physical_after_sha256',
+    'source_data_independence_before_sha256',
+    'source_data_independence_after_sha256',
+    'source_wiodr13_manifest_sha256', 'source_wiodr16_manifest_sha256',
+    'source_wiodr13_inventory_before_sha256',
+    'source_wiodr13_inventory_after_sha256',
+    'source_wiodr16_inventory_before_sha256',
+    'source_wiodr16_inventory_after_sha256', 'evidence_index',
+    'evidence_index_sha256'
+)
+if ($bridgeRecordLines.Count -lt $bridgeHeader.Count) {
+    throw "Bridge capture record is shorter than its authenticated header."
+}
+$bridgeKeys = @($bridgeRecordLines[0..($bridgeHeader.Count - 1)] |
+    ForEach-Object { @($_.Split(@('='), 2))[0] })
+$bridgeRenvLibraryRoot = Resolve-PhysicalExistingDirectory (
+    Get-CaptureValue $bridgeRecordLines 'renv_library_root_path'
+) 'Bridge renv library root'
+$expectedRenvLibraryRoot = Get-Issue13V5RenvLibraryRoot $script:rLibrary
+$bridgeBaselineWorktree = Resolve-PhysicalExistingDirectory (
+    Get-CaptureValue $bridgeRecordLines 'baseline_worktree'
+) 'Bridge baseline worktree'
+$bridgeProjectLibrary = [IO.Path]::GetFullPath(
+    (Get-CaptureValue $bridgeRecordLines 'project_library_path')
+).TrimEnd('\', '/')
+$expectedBridgeProjectLibrary = [IO.Path]::GetFullPath(
+    (Join-Path $bridgeBaselineWorktree 'renv\library')
+).TrimEnd('\', '/')
+$expectedEnvironmentSetLines = [string[]]@(
+    'RENV_CONFIG_AUTO_SNAPSHOT=FALSE',
+    'RENV_CONFIG_CACHE_ENABLED=FALSE',
+    'RENV_CONFIG_LOCKING_ENABLED=FALSE',
+    'RENV_CONFIG_SANDBOX_ENABLED=FALSE',
+    'RENV_CONFIG_UPDATES_CHECK=FALSE',
+    'RENV_CONFIG_USER_ENVIRON=FALSE',
+    'RENV_CONFIG_USER_LIBRARY=FALSE',
+    ('RENV_PATHS_LIBRARY=' + $expectedRenvLibraryRoot.Replace('\', '/')),
+    ('R_LIBS_USER=' + $script:rLibrary.Replace('\', '/')),
+    'TZ=UTC'
+)
+[Array]::Sort($expectedEnvironmentSetLines, [StringComparer]::Ordinal)
+$expectedEnvironmentClearedNames = [string[]]@(
+    'LANG', 'LC_ALL', 'LC_CTYPE', 'R_ARCH', 'R_DEFAULT_PACKAGES',
+    'R_ENVIRON', 'R_ENVIRON_USER', 'R_HOME', 'R_LIBS', 'R_LIBS_SITE',
+    'R_PROFILE', 'R_PROFILE_USER', 'R_STARTUP_DEBUG',
+    'RENV_ACTIVATE_PROJECT', 'RENV_AUTOLOAD_ENABLED',
+    'RENV_AUTOLOADER_ENABLED', 'RENV_CONFIG_AUTOLOADER_ENABLED',
+    'RENV_CONFIG_EXTERNAL_LIBRARIES', 'RENV_CONFIG_STARTUP_QUIET',
+    'RENV_CONFIG_SYNCHRONIZED_CHECK', 'RENV_CONFIG_USER_PROFILE',
+    'RENV_PATHS_LIBRARY_ROOT', 'RENV_PATHS_LIBRARY_ROOT_ASIS',
+    'RENV_PATHS_LOCKFILE', 'RENV_PATHS_PREFIX',
+    'RENV_PATHS_PREFIX_AUTO', 'RENV_PATHS_RENV', 'RENV_PATHS_ROOT',
+    'RENV_PATHS_SANDBOX', 'RENV_PATHS_VERSION', 'RENV_PROCESS_TYPE',
+    'RENV_PROFILE', 'RENV_PROJECT', 'RENV_SANDBOX_LOCKING_ENABLED',
+    'RENV_STARTUP_DIAGNOSTICS'
+)
+[Array]::Sort($expectedEnvironmentClearedNames, [StringComparer]::Ordinal)
+$expectedEnvironmentSetSha256 = Get-TextSha256 (
+    [string]::Join("`n", $expectedEnvironmentSetLines))
+$expectedEnvironmentClearedSha256 = Get-TextSha256 (
+    [string]::Join("`n", $expectedEnvironmentClearedNames))
+$bridgeCalculationLogRecords = [string[]]@($runtimeMethods |
+    ForEach-Object {
+        $calculationLogPath = Resolve-PhysicalExistingFile (Join-Path `
+            $bridgeCapture ("logs\" + $_ + ".calculate.log")) `
+            "Bridge calculation log $_"
+        $_ + '|' + (Get-Sha256 $calculationLogPath)
+    })
+[Array]::Sort($bridgeCalculationLogRecords, [StringComparer]::Ordinal)
+$expectedBridgeCalculationLogSha256 = Get-TextSha256 (
+    [string]::Join("`n", $bridgeCalculationLogRecords))
 $bridgeSourceOriginPath = Get-CaptureValue $bridgeRecordLines "source_data_origin_path"
 $bridgeSourceSnapshotPath = Resolve-PhysicalExistingDirectory (
     Get-CaptureValue $bridgeRecordLines "source_data_snapshot_path"
@@ -794,7 +991,9 @@ $bridgeSourceSnapshotInventoryBefore =
     Get-DirectoryInventorySha256 $bridgeSourceSnapshotPath
 $bridgeSourcePhysicalBefore = Get-Issue13V5PhysicalSnapshotProof `
     $sourceData $bridgeSourceSnapshotPath "Bridge source-data snapshot"
-if ($bridgeRecordLines[0] -cne "schema=issue13-v5-clean-bridge-capture/2" -or
+if ($bridgeRecordLines.Count -ne $bridgeHeader.Count + 7 + 7 -or
+    ($bridgeKeys -join "`n") -cne ($bridgeHeader -join "`n") -or
+    $bridgeRecordLines[0] -cne "schema=issue13-v5-clean-bridge-capture/3" -or
     (Get-CaptureValue $bridgeRecordLines "verified_records") -cne "7" -or
     (Get-CaptureValue $bridgeRecordLines "tool_records") -cne "7" -or
     (Get-CaptureValue $bridgeRecordLines "harness_path") -cne
@@ -825,6 +1024,31 @@ if ($bridgeRecordLines[0] -cne "schema=issue13-v5-clean-bridge-capture/2" -or
     (Get-CaptureValue $bridgeRecordLines `
         "r_library_inventory_after_sha256") -cne
         $rLibraryInventoryBefore -or
+    $bridgeRenvLibraryRoot -cne $expectedRenvLibraryRoot -or
+    (Get-CaptureValue $bridgeRecordLines `
+        'r_environment_set_count') -cne '10' -or
+    (Get-CaptureValue $bridgeRecordLines `
+        'r_environment_set_sha256') -cne
+        $expectedEnvironmentSetSha256 -or
+    (Get-CaptureValue $bridgeRecordLines `
+        'r_environment_cleared_count') -cne '35' -or
+    (Get-CaptureValue $bridgeRecordLines `
+        'r_environment_cleared_sha256') -cne
+        $expectedEnvironmentClearedSha256 -or
+    (Get-CaptureValue $bridgeRecordLines `
+        'rscript_invocation_count') -cne '14' -or
+    (Get-CaptureValue $bridgeRecordLines `
+        'project_library_check_count') -cne '28' -or
+    $bridgeProjectLibrary -cne $expectedBridgeProjectLibrary -or
+    (Get-CaptureValue $bridgeRecordLines `
+        'project_library_absent_before') -cne 'true' -or
+    (Get-CaptureValue $bridgeRecordLines `
+        'project_library_absent_after') -cne 'true' -or
+    [IO.Directory]::Exists($bridgeProjectLibrary) -or
+    [IO.File]::Exists($bridgeProjectLibrary) -or
+    (Get-CaptureValue $bridgeRecordLines `
+        'calculation_log_inventory_sha256') -cne
+        $expectedBridgeCalculationLogSha256 -or
     $bridgeSourceOriginPath -cne $sourceData.Replace('\', '/') -or
     (Get-CaptureValue $bridgeRecordLines `
         "source_data_snapshot_path") -cne
@@ -873,6 +1097,19 @@ if ($bridgeRecordLines[0] -cne "schema=issue13-v5-clean-bridge-capture/2" -or
     (Get-CaptureValue $bridgeRecordLines `
         "source_data_independence_after_sha256") -cne
         [string]$bridgeSourcePhysicalBefore.independence_sha256 -or
+    (Get-CaptureValue $bridgeRecordLines `
+        "seed_evidence_index_sha256") -cne
+        "917aca5671cbb7e4060b28c311e0f1397cbe19d6faedfb854a34205a5f457a94" -or
+    (Get-CaptureValue $bridgeRecordLines `
+        "source_wiodr13_manifest_sha256") -cne
+        (Get-Sha256 (Join-Path $sourceData `
+            "wiodr13\normalized\_source_manifest.csv")) -or
+    (Get-CaptureValue $bridgeRecordLines `
+        "source_wiodr16_manifest_sha256") -cne
+        (Get-Sha256 (Join-Path $sourceData `
+            "wiodr16\normalized\_source_manifest.csv")) -or
+    (Get-CaptureValue $bridgeRecordLines "evidence_index") -cne
+        $bridgeIndexPath.Replace('\', '/') -or
     (Get-CaptureValue $bridgeRecordLines "evidence_index_sha256") -cne
         (Get-Sha256 $bridgeIndexPath)) {
     throw "Bridge capture record is not bound to its evidence index."
@@ -1040,6 +1277,7 @@ $commitTrees = @{
 }
 $worktrees = @{}
 $sourceSnapshotsBefore = @{}
+$projectLibrariesBefore = @{}
 foreach ($stage in $stages) {
     foreach ($commit in @($baselineBaseCommit, $baselineRuntimeCommit)) {
         $root = Join-Path $worktreesRoot (
@@ -1052,6 +1290,19 @@ foreach ($stage in $stages) {
         }
         Assert-CleanWorktree $root $commit $commitTrees[$commit] `
             "Fresh stage-$stage worktree"
+        $worktreePath = [IO.Path]::GetFullPath($root).TrimEnd('\', '/')
+        $worktreeKey = [string]$stage + "|" + $commit
+        if ($script:stageWorktreeKeysByPath.ContainsKey($worktreePath) -or
+            $worktrees.ContainsKey($worktreeKey)) {
+            throw "Stage-five worktree identity is duplicated."
+        }
+        $projectLibrary = Join-Path $worktreePath 'renv\library'
+        $projectLibraryAbsentBefore =
+            Test-StageProjectLibraryAbsent $worktreePath
+        if (-not $projectLibraryAbsentBefore) {
+            throw "Fresh stage-five worktree contains a project-local renv library."
+        }
+        $script:stageWorktreeKeysByPath[$worktreePath] = $worktreeKey
         $sourceSnapshot = Join-Path $root "source_data"
         if (Test-Path -LiteralPath $sourceSnapshot) {
             throw "Fresh stage-$stage worktree unexpectedly has source_data."
@@ -1070,8 +1321,11 @@ foreach ($stage in $stages) {
         }
         Assert-CleanWorktree $root $commit $commitTrees[$commit] `
             "Stage-$stage worktree after source snapshot"
-        $worktreeKey = [string]$stage + "|" + $commit
         $worktrees[$worktreeKey] = $root
+        $projectLibrariesBefore[$worktreeKey] = [pscustomobject]@{
+            path = $projectLibrary
+            absent = $projectLibraryAbsentBefore
+        }
         $sourceSnapshotsBefore[$worktreeKey] = [pscustomobject]@{
             path = $sourceSnapshot
             inventory_sha256 = $sourceSnapshotInventory
@@ -1083,6 +1337,7 @@ foreach ($stage in $stages) {
 $stageRows = @()
 $seedRecords = @()
 $targetRecords = @()
+$recalculationLogRecords = [Collections.Generic.List[string]]::new()
 foreach ($method in $methods) {
     $bridgeRow = @($bridgeIndex | Where-Object { $_.method -ceq $method })[0]
     $reference = $referenceByMethod[$method]
@@ -1121,6 +1376,8 @@ foreach ($method in $methods) {
         if ($script:rscriptExitCode -ne 0) {
             throw "Stage-$stage recalculation failed for $method. See $runLog"
         }
+        $recalculationLogRecords.Add(
+            $method + '|' + [string]$stage + '|' + (Get-Sha256 $runLog))
         $aliasRecords = @($runOutput | Where-Object {
             $_ -cmatch '^recalculation_record;'
         })
@@ -1189,13 +1446,33 @@ if (([System.IO.File]::ReadAllLines($stageIndexPath, $utf8) -join "`n") `
 }
 
 $emptyStatusSha256 = Get-TextSha256 ""
-$worktreeRecords = foreach ($key in @($worktrees.Keys | Sort-Object)) {
+$orderedWorktreeKeys = [string[]]@($worktrees.Keys)
+[Array]::Sort($orderedWorktreeKeys, [StringComparer]::Ordinal)
+$worktreeRecords = foreach ($key in $orderedWorktreeKeys) {
     $parts = @($key.Split('|'))
     "worktree_record;key=$key;path=$($worktrees[$key].Replace('\', '/'))" +
         ";commit=$($parts[1]);tree=$($commitTrees[$parts[1]])" +
         ";git_status_sha256=$emptyStatusSha256"
 }
-$sourceSnapshotRecords = foreach ($key in @($worktrees.Keys | Sort-Object)) {
+$projectLibraryRecords = foreach ($key in $orderedWorktreeKeys) {
+    $before = $projectLibrariesBefore[$key]
+    $absentAfter = Test-StageProjectLibraryAbsent $worktrees[$key]
+    if (-not [bool]$before.absent -or -not $absentAfter) {
+        throw "Stage worktree project-local renv library exists: $key"
+    }
+    "project_library_record;key=$key" +
+        ";path=$([string]$before.path -replace '\\', '/')" +
+        ";absent_before=true;absent_after=true"
+}
+$projectLibraryRecordLines = [string[]]@($projectLibraryRecords)
+[Array]::Sort($projectLibraryRecordLines, [StringComparer]::Ordinal)
+if ([string]::Join("`n", $projectLibraryRecordLines) -cne
+        [string]::Join("`n", [string[]]@($projectLibraryRecords))) {
+    throw "Stage project-library records are not in canonical order."
+}
+$projectLibraryAbsenceSha256 = Get-TextSha256 (
+    [string]::Join("`n", $projectLibraryRecordLines))
+$sourceSnapshotRecords = foreach ($key in $orderedWorktreeKeys) {
     $before = $sourceSnapshotsBefore[$key]
     $after = Get-DirectoryInventorySha256 $before.path
     $physicalAfter = Get-Issue13V5PhysicalSnapshotProof `
@@ -1229,6 +1506,10 @@ $sourceSnapshotRecords = foreach ($key in @($worktrees.Keys | Sort-Object)) {
         ";independence_before_sha256=$($before.physical.independence_sha256)" +
         ";independence_after_sha256=$($physicalAfter.independence_sha256)"
 }
+$recalculationLogLines = [string[]]$recalculationLogRecords.ToArray()
+[Array]::Sort($recalculationLogLines, [StringComparer]::Ordinal)
+$recalculationLogInventorySha256 = Get-TextSha256 (
+    [string]::Join("`n", $recalculationLogLines))
 $sourceDataOriginInventoryAfter = Get-DirectoryInventorySha256 $sourceData
 $bridgeSourceSnapshotInventoryAfter =
     Get-DirectoryInventorySha256 $bridgeSourceSnapshotPath
@@ -1247,6 +1528,18 @@ $harnessInventoryAfter = Get-DirectoryInventorySha256 $script:harness
 $harnessRuntimeInventoryAfter = `
     Get-DirectoryInventorySha256 $harnessRuntime
 $rLibraryInventoryAfter = Get-DirectoryInventorySha256 $script:rLibrary
+if ($script:rscriptInvocationCount -ne 120L -or
+    $script:projectLibraryCheckCount -ne 240L -or
+    $script:rEnvironmentSetCount -ne 10L -or
+    $script:rEnvironmentClearedCount -ne 35L -or
+    $script:rEnvironmentSetSha256 -cne
+        $expectedEnvironmentSetSha256 -or
+    $script:rEnvironmentClearedSha256 -cne
+        $expectedEnvironmentClearedSha256 -or
+    $projectLibraryRecords.Count -ne 6L -or
+    $recalculationLogRecords.Count -ne 36L) {
+    throw "Stage-five renv environment/activation evidence is incomplete."
+}
 if ($harnessInventoryAfter -cne $harnessInventoryBefore -or
     $harnessRuntimeInventoryAfter -cne $harnessRuntimeInventoryBefore -or
     $rLibraryInventoryAfter -cne $rLibraryInventoryBefore -or
@@ -1279,7 +1572,7 @@ if (($recipeRecordsAfter -join "`n") -cne
 }
 $recipeRecords = $recipeRecordsBefore
 $captureRecord = @(
-    "schema=issue13-v5-clean-stage5-capture/2",
+    "schema=issue13-v5-clean-stage5-capture/3",
     "baseline_base_commit=$baselineBaseCommit",
     "baseline_base_tree=$baselineBaseTree",
     "baseline_runtime_commit=$baselineRuntimeCommit",
@@ -1296,6 +1589,17 @@ $captureRecord = @(
     "r_library_path=$($script:rLibrary.Replace('\', '/'))",
     "r_library_inventory_before_sha256=$rLibraryInventoryBefore",
     "r_library_inventory_after_sha256=$rLibraryInventoryAfter",
+    "renv_library_root_path=$((Get-Issue13V5RenvLibraryRoot $script:rLibrary).Replace('\', '/'))",
+    "r_environment_set_count=$($script:rEnvironmentSetCount)",
+    "r_environment_set_sha256=$($script:rEnvironmentSetSha256)",
+    "r_environment_cleared_count=$($script:rEnvironmentClearedCount)",
+    "r_environment_cleared_sha256=$($script:rEnvironmentClearedSha256)",
+    "rscript_invocation_count=$($script:rscriptInvocationCount)",
+    "project_library_check_count=$($script:projectLibraryCheckCount)",
+    "project_library_records=$($projectLibraryRecords.Count)",
+    "project_library_absence_sha256=$projectLibraryAbsenceSha256",
+    "recalculation_log_records=$($recalculationLogRecords.Count)",
+    "recalculation_log_inventory_sha256=$recalculationLogInventorySha256",
     "methods=$($methods -join ',')",
     "stages=$($stages -join ',')",
     "bridge_capture_record_sha256=$(Get-Sha256 $bridgeRecordPath)",
@@ -1328,8 +1632,8 @@ $captureRecord = @(
     "target_records=$($targetRecords.Count)",
     "worktree_records=$($worktreeRecords.Count)",
     "source_snapshot_records=$($sourceSnapshotRecords.Count)"
-) + $recipeRecords + $worktreeRecords + $sourceSnapshotRecords + $referenceRecords +
-    $seedRecords + $targetRecords
+) + $recipeRecords + $worktreeRecords + $projectLibraryRecords +
+    $sourceSnapshotRecords + $referenceRecords + $seedRecords + $targetRecords
 $captureRecordPath = Join-Path $capture "capture-record.txt"
 [System.IO.File]::WriteAllLines($captureRecordPath, $captureRecord, $utf8)
 if (([System.IO.File]::ReadAllLines($captureRecordPath, $utf8) -join "`n") `
@@ -1341,6 +1645,9 @@ foreach ($key in $worktrees.Keys) {
     $parts = @($key.Split('|'))
     Assert-CleanWorktree $worktrees[$key] $parts[1] `
         $commitTrees[$parts[1]] "Completed stage-five worktree"
+    if (-not (Test-StageProjectLibraryAbsent $worktrees[$key])) {
+        throw "Completed stage-five worktree contains a project-local renv library."
+    }
 }
 Write-Output ("capture_root=" + $capture.Replace('\', '/'))
 Write-Output ("evidence_index=" + $stageIndexPath.Replace('\', '/'))

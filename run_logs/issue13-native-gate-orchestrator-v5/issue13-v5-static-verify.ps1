@@ -1155,7 +1155,7 @@ if ($diagnosticControllerText[
   throw 'Diagnostic bridge builder contains the rejected legacy cardinality rule.'
 }
 foreach ($required in @(
-    'schema=issue13-v5-clean-bridge-capture/2',
+    'schema=issue13-v5-clean-bridge-capture/3',
     'tool_records=$($toolRecordsBefore.Count)',
     'harness_inventory_sha256=$harnessInventoryBefore',
     'harness_runtime_inventory_before_sha256=$harnessRuntimeInventoryBefore',
@@ -1166,6 +1166,33 @@ foreach ($required in @(
     'r_library_path=$($script:rLibrary.Replace',
     'r_library_inventory_before_sha256=$rLibraryInventoryBefore',
     'r_library_inventory_after_sha256=$rLibraryInventoryAfter',
+    'renv_library_root_path=',
+    'r_environment_set_count=',
+    'r_environment_set_sha256=',
+    'r_environment_cleared_count=',
+    'r_environment_cleared_sha256=',
+    'rscript_invocation_count=',
+    'project_library_check_count=',
+    'project_library_absent_before=',
+    'project_library_absent_after=',
+    'calculation_log_inventory_sha256=',
+    '$setLines.Count -ne 10', '$clearedNames.Count -ne 35',
+    'RENV_CONFIG_AUTO_SNAPSHOT=FALSE',
+    'RENV_CONFIG_CACHE_ENABLED=FALSE',
+    'RENV_CONFIG_LOCKING_ENABLED=FALSE',
+    'RENV_CONFIG_SANDBOX_ENABLED=FALSE',
+    'RENV_CONFIG_UPDATES_CHECK=FALSE',
+    'RENV_CONFIG_USER_ENVIRON=FALSE',
+    'RENV_CONFIG_USER_LIBRARY=FALSE',
+    '$script:rEnvironmentSetCount -ne 10L',
+    '$script:rEnvironmentClearedCount -ne 35L',
+    '$script:rscriptInvocationCount -ne 14L',
+    '$script:projectLibraryCheckCount -ne 28L',
+    '$calculationLogRecords.Count -ne 7L',
+    '$result = $null', '} finally {',
+    'Project-local renv library exists before sealed Rscript.',
+    'Sealed Rscript created a project-local renv library.',
+    'Bootstrapping renv|Downloading renv|Installing renv|Installing package',
     'Invoke-SealedRscript',
     'New-Issue13V5ClosedREnvironment',
     'Invoke-Issue13V5RscriptBounded',
@@ -1204,16 +1231,17 @@ foreach ($required in @(
     'wlv13_v5d_validate_stage5_capture <- function',
     'wlv13_v5d_stage5_capture_mutation_selftest <- function',
     'wlv13_v5d_live_validation_structure_selftest <- function',
-    'identical(capture_assertions, 46L)',
-    'identical(live_structure_assertions, 7L)',
+    'identical(capture_assertions, 75L)',
+    'identical(live_structure_assertions, 8L)',
     'requested_verify_live <- verify_live',
     'lockBinding("requested_verify_live", environment())',
     'd7fc0ba48bed304cf3975f2189ee975b14c16522443b28379d26329ea661b97a',
     'lockBinding("official_source_inventory_sha256", environment())',
-    'stats::setNames(c(1L, 1L, 6L, 1L, 1L, 6L)',
+    'stats::setNames(c(1L, 1L, 6L, 1L, 1L, 6L, 6L)',
+    '"stage_project_library"',
     'live_structure_assertions=%d',
     'wlv13_v5d_physical_snapshot_attest <- function',
-    'external_inventories, verify_live = TRUE',
+    'external_inventories, live_snapshot, verify_live = TRUE',
     'utils::readRegistry(',
     'Bridge capture fsutil is not independently authenticated.',
     'coherent fsutil executable',
@@ -1221,7 +1249,7 @@ foreach ($required in @(
     'harness_runtime_inventory_after_sha256',
     'r_library_inventory_before_sha256',
     'r_library_inventory_after_sha256',
-    'length(stage_header) + 10L + 6L + 6L + 12L + 36L + 36L'
+    'length(stage_header) + 10L + 6L + 6L + 6L + 12L + 36L + 36L'
   )) {
   if (-not $diagnosticControllerText[
       'issue13-v5-build-stage5-profiles.R'].Contains($required)) {
@@ -1238,7 +1266,7 @@ foreach ($required in @(
   }
 }
 foreach ($required in @(
-    'schema=issue13-v5-clean-stage5-capture/2',
+    'schema=issue13-v5-clean-stage5-capture/3',
     '$stageRows.Count -ne 36',
     '$seedRecords.Count -ne 36',
     '$targetRecords.Count -ne 36',
@@ -1255,6 +1283,37 @@ foreach ($required in @(
     'r_library_path=$($script:rLibrary.Replace',
     'r_library_inventory_before_sha256=$rLibraryInventoryBefore',
     'r_library_inventory_after_sha256=$rLibraryInventoryAfter',
+    'renv_library_root_path=',
+    'r_environment_set_count=',
+    'r_environment_set_sha256=',
+    'r_environment_cleared_count=',
+    'r_environment_cleared_sha256=',
+    'rscript_invocation_count=',
+    'project_library_check_count=',
+    'project_library_records=',
+    'project_library_absence_sha256=',
+    'recalculation_log_records=',
+    'recalculation_log_inventory_sha256=',
+    '$setLines.Count -ne 10', '$clearedNames.Count -ne 35',
+    'RENV_CONFIG_AUTO_SNAPSHOT=FALSE',
+    'RENV_CONFIG_CACHE_ENABLED=FALSE',
+    'RENV_CONFIG_LOCKING_ENABLED=FALSE',
+    'RENV_CONFIG_SANDBOX_ENABLED=FALSE',
+    'RENV_CONFIG_UPDATES_CHECK=FALSE',
+    'RENV_CONFIG_USER_ENVIRON=FALSE',
+    'RENV_CONFIG_USER_LIBRARY=FALSE',
+    '$script:rEnvironmentSetCount -ne 10L',
+    '$script:rEnvironmentClearedCount -ne 35L',
+    '$script:rscriptInvocationCount -ne 120L',
+    '$script:projectLibraryCheckCount -ne 240L',
+    '$projectLibraryRecords.Count -ne 6L',
+    '$recalculationLogRecords.Count -ne 36L',
+    '$guardProjectLibrary = $true',
+    'project_library_record;key=',
+    '$result = $null', '} finally {',
+    'Project-local renv library exists before sealed Rscript.',
+    'Sealed Rscript created a project-local renv library.',
+    'Bootstrapping renv|Downloading renv|Installing renv|Installing package',
     'Copy-Issue13V5PhysicalDirectorySnapshot',
     'source_snapshot_records=$($sourceSnapshotRecords.Count)',
     'source_data_origin_inventory_before_sha256=',
@@ -1267,7 +1326,7 @@ foreach ($required in @(
     'Invoke-SealedRscript',
     'New-Issue13V5ClosedREnvironment',
     'Invoke-Issue13V5RscriptBounded',
-    'Invoke-SealedRscript $arguments 600 $ProjectRoot',
+    'Invoke-SealedRscript $arguments 600 $script:harness',
     'Invoke-SealedRscript $runArguments 18000 $worktree',
     'metadata_equivalence = Resolve-PhysicalExistingFile',
     'Write-Output "baseline_recalculations=36"'
@@ -2086,6 +2145,7 @@ $issue13CriticalPowerShellNames = @(
   'Exit-Issue13V5ProcessEnvironment',
   'Invoke-Issue13V5WithProcessEnvironment',
   'Set-Issue13V5ProcessStartInfoEnvironment',
+  'Get-Issue13V5RenvLibraryRoot',
   'New-Issue13V5ClosedREnvironment',
   'Test-Issue13V5ProcessEnvironmentSelfTest',
   'Stop-Issue13V5ExternalProcess',
@@ -2105,6 +2165,7 @@ $issue13CriticalPowerShellNames = @(
   'Invoke-Issue13OracleEffectGitBytes',
   'Get-Issue13OracleEffectExpectedSourceTooling',
   'Get-Issue13OracleEffectRscriptIdentity',
+  'Get-Issue13OracleEffectRenvLibraryRoot',
   'Get-Issue13OracleEffectProcessEnvironmentState',
   'Set-Issue13OracleEffectProcessEnvironmentState',
   'Enter-Issue13OracleEffectSanitizedREnvironment',
@@ -2172,6 +2233,7 @@ $issue13CriticalDefinitionOwners = @{
     'Exit-Issue13V5ProcessEnvironment',
     'Invoke-Issue13V5WithProcessEnvironment',
     'Set-Issue13V5ProcessStartInfoEnvironment',
+    'Get-Issue13V5RenvLibraryRoot',
     'New-Issue13V5ClosedREnvironment',
     'Test-Issue13V5ProcessEnvironmentSelfTest',
     'Assert-Issue13V5PhysicalCopy',
@@ -2213,6 +2275,7 @@ $issue13CriticalDefinitionOwners = @{
     'Invoke-Issue13OracleEffectGit',
     'Invoke-Issue13OracleEffectGitBytes',
     'Get-Issue13OracleEffectExpectedSourceTooling',
+    'Get-Issue13OracleEffectRenvLibraryRoot',
     'Get-Issue13OracleEffectProcessEnvironmentState',
     'Set-Issue13OracleEffectProcessEnvironmentState',
     'Enter-Issue13OracleEffectSanitizedREnvironment',
@@ -2665,6 +2728,77 @@ function Test-Issue13V5StaticExactProperties(
   [string]::Join("`n", @($Value.PSObject.Properties.Name)) -ceq
     [string]::Join("`n", $Expected)
 }
+function Test-Issue13V5StaticEnvironmentSetSchema(
+  [object]$Schema,
+  [string[]]$ExpectedNames
+) {
+  $environmentSet = $Schema.'$defs'.environmentSet
+  if (-not (Test-Issue13V5StaticExactProperties $environmentSet @(
+        'type', 'minItems', 'maxItems', 'prefixItems', 'items')) -or
+      [string]$environmentSet.type -cne 'array' -or
+      [long]$environmentSet.minItems -ne 10L -or
+      [long]$environmentSet.maxItems -ne 10L -or
+      -not (Test-Issue13V5ExactBoolean $environmentSet.items $false) -or
+      @($environmentSet.prefixItems).Count -ne 10 -or
+      $ExpectedNames.Count -ne 10) {
+    return $false
+  }
+  for ($index = 0; $index -lt 10; $index++) {
+    $item = @($environmentSet.prefixItems)[$index]
+    if (-not (Test-Issue13V5StaticExactProperties $item @(
+          'type', 'additionalProperties', 'required', 'properties')) -or
+        [string]$item.type -cne 'object' -or
+        -not (Test-Issue13V5ExactBoolean `
+          $item.additionalProperties $false) -or
+        [string]::Join("`n", @($item.required)) -cne "name`nvalue" -or
+        -not (Test-Issue13V5StaticExactProperties `
+          $item.properties @('name', 'value')) -or
+        -not (Test-Issue13V5StaticExactProperties `
+          $item.properties.name @('const')) -or
+        [string]$item.properties.name.const -cne $ExpectedNames[$index]) {
+      return $false
+    }
+    if ($index -ge 7 -and $index -lt 9) {
+      if (-not (Test-Issue13V5StaticExactProperties `
+            $item.properties.value @('$ref')) -or
+          [string]$item.properties.value.'$ref' -cne '#/$defs/path') {
+        return $false
+      }
+    } else {
+      $expectedValue = if ($index -lt 7) { 'FALSE' } else { 'UTC' }
+      if (-not (Test-Issue13V5StaticExactProperties `
+            $item.properties.value @('const')) -or
+          [string]$item.properties.value.const -cne $expectedValue) {
+        return $false
+      }
+    }
+  }
+  return $true
+}
+function Test-Issue13V5StaticEnvironmentClearedSchema(
+  [object]$Schema,
+  [string[]]$ExpectedNames
+) {
+  $environmentCleared = $Schema.'$defs'.environmentCleared
+  if (-not (Test-Issue13V5StaticExactProperties $environmentCleared @(
+        'type', 'minItems', 'maxItems', 'prefixItems', 'items')) -or
+      [string]$environmentCleared.type -cne 'array' -or
+      [long]$environmentCleared.minItems -ne 35L -or
+      [long]$environmentCleared.maxItems -ne 35L -or
+      -not (Test-Issue13V5ExactBoolean $environmentCleared.items $false) -or
+      @($environmentCleared.prefixItems).Count -ne 35 -or
+      $ExpectedNames.Count -ne 35) {
+    return $false
+  }
+  for ($index = 0; $index -lt 35; $index++) {
+    $item = @($environmentCleared.prefixItems)[$index]
+    if (-not (Test-Issue13V5StaticExactProperties $item @('const')) -or
+        [string]$item.const -cne $ExpectedNames[$index]) {
+      return $false
+    }
+  }
+  return $true
+}
 function Get-Issue13V5StaticHashtableKeys(
   [Management.Automation.Language.HashtableAst]$Hashtable
 ) {
@@ -2786,6 +2920,7 @@ $commitECriticalOwners = [ordered]@{
   'Exit-Issue13V5ProcessEnvironment' = 'issue13-v5-coordinator-lib.ps1'
   'Invoke-Issue13V5WithProcessEnvironment' = 'issue13-v5-coordinator-lib.ps1'
   'Set-Issue13V5ProcessStartInfoEnvironment' = 'issue13-v5-coordinator-lib.ps1'
+  'Get-Issue13V5RenvLibraryRoot' = 'issue13-v5-coordinator-lib.ps1'
   'New-Issue13V5ClosedREnvironment' = 'issue13-v5-coordinator-lib.ps1'
   'Test-Issue13V5ProcessEnvironmentSelfTest' = 'issue13-v5-coordinator-lib.ps1'
   'Stop-Issue13V5ExternalProcess' = 'issue13-v5-coordinator-lib.ps1'
@@ -2801,6 +2936,8 @@ $commitECriticalOwners = [ordered]@{
   'Get-Issue13OracleEffectExpectedSourceTooling' =
     'issue13-v5-oracle-effect-lib.ps1'
   'Get-Issue13OracleEffectRscriptIdentity' =
+    'issue13-v5-oracle-effect-lib.ps1'
+  'Get-Issue13OracleEffectRenvLibraryRoot' =
     'issue13-v5-oracle-effect-lib.ps1'
   'Get-Issue13OracleEffectProcessEnvironmentState' =
     'issue13-v5-oracle-effect-lib.ps1'
@@ -3652,6 +3789,7 @@ function Test-Issue13V5StaticCentralEnvironmentContract(
     'Invoke-Issue13V5WithCleanup',
     'Invoke-Issue13V5WithProcessEnvironment',
     'Set-Issue13V5ProcessStartInfoEnvironment',
+    'Get-Issue13V5RenvLibraryRoot',
     'New-Issue13V5ClosedREnvironment',
     'Invoke-Issue13V5External')
   $definitions = @{}
@@ -3672,8 +3810,28 @@ function Test-Issue13V5StaticCentralEnvironmentContract(
     'Invoke-Issue13V5WithProcessEnvironment'].Extent.Text
   $startInfoText = [string]$definitions[
     'Set-Issue13V5ProcessStartInfoEnvironment'].Extent.Text
-  $closedText = [string]$definitions[
-    'New-Issue13V5ClosedREnvironment'].Extent.Text
+  $renvRootText = [string]$definitions[
+    'Get-Issue13V5RenvLibraryRoot'].Extent.Text
+  $closed = $definitions['New-Issue13V5ClosedREnvironment']
+  $closedText = [string]$closed.Extent.Text
+  $closedSetTargets = [string[]]@($closed.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+        $node.Left.Extent.Text.StartsWith('$environment[') -and
+        $node.Left.Extent.Text -cne '$environment[$name]'
+    }, $true) | ForEach-Object { [string]$_.Left.Extent.Text })
+  $expectedClosedSetTargets = [string[]]@(
+    "`$environment['R_LIBS_USER']",
+    "`$environment['RENV_PATHS_LIBRARY']",
+    "`$environment['RENV_CONFIG_AUTO_SNAPSHOT']",
+    "`$environment['RENV_CONFIG_CACHE_ENABLED']",
+    "`$environment['RENV_CONFIG_LOCKING_ENABLED']",
+    "`$environment['RENV_CONFIG_SANDBOX_ENABLED']",
+    "`$environment['RENV_CONFIG_UPDATES_CHECK']",
+    "`$environment['RENV_CONFIG_USER_ENVIRON']",
+    "`$environment['RENV_CONFIG_USER_LIBRARY']",
+    "`$environment['TZ']"
+  )
   $external = $definitions['Invoke-Issue13V5External']
   $externalText = [string]$external.Extent.Text
   $recordTables = @($external.FindAll({
@@ -3725,10 +3883,33 @@ function Test-Issue13V5StaticCentralEnvironmentContract(
       'environment_set = [object[]]$environmentSet.ToArray()') -and
     $startInfoText.Contains(
       'environment_cleared = [object[]]$environmentCleared.ToArray()') -and
+    $renvRootText.Contains('[IO.DirectoryInfo]::new($library)') -and
+    $renvRootText.Contains("`$version.Name -cnotmatch '^R-[0-9]+[.][0-9]+$'") -and
+    $renvRootText.Contains("`$root.Name -cne 'library'") -and
+    $renvRootText.Contains('$reconstructed, $library,') -and
+    $renvRootText.Contains('[StringComparison]::OrdinalIgnoreCase') -and
     $closedText.Contains(
       'foreach ($name in $script:Issue13V5OracleClearedREnvironment)') -and
     $closedText.Contains("`$environment['R_LIBS_USER'] = `$RLibrary") -and
+    $closedText.Contains("`$environment['RENV_PATHS_LIBRARY'] =") -and
+    $closedText.Contains('Get-Issue13V5RenvLibraryRoot $RLibrary') -and
+    $closedText.Contains(
+      "`$environment['RENV_CONFIG_AUTO_SNAPSHOT'] = 'FALSE'") -and
+    $closedText.Contains(
+      "`$environment['RENV_CONFIG_CACHE_ENABLED'] = 'FALSE'") -and
+    $closedText.Contains(
+      "`$environment['RENV_CONFIG_LOCKING_ENABLED'] = 'FALSE'") -and
+    $closedText.Contains(
+      "`$environment['RENV_CONFIG_SANDBOX_ENABLED'] = 'FALSE'") -and
+    $closedText.Contains(
+      "`$environment['RENV_CONFIG_UPDATES_CHECK'] = 'FALSE'") -and
+    $closedText.Contains(
+      "`$environment['RENV_CONFIG_USER_ENVIRON'] = 'FALSE'") -and
+    $closedText.Contains(
+      "`$environment['RENV_CONFIG_USER_LIBRARY'] = 'FALSE'") -and
     $closedText.Contains("`$environment['TZ'] = 'UTC'") -and
+    [string]::Join("`n", $closedSetTargets) -ceq
+      [string]::Join("`n", $expectedClosedSetTargets) -and
     $recordTables.Count -eq 1 -and
     -not $externalText.Contains('environment_removed =') -and
     -not $externalText.Contains('environment = [object[]]') -and
@@ -3752,7 +3933,39 @@ $centralEnvironmentMutantTexts = @(
     'environment_set = [object[]]$environmentBinding.environment_set',
     'environment = [object[]]$environmentBinding.environment_set'),
   $centralText.Replace(
+    "`$environment['R_LIBS_USER'] = `$RLibrary",
+    "`$null = `$RLibrary"),
+  $centralText.Replace(
     "`$environment['TZ'] = 'UTC'", "`$null = 'UTC'"),
+  $centralText.Replace(
+    'Get-Issue13V5RenvLibraryRoot $RLibrary', '$RLibrary'),
+  $centralText.Replace(
+    "`$environment['RENV_CONFIG_AUTO_SNAPSHOT'] = 'FALSE'",
+    "`$null = 'FALSE'"),
+  $centralText.Replace(
+    "`$environment['RENV_CONFIG_CACHE_ENABLED'] = 'FALSE'",
+    "`$null = 'FALSE'"),
+  $centralText.Replace(
+    "`$environment['RENV_CONFIG_LOCKING_ENABLED'] = 'FALSE'",
+    "`$null = 'FALSE'"),
+  $centralText.Replace(
+    "`$environment['RENV_CONFIG_SANDBOX_ENABLED'] = 'FALSE'",
+    "`$null = 'FALSE'"),
+  $centralText.Replace(
+    "`$environment['RENV_CONFIG_UPDATES_CHECK'] = 'FALSE'",
+    "`$null = 'FALSE'"),
+  $centralText.Replace(
+    "`$environment['RENV_CONFIG_USER_ENVIRON'] = 'FALSE'",
+    "`$null = 'FALSE'"),
+  $centralText.Replace(
+    "`$environment['RENV_CONFIG_USER_LIBRARY'] = 'FALSE'",
+    "`$null = 'FALSE'"),
+  $centralText.Replace(
+    "`$environment['TZ'] = 'UTC'",
+    "`$environment['ISSUE13_V5_UNDECLARED'] = 'TRUE'`n  " +
+      "`$environment['TZ'] = 'UTC'"),
+  $centralText.Replace(
+    "`$root.Name -cne 'library'", '$false'),
   $centralText.Replace(
     'foreach ($name in $script:Issue13V5OracleClearedREnvironment)',
     'foreach ($name in @())'))
@@ -4072,11 +4285,44 @@ foreach ($boundedRscriptMutantText in $boundedRscriptMutantTexts) {
   }
 }
 $closedNames = [string[]]$script:Issue13V5OracleClearedREnvironment
-if ($closedNames.Count -ne 16 -or
-    @($closedNames | Sort-Object -Unique).Count -ne 16 -or
+$expectedClosedNames = [string[]]@(
+  'LANG', 'LC_ALL', 'LC_CTYPE',
+  'R_ARCH', 'R_DEFAULT_PACKAGES', 'R_ENVIRON', 'R_ENVIRON_USER', 'R_HOME',
+  'R_LIBS', 'R_LIBS_SITE', 'R_PROFILE', 'R_PROFILE_USER', 'R_STARTUP_DEBUG',
+  'RENV_ACTIVATE_PROJECT', 'RENV_AUTOLOAD_ENABLED',
+  'RENV_AUTOLOADER_ENABLED', 'RENV_CONFIG_AUTOLOADER_ENABLED',
+  'RENV_CONFIG_EXTERNAL_LIBRARIES', 'RENV_CONFIG_STARTUP_QUIET',
+  'RENV_CONFIG_SYNCHRONIZED_CHECK', 'RENV_CONFIG_USER_PROFILE',
+  'RENV_PATHS_LIBRARY_ROOT', 'RENV_PATHS_LIBRARY_ROOT_ASIS',
+  'RENV_PATHS_LOCKFILE', 'RENV_PATHS_PREFIX', 'RENV_PATHS_PREFIX_AUTO',
+  'RENV_PATHS_RENV', 'RENV_PATHS_ROOT', 'RENV_PATHS_SANDBOX',
+  'RENV_PATHS_VERSION',
+  'RENV_PROCESS_TYPE', 'RENV_PROFILE', 'RENV_PROJECT',
+  'RENV_SANDBOX_LOCKING_ENABLED', 'RENV_STARTUP_DIAGNOSTICS'
+)
+if ($closedNames.Count -ne 35 -or
+    @($closedNames | Sort-Object -Unique).Count -ne 35 -or
+    [string]::Join("`n", $closedNames) -cne
+      [string]::Join("`n", $expectedClosedNames) -or
     -not $centralText.Contains("`$environment['R_LIBS_USER'] = `$RLibrary") -or
+    -not $centralText.Contains("`$environment['RENV_PATHS_LIBRARY'] =") -or
+    -not $centralText.Contains('Get-Issue13V5RenvLibraryRoot $RLibrary') -or
+    -not $centralText.Contains(
+      "`$environment['RENV_CONFIG_AUTO_SNAPSHOT'] = 'FALSE'") -or
+    -not $centralText.Contains(
+      "`$environment['RENV_CONFIG_CACHE_ENABLED'] = 'FALSE'") -or
+    -not $centralText.Contains(
+      "`$environment['RENV_CONFIG_LOCKING_ENABLED'] = 'FALSE'") -or
+    -not $centralText.Contains(
+      "`$environment['RENV_CONFIG_SANDBOX_ENABLED'] = 'FALSE'") -or
+    -not $centralText.Contains(
+      "`$environment['RENV_CONFIG_UPDATES_CHECK'] = 'FALSE'") -or
+    -not $centralText.Contains(
+      "`$environment['RENV_CONFIG_USER_ENVIRON'] = 'FALSE'") -or
+    -not $centralText.Contains(
+      "`$environment['RENV_CONFIG_USER_LIBRARY'] = 'FALSE'") -or
     -not $centralText.Contains("`$environment['TZ'] = 'UTC'")) {
-  throw 'The closed R environment is not the exact clear-16 plus set-2 contract.'
+  throw 'The closed R environment is not the exact clear-35 plus set-10 contract.'
 }
 foreach ($requiredEnvironmentSelftest in @(
     'Environment tri-state self-test',
@@ -5235,6 +5481,30 @@ function Test-Issue13V5StaticOracleSchema(
   $terminalRuntime = $Schema.'$defs'.terminalRuntime
   $runtimeSnapshot = $Schema.'$defs'.runtimeSnapshot
   $runtimeImmutability = $Schema.'$defs'.runtimeImmutability
+  $rEnvironment = $Schema.'$defs'.rEnvironment
+  $command = $Schema.'$defs'.command
+  $expectedRSetNames = [string[]]@(
+    'RENV_CONFIG_AUTO_SNAPSHOT', 'RENV_CONFIG_CACHE_ENABLED',
+    'RENV_CONFIG_LOCKING_ENABLED', 'RENV_CONFIG_SANDBOX_ENABLED',
+    'RENV_CONFIG_UPDATES_CHECK', 'RENV_CONFIG_USER_ENVIRON',
+    'RENV_CONFIG_USER_LIBRARY', 'RENV_PATHS_LIBRARY', 'R_LIBS_USER', 'TZ'
+  )
+  $expectedRClearedNames = [string[]]@(
+    'LANG', 'LC_ALL', 'LC_CTYPE', 'RENV_ACTIVATE_PROJECT',
+    'RENV_AUTOLOADER_ENABLED', 'RENV_AUTOLOAD_ENABLED',
+    'RENV_CONFIG_AUTOLOADER_ENABLED', 'RENV_CONFIG_EXTERNAL_LIBRARIES',
+    'RENV_CONFIG_STARTUP_QUIET', 'RENV_CONFIG_SYNCHRONIZED_CHECK',
+    'RENV_CONFIG_USER_PROFILE', 'RENV_PATHS_LIBRARY_ROOT',
+    'RENV_PATHS_LIBRARY_ROOT_ASIS', 'RENV_PATHS_LOCKFILE',
+    'RENV_PATHS_PREFIX', 'RENV_PATHS_PREFIX_AUTO', 'RENV_PATHS_RENV',
+    'RENV_PATHS_ROOT', 'RENV_PATHS_SANDBOX', 'RENV_PATHS_VERSION',
+    'RENV_PROCESS_TYPE', 'RENV_PROFILE', 'RENV_PROJECT',
+    'RENV_SANDBOX_LOCKING_ENABLED', 'RENV_STARTUP_DIAGNOSTICS',
+    'R_ARCH', 'R_DEFAULT_PACKAGES', 'R_ENVIRON', 'R_ENVIRON_USER',
+    'R_HOME', 'R_LIBS', 'R_LIBS_SITE', 'R_PROFILE', 'R_PROFILE_USER',
+    'R_STARTUP_DEBUG'
+  )
+  $terminalRSet = $Spec.terminal_comparison_runtime.r_environment_set
   (Test-Issue13V5StaticExactProperties $tree.properties @(
       'relative_path', 'repository_path', 'mode', 'type', 'tree')) -and
     [string]::Join("`n", @($tree.required)) -ceq
@@ -5319,6 +5589,42 @@ function Test-Issue13V5StaticOracleSchema(
       $runtimeImmutability.properties.immutable.const $true) -and
     (Test-Issue13V5ExactBoolean `
       $runtimeImmutability.additionalProperties $false) -and
+    (Test-Issue13V5StaticEnvironmentSetSchema `
+      $Schema $expectedRSetNames) -and
+    (Test-Issue13V5StaticExactProperties `
+      $rEnvironment.properties.set @('$ref')) -and
+    [string]$rEnvironment.properties.set.'$ref' -ceq
+      '#/$defs/environmentSet' -and
+    (Test-Issue13V5StaticEnvironmentClearedSchema `
+      $Schema $expectedRClearedNames) -and
+    (Test-Issue13V5StaticExactProperties `
+      $rEnvironment.properties.cleared @('$ref')) -and
+    [string]$rEnvironment.properties.cleared.'$ref' -ceq
+      '#/$defs/environmentCleared' -and
+    (Test-Issue13V5StaticExactProperties `
+      $command.properties.environment_set @('$ref')) -and
+    [string]$command.properties.environment_set.'$ref' -ceq
+      '#/$defs/environmentSet' -and
+    (Test-Issue13V5StaticExactProperties `
+      $command.properties.environment_cleared @('$ref')) -and
+    [string]$command.properties.environment_cleared.'$ref' -ceq
+      '#/$defs/environmentCleared' -and
+    (Test-Issue13V5StaticExactProperties `
+      $terminalRSet $expectedRSetNames) -and
+    [string]$terminalRSet.R_LIBS_USER -ceq 'configured-r-library' -and
+    [string]$terminalRSet.RENV_PATHS_LIBRARY -ceq
+      'configured-renv-library-root' -and
+    [string]$terminalRSet.RENV_CONFIG_AUTO_SNAPSHOT -ceq 'FALSE' -and
+    [string]$terminalRSet.RENV_CONFIG_CACHE_ENABLED -ceq 'FALSE' -and
+    [string]$terminalRSet.RENV_CONFIG_LOCKING_ENABLED -ceq 'FALSE' -and
+    [string]$terminalRSet.RENV_CONFIG_SANDBOX_ENABLED -ceq 'FALSE' -and
+    [string]$terminalRSet.RENV_CONFIG_UPDATES_CHECK -ceq 'FALSE' -and
+    [string]$terminalRSet.RENV_CONFIG_USER_ENVIRON -ceq 'FALSE' -and
+    [string]$terminalRSet.RENV_CONFIG_USER_LIBRARY -ceq 'FALSE' -and
+    [string]$terminalRSet.TZ -ceq 'UTC' -and
+    [string]::Join("`n", @(
+      $Spec.terminal_comparison_runtime.r_environment_cleared)) -ceq
+      [string]::Join("`n", $expectedRClearedNames) -and
     (Test-Issue13V5StaticExactProperties `
       $Spec.terminal_comparison_runtime.source_tooling @(
         'repository_relative_root', 'file_count', 'directory_count',
@@ -5331,7 +5637,7 @@ function Test-Issue13V5StaticOracleSchema(
 if (-not (Test-Issue13V5StaticOracleSchema $oracleSchema $oracleSpec) -or
     [string]$oracleSpec.proof_schema_sha256 -cne
       $oracleSchemaSha256.ToLowerInvariant()) {
-  throw 'Oracle proof schema/spec do not close source_tooling and Rscript.'
+  throw 'Oracle proof schema/spec do not close source_tooling, Rscript, and set-10 R environment.'
 }
 $stableSourceSpec = $oracleSpec.terminal_comparison_runtime.source_tooling
 $stableRscriptSpec = $oracleSpec.terminal_comparison_runtime.rscript
@@ -5382,9 +5688,61 @@ $itemIdMutant = $oracleSchema | ConvertTo-Json -Depth 100 -Compress |
   ConvertFrom-Json -Depth 100
 $itemIdMutant.'$defs'.rscript.properties.item_id.pattern = '^.+$'
 $schemaMutants.Add($itemIdMutant)
+$rSetCountMutant = $oracleSchema | ConvertTo-Json -Depth 100 -Compress |
+  ConvertFrom-Json -Depth 100
+$rSetCountMutant.'$defs'.environmentSet.maxItems = 9
+$schemaMutants.Add($rSetCountMutant)
+$rSetRefMutant = $oracleSchema | ConvertTo-Json -Depth 100 -Compress |
+  ConvertFrom-Json -Depth 100
+$rSetRefMutant.'$defs'.rEnvironment.properties.set.'$ref' = '#/$defs/path'
+$schemaMutants.Add($rSetRefMutant)
+$commandSetRefMutant = $oracleSchema | ConvertTo-Json -Depth 100 -Compress |
+  ConvertFrom-Json -Depth 100
+$commandSetRefMutant.'$defs'.command.properties.environment_set.'$ref' =
+  '#/$defs/path'
+$schemaMutants.Add($commandSetRefMutant)
+$rSetNameMutant = $oracleSchema | ConvertTo-Json -Depth 100 -Compress |
+  ConvertFrom-Json -Depth 100
+$rSetNameMutant.'$defs'.environmentSet.prefixItems[7].properties.name.const =
+  'R_LIBS_USER'
+$schemaMutants.Add($rSetNameMutant)
+$rSetValueMutant = $oracleSchema | ConvertTo-Json -Depth 100 -Compress |
+  ConvertFrom-Json -Depth 100
+$rSetValueMutant.'$defs'.environmentSet.prefixItems[2].properties.value.const =
+  'TRUE'
+$schemaMutants.Add($rSetValueMutant)
+$rSetPathMutant = $oracleSchema | ConvertTo-Json -Depth 100 -Compress |
+  ConvertFrom-Json -Depth 100
+$rSetPathMutant.'$defs'.environmentSet.prefixItems[7].properties.value.'$ref' =
+  '#/$defs/sha256'
+$schemaMutants.Add($rSetPathMutant)
+$rSetOrderMutant = $oracleSchema | ConvertTo-Json -Depth 100 -Compress |
+  ConvertFrom-Json -Depth 100
+$rSetSwap = $rSetOrderMutant.'$defs'.environmentSet.prefixItems[7]
+$rSetOrderMutant.'$defs'.environmentSet.prefixItems[7] =
+  $rSetOrderMutant.'$defs'.environmentSet.prefixItems[8]
+$rSetOrderMutant.'$defs'.environmentSet.prefixItems[8] = $rSetSwap
+$schemaMutants.Add($rSetOrderMutant)
+$rClearedOrderMutant = $oracleSchema | ConvertTo-Json -Depth 100 -Compress |
+  ConvertFrom-Json -Depth 100
+$rClearedSwap = $rClearedOrderMutant.'$defs'.environmentCleared.prefixItems[3]
+$rClearedOrderMutant.'$defs'.environmentCleared.prefixItems[3] =
+  $rClearedOrderMutant.'$defs'.environmentCleared.prefixItems[25]
+$rClearedOrderMutant.'$defs'.environmentCleared.prefixItems[25] = $rClearedSwap
+$schemaMutants.Add($rClearedOrderMutant)
+$rClearedRefMutant = $oracleSchema | ConvertTo-Json -Depth 100 -Compress |
+  ConvertFrom-Json -Depth 100
+$rClearedRefMutant.'$defs'.rEnvironment.properties.cleared.'$ref' =
+  '#/$defs/path'
+$schemaMutants.Add($rClearedRefMutant)
+$commandClearedRefMutant = $oracleSchema |
+  ConvertTo-Json -Depth 100 -Compress | ConvertFrom-Json -Depth 100
+$commandClearedRefMutant.'$defs'.command.properties.environment_cleared.'$ref' =
+  '#/$defs/path'
+$schemaMutants.Add($commandClearedRefMutant)
 foreach ($schemaMutant in $schemaMutants) {
   if (Test-Issue13V5StaticOracleSchema $schemaMutant $oracleSpec) {
-    throw 'Oracle schema checker accepted a source/Rscript shape mutant.'
+    throw 'Oracle schema checker accepted a source/Rscript/set-10/clear-35 shape mutant.'
   }
 }
 $stableSpecMutant = $oracleSpec | ConvertTo-Json -Depth 100 -Compress |
@@ -5394,6 +5752,42 @@ $stableSpecMutant.terminal_comparison_runtime.source_tooling.PSObject.Properties
     'candidate_commit', '0000000000000000000000000000000000000000'))
 if (Test-Issue13V5StaticOracleSchema $oracleSchema $stableSpecMutant) {
   throw 'Oracle stable spec accepted a dynamic candidate/tree/blob pin.'
+}
+$rSetSpecMutant = $oracleSpec | ConvertTo-Json -Depth 100 -Compress |
+  ConvertFrom-Json -Depth 100
+$rSetSpecMutant.terminal_comparison_runtime.r_environment_set.
+  RENV_CONFIG_AUTO_SNAPSHOT = 'TRUE'
+if (Test-Issue13V5StaticOracleSchema $oracleSchema $rSetSpecMutant) {
+  throw 'Oracle stable spec accepted a set-10 R-environment mutant.'
+}
+$rSetSpecOrderMutant = $oracleSpec | ConvertTo-Json -Depth 100 -Compress |
+  ConvertFrom-Json -Depth 100
+$rSetSpecOrderMutant.terminal_comparison_runtime.r_environment_set =
+  [pscustomobject][ordered]@{
+    R_LIBS_USER = 'configured-r-library'
+    RENV_PATHS_LIBRARY = 'configured-renv-library-root'
+    RENV_CONFIG_AUTO_SNAPSHOT = 'FALSE'
+    RENV_CONFIG_CACHE_ENABLED = 'FALSE'
+    RENV_CONFIG_LOCKING_ENABLED = 'FALSE'
+    RENV_CONFIG_SANDBOX_ENABLED = 'FALSE'
+    RENV_CONFIG_UPDATES_CHECK = 'FALSE'
+    RENV_CONFIG_USER_ENVIRON = 'FALSE'
+    RENV_CONFIG_USER_LIBRARY = 'FALSE'
+    TZ = 'UTC'
+  }
+if (Test-Issue13V5StaticOracleSchema $oracleSchema $rSetSpecOrderMutant) {
+  throw 'Oracle stable spec accepted a reordered set-10 R environment.'
+}
+$rClearedSpecOrderMutant = $oracleSpec |
+  ConvertTo-Json -Depth 100 -Compress | ConvertFrom-Json -Depth 100
+$rClearedSpecSwap =
+  $rClearedSpecOrderMutant.terminal_comparison_runtime.r_environment_cleared[3]
+$rClearedSpecOrderMutant.terminal_comparison_runtime.r_environment_cleared[3] =
+  $rClearedSpecOrderMutant.terminal_comparison_runtime.r_environment_cleared[25]
+$rClearedSpecOrderMutant.terminal_comparison_runtime.r_environment_cleared[25] =
+  $rClearedSpecSwap
+if (Test-Issue13V5StaticOracleSchema $oracleSchema $rClearedSpecOrderMutant) {
+  throw 'Oracle stable spec accepted a reordered clear-35 R environment.'
 }
 foreach ($requiredOracleText in @(
     'function Invoke-Issue13OracleEffectGit',
@@ -6614,7 +7008,13 @@ $expectedCaptureHeaders = @{
     'harness_runtime_inventory_after_sha256', 'rscript_path',
     'rscript_sha256', 'fsutil_path', 'fsutil_sha256', 'r_library_path',
     'r_library_inventory_before_sha256',
-    'r_library_inventory_after_sha256', 'tool_records', 'baseline_worktree',
+    'r_library_inventory_after_sha256', 'renv_library_root_path',
+    'r_environment_set_count', 'r_environment_set_sha256',
+    'r_environment_cleared_count', 'r_environment_cleared_sha256',
+    'rscript_invocation_count', 'project_library_check_count',
+    'project_library_path', 'project_library_absent_before',
+    'project_library_absent_after', 'calculation_log_inventory_sha256',
+    'tool_records', 'baseline_worktree',
     'captured_methods', 'verified_records', 'seed_evidence_index_sha256',
     'source_data_origin_path', 'source_data_snapshot_path',
     'source_data_origin_inventory_before_sha256',
@@ -6645,7 +7045,13 @@ $expectedCaptureHeaders = @{
     'harness_runtime_inventory_after_sha256', 'rscript_path',
     'rscript_sha256', 'fsutil_path', 'fsutil_sha256', 'r_library_path',
     'r_library_inventory_before_sha256',
-    'r_library_inventory_after_sha256', 'methods', 'stages',
+    'r_library_inventory_after_sha256', 'renv_library_root_path',
+    'r_environment_set_count', 'r_environment_set_sha256',
+    'r_environment_cleared_count', 'r_environment_cleared_sha256',
+    'rscript_invocation_count', 'project_library_check_count',
+    'project_library_records', 'project_library_absence_sha256',
+    'recalculation_log_records', 'recalculation_log_inventory_sha256',
+    'methods', 'stages',
     'bridge_capture_record_sha256', 'bridge_evidence_index_sha256',
     'bridge_manifest_sha256', 'stage5_evidence_index_sha256',
     'source_data_origin_path',
@@ -7482,9 +7888,24 @@ $oracleSchemaSha256 = Get-Issue13V5Sha256 (
 $oracleTerminal = $oracleSpec.terminal_comparison_runtime
 $expectedOracleCleared = [string[]]@(
   'LANG', 'LC_ALL', 'LC_CTYPE',
+  'RENV_ACTIVATE_PROJECT', 'RENV_AUTOLOADER_ENABLED',
+  'RENV_AUTOLOAD_ENABLED', 'RENV_CONFIG_AUTOLOADER_ENABLED',
+  'RENV_CONFIG_EXTERNAL_LIBRARIES', 'RENV_CONFIG_STARTUP_QUIET',
+  'RENV_CONFIG_SYNCHRONIZED_CHECK', 'RENV_CONFIG_USER_PROFILE',
+  'RENV_PATHS_LIBRARY_ROOT', 'RENV_PATHS_LIBRARY_ROOT_ASIS',
+  'RENV_PATHS_LOCKFILE', 'RENV_PATHS_PREFIX', 'RENV_PATHS_PREFIX_AUTO',
+  'RENV_PATHS_RENV', 'RENV_PATHS_ROOT', 'RENV_PATHS_SANDBOX',
+  'RENV_PATHS_VERSION',
+  'RENV_PROCESS_TYPE', 'RENV_PROFILE', 'RENV_PROJECT',
+  'RENV_SANDBOX_LOCKING_ENABLED', 'RENV_STARTUP_DIAGNOSTICS',
   'R_ARCH', 'R_DEFAULT_PACKAGES', 'R_ENVIRON', 'R_ENVIRON_USER', 'R_HOME',
-  'R_LIBS', 'R_LIBS_SITE', 'R_PROFILE', 'R_PROFILE_USER', 'R_STARTUP_DEBUG',
-  'RENV_CONFIG_AUTOLOADER_ENABLED', 'RENV_PATHS_LIBRARY', 'RENV_PATHS_ROOT'
+  'R_LIBS', 'R_LIBS_SITE', 'R_PROFILE', 'R_PROFILE_USER', 'R_STARTUP_DEBUG'
+)
+$expectedOracleSetNames = [string[]]@(
+  'RENV_CONFIG_AUTO_SNAPSHOT', 'RENV_CONFIG_CACHE_ENABLED',
+  'RENV_CONFIG_LOCKING_ENABLED', 'RENV_CONFIG_SANDBOX_ENABLED',
+  'RENV_CONFIG_UPDATES_CHECK', 'RENV_CONFIG_USER_ENVIRON',
+  'RENV_CONFIG_USER_LIBRARY', 'RENV_PATHS_LIBRARY', 'R_LIBS_USER', 'TZ'
 )
 $expectedOraclePackages = [string[]]@('fst', 'jsonlite', 'openssl')
 if ([string]$oracleSpec.schema -cne 'wlv-issue13-v5-oracle-effect-spec/2' -or
@@ -7517,8 +7938,26 @@ if ([string]$oracleSpec.schema -cne 'wlv-issue13-v5-oracle-effect-spec/2' -or
       [string]::Join("`n", $expectedControllerFiles) -or
     [string]$oracleTerminal.r_library_environment_variable -cne
       'R_LIBS_USER' -or
+    -not (Test-Issue13V5StaticExactProperties `
+      $oracleTerminal.r_environment_set $expectedOracleSetNames) -or
     [string]$oracleTerminal.r_environment_set.R_LIBS_USER -cne
       'configured-r-library' -or
+    [string]$oracleTerminal.r_environment_set.RENV_PATHS_LIBRARY -cne
+      'configured-renv-library-root' -or
+    [string]$oracleTerminal.r_environment_set.RENV_CONFIG_AUTO_SNAPSHOT -cne
+      'FALSE' -or
+    [string]$oracleTerminal.r_environment_set.RENV_CONFIG_CACHE_ENABLED -cne
+      'FALSE' -or
+    [string]$oracleTerminal.r_environment_set.RENV_CONFIG_LOCKING_ENABLED -cne
+      'FALSE' -or
+    [string]$oracleTerminal.r_environment_set.RENV_CONFIG_SANDBOX_ENABLED -cne
+      'FALSE' -or
+    [string]$oracleTerminal.r_environment_set.RENV_CONFIG_UPDATES_CHECK -cne
+      'FALSE' -or
+    [string]$oracleTerminal.r_environment_set.RENV_CONFIG_USER_ENVIRON -cne
+      'FALSE' -or
+    [string]$oracleTerminal.r_environment_set.RENV_CONFIG_USER_LIBRARY -cne
+      'FALSE' -or
     [string]$oracleTerminal.r_environment_set.TZ -cne 'UTC' -or
     [string]::Join("`n", @($oracleTerminal.r_environment_cleared)) -cne
       [string]::Join("`n", $expectedOracleCleared) -or
@@ -7552,9 +7991,32 @@ if ([string]$oracleSpec.schema -cne 'wlv-issue13-v5-oracle-effect-spec/2' -or
       "commit_sha256`nfile_count`ninventory_sha256`nrecords" -or
     [string]::Join("`n", @(
       $oracleSchema.'$defs'.rEnvironment.required)) -cne "set`ncleared" -or
+    -not (Test-Issue13V5StaticEnvironmentSetSchema `
+      $oracleSchema $expectedOracleSetNames) -or
+    -not (Test-Issue13V5StaticEnvironmentClearedSchema `
+      $oracleSchema $expectedOracleCleared) -or
+    -not (Test-Issue13V5StaticExactProperties `
+      $oracleSchema.'$defs'.rEnvironment.properties.set @('$ref')) -or
+    [string]$oracleSchema.'$defs'.rEnvironment.properties.set.'$ref' -cne
+      '#/$defs/environmentSet' -or
+    -not (Test-Issue13V5StaticExactProperties `
+      $oracleSchema.'$defs'.rEnvironment.properties.cleared @('$ref')) -or
+    [string]$oracleSchema.'$defs'.rEnvironment.properties.cleared.'$ref' -cne
+      '#/$defs/environmentCleared' -or
+    -not (Test-Issue13V5StaticExactProperties `
+      $oracleSchema.'$defs'.command.properties.environment_set @('$ref')) -or
+    [string]$oracleSchema.'$defs'.command.properties.environment_set.'$ref' `
+      -cne '#/$defs/environmentSet' -or
+    -not (Test-Issue13V5StaticExactProperties `
+      $oracleSchema.'$defs'.command.properties.environment_cleared @('$ref')) -or
+    [string]$oracleSchema.'$defs'.command.properties.environment_cleared.'$ref' `
+      -cne '#/$defs/environmentCleared' -or
     [string]::Join("`n", @(
       $oracleSchema.'$defs'.rLibrary.required)) -cne
-      "path`nenvironment_variable`nenvironment`nr_version`nplatform`nlib_paths`nrequired_packages`nloaded_packages`ninventory_sha256" -or
+      "path`nenvironment_variable`nenvironment`nactivation`nr_version`nplatform`nlib_paths`nrequired_packages`nloaded_packages`ninventory_sha256" -or
+    [string]::Join("`n", @(
+      $oracleSchema.'$defs'.rActivation.required)) -cne
+      "mode`nverified`nrenv_version`ncaptured_console_line_count`nrenv_library_root`nproject_inventory_sha256`nproject_library_absent_before`nproject_library_absent_after`nr_library_inventory_before_sha256`nr_library_inventory_after_sha256" -or
     [string]::Join("`n", @(
       $oracleSchema.'$defs'.comparisonWorkflow.required)) -cne
       "primary_root`nreplay_root`ngenerator_created_both_roots`nmethods`ncommands`ncomparisons" -or
@@ -7584,6 +8046,57 @@ if ([string]$oracleSpec.schema -cne 'wlv-issue13-v5-oracle-effect-spec/2' -or
     -not $oracleLibraryText.Contains('$approved.Count -eq 17') -or
     -not $oracleLibraryText.Contains(
       '$externalInventory.status -ceq ''sealed''') -or
+    -not $oracleLibraryText.Contains('@($contract.set).Count -eq 10') -or
+    -not $oracleLibraryText.Contains(
+      "RENV_CONFIG_AUTO_SNAPSHOT = 'FALSE'") -or
+    -not $oracleLibraryText.Contains(
+      "RENV_CONFIG_CACHE_ENABLED = 'FALSE'") -or
+    -not $oracleLibraryText.Contains(
+      "RENV_CONFIG_LOCKING_ENABLED = 'FALSE'") -or
+    -not $oracleLibraryText.Contains(
+      "RENV_CONFIG_SANDBOX_ENABLED = 'FALSE'") -or
+    -not $oracleLibraryText.Contains(
+      "RENV_CONFIG_UPDATES_CHECK = 'FALSE'") -or
+    -not $oracleLibraryText.Contains(
+      "RENV_CONFIG_USER_ENVIRON = 'FALSE'") -or
+    -not $oracleLibraryText.Contains(
+      "RENV_CONFIG_USER_LIBRARY = 'FALSE'") -or
+    -not $oracleLibraryText.Contains(
+      'function Get-Issue13OracleEffectRRuntime') -or
+    -not $oracleLibraryText.Contains(
+      '[Parameter(Mandatory = $true)][string]$ProjectRoot') -or
+    -not $oracleLibraryText.Contains(
+      'issue13-oracle-renv-') -or
+    -not $oracleLibraryText.Contains(
+      'source(activation, local = TRUE)') -or
+    -not $oracleLibraryText.Contains(
+      'Sys.setenv(RENV_PROJECT = project)') -or
+    -not $oracleLibraryText.Contains(
+      'Sys.getenv("RENV_PATHS_LIBRARY")') -or
+    -not $oracleLibraryText.Contains(
+      'normalizePath(.libPaths()[[1L]]') -or
+    -not $oracleLibraryText.Contains(
+      'bootstrapping renv') -or
+    -not $oracleLibraryText.Contains(
+      'project_library_absent_before') -or
+    -not $oracleLibraryText.Contains(
+      'project_library_absent_after') -or
+    -not $oracleLibraryText.Contains(
+      '$probeState.result.environment_set') -or
+    $oracleLibraryText.Contains(
+      '$probeState.result.environment_set | Sort-Object name') -or
+    -not $oracleLibraryText.Contains(
+      '@($probeState.result.environment_set) |') -or
+    $oracleLibraryText.Contains(
+      '$probeState.result.environment_cleared | Sort-Object') -or
+    $oracleLibraryText.Contains(
+      '$expectedEnvironment.cleared | Sort-Object') -or
+    -not $oracleLibraryText.Contains(
+      '$probeState.result.environment_cleared') -or
+    -not $oracleLibraryText.Contains(
+      '$rscriptIdentity.logical_path $RLibrary $oracleIdentity.repository_root') -or
+    -not $oracleLibraryText.Contains(
+      '$currentRscript.logical_path $RLibrary $RepositoryRoot') -or
     -not $oracleLibraryText.Contains('source_controller = $expectedController') -or
     -not $oracleLibraryText.Contains('runtime_immutability =') -or
     -not $oracleLibraryText.Contains(
@@ -7764,6 +8277,12 @@ foreach ($required in @(
     '$rssEvidenceInventorySha256', '$oracleValidationCommandLine',
     '$oracleSourceController', '$oracleRLibrary',
     '$oracleRuntimeImmutability',
+    '$oracleEnvironmentSet.Count -ne 10',
+    '$oracleAutoSnapshotSet.Count -ne 1',
+    '$oracleCacheSet.Count -ne 1', '$oracleLockingSet.Count -ne 1',
+    '$oracleSandboxSet.Count -ne 1', '$oracleUpdatesSet.Count -ne 1',
+    '$oracleUserEnvironSet.Count -ne 1',
+    '$oracleUserLibrarySet.Count -ne 1',
     '$oracleSourceController.file_count -ne 34L',
     "@(`$_.arguments) -cnotcontains '--vanilla'",
     '$oracleRuntimeImmutability.immutable',
@@ -7956,7 +8475,7 @@ $liveSmokeMutants = @(
 foreach ($liveSmokeMutant in $liveSmokeMutants) {
   if ($liveSmokeMutant -ceq $smokeText -or
       (Test-Issue13V5StaticLiveBaselineSmoke $liveSmokeMutant)) {
-    throw 'Live baseline smoke predicate accepted a purpose/runtime/TZ mutant.'
+    throw 'Live baseline smoke predicate accepted a purpose/runtime/R-environment mutant.'
   }
 }
 $smokeTokens = @()
@@ -8337,6 +8856,19 @@ foreach ($required in @(
     'environment_set = [object[]]$environmentBinding.environment_set',
     'environment_cleared = [object[]]$environmentBinding.environment_cleared',
     'Environment variable is duplicated case-insensitively',
+    'Assert-Issue13V5ExactPropertyNames $processDocument.environment @(',
+    "'R_LIBS_USER', 'RENV_PATHS_LIBRARY',",
+    "'RENV_CONFIG_AUTO_SNAPSHOT', 'RENV_CONFIG_CACHE_ENABLED',",
+    "'RENV_CONFIG_LOCKING_ENABLED',",
+    "'RENV_CONFIG_SANDBOX_ENABLED', 'RENV_CONFIG_UPDATES_CHECK',",
+    "'RENV_CONFIG_USER_ENVIRON', 'RENV_CONFIG_USER_LIBRARY', 'TZ'",
+    '[string]$processDocument.environment.RENV_CONFIG_AUTO_SNAPSHOT -cne',
+    '[string]$processDocument.environment.RENV_CONFIG_CACHE_ENABLED -cne',
+    '[string]$processDocument.environment.RENV_CONFIG_LOCKING_ENABLED -cne',
+    '[string]$processDocument.environment.RENV_CONFIG_SANDBOX_ENABLED -cne',
+    '[string]$processDocument.environment.RENV_CONFIG_UPDATES_CHECK -cne',
+    '[string]$processDocument.environment.RENV_CONFIG_USER_ENVIRON -cne',
+    '[string]$processDocument.environment.RENV_CONFIG_USER_LIBRARY -cne',
     'Get-Issue13V5ConfiguredPaths', 'Test-Issue13V5LegacyPath',
     'Get-Issue13V5SourceBinding', 'Get-Issue13V5SourceContractSha256',
     'Assert-Issue13V5SourceContractBindings', 'candidate_source_origin',

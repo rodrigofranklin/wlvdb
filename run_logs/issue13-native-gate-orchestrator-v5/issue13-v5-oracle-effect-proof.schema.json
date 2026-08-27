@@ -276,37 +276,154 @@
         }
       }
     },
-    "environmentSetRecord": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["name", "value"],
-      "properties": {
-        "name": {"enum": ["R_LIBS_USER", "TZ"]},
-        "value": {"type": "string", "minLength": 1}
-      }
+    "environmentSet": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "prefixItems": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "RENV_CONFIG_AUTO_SNAPSHOT"},
+            "value": {"const": "FALSE"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "RENV_CONFIG_CACHE_ENABLED"},
+            "value": {"const": "FALSE"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "RENV_CONFIG_LOCKING_ENABLED"},
+            "value": {"const": "FALSE"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "RENV_CONFIG_SANDBOX_ENABLED"},
+            "value": {"const": "FALSE"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "RENV_CONFIG_UPDATES_CHECK"},
+            "value": {"const": "FALSE"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "RENV_CONFIG_USER_ENVIRON"},
+            "value": {"const": "FALSE"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "RENV_CONFIG_USER_LIBRARY"},
+            "value": {"const": "FALSE"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "RENV_PATHS_LIBRARY"},
+            "value": {"$ref": "#/$defs/path"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "R_LIBS_USER"},
+            "value": {"$ref": "#/$defs/path"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "TZ"},
+            "value": {"const": "UTC"}
+          }
+        }
+      ],
+      "items": false
+    },
+    "environmentCleared": {
+      "type": "array",
+      "minItems": 35,
+      "maxItems": 35,
+      "prefixItems": [
+        {"const": "LANG"},
+        {"const": "LC_ALL"},
+        {"const": "LC_CTYPE"},
+        {"const": "RENV_ACTIVATE_PROJECT"},
+        {"const": "RENV_AUTOLOADER_ENABLED"},
+        {"const": "RENV_AUTOLOAD_ENABLED"},
+        {"const": "RENV_CONFIG_AUTOLOADER_ENABLED"},
+        {"const": "RENV_CONFIG_EXTERNAL_LIBRARIES"},
+        {"const": "RENV_CONFIG_STARTUP_QUIET"},
+        {"const": "RENV_CONFIG_SYNCHRONIZED_CHECK"},
+        {"const": "RENV_CONFIG_USER_PROFILE"},
+        {"const": "RENV_PATHS_LIBRARY_ROOT"},
+        {"const": "RENV_PATHS_LIBRARY_ROOT_ASIS"},
+        {"const": "RENV_PATHS_LOCKFILE"},
+        {"const": "RENV_PATHS_PREFIX"},
+        {"const": "RENV_PATHS_PREFIX_AUTO"},
+        {"const": "RENV_PATHS_RENV"},
+        {"const": "RENV_PATHS_ROOT"},
+        {"const": "RENV_PATHS_SANDBOX"},
+        {"const": "RENV_PATHS_VERSION"},
+        {"const": "RENV_PROCESS_TYPE"},
+        {"const": "RENV_PROFILE"},
+        {"const": "RENV_PROJECT"},
+        {"const": "RENV_SANDBOX_LOCKING_ENABLED"},
+        {"const": "RENV_STARTUP_DIAGNOSTICS"},
+        {"const": "R_ARCH"},
+        {"const": "R_DEFAULT_PACKAGES"},
+        {"const": "R_ENVIRON"},
+        {"const": "R_ENVIRON_USER"},
+        {"const": "R_HOME"},
+        {"const": "R_LIBS"},
+        {"const": "R_LIBS_SITE"},
+        {"const": "R_PROFILE"},
+        {"const": "R_PROFILE_USER"},
+        {"const": "R_STARTUP_DEBUG"}
+      ],
+      "items": false
     },
     "rEnvironment": {
       "type": "object",
       "additionalProperties": false,
       "required": ["set", "cleared"],
       "properties": {
-        "set": {
-          "type": "array", "minItems": 2, "maxItems": 2,
-          "items": {"$ref": "#/$defs/environmentSetRecord"}
-        },
-        "cleared": {
-          "type": "array", "minItems": 16, "maxItems": 16,
-          "uniqueItems": true,
-          "items": {
-            "enum": [
-              "LANG", "LC_ALL", "LC_CTYPE", "R_ARCH", "R_DEFAULT_PACKAGES",
-              "R_ENVIRON", "R_ENVIRON_USER", "R_HOME", "R_LIBS", "R_LIBS_SITE",
-              "R_PROFILE", "R_PROFILE_USER", "R_STARTUP_DEBUG",
-              "RENV_CONFIG_AUTOLOADER_ENABLED", "RENV_PATHS_LIBRARY",
-              "RENV_PATHS_ROOT"
-            ]
-          }
-        }
+        "set": {"$ref": "#/$defs/environmentSet"},
+        "cleared": {"$ref": "#/$defs/environmentCleared"}
       }
     },
     "rPackage": {
@@ -326,17 +443,42 @@
         "inventory_sha256": {"$ref": "#/$defs/sha256"}
       }
     },
+    "rActivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode", "verified", "renv_version", "captured_console_line_count",
+        "renv_library_root", "project_inventory_sha256",
+        "project_library_absent_before", "project_library_absent_after",
+        "r_library_inventory_before_sha256",
+        "r_library_inventory_after_sha256"
+      ],
+      "properties": {
+        "mode": {"const": "isolated-project-copy"},
+        "verified": {"const": true},
+        "renv_version": {"const": "1.2.4"},
+        "captured_console_line_count": {"type": "integer", "minimum": 0},
+        "renv_library_root": {"$ref": "#/$defs/path"},
+        "project_inventory_sha256": {"$ref": "#/$defs/sha256"},
+        "project_library_absent_before": {"const": true},
+        "project_library_absent_after": {"const": true},
+        "r_library_inventory_before_sha256": {"$ref": "#/$defs/sha256"},
+        "r_library_inventory_after_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
     "rLibrary": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "path", "environment_variable", "environment", "r_version", "platform",
+        "path", "environment_variable", "environment", "activation",
+        "r_version", "platform",
         "lib_paths", "required_packages", "loaded_packages", "inventory_sha256"
       ],
       "properties": {
         "path": {"$ref": "#/$defs/path"},
         "environment_variable": {"const": "R_LIBS_USER"},
         "environment": {"$ref": "#/$defs/rEnvironment"},
+        "activation": {"$ref": "#/$defs/rActivation"},
         "r_version": {"type": "string", "minLength": 1},
         "platform": {"type": "string", "minLength": 1},
         "lib_paths": {
@@ -484,23 +626,8 @@
         },
         "working_directory": {"$ref": "#/$defs/path"},
         "r_library_environment": {"$ref": "#/$defs/commandEnvironment"},
-        "environment_set": {
-          "type": "array", "minItems": 2, "maxItems": 2,
-          "items": {"$ref": "#/$defs/environmentSetRecord"}
-        },
-        "environment_cleared": {
-          "type": "array", "minItems": 16, "maxItems": 16,
-          "uniqueItems": true,
-          "items": {
-            "enum": [
-              "LANG", "LC_ALL", "LC_CTYPE", "R_ARCH", "R_DEFAULT_PACKAGES",
-              "R_ENVIRON", "R_ENVIRON_USER", "R_HOME", "R_LIBS", "R_LIBS_SITE",
-              "R_PROFILE", "R_PROFILE_USER", "R_STARTUP_DEBUG",
-              "RENV_CONFIG_AUTOLOADER_ENABLED", "RENV_PATHS_LIBRARY",
-              "RENV_PATHS_ROOT"
-            ]
-          }
-        },
+        "environment_set": {"$ref": "#/$defs/environmentSet"},
+        "environment_cleared": {"$ref": "#/$defs/environmentCleared"},
         "output_directory": {"$ref": "#/$defs/path"},
         "command_sha256": {"$ref": "#/$defs/sha256"},
         "exit_code": {"const": 0}

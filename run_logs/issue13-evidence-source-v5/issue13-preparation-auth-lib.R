@@ -310,8 +310,26 @@ wlv_gate_prep_authenticate_metrics <- function(
         as.integer(process$expected_worker_processes)
       ) &&
       identical(as.integer(process$expected_worker_processes), 0L) &&
-      identical(names(process$environment), "R_LIBS_USER") &&
-      wlv_gate_prep_same_path(process$environment$R_LIBS_USER, r_library),
+      identical(names(process$environment), c(
+        "R_LIBS_USER", "RENV_PATHS_LIBRARY",
+        "RENV_CONFIG_AUTO_SNAPSHOT", "RENV_CONFIG_CACHE_ENABLED",
+        "RENV_CONFIG_LOCKING_ENABLED",
+        "RENV_CONFIG_SANDBOX_ENABLED", "RENV_CONFIG_UPDATES_CHECK",
+        "RENV_CONFIG_USER_ENVIRON", "RENV_CONFIG_USER_LIBRARY", "TZ"
+      )) &&
+      wlv_gate_prep_same_path(process$environment$R_LIBS_USER, r_library) &&
+      wlv_gate_prep_same_path(
+        process$environment$RENV_PATHS_LIBRARY,
+        wlv13_renv_library_root(r_library)
+      ) &&
+      identical(process$environment$RENV_CONFIG_AUTO_SNAPSHOT, "FALSE") &&
+      identical(process$environment$RENV_CONFIG_CACHE_ENABLED, "FALSE") &&
+      identical(process$environment$RENV_CONFIG_LOCKING_ENABLED, "FALSE") &&
+      identical(process$environment$RENV_CONFIG_SANDBOX_ENABLED, "FALSE") &&
+      identical(process$environment$RENV_CONFIG_UPDATES_CHECK, "FALSE") &&
+      identical(process$environment$RENV_CONFIG_USER_ENVIRON, "FALSE") &&
+      identical(process$environment$RENV_CONFIG_USER_LIBRARY, "FALSE") &&
+      identical(process$environment$TZ, "UTC"),
     sprintf("Process binding failed for `%s`.", id)
   )
   wlv_gate_prep_require(
