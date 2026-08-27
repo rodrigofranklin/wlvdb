@@ -128,10 +128,10 @@
     ],
     "required_r_packages": ["fst", "jsonlite", "openssl"],
     "sealed_inventory": {
-      "status": "requires-terminal-reseal",
-      "file_count": 39,
-      "total_bytes": 594386,
-      "inventory_sha256": "9f50c978ffc5f1f2d69d70ca8e5a7205eca39ec8441843cd5fa43b959eaf03c1"
+      "status": "sealed",
+      "file_count": 47,
+      "total_bytes": 1633783,
+      "inventory_sha256": "a81a648367cd4f97fc463d73ab49502a84d0b5c58ee23f0c43e8ba9346739940"
     },
     "required_controller_files": [
       "README.md",

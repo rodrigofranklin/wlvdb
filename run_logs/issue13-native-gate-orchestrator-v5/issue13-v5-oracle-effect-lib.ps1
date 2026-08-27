@@ -2355,9 +2355,7 @@ function Test-Issue13OracleEffectSpec {
       $script:Issue13OracleEffectRscriptSha256
   ) 'terminal Rscript stable contract differs.'
   Assert-Issue13OracleEffect (
-    [string]$terminal.sealed_inventory.status -cin @(
-      'requires-terminal-reseal', 'sealed'
-    ) -and
+    [string]$terminal.sealed_inventory.status -ceq 'sealed' -and
     [int64]$terminal.sealed_inventory.file_count -gt 0 -and
     [int64]$terminal.sealed_inventory.total_bytes -gt 0 -and
     [string]$terminal.sealed_inventory.inventory_sha256 -cmatch `

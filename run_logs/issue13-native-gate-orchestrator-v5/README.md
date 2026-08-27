@@ -295,17 +295,14 @@ como nos exemplos com `& $pwsh -NoProfile -File`. Não invoque dois entrypoints
 no mesmo host: os tipos nativos compilados ficam no AppDomain, e uma segunda
 entrada é recusada de forma fail-closed como estado herdado.
 
-O selo incorporado neste freeze ainda é deliberadamente provisório:
-`39` arquivos, `594386` bytes e inventário SHA-256
-`9f50c978ffc5f1f2d69d70ca8e5a7205eca39ec8441843cd5fa43b959eaf03c1`.
-O spec do Oracle registra `status = requires-terminal-reseal`; esses números
-não são resultado final nem tornam o runtime elegível. Um dry-run terminal deve
-recalcular contagem, bytes e hash, atualizar todos os pins e trocar o status
-para `sealed` antes da prova Oracle e do gate longo. Até lá, o gerador e o
-validador do Oracle recusam a prova. Depois do reseal, o output continuará
-exigindo um único diretório plano `issue13-evidence-harness`, sem subdiretório
-oculto; o manifesto nunca é autoridade isolada, pois cada validador recompõe o
-inventário físico contra o selo incorporado.
+O selo terminal foi derivado de uma staging write-once materializada dos blobs
+autenticados do candidato: `47` arquivos, `1633783` bytes e inventário SHA-256
+`a81a648367cd4f97fc463d73ab49502a84d0b5c58ee23f0c43e8ba9346739940`.
+O spec do Oracle registra `status = sealed`; gerador e validador exigem essa
+tripla exata antes da prova Oracle e do gate longo. O output continua exigindo
+um único diretório plano `issue13-evidence-harness`, sem subdiretório oculto; o
+manifesto nunca é autoridade isolada, pois cada validador recompõe o inventário
+físico contra o selo incorporado.
 
 Gere o índice do oráculo compatível:
 

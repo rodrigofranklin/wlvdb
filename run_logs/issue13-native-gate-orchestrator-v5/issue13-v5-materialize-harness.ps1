@@ -485,10 +485,10 @@ $sourceToolingFiles = @(
   'issue13-preparation-rule-matrix.json',
   'issue13-runtime-loader-selftest.R'
 )
-$expectedOutputFileCount = 39L
-$expectedOutputTotalBytes = 594386L
+$expectedOutputFileCount = 47L
+$expectedOutputTotalBytes = 1633783L
 $expectedOutputInventory =
-  '9f50c978ffc5f1f2d69d70ca8e5a7205eca39ec8441843cd5fa43b959eaf03c1'
+  'a81a648367cd4f97fc463d73ab49502a84d0b5c58ee23f0c43e8ba9346739940'
 $controllerFiles = @(
   'README.md',
   'issue13-v5-aggregate-hardening.R',

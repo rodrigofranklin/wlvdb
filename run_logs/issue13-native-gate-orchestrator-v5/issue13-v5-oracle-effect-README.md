@@ -106,10 +106,10 @@ Runtimes com basename contendo `v5c5` ou `v5c6`, manifests com o campo antigo
 A prova armazena o commit esperado, o hash do manifest, os três inventários e
 o inventário físico completo instalado.
 
-No freeze de infraestrutura, o fixture provisório continua marcado
-`status = "requires-terminal-reseal"` (`39 / 594386 / 9f50c978…03c1`). Gerador
-e validador recusam produzir/adotar proof enquanto o dry-run terminal não
-substituir, no spec, esse status por `sealed` e atualizar os três pins.
+O fixture terminal está marcado `status = "sealed"` e fixa a tripla física
+`47 / 1633783 / a81a6483…9940`, derivada de uma staging write-once. Gerador e
+validador recusam produzir ou adotar proof se status, contagem, bytes ou hash
+divergirem desse selo.
 
 ## Comparações criadas pelo gerador
 
