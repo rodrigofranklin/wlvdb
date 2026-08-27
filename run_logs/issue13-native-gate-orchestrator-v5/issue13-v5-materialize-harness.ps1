@@ -6,6 +6,431 @@ param(
   [switch]$ConfirmMaterialize
 )
 
+$issue13V5CommandCollisionGuard = {
+  param([Management.Automation.Language.ScriptBlockAst]$Ast)
+  $runtimeRoot =
+    'C:\Users\rodri\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\powershell'
+  $moduleRoot = [IO.Path]::Combine($runtimeRoot, 'Modules')
+  $expectedProcessPath = [IO.Path]::Combine($runtimeRoot, 'pwsh.exe')
+  if (-not [string]::Equals(
+      [IO.Path]::GetFullPath([Environment]::ProcessPath),
+      $expectedProcessPath, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'V5 command bootstrap requires the sealed pwsh host.'
+  }
+
+  $trustedRuntimeFiles =
+    [Collections.Generic.Dictionary[string, object]]::new(
+      [StringComparer]::OrdinalIgnoreCase)
+  foreach ($record in [object[]]@(
+      [pscustomobject]@{
+        relative_path = 'pwsh.exe'
+        size_bytes = 301368L
+        sha256 =
+          'DB6DD81183FE57D22E03B911EC9A30A2FD7C40542E97743615355A6FB44F458F'
+      },
+      [pscustomobject]@{
+        relative_path = 'System.Management.Automation.dll'
+        size_bytes = 19597112L
+        sha256 =
+          '5AD53C0024367C81A9BEBA1FCEF3288DCF6A34966E4AB8CF8A31603A8358B317'
+      },
+      [pscustomobject]@{
+        relative_path = 'Microsoft.PowerShell.Commands.Management.dll'
+        size_bytes = 1124192L
+        sha256 =
+          '51120F70291FD7CE7FD96076FD043F9BFC8807C7B8590B18EAA7118D38457F60'
+      },
+      [pscustomobject]@{
+        relative_path = 'Microsoft.PowerShell.Commands.Utility.dll'
+        size_bytes = 1652576L
+        sha256 =
+          '34533CC9A47EB3F070ACA476ED77EE68A470F2749B3D1FC027C3FD991EB6EAD5'
+      },
+      [pscustomobject]@{
+        relative_path = 'Microsoft.Management.Infrastructure.CimCmdlets.dll'
+        size_bytes = 493368L
+        sha256 =
+          '7CE68B9940FD22D785C9AA702903063CB135BAD3AB56B53590B603C72AB9BF94'
+      },
+      [pscustomobject]@{
+        relative_path = 'microsoft.management.infrastructure.dll'
+        size_bytes = 309112L
+        sha256 =
+          'E997C2216F1D72CB1B483A812F80BE940A4D9643E3F6F8EA1258632EE5E1EC1C'
+      },
+      [pscustomobject]@{
+        relative_path = 'microsoft.management.infrastructure.native.dll'
+        size_bytes = 362320L
+        sha256 =
+          '3C86966B8C64ECE8E45C2CC87DAF528AE3651EE101EB08E42B98460CBCF995D9'
+      },
+      [pscustomobject]@{
+        relative_path =
+          'microsoft.management.infrastructure.native.unmanaged.dll'
+        size_bytes = 28192L
+        sha256 =
+          '9BEE4E35576355156F00E2E47EF57AA2C8CA64390C112F083A772F2219026293'
+      },
+      [pscustomobject]@{
+        relative_path =
+          'Modules\Microsoft.PowerShell.Management\Microsoft.PowerShell.Management.psd1'
+        size_bytes = 16100L
+        sha256 =
+          '9AF88C06CDC43CFB8DFFA2A07A40A92A7A2EEC015067DB0B37461614A73B74E1'
+      },
+      [pscustomobject]@{
+        relative_path =
+          'Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1'
+        size_bytes = 16874L
+        sha256 =
+          '7C7A4982CA9C2FFD7FA5FF4ED5E65136A3B967988F9325A6F4DEFC02F887534F'
+      },
+      [pscustomobject]@{
+        relative_path = 'Modules\CimCmdlets\CimCmdlets.psd1'
+        size_bytes = 15295L
+        sha256 =
+          '35F52D09846EC3088DC1B4B976B62EA4209865A84E1DA47A3CD9637FFEB9BF7D'
+      })) {
+    $path = [IO.Path]::GetFullPath(
+      [IO.Path]::Combine($runtimeRoot, [string]$record.relative_path))
+    if (-not $path.StartsWith(
+        $runtimeRoot + [IO.Path]::DirectorySeparatorChar,
+        [StringComparison]::OrdinalIgnoreCase) -or
+        $trustedRuntimeFiles.ContainsKey($path)) {
+      throw 'V5 trusted runtime file allowlist escaped or duplicated.'
+    }
+    $trustedRuntimeFiles.Add($path, $record)
+  }
+  if ($trustedRuntimeFiles.Count -ne 11) {
+    throw 'V5 trusted runtime file allowlist is not exact.'
+  }
+
+  $cursor = [IO.DirectoryInfo]::new($runtimeRoot)
+  while ($null -ne $cursor) {
+    if (($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+      throw 'V5 trusted runtime has a reparse ancestor.'
+    }
+    $cursor = $cursor.Parent
+  }
+  $runtimeFileLeases = [Collections.Generic.List[IO.FileStream]]::new()
+  try {
+    foreach ($path in $trustedRuntimeFiles.Keys) {
+      $fileCursor = [IO.DirectoryInfo]::new([IO.Path]::GetDirectoryName($path))
+      while ($null -ne $fileCursor -and $fileCursor.FullName.StartsWith(
+          $runtimeRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        if (($fileCursor.Attributes -band
+            [IO.FileAttributes]::ReparsePoint) -ne 0) {
+          throw 'V5 trusted runtime file has a reparse ancestor.'
+        }
+        $fileCursor = $fileCursor.Parent
+      }
+      $file = [IO.FileInfo]::new($path)
+      if (($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw 'V5 trusted runtime file is a reparse point.'
+      }
+      $stream = $null
+      $algorithm = $null
+      try {
+        $stream = [IO.File]::Open(
+          $path, [IO.FileMode]::Open, [IO.FileAccess]::Read,
+          [IO.FileShare]::Read)
+        $algorithm = [Security.Cryptography.SHA256]::Create()
+        $digest = [Convert]::ToHexString($algorithm.ComputeHash($stream))
+        $spec = $trustedRuntimeFiles[$path]
+        if ($stream.Length -ne [long]$spec.size_bytes -or
+            $digest -cne [string]$spec.sha256) {
+          throw 'V5 trusted runtime file identity changed.'
+        }
+        $runtimeFileLeases.Add($stream)
+        $stream = $null
+      } finally {
+        if ($null -ne $algorithm) { $algorithm.Dispose() }
+        if ($null -ne $stream) { $stream.Dispose() }
+      }
+    }
+  } catch {
+    foreach ($lease in $runtimeFileLeases) { $lease.Dispose() }
+    throw
+  }
+  if ($runtimeFileLeases.Count -ne 11) {
+    foreach ($lease in $runtimeFileLeases) { $lease.Dispose() }
+    $runtimeFileLeases.Clear()
+    throw 'V5 bootstrap did not retain all eleven runtime file leases.'
+  }
+  $leaseSets = [AppDomain]::CurrentDomain.GetData(
+    'wlv.issue13.v5.powershell.runtime.leases')
+  if ($leaseSets -isnot [Collections.Generic.List[object]]) {
+    $leaseSets = [Collections.Generic.List[object]]::new()
+  }
+  $leaseSets.Add($runtimeFileLeases)
+  [AppDomain]::CurrentDomain.SetData(
+    'wlv.issue13.v5.powershell.runtime.leases', $leaseSets)
+
+  [Environment]::SetEnvironmentVariable(
+    'PSModulePath', $moduleRoot, [EnvironmentVariableTarget]::Process)
+  $global:PSModuleAutoLoadingPreference = 'None'
+
+  $trustedCmdletAssemblies =
+    [Collections.Generic.Dictionary[string, object]]::new(
+      [StringComparer]::OrdinalIgnoreCase)
+  $trustedCmdletAssemblies.Add(
+    [IO.Path]::Combine($runtimeRoot, 'System.Management.Automation.dll'),
+    [pscustomobject]@{
+      full_name =
+        'System.Management.Automation, Version=7.6.0.500, Culture=neutral, PublicKeyToken=31bf3856ad364e35'
+      module_version_id = '7071448b-dbd2-48c8-9dff-f288a19a62d2'
+    })
+  $trustedCmdletAssemblies.Add(
+    [IO.Path]::Combine(
+      $runtimeRoot, 'Microsoft.PowerShell.Commands.Management.dll'),
+    [pscustomobject]@{
+      full_name =
+        'Microsoft.PowerShell.Commands.Management, Version=7.6.0.500, Culture=neutral, PublicKeyToken=31bf3856ad364e35'
+      module_version_id = '4c155aeb-1e5e-4023-8c7f-214e199b9530'
+    })
+  $trustedCmdletAssemblies.Add(
+    [IO.Path]::Combine(
+      $runtimeRoot, 'Microsoft.PowerShell.Commands.Utility.dll'),
+    [pscustomobject]@{
+      full_name =
+        'Microsoft.PowerShell.Commands.Utility, Version=7.6.0.500, Culture=neutral, PublicKeyToken=31bf3856ad364e35'
+      module_version_id = '99be7828-14d8-415d-ae6e-3f0185e7ef9f'
+    })
+  $trustedCmdletAssemblies.Add(
+    [IO.Path]::Combine(
+      $runtimeRoot, 'Microsoft.Management.Infrastructure.CimCmdlets.dll'),
+    [pscustomobject]@{
+      full_name =
+        'Microsoft.Management.Infrastructure.CimCmdlets, Version=7.6.0.500, Culture=neutral, PublicKeyToken=31bf3856ad364e35'
+      module_version_id = '3af4a3ba-947a-4e39-9400-da8fae0c56de'
+    })
+  if ($trustedCmdletAssemblies.Count -ne 4) {
+    throw 'V5 trusted cmdlet assembly allowlist is not exact.'
+  }
+
+  $importModuleCandidates = [object[]](
+    $ExecutionContext.InvokeCommand.GetCommands(
+      'Import-Module', [Management.Automation.CommandTypes]::Cmdlet, $true))
+  if ($importModuleCandidates.Count -ne 1) {
+    throw 'V5 bootstrap Import-Module cmdlet is not singular.'
+  }
+  $importModuleCmdlet = $importModuleCandidates[0]
+  $importAssembly = $importModuleCmdlet.ImplementingType.Assembly
+  $importAssemblyPath = [IO.Path]::GetFullPath(
+    [string]$importAssembly.Location)
+  $importAssemblySpec = $trustedCmdletAssemblies[$importAssemblyPath]
+  if ([string]$importModuleCmdlet.CommandType -cne 'Cmdlet' -or
+      [string]$importModuleCmdlet.ModuleName -cne 'Microsoft.PowerShell.Core' -or
+      [string]$importModuleCmdlet.Source -cne 'Microsoft.PowerShell.Core' -or
+      [string]$importModuleCmdlet.ImplementingType.FullName -cne
+        'Microsoft.PowerShell.Commands.ImportModuleCommand' -or
+      $importAssemblyPath -cne
+        [IO.Path]::Combine($runtimeRoot, 'System.Management.Automation.dll') -or
+      [string]$importAssembly.FullName -cne [string]$importAssemblySpec.full_name -or
+      $importAssembly.ManifestModule.ModuleVersionId.ToString('D') -cne
+        [string]$importAssemblySpec.module_version_id) {
+    throw 'V5 bootstrap Import-Module cmdlet identity changed.'
+  }
+  foreach ($kind in [Management.Automation.CommandTypes[]]@(
+      [Management.Automation.CommandTypes]::Alias,
+      [Management.Automation.CommandTypes]::Function,
+      [Management.Automation.CommandTypes]::Filter,
+      [Management.Automation.CommandTypes]::Application,
+      [Management.Automation.CommandTypes]::ExternalScript)) {
+    if (([object[]]($ExecutionContext.InvokeCommand.GetCommands(
+        'Import-Module', $kind, $true))).Count -ne 0) {
+      throw 'V5 bootstrap Import-Module has a competing command.'
+    }
+  }
+  foreach ($manifest in [string[]]@(
+      [IO.Path]::Combine(
+        $moduleRoot,
+        'Microsoft.PowerShell.Management\Microsoft.PowerShell.Management.psd1'),
+      [IO.Path]::Combine(
+        $moduleRoot,
+        'Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1'),
+      [IO.Path]::Combine($moduleRoot, 'CimCmdlets\CimCmdlets.psd1'))) {
+    $null = & $importModuleCmdlet -Name $manifest -Global -Force -ErrorAction Stop
+  }
+  $global:PSModuleAutoLoadingPreference = 'None'
+
+  $cmdletGroups =
+    [Collections.Generic.Dictionary[string, object]]::new(
+      [StringComparer]::Ordinal)
+  $cmdletGroups.Add('core', [pscustomobject]@{
+      module_name = 'Microsoft.PowerShell.Core'
+      source = 'Microsoft.PowerShell.Core'
+      module_path = ''
+      version = '7.6.0.500'
+      module_guid = ''
+      assembly_path =
+        [IO.Path]::Combine($runtimeRoot, 'System.Management.Automation.dll')
+      commands = [string[]]@(
+        'ForEach-Object', 'Out-Null', 'Set-StrictMode', 'Where-Object')
+    })
+  $cmdletGroups.Add('management', [pscustomobject]@{
+      module_name = 'Microsoft.PowerShell.Management'
+      source = 'Microsoft.PowerShell.Management'
+      module_path = [IO.Path]::Combine(
+        $moduleRoot,
+        'Microsoft.PowerShell.Management\Microsoft.PowerShell.Management.psd1')
+      version = '7.0.0.0'
+      module_guid = 'eefcb906-b326-4e99-9f54-8b4bb6ef3c6d'
+      assembly_path = [IO.Path]::Combine(
+        $runtimeRoot, 'Microsoft.PowerShell.Commands.Management.dll')
+      commands = [string[]]@(
+        'Copy-Item', 'Get-ChildItem', 'Get-Content', 'Get-Item',
+        'Get-Location', 'Get-Process', 'Join-Path', 'Move-Item', 'New-Item',
+        'Remove-Item', 'Resolve-Path', 'Set-Content', 'Set-Item',
+        'Set-Location', 'Split-Path', 'Start-Process', 'Stop-Process',
+        'Test-Path')
+    })
+  $cmdletGroups.Add('utility', [pscustomobject]@{
+      module_name = 'Microsoft.PowerShell.Utility'
+      source = 'Microsoft.PowerShell.Utility'
+      module_path = [IO.Path]::Combine(
+        $moduleRoot,
+        'Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1')
+      version = '7.0.0.0'
+      module_guid = '1da87e53-152b-403e-98dc-74d7b4d63d59'
+      assembly_path = [IO.Path]::Combine(
+        $runtimeRoot, 'Microsoft.PowerShell.Commands.Utility.dll')
+      commands = [string[]]@(
+        'Add-Member', 'Add-Type', 'Compare-Object', 'ConvertFrom-Json',
+        'ConvertTo-Json', 'Format-List', 'Get-FileHash', 'Get-Variable',
+        'Group-Object', 'Import-Csv', 'Invoke-Expression', 'Measure-Object',
+        'New-Object', 'New-Variable', 'Select-Object', 'Set-Variable',
+        'Sort-Object', 'Start-Sleep', 'Test-Json', 'Write-Error',
+        'Write-Output')
+    })
+  $cmdletGroups.Add('cim', [pscustomobject]@{
+      module_name = 'CimCmdlets'
+      source = 'CimCmdlets'
+      module_path = [IO.Path]::Combine(
+        $runtimeRoot, 'Microsoft.Management.Infrastructure.CimCmdlets.dll')
+      version = '7.0.0.0'
+      module_guid = 'fb6cc51d-c096-4b38-b78d-0fed6277096a'
+      assembly_path = [IO.Path]::Combine(
+        $runtimeRoot, 'Microsoft.Management.Infrastructure.CimCmdlets.dll')
+      commands = [string[]]@('Get-CimInstance')
+    })
+
+  $trustedCmdlets =
+    [Collections.Generic.Dictionary[string, object]]::new(
+      [StringComparer]::OrdinalIgnoreCase)
+  foreach ($group in $cmdletGroups.Values) {
+    foreach ($commandName in $group.commands) {
+      if ($trustedCmdlets.ContainsKey($commandName)) {
+        throw 'V5 trusted cmdlet allowlist contains a duplicate.'
+      }
+      $trustedCmdlets.Add($commandName, $group)
+    }
+  }
+  if ($cmdletGroups.Count -ne 4 -or $trustedCmdlets.Count -ne 44) {
+    throw 'V5 trusted cmdlet allowlist is not exact.'
+  }
+
+  $resolvedTrustedCmdlets =
+    [Collections.Generic.Dictionary[string, object]]::new(
+      [StringComparer]::OrdinalIgnoreCase)
+  foreach ($commandName in $trustedCmdlets.Keys) {
+    $candidates = [object[]](
+      $ExecutionContext.InvokeCommand.GetCommands(
+        $commandName, [Management.Automation.CommandTypes]::Cmdlet, $true))
+    if ($candidates.Count -ne 1) {
+      throw "V5 trusted cmdlet is not singular: $commandName"
+    }
+    $cmdlet = $candidates[0]
+    $group = $trustedCmdlets[$commandName]
+    $modulePath = if ($null -eq $cmdlet.Module) { '' } else {
+      [IO.Path]::GetFullPath([string]$cmdlet.Module.Path)
+    }
+    $moduleGuid = if ($null -eq $cmdlet.Module) { '' } else {
+      $cmdlet.Module.Guid.ToString('D')
+    }
+    $assembly = $cmdlet.ImplementingType.Assembly
+    $assemblyPath = [IO.Path]::GetFullPath([string]$assembly.Location)
+    $assemblySpec = if ($trustedCmdletAssemblies.ContainsKey($assemblyPath)) {
+      $trustedCmdletAssemblies[$assemblyPath]
+    } else { $null }
+    $attributes = [object[]]$cmdlet.ImplementingType.GetCustomAttributes(
+      [Management.Automation.CmdletAttribute], $false)
+    $declaredName = if ($attributes.Count -eq 1) {
+      [string]$attributes[0].VerbName + '-' + [string]$attributes[0].NounName
+    } else { '' }
+    if ([string]$cmdlet.CommandType -cne 'Cmdlet' -or
+        [string]$cmdlet.Name -cne $commandName -or
+        [string]$cmdlet.ModuleName -cne [string]$group.module_name -or
+        [string]$cmdlet.Source -cne [string]$group.source -or
+        -not [string]::Equals(
+          $modulePath, [string]$group.module_path,
+          [StringComparison]::OrdinalIgnoreCase) -or
+        [string]$cmdlet.Version -cne [string]$group.version -or
+        $moduleGuid -cne [string]$group.module_guid -or
+        -not [string]::Equals(
+          $assemblyPath, [string]$group.assembly_path,
+          [StringComparison]::OrdinalIgnoreCase) -or
+        $null -eq $assemblySpec -or
+        [string]$assembly.FullName -cne [string]$assemblySpec.full_name -or
+        $assembly.ManifestModule.ModuleVersionId.ToString('D') -cne
+          [string]$assemblySpec.module_version_id -or
+        $declaredName -cne $commandName) {
+      throw "V5 trusted cmdlet identity changed: $commandName"
+    }
+    $resolvedTrustedCmdlets.Add($commandName, $cmdlet)
+  }
+
+  $names = [Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::OrdinalIgnoreCase)
+  $collisions = [Collections.Generic.List[string]]::new()
+  $commandAsts = [object[]]$Ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.CommandAst]
+    }, $true)
+  foreach ($commandAst in $commandAsts) {
+    $name = $commandAst.GetCommandName()
+    if ([string]::IsNullOrWhiteSpace($name) -or -not $names.Add($name)) {
+      continue
+    }
+    foreach ($kind in [Management.Automation.CommandTypes[]]@(
+        [Management.Automation.CommandTypes]::Alias,
+        [Management.Automation.CommandTypes]::Function,
+        [Management.Automation.CommandTypes]::Filter,
+        [Management.Automation.CommandTypes]::Application,
+        [Management.Automation.CommandTypes]::ExternalScript)) {
+      foreach ($collision in [object[]](
+          $ExecutionContext.InvokeCommand.GetCommands($name, $kind, $true))) {
+        $collisions.Add(([string]$kind + ':' + $name))
+      }
+    }
+    $cmdlets = [object[]](
+      $ExecutionContext.InvokeCommand.GetCommands(
+        $name, [Management.Automation.CommandTypes]::Cmdlet, $true))
+    if ($trustedCmdlets.ContainsKey($name)) {
+      if ($cmdlets.Count -ne 1 -or
+          $cmdlets[0].ImplementingType -ne
+            $resolvedTrustedCmdlets[$name].ImplementingType) {
+        $collisions.Add('Cmdlet:' + $name)
+      }
+    } elseif ($cmdlets.Count -ne 0) {
+      $collisions.Add('Cmdlet:' + $name)
+    }
+  }
+  if ($collisions.Count -ne 0) {
+    throw ('V5 command collision bootstrap rejected inherited commands: ' +
+      [string]::Join(', ', [string[]]$collisions.ToArray()))
+  }
+  if ([string][Environment]::GetEnvironmentVariable(
+      'PSModulePath', [EnvironmentVariableTarget]::Process) -cne $moduleRoot -or
+      [string]$global:PSModuleAutoLoadingPreference -cne 'None') {
+    throw 'V5 command bootstrap did not retain its closed module resolver.'
+  }
+}
+& $issue13V5CommandCollisionGuard $MyInvocation.MyCommand.ScriptBlock.Ast
+
+. ([IO.Path]::Combine($PSScriptRoot, 'issue13-v5-coordinator-lib.ps1'))
+$null = Assert-Issue13V5CurrentPwshHost
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -18,8 +443,48 @@ if (-not $ConfirmMaterialize) {
 }
 
 $baselineCommit = 'cc2c86189a06676bcb9f0e05e08033d710a92509'
-$expectedSourceInventory =
-  'f42c94666cd10606176e8fe0f3f2afe9975b58c5b0b914343a267f62724d34f1'
+$sourceToolingRelativeRoot = 'run_logs/issue13-evidence-source-v5'
+$expectedSourcePathListSha256 =
+  '7bf2e27807e9bc36d3d3766789439d0d9afdd7b2cc5127145ce0e0f6819db00d'
+$sourceToolingFiles = @(
+  'issue13-evidence-harness/issue13-aggregate-prep-fault.R',
+  'issue13-evidence-harness/issue13-aggregate.R',
+  'issue13-evidence-harness/issue13-audit-prep-fault-plan.R',
+  'issue13-evidence-harness/issue13-baseline-runtime-index-lib.R',
+  'issue13-evidence-harness/issue13-build-calculate-bundle.R',
+  'issue13-evidence-harness/issue13-build-fault-seed-specs.R',
+  'issue13-evidence-harness/issue13-build-paper-bundle.R',
+  'issue13-evidence-harness/issue13-build-prep-fault-specs.R',
+  'issue13-evidence-harness/issue13-build-recalc-bundle.R',
+  'issue13-evidence-harness/issue13-compare-lib.R',
+  'issue13-evidence-harness/issue13-compare-results.R',
+  'issue13-evidence-harness/issue13-compare.R',
+  'issue13-evidence-harness/issue13-import-baseline-lib.R',
+  'issue13-evidence-harness/issue13-import-baseline-run.R',
+  'issue13-evidence-harness/issue13-import-baseline-selftest.R',
+  'issue13-evidence-harness/issue13-import-fault-inputs.R',
+  'issue13-evidence-harness/issue13-lib.R',
+  'issue13-evidence-harness/issue13-matrix.R',
+  'issue13-evidence-harness/issue13-monitor-selftest.ps1',
+  'issue13-evidence-harness/issue13-monitor.ps1',
+  'issue13-evidence-harness/issue13-run-fault-seed-record.ps1',
+  'issue13-evidence-harness/issue13-run-fault-seeds.ps1',
+  'issue13-evidence-harness/issue13-run-plan.ps1',
+  'issue13-evidence-harness/issue13-run-prep-fault-record.ps1',
+  'issue13-evidence-harness/issue13-run-recalc-bundle.ps1',
+  'issue13-evidence-harness/issue13-scenario.R',
+  'issue13-evidence-harness/issue13-seed-channel.R',
+  'issue13-evidence-harness/issue13-seed-runtime-lib.R',
+  'issue13-evidence-harness/issue13-seed-runtime-selftest.R',
+  'issue13-evidence-harness/issue13-selftest.R',
+  'issue13-evidence-harness/issue13-snapshot.R',
+  'issue13-evidence-harness/README.md',
+  'issue13-prep-paper-lib.R',
+  'issue13-preparation-auth-lib.R',
+  'issue13-preparation-compare.R',
+  'issue13-preparation-rule-matrix.json',
+  'issue13-runtime-loader-selftest.R'
+)
 $expectedOutputFileCount = 39L
 $expectedOutputTotalBytes = 594386L
 $expectedOutputInventory =
@@ -268,22 +733,244 @@ function Get-Issue13V5GitBlobSha1([byte[]]$Bytes) {
   ).ToLowerInvariant()
 }
 
-function Get-Issue13V5SourceRuntimeFiles([string]$Root) {
+function Invoke-Issue13V5GitBytes(
+  [string]$Repository,
+  [string[]]$Arguments
+) {
+  Invoke-Issue13V5GitRaw $Repository $Arguments
+}
+
+function Get-Issue13V5GitLine(
+  [string]$Repository,
+  [string[]]$Arguments,
+  [string]$Label
+) {
+  $result = Invoke-Issue13V5GitBytes $Repository $Arguments
+  $value = $utf8.GetString([byte[]]$result.stdout).TrimEnd("`r", "`n")
+  if ([string]::IsNullOrWhiteSpace($value) -or $value.Contains("`n") -or
+      $value.Contains("`r")) {
+    throw "$Label did not produce exactly one nonempty line."
+  }
+  $value
+}
+
+function ConvertFrom-Issue13V5GitTreeBytes(
+  [byte[]]$Bytes,
+  [string]$Label
+) {
+  if ($Bytes.Length -eq 0 -or $Bytes[$Bytes.Length - 1] -ne 0) {
+    throw "$Label is not a nonempty NUL-terminated Git tree listing."
+  }
+  $records = [Collections.Generic.List[object]]::new()
+  $start = 0
+  for ($index = 0; $index -lt $Bytes.Length; $index++) {
+    if ($Bytes[$index] -ne 0) { continue }
+    if ($index -eq $start) { throw "$Label contains an empty tree record." }
+    $length = $index - $start
+    $segment = [byte[]]::new($length)
+    [Array]::Copy($Bytes, $start, $segment, 0, $length)
+    $text = $utf8.GetString($segment)
+    if ($text -cnotmatch
+        '^([0-7]{6}) (blob|tree) ([0-9a-f]{40})\t([^\x00]+)$') {
+      throw "$Label contains a malformed Git tree record."
+    }
+    $records.Add([pscustomobject][ordered]@{
+        mode = [string]$Matches[1]
+        type = [string]$Matches[2]
+        object = [string]$Matches[3]
+        path = [string]$Matches[4]
+      })
+    $start = $index + 1
+  }
+  [object[]]$records.ToArray()
+}
+
+function Get-Issue13V5SourceToolingFiles([string]$Root) {
   $harness = Join-Path $Root 'issue13-evidence-harness'
   if (-not (Test-Path -LiteralPath $harness -PathType Container)) {
-    throw "The canonical V4 harness directory is absent: $harness"
+    throw "The canonical V5 source harness directory is absent: $harness"
   }
+  $rootDirectories = @(Get-ChildItem -LiteralPath $Root -Directory -Force)
   $harnessDirectories = @(
     Get-ChildItem -LiteralPath $harness -Directory -Recurse -Force)
-  if ($harnessDirectories.Count -ne 0) {
-    throw 'The selected canonical V4 harness directory must be flat.'
+  if ($rootDirectories.Count -ne 1 -or
+      $rootDirectories[0].Name -cne 'issue13-evidence-harness' -or
+      $harnessDirectories.Count -ne 0) {
+    throw 'The canonical V5 source requires one flat harness directory.'
   }
-  @(
-    @(Get-ChildItem -LiteralPath $Root -File -Force | Where-Object {
-      $_.Name -cne 'v5-harness-manifest.json'
-    }),
-    @(Get-ChildItem -LiteralPath $harness -File -Force)
-  ) | ForEach-Object { $_ }
+  $actual = @(Get-ChildItem -LiteralPath $Root -File -Recurse -Force |
+      ForEach-Object {
+        $_.FullName.Substring($Root.Length + 1).Replace('\', '/')
+      } | Sort-Object -CaseSensitive)
+  $expected = @($sourceToolingFiles | Sort-Object -CaseSensitive)
+  if ([string]::Join("`n", $actual) -cne
+      [string]::Join("`n", $expected)) {
+    throw 'The canonical V5 source topology differs from its closed allowlist.'
+  }
+  @($sourceToolingFiles | ForEach-Object {
+      Get-Item -LiteralPath (Join-Path $Root $_.Replace('/', '\')) -Force
+    })
+}
+
+function Get-Issue13V5TrackedSourceTooling(
+  [string]$Root,
+  [string]$Repository,
+  [string]$Commit
+) {
+  $rootFull = (Resolve-Path -LiteralPath $Root).Path
+  $expectedRoot = (Resolve-Path -LiteralPath (
+      Join-Path $Repository $sourceToolingRelativeRoot.Replace('/', '\'))).Path
+  if (-not [string]::Equals($rootFull, $expectedRoot,
+      [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'V5 materialization accepts only the tracked canonical source root.'
+  }
+  $files = @(Get-Issue13V5SourceToolingFiles $rootFull)
+  if ($files.Count -ne 37) {
+    throw 'The canonical V5 source must contain exactly 37 files.'
+  }
+  $pathPayload = [Text.Encoding]::UTF8.GetBytes(
+    [string]::Join("`n", $sourceToolingFiles))
+  $pathListSha256 = Get-Issue13V5BytesSha256 $pathPayload
+  if ($pathListSha256 -cne $expectedSourcePathListSha256) {
+    throw 'The canonical V5 source path allowlist changed.'
+  }
+  $head = Get-Issue13V5GitLine $Repository @('rev-parse', 'HEAD') `
+    'V5 repository HEAD'
+  if ($head -cne $Commit) {
+    throw 'The canonical V5 source is not evaluated at the candidate commit.'
+  }
+  $status = Invoke-Issue13V5GitBytes $Repository @(
+    'status', '--porcelain=v1', '-z', '--untracked-files=no')
+  if ($status.stdout -isnot [byte[]] -or
+      $status.stdout.Length -ne 0) {
+    throw 'The candidate repository has tracked working-tree changes.'
+  }
+
+  $rootListing = ConvertFrom-Issue13V5GitTreeBytes (
+    (Invoke-Issue13V5GitBytes $Repository @(
+        'ls-tree', '-z', $Commit, '--', $sourceToolingRelativeRoot)).stdout) `
+    'Canonical source root tree'
+  if ($rootListing.Count -ne 1 -or
+      $rootListing[0].path -cne $sourceToolingRelativeRoot -or
+      $rootListing[0].mode -cne '040000' -or
+      $rootListing[0].type -cne 'tree') {
+    throw 'The candidate commit lacks the exact canonical source root tree.'
+  }
+  $rootEntries = ConvertFrom-Issue13V5GitTreeBytes (
+    (Invoke-Issue13V5GitBytes $Repository @(
+        'ls-tree', '-z', ($Commit + ':' + $sourceToolingRelativeRoot))).stdout) `
+    'Canonical source top-level tree'
+  $harnessEntry = @($rootEntries | Where-Object {
+      $_.path -ceq 'issue13-evidence-harness'
+    })
+  if ($harnessEntry.Count -ne 1 -or
+      $harnessEntry[0].mode -cne '040000' -or
+      $harnessEntry[0].type -cne 'tree') {
+    throw 'The candidate commit lacks the canonical source harness tree.'
+  }
+  $harnessEntries = ConvertFrom-Issue13V5GitTreeBytes (
+    (Invoke-Issue13V5GitBytes $Repository @(
+        'ls-tree', '-z', ($Commit + ':' + $sourceToolingRelativeRoot +
+          '/issue13-evidence-harness'))).stdout) `
+    'Canonical source harness tree'
+  $gitFiles = [Collections.Generic.Dictionary[string, object]]::new(
+    [StringComparer]::Ordinal)
+  foreach ($entry in $rootEntries) {
+    if ($entry.type -ceq 'tree') { continue }
+    $gitFiles.Add([string]$entry.path, $entry)
+  }
+  foreach ($entry in $harnessEntries) {
+    if ($entry.type -cne 'blob') {
+      throw 'The canonical source harness tree contains a nested tree.'
+    }
+    $gitFiles.Add('issue13-evidence-harness/' + [string]$entry.path, $entry)
+  }
+  $gitPaths = @($gitFiles.Keys | Sort-Object -CaseSensitive)
+  $expectedPaths = @($sourceToolingFiles | Sort-Object -CaseSensitive)
+  if ($rootEntries.Count -ne 6 -or $harnessEntries.Count -ne 32 -or
+      $gitFiles.Count -ne 37 -or
+      [string]::Join("`n", $gitPaths) -cne
+        [string]::Join("`n", $expectedPaths)) {
+    throw 'The candidate commit source topology differs from the allowlist.'
+  }
+
+  foreach ($treeObject in @(
+      [string]$rootListing[0].object,
+      [string]$harnessEntry[0].object)) {
+    $type = Get-Issue13V5GitLine $Repository @(
+      'cat-file', '-t', $treeObject) 'Canonical source tree type'
+    if ($type -cne 'tree') {
+      throw 'A canonical source tree object is not a Git tree.'
+    }
+  }
+  $records = [Collections.Generic.List[object]]::new()
+  foreach ($relative in $sourceToolingFiles) {
+    $entry = $gitFiles[$relative]
+    if ($null -eq $entry -or $entry.mode -cne '100644' -or
+        $entry.type -cne 'blob') {
+      throw "Canonical source file has an invalid Git mode: $relative"
+    }
+    $repositoryPath = $sourceToolingRelativeRoot + '/' + $relative
+    $path = Join-Path $rootFull $relative.Replace('/', '\')
+    $localBytes = [IO.File]::ReadAllBytes($path)
+    $blobBytes = [byte[]](Invoke-Issue13V5GitBytes $Repository @(
+        'cat-file', 'blob', ($Commit + ':' + $repositoryPath))).stdout
+    if (-not [Collections.StructuralComparisons]::StructuralEqualityComparer.
+        Equals($localBytes, $blobBytes)) {
+      throw "Canonical source bytes differ from the candidate: $relative"
+    }
+    $hashObject = Get-Issue13V5GitLine $Repository @(
+      'hash-object', '--no-filters', '--', $repositoryPath) `
+      "Canonical source hash-object $relative"
+    if ($hashObject -cne [string]$entry.object -or
+        (Get-Issue13V5GitBlobSha1 $localBytes) -cne [string]$entry.object) {
+      throw "Canonical source Git blob differs from the candidate: $relative"
+    }
+    $records.Add([pscustomobject][ordered]@{
+        relative_path = $relative
+        repository_path = $repositoryPath
+        size_bytes = [long]$localBytes.LongLength
+        sha256 = Get-Issue13V5BytesSha256 $localBytes
+        mode = [string]$entry.mode
+        type = [string]$entry.type
+        blob = [string]$entry.object
+      })
+  }
+  $inventoryLines = @($records | ForEach-Object {
+      [string]$_.relative_path + '|' + [string]$_.size_bytes + '|' +
+        [string]$_.sha256
+    })
+  $inventoryPayload = [Text.Encoding]::UTF8.GetBytes(
+    [string]::Join("`n", $inventoryLines))
+  [pscustomobject][ordered]@{
+    candidate_commit = $Commit
+    repository_relative_root = $sourceToolingRelativeRoot
+    root = $rootFull
+    physical_root = ConvertTo-Issue13V5CanonicalPath $rootFull
+    file_count = [long]$records.Count
+    directory_count = 1L
+    total_bytes = [long](($records | Measure-Object size_bytes -Sum).Sum)
+    path_list_sha256 = $pathListSha256
+    inventory_sha256 = Get-Issue13V5BytesSha256 $inventoryPayload
+    trees = [object[]]@(
+      [pscustomobject][ordered]@{
+        relative_path = '.'
+        repository_path = $sourceToolingRelativeRoot
+        mode = [string]$rootListing[0].mode
+        type = [string]$rootListing[0].type
+        tree = [string]$rootListing[0].object
+      },
+      [pscustomobject][ordered]@{
+        relative_path = 'issue13-evidence-harness'
+        repository_path = $sourceToolingRelativeRoot +
+          '/issue13-evidence-harness'
+        mode = [string]$harnessEntry[0].mode
+        type = [string]$harnessEntry[0].type
+        tree = [string]$harnessEntry[0].object
+      }
+    )
+    records = [object[]]$records.ToArray()
+  }
 }
 
 function Get-Issue13V5OutputRuntimeFiles([string]$Root) {
@@ -313,7 +1000,7 @@ function Get-Issue13V5Inventory(
 ) {
   $rootFull = (Resolve-Path -LiteralPath $Root).Path
   $files = if ($Mode -ceq 'source') {
-    Get-Issue13V5SourceRuntimeFiles $rootFull
+    Get-Issue13V5SourceToolingFiles $rootFull
   } else {
     Get-Issue13V5OutputRuntimeFiles $rootFull
   }
@@ -401,7 +1088,7 @@ function Get-Issue13V5ControllerPins(
     $relative = $relativeRoot + '/' + $_
     $controllerBytes = [IO.File]::ReadAllBytes($path)
     $currentBlob = Get-Issue13V5GitBlobSha1 $controllerBytes
-    $committedBlob = (& git -C $Repository rev-parse `
+    $committedBlob = (Invoke-Issue13V5SealedGit -C $Repository rev-parse `
       ($Commit + ':' + $relative) 2>$null).Trim()
     if ($LASTEXITCODE -ne 0 -or $currentBlob -cnotmatch '^[0-9a-f]{40}$' -or
         $currentBlob -cne $committedBlob) {
@@ -433,15 +1120,14 @@ function Add-Issue13V5ExactSource(
   Set-Issue13V5Utf8Text $Path $patched
 }
 
-if ([string]::IsNullOrWhiteSpace($SourceRuntimeRoot)) {
-  $SourceRuntimeRoot = Join-Path (Split-Path -Parent $PSScriptRoot) `
-    'issue13-evidence-runtime-v4'
-}
-$repository = (& git -C $PSScriptRoot rev-parse --show-toplevel 2>$null).Trim()
+$repository = (Invoke-Issue13V5SealedGit `
+  -C $PSScriptRoot rev-parse --show-toplevel 2>$null).Trim()
 $repository = Assert-Issue13V5AliasFreeLocalPath $repository 'V5 repository'
 $repository = Assert-Issue13V5NoReparseAncestors $repository 'V5 repository'
-$head = (& git -C $repository rev-parse HEAD 2>$null).Trim()
-$trackedStatus = @(& git -C $repository status '--porcelain=v1' `
+$head = (Invoke-Issue13V5SealedGit `
+  -C $repository rev-parse HEAD 2>$null).Trim()
+$trackedStatus = @(Invoke-Issue13V5SealedGit `
+  -C $repository status '--porcelain=v1' `
   '--untracked-files=no' 2>$null)
 if ($LASTEXITCODE -ne 0 -or $head -cne $CandidateCommit -or
     $trackedStatus.Count -ne 0) {
@@ -451,13 +1137,17 @@ $controllerPins = @(Get-Issue13V5ControllerPins $repository $CandidateCommit)
 if ($controllerPins.Count -ne $controllerFiles.Count) {
   throw 'V5 controller pin coverage differs from its closed inventory.'
 }
+if ([string]::IsNullOrWhiteSpace($SourceRuntimeRoot)) {
+  $SourceRuntimeRoot = Join-Path $repository `
+    $sourceToolingRelativeRoot.Replace('/', '\')
+}
 $SourceRuntimeRoot = Assert-Issue13V5AliasFreeLocalPath `
-  $SourceRuntimeRoot 'Canonical V4 tooling source'
+  $SourceRuntimeRoot 'Canonical V5 tooling source'
 $null = Assert-Issue13V5NoReparseAncestors $SourceRuntimeRoot `
-  'Canonical V4 tooling source'
+  'Canonical V5 tooling source'
 $source = Assert-Issue13V5TreeHasNoReparsePoints `
   (Resolve-Path -LiteralPath $SourceRuntimeRoot).Path `
-  'Canonical V4 tooling source'
+  'Canonical V5 tooling source'
 $Destination = Assert-Issue13V5AliasFreeLocalPath $Destination 'V5 destination'
 $destinationFull = Assert-Issue13V5NoReparseAncestors $Destination `
   'V5 destination'
@@ -474,11 +1164,15 @@ if (Test-Path -LiteralPath $destinationFull) {
   throw "The V5 harness destination already exists: $destinationFull"
 }
 
-$sourceInventory = Get-Issue13V5Inventory $source 'source'
+$sourceInventory = Get-Issue13V5TrackedSourceTooling `
+  $source $repository $CandidateCommit
 if ([long]$sourceInventory.file_count -ne 37 -or
-    [long]$sourceInventory.total_bytes -ne 581093 -or
-    [string]$sourceInventory.inventory_sha256 -cne $expectedSourceInventory) {
-  throw 'The canonical V4 tooling inventory changed; audit before materializing V5.'
+    [long]$sourceInventory.directory_count -ne 1 -or
+    @($sourceInventory.trees).Count -ne 2 -or
+    @($sourceInventory.records).Count -ne 37 -or
+    [string]$sourceInventory.path_list_sha256 -cne
+      $expectedSourcePathListSha256) {
+  throw 'The canonical V5 tooling binding differs from its closed contract.'
 }
 
 $parent = Split-Path -Parent $destinationFull
@@ -507,7 +1201,7 @@ foreach ($record in @($sourceInventory.records)) {
   $from = Join-Path $source ([string]$record.relative_path).Replace('/', '\')
   $to = Join-Path $staging ([string]$record.relative_path).Replace('/', '\')
   $null = Assert-Issue13V5NoReparseAncestors $from `
-    "V5 runtime source $($record.relative_path)"
+    "V5 tracked tooling source $($record.relative_path)"
   $toParent = Split-Path -Parent $to
   if (-not (Test-Path -LiteralPath $toParent -PathType Container)) {
     $null = New-Item -ItemType Directory -Path $toParent
@@ -1998,20 +2692,17 @@ differences are accepted only after their payloads and internal hashes pass.
 Set-Issue13V5Utf8Text $readme $readmeValue
 
 $null = Assert-Issue13V5TreeHasNoReparsePoints $source `
-  'Canonical V4 tooling source after copy'
+  'Canonical V5 tooling source after projection'
 if ((ConvertTo-Issue13V5CanonicalPath $source) -cne $sourceCanonical -or
     (ConvertTo-Issue13V5CanonicalPath $repository) -cne
       $repositoryCanonical) {
   throw 'The V5 source or repository physical identity changed.'
 }
-$sourceInventoryAfter = Get-Issue13V5Inventory $source 'source'
-if ([long]$sourceInventoryAfter.file_count -ne
-      [long]$sourceInventory.file_count -or
-    [long]$sourceInventoryAfter.total_bytes -ne
-      [long]$sourceInventory.total_bytes -or
-    [string]$sourceInventoryAfter.inventory_sha256 -cne
-      [string]$sourceInventory.inventory_sha256) {
-  throw 'The canonical V4 tooling source changed during materialization.'
+$sourceInventoryAfter = Get-Issue13V5TrackedSourceTooling `
+  $source $repository $CandidateCommit
+if (($sourceInventoryAfter | ConvertTo-Json -Depth 20 -Compress) -cne
+    ($sourceInventory | ConvertTo-Json -Depth 20 -Compress)) {
+  throw 'The canonical V5 tooling source changed during materialization.'
 }
 $controllerPinsAfter = @(Get-Issue13V5ControllerPins $repository $CandidateCommit)
 if (($controllerPinsAfter | ConvertTo-Json -Depth 10 -Compress) -cne
@@ -2050,12 +2741,7 @@ $manifest = [ordered]@{
     file_count = $controllerPins.Count
     records = [object[]]$controllerPins
   }
-  source_tooling = [ordered]@{
-    root = $source
-    file_count = $sourceInventory.file_count
-    total_bytes = $sourceInventory.total_bytes
-    inventory_sha256 = $sourceInventory.inventory_sha256
-  }
+  source_tooling = $sourceInventory
   output_tooling = [ordered]@{
     file_count = $outputInventory.file_count
     total_bytes = $outputInventory.total_bytes
@@ -2112,6 +2798,18 @@ if ([long]$installedInventory.file_count -ne $expectedOutputFileCount -or
     [string]$installedInventory.inventory_sha256 -cne
       $expectedOutputInventory) {
   throw 'Installed V5 tooling differs from the sealed output inventory.'
+}
+$sourceInventoryInstalled = Get-Issue13V5TrackedSourceTooling `
+  $source $repository $CandidateCommit
+if (($sourceInventoryInstalled | ConvertTo-Json -Depth 20 -Compress) -cne
+    ($sourceInventory | ConvertTo-Json -Depth 20 -Compress)) {
+  throw 'The canonical V5 tooling source changed across promotion.'
+}
+$controllerPinsInstalled = @(
+  Get-Issue13V5ControllerPins $repository $CandidateCommit)
+if (($controllerPinsInstalled | ConvertTo-Json -Depth 10 -Compress) -cne
+    ($controllerPins | ConvertTo-Json -Depth 10 -Compress)) {
+  throw 'The candidate-pinned controller changed across promotion.'
 }
 
 [pscustomobject][ordered]@{

@@ -39,6 +39,16 @@ Os summaries históricos continuam fixados pelos SHA-256:
 - oracle 003: `4ba530a191ef45baaaa08b2aa03ec6dcd0268aa6514caec6520203a0213afdfe`;
 - patch canônico: `9f9b878f8e557973127e6260a0f224c868a0c4e8dc2db52dd6aa3f7131f28cd9`.
 
+Esses dois summaries são aceitos somente em seus formatos históricos exatos:
+o strict possui 16 propriedades, o oracle compat possui 19 propriedades
+(incluindo o legado `environment_removed`), e nenhum deles contém campo
+`rscript_*`. Não há injeção, fallback nem reescrita desses documentos selados.
+Consequentemente, a identidade de Rscript registrada pela prova terminal é
+uma vinculação atual, reaberta e recalculada durante o workflow; ela não prova
+retroativamente qual executável gerou os summaries 003. Essa limitação é mais
+um motivo para a prova permanecer auxiliar e
+`final_evidence_eligible=false`.
+
 Para os sete métodos recuperados, o validador continua exigindo:
 
 - a falha strict e sua mensagem exata em `cc2`;
@@ -61,6 +71,8 @@ validador exigem simultaneamente:
 
 - `generation = "v5-terminal"`;
 - `source_controller.commit_sha256 = ExpectedCandidateCommit`;
+- `source_tooling` idêntico no manifest e na derivação independente do
+  candidato Git/local;
 - `final_evidence_eligible = true`;
 - `reuses_candidate_evidence = false`;
 - inventário físico instalado, sem reparse points, exatamente igual a
@@ -70,6 +82,24 @@ validador exigem simultaneamente:
 - exatamente os 34 registros nome↔`relative_path` do controller terminal,
   vinculados ao blob Git e ao SHA-256 calculado sobre os bytes crus de
   `git cat-file blob` do commit esperado.
+
+A raiz-fonte rastreada é exclusivamente
+`run_logs/issue13-evidence-source-v5`: 37 arquivos, um diretório físico e dois
+objetos tree (`.` e `issue13-evidence-harness`). O spec guarda apenas os campos
+estáveis desse contrato: raiz relativa, contagens, SHA-256 da lista ordenada de
+caminhos, as duas raízes relativas, os 37 caminhos obrigatórios e os modos
+`040000`/`100644`. Commit, trees/blobs, bytes totais e hash de inventário são
+deliberadamente dinâmicos e aparecem somente no `source_tooling` derivado.
+
+A derivação usa `ProcessStartInfo.ArgumentList` e lê stdout como bytes crus;
+`git ls-tree -z`, `git cat-file` e `git hash-object --no-filters` evitam
+interpretação de shell, quebra por espaços e perda de delimitadores NUL. Cada
+arquivo local precisa ser byte a byte idêntico ao blob do
+`ExpectedCandidateCommit`. A lista dos 37 registros preserva a ordem fechada
+do spec (inclusive `README.md` na posição 32), e não a ordem lexical do Git.
+O manifest, o contexto anterior e a recaptura posterior precisam conter o
+mesmo objeto derivado; qualquer troca do commit, tree, blob ou byte local
+interrompe a prova.
 
 Runtimes com basename contendo `v5c5` ou `v5c6`, manifests com o campo antigo
 `candidate_commit` e qualquer geração anterior a `v5-terminal` são rejeitados.
@@ -108,6 +138,17 @@ processo ao terminar. Candidate e baseline são
 obtidos somente dos summaries autenticados e dos cenários
 `baseline__calculate__<method>__workers1`; não há parâmetros livres para runs.
 
+O ambiente do processo é tratado como estado tri-state, sem confundir
+ausência com string vazia: `present=false,value=null` significa variável
+ausente; `present=true,value=""` significa valor vazio visível; e
+`present=true,value="..."` preserva um valor real. Os nomes de `set` e
+`cleared` são únicos sem distinção de maiúsculas/minúsculas e os dois conjuntos
+são disjuntos. Somente o setter remove uma variável ausente; valores vazios
+são definidos, não removidos. Uma falha durante `Enter` desfaz todas as
+mutações já aplicadas em ordem inversa; `Exit` tenta todas as restaurações e
+agrega erros. Os autotestes negativos cobrem ausência, vazio, valor, sentinela,
+exceção da ação, rollback parcial e restauração exata do ambiente externo.
+
 Cada diretório de método deve terminar com somente:
 
 ```text
@@ -136,6 +177,20 @@ e todos os namespaces carregados, com nome, versão, caminho, papel requerido,
 contagem/bytes e SHA-256 recursivo do pacote. `fst`, `jsonlite` e `openssl` são
 obrigatórios e devem resolver dentro de `RLibrary`. Os dois snapshots completos
 precisam ser idênticos; proof, config e control preservam seus pins.
+
+Além da sondagem R, cada captura abre novamente `Rscript.exe` e registra
+exatamente seis campos: `logical_path` (resultado de `Resolve-Path`, com barras
+invertidas no Windows), `physical_path`, `item_id`, `link_count`, `size_bytes`
+e `sha256`. A identidade física combina o serial de volume de
+`ByHandleFileInformation` em 16 hex com o `FileId` de 128 bits. Essa identidade
+é capturada dinamicamente (a verificação local atual produz
+`0000000034ee9270:0000000000000000000200000005ebe0`). O spec estável sela
+somente `required_link_count=1`, `size_bytes=94720` e
+`sha256=3ad097e1…15f9`; caminhos e `item_id` não são pins estáticos. O arquivo é
+reaberto e hasheado antes e depois do
+workflow, mesmo quando um `PreparedContext` é reutilizado. A prova publica a
+identidade em `terminal_runtime.rscript` e nos snapshots `before`/`after` de
+`runtime_immutability`, que devem ser exatamente iguais.
 
 ## Gerar e validar
 

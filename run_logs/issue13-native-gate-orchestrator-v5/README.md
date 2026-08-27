@@ -16,6 +16,34 @@ evidência negativa é preservada, autenticada e nunca importada no gate final:
 - resultado: 5 aprovados e 7 reprovados;
 - `final_evidence_eligible=false`.
 
+O harness físico separado referenciado pelo resumo também permanece fechado:
+manifesto `a17a187621cdd4aff6f24efd6bf43ffbf9336de0a19189dfc7f5a82758a92c23`,
+39 arquivos em um diretório, 586.873 bytes, inventário
+`7ba02db2ad97cd59bc93405057d5cc127fbefaac0e4e72331c13a10e5f8d495b`
+e lista de caminhos
+`d6fe55884678c1300f661bd4b1ff1f42694af9d49dabd739fad7630ebfd2b416`.
+Ele autentica a infraestrutura histórica do smoke, mas não é reutilizado como
+runtime ou evidência terminal.
+
+O resumo acima é o registro histórico imutável. O archive write-once
+`attempts` preservado é reautenticado com 120 arquivos, 60 diretórios,
+2.255.912 bytes, inventário
+`12b63f23e87b12b6afc0beabec9e64518b0ce114f1ae8b7fa481c01c78320edf`,
+inventário de diretórios
+`7bdb481081e12c4522f6dfdace2ec2c00015127139b574356f76e019754592ea` e
+lista de arquivos
+`5b805a5b9c7d2e1d09b111392b8d0795e60b4866e55f606ac8db9dc4e7cf7657`.
+Seus 12 worktrees também são preservados sem alterações, integralmente limpos,
+em `cc2c86189a06676bcb9f0e05e08033d710a92509`, árvore
+`0cb1142cdadd74bf95272010f5393ebe2af79f47`.
+
+Esse selo integral do archive foi calculado posteriormente. Ele autentica o
+estado atual dos artefatos preservados, mas não prova retrospectivamente os
+bytes físicos de `Rscript.exe` usados em 25/08/2026. A identidade do Rscript
+registrada na configuração é um vínculo atual, reaberto e validado antes e
+depois do workflow terminal. Essa distinção é obrigatória no relatório, assim
+como `final_evidence_eligible=false` para o smoke histórico.
+
 Com autorização explícita, o runtime do oráculo legado é um único filho direto
 de `cc2c861`, fora do branch candidato:
 
@@ -92,6 +120,24 @@ deliberadamente fora desses 34 arquivos, do runtime materializado e de qualquer
 autoridade `source_controller`. Sua existência local não altera o inventário
 fechado.
 
+## Tooling-fonte Git-bound
+
+O source do harness que pode ser materializado não vem de uma raiz operacional
+externa. Ele fica rastreado em
+`run_logs/issue13-evidence-source-v5` e contém exatamente 37 arquivos, um único
+diretório descendente (`issue13-evidence-harness`) e duas árvores Git (a raiz e
+o diretório descendente). O path-list fechado tem SHA-256
+`7bf2e27807e9bc36d3d3766789439d0d9afdd7b2cc5127145ce0e0f6819db00d`.
+
+O objeto `source_tooling` registra `candidate_commit`, raiz relativa no
+repositório, raízes lógica e física, contagens, bytes, path-list, inventário,
+as duas árvores e os 37 arquivos. Cada árvore contém caminho, modo `040000`,
+tipo `tree` e objeto Git; cada arquivo contém caminho, tamanho, SHA-256, modo
+`100644`, tipo `blob` e objeto Git. Os bytes locais são comparados com
+`git cat-file blob` e `git hash-object --no-filters`. Manifesto materializado,
+configuração e prova Oracle precisam conter exatamente o mesmo objeto. A antiga
+raiz operacional `runtime-v4` não é fonte, fallback nem dependência terminal.
+
 ## Pré-condições
 
 1. O diretório V5 deve estar incluído no commit candidato; materializador,
@@ -123,9 +169,18 @@ fechado.
 O host Codex pode expor `LANG`, `LC_ALL` e `LC_CTYPE` como `C.UTF-8`, nome que
 o R 4.6.1 para Windows não reconhece. O smoke remove essas três variáveis
 durante sua execução e as restaura no `finally`; o coordenador também as remove
-explicitamente de todo `ProcessStartInfo`. Cada resumo compatível e registro de
-comando autentica a lista em `environment_removed`, evitando queda silenciosa
-para locale C/codepage 0 e corrupção de metadados UTF-8.
+explicitamente de todo `ProcessStartInfo`. O contrato de entrada distingue três
+estados sem conversão prematura: chave ausente significa herdar, valor `null`
+significa remover, e qualquer string — inclusive `""` — significa definir
+exatamente esse valor. O estado real anterior também preserva presença e valor,
+portanto ausência e string vazia não são intercambiáveis na restauração.
+
+Cada registro de comando usa somente `environment_set` (itens exatos
+`name`/`value`) e `environment_cleared` (nomes removidos). Nomes são únicos sem
+diferenciar maiúsculas/minúsculas e os dois conjuntos são disjuntos. Uma string
+vazia permanece visível como `value: ""`; não pode ser reinterpretada como
+remoção. Os dois campos legados de ambiente são proibidos. Isso evita tanto
+queda silenciosa para locale C/codepage 0 quanto corrupção de metadados UTF-8.
 
 ## Runtime terminal e origem candidata
 
@@ -268,6 +323,10 @@ Preserve integralmente os dois roots de smoke e seus worktrees até a conclusão
 do relatório: eles não são reutilizados como evidência científica, mas cada
 `ValidateConfig`, retomada e renderização reautentica seus 12 registros,
 commits, árvores, resultados, métricas e quatro arquivos de telemetria.
+O archive histórico `attempts` e os 12 worktrees de `cc2` também são
+write-once: o selo post-hoc documentado acima e a limpeza Git são verificados,
+mas jamais promovem o smoke 5/7 a evidência final ou fazem uma afirmação
+retrospectiva sobre o executável usado na data histórica.
 
 Em seguida, gere a prova Oracle-effect `/2` com duas raízes novas e distintas.
 O spec usa `wlv-issue13-v5-oracle-effect-spec/2` e o proof usa
@@ -303,12 +362,17 @@ com falhas, coordenadas e diagnósticos fechados pelo patch autorizado. Seu
 
 - `comparison_harness.source_controller`, com o commit e os 34 registros
   nome↔caminho↔blob Git;
-- o executável R, com caminho, tamanho e SHA-256;
+- `comparison_harness.source_tooling`, com o mesmo objeto 37/1/2 do manifesto
+  e da configuração, incluindo raízes, path-list, inventário, trees e blobs;
+- o executável R, com exatamente `logical_path`, `physical_path`, `item_id`,
+  `link_count`, `size_bytes` e `sha256`; os snapshots `before`, `after` e o
+  registro corrente precisam ser idênticos, com um único hard link;
 - a biblioteca R física, com versão/plataforma, `.libPaths()`, inventário
   recursivo e os namespaces carregados; `fst`, `jsonlite` e `openssl` devem
   resolver dentro de `RLibrary`;
-- o ambiente de cada comando, com `R_LIBS_USER=RLibrary`, `TZ=UTC` e o conjunto
-  exato das 16 variáveis removidas;
+- o ambiente de cada comando, com `R_LIBS_USER=RLibrary`, `TZ=UTC` em
+  `environment_set` e o conjunto exato das 16 variáveis em
+  `environment_cleared`;
 - `runtime_immutability`, com snapshots completos `before` e `after`
   idênticos e `immutable=true`.
 
@@ -430,7 +494,12 @@ Ele ainda exige exatamente 60 deltas completos de recálculo com digests iguais,
 recomposição de RSS a partir de amostras autenticadas nas 76 linhas, e registra
 no Markdown os resultados `5+7`, os hashes da prova/patch/comparações e cada
 um dos dez comandos oracle com executável, argumentos, ambiente e diretório de
-trabalho, além dos 17 inventários imutáveis.
+trabalho, além dos 17 inventários imutáveis. Os comandos do coordenador usam o
+shape fechado `environment_set`/`environment_cleared`; o renderer rejeita
+campos legados, nomes duplicados ou sobrepostos e preserva string vazia de modo
+visível. Ele também exige igualdade do objeto `source_tooling` entre manifesto,
+configuração e prova, a identidade Rscript de seis campos nos snapshots
+before/after/current e os selos do resumo, archive e 12 worktrees históricos.
 
 Antes de cada comparação de par, o coordenador reconfere no estado os hashes de
 `scenario-result.json` e `process-metrics.json` dos dois braços; o hash das

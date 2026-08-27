@@ -72,6 +72,75 @@
         }
       }
     },
+    "sourceToolingTree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relative_path", "repository_path", "mode", "type", "tree"],
+      "properties": {
+        "relative_path": {
+          "enum": [".", "issue13-evidence-harness"]
+        },
+        "repository_path": {
+          "type": "string",
+          "pattern": "^run_logs/issue13-evidence-source-v5(?:/issue13-evidence-harness)?$"
+        },
+        "mode": {"const": "040000"},
+        "type": {"const": "tree"},
+        "tree": {"$ref": "#/$defs/sha1"}
+      }
+    },
+    "sourceToolingFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relative_path", "repository_path", "size_bytes", "sha256", "mode",
+        "type", "blob"
+      ],
+      "properties": {
+        "relative_path": {"type": "string", "minLength": 1},
+        "repository_path": {
+          "type": "string",
+          "pattern": "^run_logs/issue13-evidence-source-v5/.+$"
+        },
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "mode": {"const": "100644"},
+        "type": {"const": "blob"},
+        "blob": {"$ref": "#/$defs/sha1"}
+      }
+    },
+    "sourceTooling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_commit", "repository_relative_root", "root", "physical_root",
+        "file_count", "directory_count", "total_bytes", "path_list_sha256",
+        "inventory_sha256", "trees", "records"
+      ],
+      "properties": {
+        "candidate_commit": {"$ref": "#/$defs/sha1"},
+        "repository_relative_root": {
+          "const": "run_logs/issue13-evidence-source-v5"
+        },
+        "root": {"$ref": "#/$defs/path"},
+        "physical_root": {"$ref": "#/$defs/path"},
+        "file_count": {"const": 37},
+        "directory_count": {"const": 1},
+        "total_bytes": {"type": "integer", "minimum": 1},
+        "path_list_sha256": {
+          "const": "7bf2e27807e9bc36d3d3766789439d0d9afdd7b2cc5127145ce0e0f6819db00d"
+        },
+        "inventory_sha256": {"$ref": "#/$defs/sha256"},
+        "trees": {
+          "type": "array", "minItems": 2, "maxItems": 2,
+          "items": {"$ref": "#/$defs/sourceToolingTree"}
+        },
+        "records": {
+          "type": "array", "minItems": 37, "maxItems": 37,
+          "items": {"$ref": "#/$defs/sourceToolingFile"}
+        }
+      }
+    },
     "physicalFile": {
       "type": "object",
       "additionalProperties": false,
@@ -164,8 +233,8 @@
       "required": [
         "expected_candidate_commit", "manifest_path", "manifest_sha256",
         "generation", "final_evidence_eligible", "reuses_candidate_evidence",
-        "source_controller_commit_sha256", "source_controller", "output_tooling",
-        "sealed_output_tooling", "installed_inventory", "tools"
+        "source_controller_commit_sha256", "source_controller", "source_tooling",
+        "output_tooling", "sealed_output_tooling", "installed_inventory", "tools"
       ],
       "properties": {
         "expected_candidate_commit": {"$ref": "#/$defs/sha1"},
@@ -176,6 +245,7 @@
         "reuses_candidate_evidence": {"const": false},
         "source_controller_commit_sha256": {"$ref": "#/$defs/sha1"},
         "source_controller": {"$ref": "#/$defs/sourceController"},
+        "source_tooling": {"$ref": "#/$defs/sourceTooling"},
         "output_tooling": {"$ref": "#/$defs/aggregateInventory"},
         "sealed_output_tooling": {"$ref": "#/$defs/aggregateInventory"},
         "installed_inventory": {"$ref": "#/$defs/installedInventory"},
@@ -188,11 +258,22 @@
     "rscript": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "sha256", "size_bytes"],
+      "required": [
+        "logical_path", "physical_path", "item_id", "link_count", "size_bytes",
+        "sha256"
+      ],
       "properties": {
-        "path": {"$ref": "#/$defs/path"},
-        "sha256": {"$ref": "#/$defs/sha256"},
-        "size_bytes": {"type": "integer", "minimum": 1}
+        "logical_path": {"$ref": "#/$defs/path"},
+        "physical_path": {"$ref": "#/$defs/path"},
+        "item_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}:[0-9a-f]{32}$"
+        },
+        "link_count": {"const": 1},
+        "size_bytes": {"const": 94720},
+        "sha256": {
+          "const": "3ad097e10d867e09eb7e54d8ed1f8ef933779b82be56482a04a27d65536d15f9"
+        }
       }
     },
     "environmentSetRecord": {

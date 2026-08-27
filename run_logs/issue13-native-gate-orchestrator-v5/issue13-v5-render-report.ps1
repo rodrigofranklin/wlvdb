@@ -5,16 +5,573 @@ param(
   [switch]$ConfirmWriteReport
 )
 
+$issue13V5CommandCollisionGuard = {
+  param([Management.Automation.Language.ScriptBlockAst]$Ast)
+  $runtimeRoot =
+    'C:\Users\rodri\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\powershell'
+  $moduleRoot = [IO.Path]::Combine($runtimeRoot, 'Modules')
+  $expectedProcessPath = [IO.Path]::Combine($runtimeRoot, 'pwsh.exe')
+  if (-not [string]::Equals(
+      [IO.Path]::GetFullPath([Environment]::ProcessPath),
+      $expectedProcessPath, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'V5 command bootstrap requires the sealed pwsh host.'
+  }
+
+  $trustedRuntimeFiles =
+    [Collections.Generic.Dictionary[string, object]]::new(
+      [StringComparer]::OrdinalIgnoreCase)
+  foreach ($record in [object[]]@(
+      [pscustomobject]@{
+        relative_path = 'pwsh.exe'
+        size_bytes = 301368L
+        sha256 =
+          'DB6DD81183FE57D22E03B911EC9A30A2FD7C40542E97743615355A6FB44F458F'
+      },
+      [pscustomobject]@{
+        relative_path = 'System.Management.Automation.dll'
+        size_bytes = 19597112L
+        sha256 =
+          '5AD53C0024367C81A9BEBA1FCEF3288DCF6A34966E4AB8CF8A31603A8358B317'
+      },
+      [pscustomobject]@{
+        relative_path = 'Microsoft.PowerShell.Commands.Management.dll'
+        size_bytes = 1124192L
+        sha256 =
+          '51120F70291FD7CE7FD96076FD043F9BFC8807C7B8590B18EAA7118D38457F60'
+      },
+      [pscustomobject]@{
+        relative_path = 'Microsoft.PowerShell.Commands.Utility.dll'
+        size_bytes = 1652576L
+        sha256 =
+          '34533CC9A47EB3F070ACA476ED77EE68A470F2749B3D1FC027C3FD991EB6EAD5'
+      },
+      [pscustomobject]@{
+        relative_path = 'Microsoft.Management.Infrastructure.CimCmdlets.dll'
+        size_bytes = 493368L
+        sha256 =
+          '7CE68B9940FD22D785C9AA702903063CB135BAD3AB56B53590B603C72AB9BF94'
+      },
+      [pscustomobject]@{
+        relative_path = 'microsoft.management.infrastructure.dll'
+        size_bytes = 309112L
+        sha256 =
+          'E997C2216F1D72CB1B483A812F80BE940A4D9643E3F6F8EA1258632EE5E1EC1C'
+      },
+      [pscustomobject]@{
+        relative_path = 'microsoft.management.infrastructure.native.dll'
+        size_bytes = 362320L
+        sha256 =
+          '3C86966B8C64ECE8E45C2CC87DAF528AE3651EE101EB08E42B98460CBCF995D9'
+      },
+      [pscustomobject]@{
+        relative_path =
+          'microsoft.management.infrastructure.native.unmanaged.dll'
+        size_bytes = 28192L
+        sha256 =
+          '9BEE4E35576355156F00E2E47EF57AA2C8CA64390C112F083A772F2219026293'
+      },
+      [pscustomobject]@{
+        relative_path =
+          'Modules\Microsoft.PowerShell.Management\Microsoft.PowerShell.Management.psd1'
+        size_bytes = 16100L
+        sha256 =
+          '9AF88C06CDC43CFB8DFFA2A07A40A92A7A2EEC015067DB0B37461614A73B74E1'
+      },
+      [pscustomobject]@{
+        relative_path =
+          'Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1'
+        size_bytes = 16874L
+        sha256 =
+          '7C7A4982CA9C2FFD7FA5FF4ED5E65136A3B967988F9325A6F4DEFC02F887534F'
+      },
+      [pscustomobject]@{
+        relative_path = 'Modules\CimCmdlets\CimCmdlets.psd1'
+        size_bytes = 15295L
+        sha256 =
+          '35F52D09846EC3088DC1B4B976B62EA4209865A84E1DA47A3CD9637FFEB9BF7D'
+      })) {
+    $path = [IO.Path]::GetFullPath(
+      [IO.Path]::Combine($runtimeRoot, [string]$record.relative_path))
+    if (-not $path.StartsWith(
+        $runtimeRoot + [IO.Path]::DirectorySeparatorChar,
+        [StringComparison]::OrdinalIgnoreCase) -or
+        $trustedRuntimeFiles.ContainsKey($path)) {
+      throw 'V5 trusted runtime file allowlist escaped or duplicated.'
+    }
+    $trustedRuntimeFiles.Add($path, $record)
+  }
+  if ($trustedRuntimeFiles.Count -ne 11) {
+    throw 'V5 trusted runtime file allowlist is not exact.'
+  }
+
+  $cursor = [IO.DirectoryInfo]::new($runtimeRoot)
+  while ($null -ne $cursor) {
+    if (($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+      throw 'V5 trusted runtime has a reparse ancestor.'
+    }
+    $cursor = $cursor.Parent
+  }
+  $runtimeFileLeases = [Collections.Generic.List[IO.FileStream]]::new()
+  try {
+    foreach ($path in $trustedRuntimeFiles.Keys) {
+      $fileCursor = [IO.DirectoryInfo]::new([IO.Path]::GetDirectoryName($path))
+      while ($null -ne $fileCursor -and $fileCursor.FullName.StartsWith(
+          $runtimeRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        if (($fileCursor.Attributes -band
+            [IO.FileAttributes]::ReparsePoint) -ne 0) {
+          throw 'V5 trusted runtime file has a reparse ancestor.'
+        }
+        $fileCursor = $fileCursor.Parent
+      }
+      $file = [IO.FileInfo]::new($path)
+      if (($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw 'V5 trusted runtime file is a reparse point.'
+      }
+      $stream = $null
+      $algorithm = $null
+      try {
+        $stream = [IO.File]::Open(
+          $path, [IO.FileMode]::Open, [IO.FileAccess]::Read,
+          [IO.FileShare]::Read)
+        $algorithm = [Security.Cryptography.SHA256]::Create()
+        $digest = [Convert]::ToHexString($algorithm.ComputeHash($stream))
+        $spec = $trustedRuntimeFiles[$path]
+        if ($stream.Length -ne [long]$spec.size_bytes -or
+            $digest -cne [string]$spec.sha256) {
+          throw 'V5 trusted runtime file identity changed.'
+        }
+        $runtimeFileLeases.Add($stream)
+        $stream = $null
+      } finally {
+        if ($null -ne $algorithm) { $algorithm.Dispose() }
+        if ($null -ne $stream) { $stream.Dispose() }
+      }
+    }
+  } catch {
+    foreach ($lease in $runtimeFileLeases) { $lease.Dispose() }
+    throw
+  }
+  if ($runtimeFileLeases.Count -ne 11) {
+    foreach ($lease in $runtimeFileLeases) { $lease.Dispose() }
+    $runtimeFileLeases.Clear()
+    throw 'V5 bootstrap did not retain all eleven runtime file leases.'
+  }
+  $leaseSets = [AppDomain]::CurrentDomain.GetData(
+    'wlv.issue13.v5.powershell.runtime.leases')
+  if ($leaseSets -isnot [Collections.Generic.List[object]]) {
+    $leaseSets = [Collections.Generic.List[object]]::new()
+  }
+  $leaseSets.Add($runtimeFileLeases)
+  [AppDomain]::CurrentDomain.SetData(
+    'wlv.issue13.v5.powershell.runtime.leases', $leaseSets)
+
+  [Environment]::SetEnvironmentVariable(
+    'PSModulePath', $moduleRoot, [EnvironmentVariableTarget]::Process)
+  $global:PSModuleAutoLoadingPreference = 'None'
+
+  $trustedCmdletAssemblies =
+    [Collections.Generic.Dictionary[string, object]]::new(
+      [StringComparer]::OrdinalIgnoreCase)
+  $trustedCmdletAssemblies.Add(
+    [IO.Path]::Combine($runtimeRoot, 'System.Management.Automation.dll'),
+    [pscustomobject]@{
+      full_name =
+        'System.Management.Automation, Version=7.6.0.500, Culture=neutral, PublicKeyToken=31bf3856ad364e35'
+      module_version_id = '7071448b-dbd2-48c8-9dff-f288a19a62d2'
+    })
+  $trustedCmdletAssemblies.Add(
+    [IO.Path]::Combine(
+      $runtimeRoot, 'Microsoft.PowerShell.Commands.Management.dll'),
+    [pscustomobject]@{
+      full_name =
+        'Microsoft.PowerShell.Commands.Management, Version=7.6.0.500, Culture=neutral, PublicKeyToken=31bf3856ad364e35'
+      module_version_id = '4c155aeb-1e5e-4023-8c7f-214e199b9530'
+    })
+  $trustedCmdletAssemblies.Add(
+    [IO.Path]::Combine(
+      $runtimeRoot, 'Microsoft.PowerShell.Commands.Utility.dll'),
+    [pscustomobject]@{
+      full_name =
+        'Microsoft.PowerShell.Commands.Utility, Version=7.6.0.500, Culture=neutral, PublicKeyToken=31bf3856ad364e35'
+      module_version_id = '99be7828-14d8-415d-ae6e-3f0185e7ef9f'
+    })
+  $trustedCmdletAssemblies.Add(
+    [IO.Path]::Combine(
+      $runtimeRoot, 'Microsoft.Management.Infrastructure.CimCmdlets.dll'),
+    [pscustomobject]@{
+      full_name =
+        'Microsoft.Management.Infrastructure.CimCmdlets, Version=7.6.0.500, Culture=neutral, PublicKeyToken=31bf3856ad364e35'
+      module_version_id = '3af4a3ba-947a-4e39-9400-da8fae0c56de'
+    })
+  if ($trustedCmdletAssemblies.Count -ne 4) {
+    throw 'V5 trusted cmdlet assembly allowlist is not exact.'
+  }
+
+  $importModuleCandidates = [object[]](
+    $ExecutionContext.InvokeCommand.GetCommands(
+      'Import-Module', [Management.Automation.CommandTypes]::Cmdlet, $true))
+  if ($importModuleCandidates.Count -ne 1) {
+    throw 'V5 bootstrap Import-Module cmdlet is not singular.'
+  }
+  $importModuleCmdlet = $importModuleCandidates[0]
+  $importAssembly = $importModuleCmdlet.ImplementingType.Assembly
+  $importAssemblyPath = [IO.Path]::GetFullPath(
+    [string]$importAssembly.Location)
+  $importAssemblySpec = $trustedCmdletAssemblies[$importAssemblyPath]
+  if ([string]$importModuleCmdlet.CommandType -cne 'Cmdlet' -or
+      [string]$importModuleCmdlet.ModuleName -cne 'Microsoft.PowerShell.Core' -or
+      [string]$importModuleCmdlet.Source -cne 'Microsoft.PowerShell.Core' -or
+      [string]$importModuleCmdlet.ImplementingType.FullName -cne
+        'Microsoft.PowerShell.Commands.ImportModuleCommand' -or
+      $importAssemblyPath -cne
+        [IO.Path]::Combine($runtimeRoot, 'System.Management.Automation.dll') -or
+      [string]$importAssembly.FullName -cne [string]$importAssemblySpec.full_name -or
+      $importAssembly.ManifestModule.ModuleVersionId.ToString('D') -cne
+        [string]$importAssemblySpec.module_version_id) {
+    throw 'V5 bootstrap Import-Module cmdlet identity changed.'
+  }
+  foreach ($kind in [Management.Automation.CommandTypes[]]@(
+      [Management.Automation.CommandTypes]::Alias,
+      [Management.Automation.CommandTypes]::Function,
+      [Management.Automation.CommandTypes]::Filter,
+      [Management.Automation.CommandTypes]::Application,
+      [Management.Automation.CommandTypes]::ExternalScript)) {
+    if (([object[]]($ExecutionContext.InvokeCommand.GetCommands(
+        'Import-Module', $kind, $true))).Count -ne 0) {
+      throw 'V5 bootstrap Import-Module has a competing command.'
+    }
+  }
+  foreach ($manifest in [string[]]@(
+      [IO.Path]::Combine(
+        $moduleRoot,
+        'Microsoft.PowerShell.Management\Microsoft.PowerShell.Management.psd1'),
+      [IO.Path]::Combine(
+        $moduleRoot,
+        'Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1'),
+      [IO.Path]::Combine($moduleRoot, 'CimCmdlets\CimCmdlets.psd1'))) {
+    $null = & $importModuleCmdlet -Name $manifest -Global -Force -ErrorAction Stop
+  }
+  $global:PSModuleAutoLoadingPreference = 'None'
+
+  $cmdletGroups =
+    [Collections.Generic.Dictionary[string, object]]::new(
+      [StringComparer]::Ordinal)
+  $cmdletGroups.Add('core', [pscustomobject]@{
+      module_name = 'Microsoft.PowerShell.Core'
+      source = 'Microsoft.PowerShell.Core'
+      module_path = ''
+      version = '7.6.0.500'
+      module_guid = ''
+      assembly_path =
+        [IO.Path]::Combine($runtimeRoot, 'System.Management.Automation.dll')
+      commands = [string[]]@(
+        'ForEach-Object', 'Out-Null', 'Set-StrictMode', 'Where-Object')
+    })
+  $cmdletGroups.Add('management', [pscustomobject]@{
+      module_name = 'Microsoft.PowerShell.Management'
+      source = 'Microsoft.PowerShell.Management'
+      module_path = [IO.Path]::Combine(
+        $moduleRoot,
+        'Microsoft.PowerShell.Management\Microsoft.PowerShell.Management.psd1')
+      version = '7.0.0.0'
+      module_guid = 'eefcb906-b326-4e99-9f54-8b4bb6ef3c6d'
+      assembly_path = [IO.Path]::Combine(
+        $runtimeRoot, 'Microsoft.PowerShell.Commands.Management.dll')
+      commands = [string[]]@(
+        'Copy-Item', 'Get-ChildItem', 'Get-Content', 'Get-Item',
+        'Get-Location', 'Get-Process', 'Join-Path', 'Move-Item', 'New-Item',
+        'Remove-Item', 'Resolve-Path', 'Set-Content', 'Set-Item',
+        'Set-Location', 'Split-Path', 'Start-Process', 'Stop-Process',
+        'Test-Path')
+    })
+  $cmdletGroups.Add('utility', [pscustomobject]@{
+      module_name = 'Microsoft.PowerShell.Utility'
+      source = 'Microsoft.PowerShell.Utility'
+      module_path = [IO.Path]::Combine(
+        $moduleRoot,
+        'Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1')
+      version = '7.0.0.0'
+      module_guid = '1da87e53-152b-403e-98dc-74d7b4d63d59'
+      assembly_path = [IO.Path]::Combine(
+        $runtimeRoot, 'Microsoft.PowerShell.Commands.Utility.dll')
+      commands = [string[]]@(
+        'Add-Member', 'Add-Type', 'Compare-Object', 'ConvertFrom-Json',
+        'ConvertTo-Json', 'Format-List', 'Get-FileHash', 'Get-Variable',
+        'Group-Object', 'Import-Csv', 'Invoke-Expression', 'Measure-Object',
+        'New-Object', 'New-Variable', 'Select-Object', 'Set-Variable',
+        'Sort-Object', 'Start-Sleep', 'Test-Json', 'Write-Error',
+        'Write-Output')
+    })
+  $cmdletGroups.Add('cim', [pscustomobject]@{
+      module_name = 'CimCmdlets'
+      source = 'CimCmdlets'
+      module_path = [IO.Path]::Combine(
+        $runtimeRoot, 'Microsoft.Management.Infrastructure.CimCmdlets.dll')
+      version = '7.0.0.0'
+      module_guid = 'fb6cc51d-c096-4b38-b78d-0fed6277096a'
+      assembly_path = [IO.Path]::Combine(
+        $runtimeRoot, 'Microsoft.Management.Infrastructure.CimCmdlets.dll')
+      commands = [string[]]@('Get-CimInstance')
+    })
+
+  $trustedCmdlets =
+    [Collections.Generic.Dictionary[string, object]]::new(
+      [StringComparer]::OrdinalIgnoreCase)
+  foreach ($group in $cmdletGroups.Values) {
+    foreach ($commandName in $group.commands) {
+      if ($trustedCmdlets.ContainsKey($commandName)) {
+        throw 'V5 trusted cmdlet allowlist contains a duplicate.'
+      }
+      $trustedCmdlets.Add($commandName, $group)
+    }
+  }
+  if ($cmdletGroups.Count -ne 4 -or $trustedCmdlets.Count -ne 44) {
+    throw 'V5 trusted cmdlet allowlist is not exact.'
+  }
+
+  $resolvedTrustedCmdlets =
+    [Collections.Generic.Dictionary[string, object]]::new(
+      [StringComparer]::OrdinalIgnoreCase)
+  foreach ($commandName in $trustedCmdlets.Keys) {
+    $candidates = [object[]](
+      $ExecutionContext.InvokeCommand.GetCommands(
+        $commandName, [Management.Automation.CommandTypes]::Cmdlet, $true))
+    if ($candidates.Count -ne 1) {
+      throw "V5 trusted cmdlet is not singular: $commandName"
+    }
+    $cmdlet = $candidates[0]
+    $group = $trustedCmdlets[$commandName]
+    $modulePath = if ($null -eq $cmdlet.Module) { '' } else {
+      [IO.Path]::GetFullPath([string]$cmdlet.Module.Path)
+    }
+    $moduleGuid = if ($null -eq $cmdlet.Module) { '' } else {
+      $cmdlet.Module.Guid.ToString('D')
+    }
+    $assembly = $cmdlet.ImplementingType.Assembly
+    $assemblyPath = [IO.Path]::GetFullPath([string]$assembly.Location)
+    $assemblySpec = if ($trustedCmdletAssemblies.ContainsKey($assemblyPath)) {
+      $trustedCmdletAssemblies[$assemblyPath]
+    } else { $null }
+    $attributes = [object[]]$cmdlet.ImplementingType.GetCustomAttributes(
+      [Management.Automation.CmdletAttribute], $false)
+    $declaredName = if ($attributes.Count -eq 1) {
+      [string]$attributes[0].VerbName + '-' + [string]$attributes[0].NounName
+    } else { '' }
+    if ([string]$cmdlet.CommandType -cne 'Cmdlet' -or
+        [string]$cmdlet.Name -cne $commandName -or
+        [string]$cmdlet.ModuleName -cne [string]$group.module_name -or
+        [string]$cmdlet.Source -cne [string]$group.source -or
+        -not [string]::Equals(
+          $modulePath, [string]$group.module_path,
+          [StringComparison]::OrdinalIgnoreCase) -or
+        [string]$cmdlet.Version -cne [string]$group.version -or
+        $moduleGuid -cne [string]$group.module_guid -or
+        -not [string]::Equals(
+          $assemblyPath, [string]$group.assembly_path,
+          [StringComparison]::OrdinalIgnoreCase) -or
+        $null -eq $assemblySpec -or
+        [string]$assembly.FullName -cne [string]$assemblySpec.full_name -or
+        $assembly.ManifestModule.ModuleVersionId.ToString('D') -cne
+          [string]$assemblySpec.module_version_id -or
+        $declaredName -cne $commandName) {
+      throw "V5 trusted cmdlet identity changed: $commandName"
+    }
+    $resolvedTrustedCmdlets.Add($commandName, $cmdlet)
+  }
+
+  $names = [Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::OrdinalIgnoreCase)
+  $collisions = [Collections.Generic.List[string]]::new()
+  $commandAsts = [object[]]$Ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.CommandAst]
+    }, $true)
+  foreach ($commandAst in $commandAsts) {
+    $name = $commandAst.GetCommandName()
+    if ([string]::IsNullOrWhiteSpace($name) -or -not $names.Add($name)) {
+      continue
+    }
+    foreach ($kind in [Management.Automation.CommandTypes[]]@(
+        [Management.Automation.CommandTypes]::Alias,
+        [Management.Automation.CommandTypes]::Function,
+        [Management.Automation.CommandTypes]::Filter,
+        [Management.Automation.CommandTypes]::Application,
+        [Management.Automation.CommandTypes]::ExternalScript)) {
+      foreach ($collision in [object[]](
+          $ExecutionContext.InvokeCommand.GetCommands($name, $kind, $true))) {
+        $collisions.Add(([string]$kind + ':' + $name))
+      }
+    }
+    $cmdlets = [object[]](
+      $ExecutionContext.InvokeCommand.GetCommands(
+        $name, [Management.Automation.CommandTypes]::Cmdlet, $true))
+    if ($trustedCmdlets.ContainsKey($name)) {
+      if ($cmdlets.Count -ne 1 -or
+          $cmdlets[0].ImplementingType -ne
+            $resolvedTrustedCmdlets[$name].ImplementingType) {
+        $collisions.Add('Cmdlet:' + $name)
+      }
+    } elseif ($cmdlets.Count -ne 0) {
+      $collisions.Add('Cmdlet:' + $name)
+    }
+  }
+  if ($collisions.Count -ne 0) {
+    throw ('V5 command collision bootstrap rejected inherited commands: ' +
+      [string]::Join(', ', [string[]]$collisions.ToArray()))
+  }
+  if ([string][Environment]::GetEnvironmentVariable(
+      'PSModulePath', [EnvironmentVariableTarget]::Process) -cne $moduleRoot -or
+      [string]$global:PSModuleAutoLoadingPreference -cne 'None') {
+    throw 'V5 command bootstrap did not retain its closed module resolver.'
+  }
+}
+& $issue13V5CommandCollisionGuard $MyInvocation.MyCommand.ScriptBlock.Ast
+
+. ([IO.Path]::Combine($PSScriptRoot, 'issue13-v5-coordinator-lib.ps1'))
+$null = Assert-Issue13V5CurrentPwshHost
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 if (-not $ConfirmWriteReport) {
   throw 'Report generation requires -ConfirmWriteReport.'
 }
 $scriptRoot = (Resolve-Path -LiteralPath $PSScriptRoot).Path
-. (Join-Path $scriptRoot 'issue13-v5-coordinator-lib.ps1')
 
+function ConvertTo-Issue13V5RendererSourceToolingJson(
+  [object]$Tooling,
+  [string]$Label
+) {
+  $null = Assert-Issue13V5ExactPropertyNames $Tooling @(
+    'candidate_commit', 'repository_relative_root', 'root', 'physical_root',
+    'file_count', 'directory_count', 'total_bytes', 'path_list_sha256',
+    'inventory_sha256', 'trees', 'records'
+  ) $Label
+  if (-not ($Tooling.candidate_commit -is [string]) -or
+      [string]$Tooling.candidate_commit -cnotmatch '^[0-9a-f]{40}$' -or
+      -not ($Tooling.repository_relative_root -is [string]) -or
+      -not ($Tooling.root -is [string]) -or
+      -not ($Tooling.physical_root -is [string]) -or
+      -not ($Tooling.file_count -is [long]) -or
+      -not ($Tooling.directory_count -is [long]) -or
+      -not ($Tooling.total_bytes -is [long]) -or
+      -not ($Tooling.path_list_sha256 -is [string]) -or
+      [string]$Tooling.path_list_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+      -not ($Tooling.inventory_sha256 -is [string]) -or
+      [string]$Tooling.inventory_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+      -not ($Tooling.trees -is [array]) -or
+      -not ($Tooling.records -is [array])) {
+    throw "$Label has a malformed source-tooling envelope."
+  }
+  $trees = @($Tooling.trees | ForEach-Object {
+    $null = Assert-Issue13V5ExactPropertyNames $_ @(
+      'relative_path', 'repository_path', 'mode', 'type', 'tree'
+    ) "$Label tree"
+    if (-not ($_.relative_path -is [string]) -or
+        -not ($_.repository_path -is [string]) -or
+        -not ($_.mode -is [string]) -or -not ($_.type -is [string]) -or
+        -not ($_.tree -is [string])) {
+      throw "$Label has a malformed Git tree record."
+    }
+    [ordered]@{
+      relative_path = [string]$_.relative_path
+      repository_path = [string]$_.repository_path
+      mode = [string]$_.mode
+      type = [string]$_.type
+      tree = [string]$_.tree
+    }
+  })
+  $records = @($Tooling.records | ForEach-Object {
+    $null = Assert-Issue13V5ExactPropertyNames $_ @(
+      'relative_path', 'repository_path', 'size_bytes', 'sha256', 'mode',
+      'type', 'blob'
+    ) "$Label file"
+    if (-not ($_.relative_path -is [string]) -or
+        -not ($_.repository_path -is [string]) -or
+        -not ($_.size_bytes -is [long]) -or
+        -not ($_.sha256 -is [string]) -or
+        -not ($_.mode -is [string]) -or -not ($_.type -is [string]) -or
+        -not ($_.blob -is [string])) {
+      throw "$Label has a malformed Git blob record."
+    }
+    [ordered]@{
+      relative_path = [string]$_.relative_path
+      repository_path = [string]$_.repository_path
+      size_bytes = [long]$_.size_bytes
+      sha256 = [string]$_.sha256
+      mode = [string]$_.mode
+      type = [string]$_.type
+      blob = [string]$_.blob
+    }
+  })
+  $canonical = [ordered]@{
+    candidate_commit = [string]$Tooling.candidate_commit
+    repository_relative_root = [string]$Tooling.repository_relative_root
+    root = [string]$Tooling.root
+    physical_root = [string]$Tooling.physical_root
+    file_count = [long]$Tooling.file_count
+    directory_count = [long]$Tooling.directory_count
+    total_bytes = [long]$Tooling.total_bytes
+    path_list_sha256 = [string]$Tooling.path_list_sha256
+    inventory_sha256 = [string]$Tooling.inventory_sha256
+    trees = [object[]]$trees
+    records = [object[]]$records
+  }
+  ConvertTo-Json -InputObject $canonical -Depth 20 -Compress
+}
+
+function ConvertTo-Issue13V5RendererRscriptJson(
+  [object]$Identity,
+  [string]$Label
+) {
+  $null = Assert-Issue13V5ExactPropertyNames $Identity @(
+    'logical_path', 'physical_path', 'item_id', 'link_count', 'size_bytes',
+    'sha256'
+  ) $Label
+  if (-not ($Identity.logical_path -is [string]) -or
+      [string]::IsNullOrWhiteSpace([string]$Identity.logical_path) -or
+      -not ($Identity.physical_path -is [string]) -or
+      [string]::IsNullOrWhiteSpace([string]$Identity.physical_path) -or
+      -not ($Identity.item_id -is [string]) -or
+      [string]$Identity.item_id -cnotmatch '^[0-9a-f]{16}:[0-9a-f]{32}$' -or
+      -not ($Identity.link_count -is [long]) -or
+      [long]$Identity.link_count -le 0L -or
+      -not ($Identity.size_bytes -is [long]) -or
+      [long]$Identity.size_bytes -le 0L -or
+      -not ($Identity.sha256 -is [string]) -or
+      [string]$Identity.sha256 -cnotmatch '^[0-9a-f]{64}$') {
+    throw "$Label has a malformed Rscript identity."
+  }
+  $canonical = [ordered]@{
+    logical_path = [string]$Identity.logical_path
+    physical_path = [string]$Identity.physical_path
+    item_id = [string]$Identity.item_id
+    link_count = [long]$Identity.link_count
+    size_bytes = [long]$Identity.size_bytes
+    sha256 = [string]$Identity.sha256
+  }
+  ConvertTo-Json -InputObject $canonical -Depth 5 -Compress
+}
+
+$initialConfigPath = (Resolve-Path -LiteralPath $ConfigPath).Path
+$initialConfigSha256 = Get-Issue13V5Sha256 $initialConfigPath
 $binding = Assert-Issue13V5Config $ConfigPath
 $config = $binding.config
+if (-not [string]::Equals(
+    (ConvertTo-Issue13V5Path ([string]$binding.path)),
+    (ConvertTo-Issue13V5Path $initialConfigPath),
+    [StringComparison]::OrdinalIgnoreCase) -or
+    [string]$binding.sha256 -cne $initialConfigSha256 -or
+    (Get-Issue13V5Sha256 $initialConfigPath) -cne $initialConfigSha256) {
+  throw 'Report config changed while its initial binding was authenticated.'
+}
+$initialConfigCanonical = ConvertTo-Json -InputObject $config -Depth 100 `
+  -Compress
+$initialConfigDiskCanonical = ConvertTo-Json -InputObject (
+  Read-Issue13V5Json $initialConfigPath) -Depth 100 -Compress
+if ($initialConfigCanonical -cne $initialConfigDiskCanonical -or
+    (Get-Issue13V5Sha256 $initialConfigPath) -cne $initialConfigSha256) {
+  throw 'Report config content changed after its initial binding was read.'
+}
 $expectedStatePath = ConvertTo-Issue13V5Path (Get-Issue13V5StatePath $config)
 $providedStatePath = ConvertTo-Issue13V5Path (
   (Resolve-Path -LiteralPath $StatePath).Path)
@@ -22,7 +579,16 @@ if (-not [string]::Equals($providedStatePath, $expectedStatePath,
     [StringComparison]::OrdinalIgnoreCase)) {
   throw 'Report state path is not the canonical control-root gate-state.json.'
 }
+$initialStateSha256 = Get-Issue13V5Sha256 $providedStatePath
 $state = Read-Issue13V5State $config $binding.sha256
+$initialStateCanonical = ConvertTo-Json -InputObject $state -Depth 100 `
+  -Compress
+$initialStateDiskCanonical = ConvertTo-Json -InputObject (
+  Read-Issue13V5Json $providedStatePath) -Depth 100 -Compress
+if ((Get-Issue13V5Sha256 $providedStatePath) -cne $initialStateSha256 -or
+    $initialStateCanonical -cne $initialStateDiskCanonical) {
+  throw 'Report state changed while its initial binding was authenticated.'
+}
 if ([string]$state.schema -cne 'wlv-issue13-v5-coordinator-state/1' -or
     [string]$state.config_sha256 -cne [string]$binding.sha256 -or
     [string]$state.final_aggregate.status -cne 'passed' -or
@@ -40,8 +606,10 @@ if ((Get-Issue13V5Sha256 $state.final_aggregate.path) -cne
 $null = Assert-Issue13V5FinalBindings $config $state
 
 $repository = (Resolve-Path -LiteralPath $config.repository_root).Path
-$head = (& git -C $repository rev-parse HEAD 2>$null).Trim()
-$trackedStatus = @(& git -C $repository status '--porcelain=v1' `
+$head = (Invoke-Issue13V5SealedGit `
+  -C $repository rev-parse HEAD 2>$null).Trim()
+$trackedStatus = @(Invoke-Issue13V5SealedGit `
+  -C $repository status '--porcelain=v1' `
   '--untracked-files=no' 2>$null)
 if ($LASTEXITCODE -ne 0 -or $head -cne [string]$config.candidate_commit -or
     $trackedStatus.Count -ne 0) {
@@ -154,19 +722,78 @@ $commandEntries = @(Get-ChildItem -LiteralPath $commandRoot -Filter '*.json' `
     }
   })
 $commandRecords = @($commandEntries | ForEach-Object document)
-if ($commandRecords.Count -le 0 -or
-    @($commandRecords | Where-Object {
-      [string]$_.schema -cne 'wlv-issue13-v5-command/1' -or
-      [long]$_.exit_code -notin @([long[]]$_.expected_exit_codes) -or
-      -not (Test-Issue13V5ExactBoolean $_.timed_out $false) -or
-      [string]$_.stdout_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
-      [string]$_.stderr_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
-      (Get-Issue13V5Sha256 ([string]$_.stdout_path)) -cne
-        [string]$_.stdout_sha256 -or
-      (Get-Issue13V5Sha256 ([string]$_.stderr_path)) -cne
-        [string]$_.stderr_sha256
-    }).Count -ne 0) {
-  throw 'Command records are incomplete, failed, or changed.'
+$expectedCommandFields = [string[]]@(
+  'schema', 'label', 'executable', 'arguments', 'environment_set',
+  'environment_cleared', 'working_directory', 'started_at_utc',
+  'finished_at_utc', 'timeout_seconds', 'timed_out', 'exit_code',
+  'expected_exit_codes', 'stdout_path', 'stdout_sha256', 'stderr_path',
+  'stderr_sha256'
+)
+if ($commandRecords.Count -le 0) {
+  throw 'No V5 command record is available for the report.'
+}
+foreach ($record in $commandRecords) {
+  $null = Assert-Issue13V5ExactPropertyNames $record $expectedCommandFields `
+    'V5 command record'
+  if ([string]$record.schema -cne 'wlv-issue13-v5-command/1' -or
+      -not ($record.label -is [string]) -or
+      [string]::IsNullOrWhiteSpace([string]$record.label) -or
+      -not ($record.executable -is [string]) -or
+      [string]::IsNullOrWhiteSpace([string]$record.executable) -or
+      -not ($record.arguments -is [array]) -or
+      @($record.arguments | Where-Object { -not ($_ -is [string]) }).Count `
+        -ne 0 -or
+      -not ($record.environment_set -is [array]) -or
+      -not ($record.environment_cleared -is [array]) -or
+      -not ($record.expected_exit_codes -is [array]) -or
+      @($record.expected_exit_codes).Count -le 0 -or
+      @($record.expected_exit_codes | Where-Object {
+        -not ($_ -is [long])
+      }).Count -ne 0 -or
+      @($record.expected_exit_codes | Sort-Object -Unique).Count -ne
+        @($record.expected_exit_codes).Count -or
+      -not ($record.working_directory -is [string]) -or
+      [string]::IsNullOrWhiteSpace([string]$record.working_directory) -or
+      -not ($record.started_at_utc -is [string]) -or
+      -not ($record.finished_at_utc -is [string]) -or
+      -not ($record.timeout_seconds -is [long]) -or
+      [long]$record.timeout_seconds -le 0L -or
+      -not ($record.exit_code -is [long]) -or
+      [long]$record.exit_code -notin @([long[]]$record.expected_exit_codes) -or
+      -not (Test-Issue13V5ExactBoolean $record.timed_out $false) -or
+      -not ($record.stdout_path -is [string]) -or
+      -not ($record.stderr_path -is [string]) -or
+      [string]$record.stdout_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+      [string]$record.stderr_sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+      (Get-Issue13V5Sha256 ([string]$record.stdout_path)) -cne
+        [string]$record.stdout_sha256 -or
+      (Get-Issue13V5Sha256 ([string]$record.stderr_path)) -cne
+        [string]$record.stderr_sha256) {
+    throw "Command record is incomplete, failed, or changed: $($record.label)"
+  }
+  $setNames = [Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::OrdinalIgnoreCase)
+  foreach ($entry in @($record.environment_set)) {
+    $null = Assert-Issue13V5ExactPropertyNames $entry @('name', 'value') `
+      "Command environment_set item: $($record.label)"
+    if (-not ($entry.name -is [string]) -or
+        [string]$entry.name -cnotmatch '^[A-Za-z_][A-Za-z0-9_]*$' -or
+        -not ($entry.value -is [string]) -or
+        -not $setNames.Add([string]$entry.name)) {
+      throw "Invalid or duplicate environment_set item: $($record.label)"
+    }
+  }
+  $clearedNames = [Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::OrdinalIgnoreCase)
+  foreach ($name in @($record.environment_cleared)) {
+    if (-not ($name -is [string]) -or
+        [string]$name -cnotmatch '^[A-Za-z_][A-Za-z0-9_]*$' -or
+        -not $clearedNames.Add([string]$name) -or
+        $setNames.Contains([string]$name)) {
+      throw ('Invalid, duplicate, or overlapping environment_cleared item: ' +
+        [string]$record.label)
+    }
+  }
 }
 $commandInventory = Get-Issue13V5TreeInventory $commandRoot
 $evidenceInventory = Get-Issue13V5TreeInventory $config.evidence_root
@@ -223,6 +850,304 @@ if ([long]$oracleSourceController.file_count -ne 34L -or
       ($configuredOracleController | ConvertTo-Json -Depth 30 -Compress)) {
   throw 'Oracle-effect terminal source-controller inventory changed.'
 }
+$harnessManifest = Read-Issue13V5Json $config.harness_manifest_path
+$manifestSourceTooling = $harnessManifest.source_tooling
+$configuredSourceTooling =
+  $config.oracle_effect.comparison_harness.source_tooling
+$oracleSourceTooling = $oracleTerminalHarness.source_tooling
+$manifestSourceToolingJson =
+  ConvertTo-Issue13V5RendererSourceToolingJson `
+    $manifestSourceTooling 'Harness-manifest source tooling'
+$configuredSourceToolingJson =
+  ConvertTo-Issue13V5RendererSourceToolingJson `
+    $configuredSourceTooling 'Configured source tooling'
+$oracleSourceToolingJson =
+  ConvertTo-Issue13V5RendererSourceToolingJson `
+    $oracleSourceTooling 'Oracle-proof source tooling'
+if ($manifestSourceToolingJson -cne $configuredSourceToolingJson -or
+    $manifestSourceToolingJson -cne $oracleSourceToolingJson) {
+  throw 'Source-tooling bindings differ among manifest, config, and proof.'
+}
+$sourceToolingRoot = (Resolve-Path -LiteralPath (
+  [string]$oracleSourceTooling.root)).Path
+$expectedSourceToolingRoot = (Resolve-Path -LiteralPath (
+  Join-Path $repository 'run_logs/issue13-evidence-source-v5')).Path
+$sourceToolingRecords = @($oracleSourceTooling.records)
+$sourceToolingTrees = @($oracleSourceTooling.trees)
+$sourceToolingRelativePaths = [string[]]@(
+  $sourceToolingRecords | ForEach-Object { [string]$_.relative_path })
+$sourceToolingPathListSha256 = Get-Issue13V5TextSha256 (
+  [string]::Join("`n", $sourceToolingRelativePaths))
+$sourceToolingInventory = Get-Issue13V5TreeInventory $sourceToolingRoot
+$sourceToolingPhysicalRoot = ConvertTo-Issue13V5PhysicalPath `
+  $sourceToolingRoot 'Issue #13 source tooling root'
+if ([long]$oracleSourceTooling.file_count -ne 37L -or
+    [long]$oracleSourceTooling.directory_count -ne 1L -or
+    $sourceToolingRecords.Count -ne 37 -or
+    $sourceToolingTrees.Count -ne 2 -or
+    @($sourceToolingRelativePaths | Sort-Object -Unique).Count -ne 37 -or
+    [string]$oracleSourceTooling.candidate_commit -cne
+      [string]$config.candidate_commit -or
+    [string]$oracleSourceTooling.repository_relative_root -cne
+      'run_logs/issue13-evidence-source-v5' -or
+    -not [string]::Equals(
+      (ConvertTo-Issue13V5Path $sourceToolingRoot),
+      (ConvertTo-Issue13V5Path $expectedSourceToolingRoot),
+      [StringComparison]::OrdinalIgnoreCase) -or
+    -not [string]::Equals(
+      [string]$oracleSourceTooling.physical_root,
+      $sourceToolingPhysicalRoot,
+      [StringComparison]::OrdinalIgnoreCase) -or
+    [string]$oracleSourceTooling.path_list_sha256 -cne
+      $sourceToolingPathListSha256 -or
+    [string]$oracleSourceTooling.path_list_sha256 -cne
+      '7bf2e27807e9bc36d3d3766789439d0d9afdd7b2cc5127145ce0e0f6819db00d' -or
+    [string]$oracleSourceTooling.inventory_sha256 -cnotmatch
+      '^[0-9a-f]{64}$' -or
+    [long]$sourceToolingInventory.file_count -ne 37L -or
+    [long]$sourceToolingInventory.directory_count -ne 1L -or
+    [long]$sourceToolingInventory.total_bytes -ne
+      [long]$oracleSourceTooling.total_bytes -or
+    [string]$sourceToolingInventory.inventory_sha256 -cne
+      [string]$oracleSourceTooling.inventory_sha256) {
+  throw 'The exact 37-file Git-bound source-tooling inventory changed.'
+}
+$expectedSourceTreePaths = [string[]]@(
+  '.', 'issue13-evidence-harness')
+for ($index = 0; $index -lt $sourceToolingTrees.Count; $index++) {
+  $tree = $sourceToolingTrees[$index]
+  $relativeTree = [string]$tree.relative_path
+  $expectedRepositoryPath = if ($relativeTree -ceq '.') {
+    'run_logs/issue13-evidence-source-v5'
+  } else {
+    'run_logs/issue13-evidence-source-v5/' + $relativeTree
+  }
+  $gitTree = (Invoke-Issue13V5SealedGit -C $repository rev-parse (
+    [string]$config.candidate_commit + ':' + $expectedRepositoryPath) `
+    2>$null).Trim()
+  $gitTreeType = if ($LASTEXITCODE -eq 0) {
+    (Invoke-Issue13V5SealedGit `
+      -C $repository cat-file -t $gitTree 2>$null).Trim()
+  } else { '' }
+  if ($relativeTree -cne $expectedSourceTreePaths[$index] -or
+      [string]$tree.repository_path -cne $expectedRepositoryPath -or
+      [string]$tree.mode -cne '040000' -or
+      [string]$tree.type -cne 'tree' -or
+      [string]$tree.tree -cnotmatch '^[0-9a-f]{40}$' -or
+      $gitTree -cne [string]$tree.tree -or $gitTreeType -cne 'tree') {
+    throw "Source-tooling Git tree binding changed: $relativeTree"
+  }
+}
+foreach ($record in $sourceToolingRecords) {
+  $relative = [string]$record.relative_path
+  $expectedRepositoryPath =
+    'run_logs/issue13-evidence-source-v5/' + $relative
+  $localPath = Join-Path $sourceToolingRoot $relative.Replace('/', '\')
+  $gitIdentity = Get-Issue13V5GitBlobIdentity $repository `
+    ([string]$config.candidate_commit) $expectedRepositoryPath
+  if ($relative -notmatch '^[^\\/:]+(?:/[^\\/:]+)*$' -or
+      $relative -match '(^|/)\.\.?(?:/|$)' -or
+      [string]$record.repository_path -cne $expectedRepositoryPath -or
+      [string]$record.mode -cne '100644' -or
+      [string]$record.type -cne 'blob' -or
+      [string]$record.blob -cne [string]$gitIdentity.git_blob -or
+      [long]$record.size_bytes -ne [long]$gitIdentity.size_bytes -or
+      [string]$record.sha256 -cne [string]$gitIdentity.sha256 -or
+      -not (Test-Path -LiteralPath $localPath -PathType Leaf) -or
+      [long](Get-Item -LiteralPath $localPath).Length -ne
+        [long]$record.size_bytes -or
+      (Get-Issue13V5Sha256 $localPath) -cne [string]$record.sha256) {
+    throw "Source-tooling Git blob binding changed: $relative"
+  }
+}
+
+$expectedStrictSmokeSha256 =
+  '973079b3cba2df2627b3dcc4dcde0899b261eff9ad1930eb31b2407d23e3dd6d'
+$null = Assert-Issue13V5ExactPropertyNames $config.strict_baseline_smoke @(
+  'path', 'sha256', 'passed_count', 'failed_count',
+  'final_evidence_eligible', 'rscript_path', 'rscript_physical_path',
+  'rscript_item_id', 'rscript_link_count', 'rscript_sha256'
+) 'Strict historical smoke config binding'
+$null = Assert-Issue13V5ExactPropertyNames $strictSmoke @(
+  'schema', 'status', 'passed', 'final_evidence_eligible', 'purpose',
+  'baseline_commit', 'started_at_utc', 'finished_at_utc',
+  'source_inventory_sha256', 'harness_manifest_path',
+  'harness_manifest_sha256', 'method_count', 'passed_count', 'failed_count',
+  'records', 'disposition'
+) 'Strict historical smoke summary'
+if ([string]$config.strict_baseline_smoke.sha256 -cne
+      $expectedStrictSmokeSha256 -or
+    (Get-Issue13V5Sha256 ([string]$config.strict_baseline_smoke.path)) -cne
+      $expectedStrictSmokeSha256 -or
+    [string]$strictSmoke.schema -cne 'wlv-issue13-v5-baseline-smoke/1' -or
+    [string]$strictSmoke.status -cne 'failed' -or
+    -not (Test-Issue13V5ExactBoolean $strictSmoke.passed $false) -or
+    -not (Test-Issue13V5ExactBoolean `
+      $strictSmoke.final_evidence_eligible $false) -or
+    [string]$strictSmoke.purpose -cne 'strict-cc2-executability-preflight' -or
+    [string]$strictSmoke.baseline_commit -cne
+      'cc2c86189a06676bcb9f0e05e08033d710a92509' -or
+    [long]$strictSmoke.method_count -ne 12L -or
+    [long]$strictSmoke.passed_count -ne 5L -or
+    [long]$strictSmoke.failed_count -ne 7L -or
+    @($strictSmoke.records).Count -ne 12) {
+  throw 'The sealed strict historical smoke summary changed.'
+}
+$strictHarnessManifestPath = (Resolve-Path -LiteralPath (
+  [string]$strictSmoke.harness_manifest_path)).Path
+$strictHarnessRuntime = (Resolve-Path -LiteralPath (
+  Split-Path -Parent $strictHarnessManifestPath)).Path
+$null = Assert-Issue13V5NoReparseAncestors $strictHarnessRuntime `
+  'Strict historical harness runtime'
+$strictHarnessManifest = Read-Issue13V5Json $strictHarnessManifestPath
+$strictHarnessInventory = Get-Issue13V5HarnessInventory $strictHarnessRuntime
+$strictHarnessPathListSha256 = Get-Issue13V5TextSha256 (
+  [string]::Join("`n", @($strictHarnessInventory.records.relative_path)))
+$strictHarnessDirectories = @(
+  Get-ChildItem -LiteralPath $strictHarnessRuntime -Directory -Force)
+if ((Get-Issue13V5Sha256 $strictHarnessManifestPath) -cne
+      'a17a187621cdd4aff6f24efd6bf43ffbf9336de0a19189dfc7f5a82758a92c23' -or
+    [string]$strictSmoke.harness_manifest_sha256 -cne
+      'a17a187621cdd4aff6f24efd6bf43ffbf9336de0a19189dfc7f5a82758a92c23' -or
+    [string]$strictHarnessManifest.schema -cne
+      'wlv-issue13-v5-harness-materialization/1' -or
+    [string]$strictHarnessManifest.generation -cne 'v5' -or
+    [string]$strictHarnessManifest.status -cne 'materialized' -or
+    [string]$strictHarnessManifest.baseline_commit -cne
+      'cc2c86189a06676bcb9f0e05e08033d710a92509' -or
+    -not (Test-Issue13V5ExactBoolean `
+      $strictHarnessManifest.final_evidence_eligible $true) -or
+    -not (Test-Issue13V5ExactBoolean `
+      $strictHarnessManifest.reuses_candidate_evidence $false) -or
+    $strictHarnessDirectories.Count -ne 1 -or
+    [string]$strictHarnessDirectories[0].Name -cne
+      'issue13-evidence-harness' -or
+    [long]$strictHarnessInventory.file_count -ne 39L -or
+    [long]$strictHarnessInventory.total_bytes -ne 586873L -or
+    [string]$strictHarnessInventory.inventory_sha256 -cne
+      '7ba02db2ad97cd59bc93405057d5cc127fbefaac0e4e72331c13a10e5f8d495b' -or
+    $strictHarnessPathListSha256 -cne
+      'd6fe55884678c1300f661bd4b1ff1f42694af9d49dabd739fad7630ebfd2b416' -or
+    [long]$strictHarnessManifest.output_tooling.file_count -ne 39L -or
+    [long]$strictHarnessManifest.output_tooling.total_bytes -ne 586873L -or
+    [string]$strictHarnessManifest.output_tooling.inventory_sha256 -cne
+      '7ba02db2ad97cd59bc93405057d5cc127fbefaac0e4e72331c13a10e5f8d495b') {
+  throw 'The separate strict historical harness changed.'
+}
+$strictSmokeRoot = Split-Path -Parent (
+  [string]$config.strict_baseline_smoke.path)
+$strictAttemptsRoot = Join-Path $strictSmokeRoot 'attempts'
+$strictAttemptsInventory = Get-Issue13V5TreeInventory $strictAttemptsRoot
+$strictAttemptPaths = [string[]]@(
+  $strictAttemptsInventory.records | ForEach-Object {
+    [string]$_.relative_path
+  })
+[Array]::Sort($strictAttemptPaths, [StringComparer]::Ordinal)
+$strictAttemptsPathListSha256 = Get-Issue13V5TextSha256 (
+  [string]::Join("`n", $strictAttemptPaths))
+if ([long]$strictAttemptsInventory.file_count -ne 120L -or
+    [long]$strictAttemptsInventory.directory_count -ne 60L -or
+    [long]$strictAttemptsInventory.total_bytes -ne 2255912L -or
+    [string]$strictAttemptsInventory.inventory_sha256 -cne
+      '12b63f23e87b12b6afc0beabec9e64518b0ce114f1ae8b7fa481c01c78320edf' -or
+    [string]$strictAttemptsInventory.directory_list_sha256 -cne
+      '7bdb481081e12c4522f6dfdace2ec2c00015127139b574356f76e019754592ea' -or
+    $strictAttemptsPathListSha256 -cne
+      '5b805a5b9c7d2e1d09b111392b8d0795e60b4866e55f606ac8db9dc4e7cf7657') {
+  throw 'The write-once strict-smoke attempts archive changed.'
+}
+$strictWorktreeRoot = Join-Path $strictSmokeRoot 'worktrees'
+$strictWorktreeDirectories = @(Get-ChildItem -LiteralPath `
+  $strictWorktreeRoot -Directory -Force | Sort-Object Name)
+$strictWorktreeFiles = @(Get-ChildItem -LiteralPath `
+  $strictWorktreeRoot -File -Force)
+$expectedStrictMethods = [string[]]@(
+  $config.methods | ForEach-Object { [string]$_.method })
+[Array]::Sort($expectedStrictMethods, [StringComparer]::Ordinal)
+$observedStrictMethods = [string[]]@(
+  $strictWorktreeDirectories | ForEach-Object { [string]$_.Name })
+[Array]::Sort($observedStrictMethods, [StringComparer]::Ordinal)
+if ($strictWorktreeDirectories.Count -ne 12 -or
+    $strictWorktreeFiles.Count -ne 0 -or
+    [string]::Join("`n", $observedStrictMethods) -cne
+      [string]::Join("`n", $expectedStrictMethods)) {
+  throw 'The strict-smoke worktree set changed.'
+}
+foreach ($worktree in $strictWorktreeDirectories) {
+  $worktreeHead = (Invoke-Issue13V5SealedGit `
+    -C $worktree.FullName rev-parse HEAD 2>$null).Trim()
+  $worktreeTree = (Invoke-Issue13V5SealedGit `
+    -C $worktree.FullName rev-parse 'HEAD^{tree}' `
+    2>$null).Trim()
+  $worktreeStatus = @(Invoke-Issue13V5SealedGit `
+    -C $worktree.FullName status '--porcelain=v1' `
+    '--untracked-files=all' 2>$null)
+  $summaryRecord = @($strictSmoke.records | Where-Object {
+    [string]$_.method -ceq [string]$worktree.Name
+  })
+  if ($LASTEXITCODE -ne 0 -or
+      $worktreeHead -cne 'cc2c86189a06676bcb9f0e05e08033d710a92509' -or
+      $worktreeTree -cne '0cb1142cdadd74bf95272010f5393ebe2af79f47' -or
+      $worktreeStatus.Count -ne 0 -or $summaryRecord.Count -ne 1 -or
+      -not [string]::Equals(
+        (ConvertTo-Issue13V5Path ([string]$summaryRecord[0].project_root)),
+        (ConvertTo-Issue13V5Path $worktree.FullName),
+        [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Strict historical smoke worktree changed: $($worktree.Name)"
+  }
+}
+
+$oracleRscript = $oracleTerminalRuntime.rscript
+$oracleRscriptBefore = $oracleRuntimeImmutability.before.rscript
+$oracleRscriptAfter = $oracleRuntimeImmutability.after.rscript
+$oracleRscriptJson = ConvertTo-Issue13V5RendererRscriptJson `
+  $oracleRscript 'Oracle terminal Rscript identity'
+$oracleRscriptBeforeJson = ConvertTo-Issue13V5RendererRscriptJson `
+  $oracleRscriptBefore 'Oracle before Rscript identity'
+$oracleRscriptAfterJson = ConvertTo-Issue13V5RendererRscriptJson `
+  $oracleRscriptAfter 'Oracle after Rscript identity'
+$currentRscriptPath = (Resolve-Path -LiteralPath ([string]$config.rscript)).Path
+$currentRscriptItem = Get-Issue13V5PhysicalItemIdentity `
+  $currentRscriptPath 'Report Rscript executable'
+$currentRscript = [ordered]@{
+  logical_path = $currentRscriptPath
+  physical_path = [string]$currentRscriptItem.physical_path
+  item_id = [string]$currentRscriptItem.item_id
+  link_count = [long]$currentRscriptItem.link_count
+  size_bytes = [long](Get-Item -LiteralPath $currentRscriptPath).Length
+  sha256 = Get-Issue13V5Sha256 $currentRscriptPath
+}
+$currentRscriptJson = ConvertTo-Issue13V5RendererRscriptJson `
+  $currentRscript 'Current Rscript identity'
+if ($oracleRscriptJson -cne $oracleRscriptBeforeJson -or
+    $oracleRscriptJson -cne $oracleRscriptAfterJson -or
+    $oracleRscriptJson -cne $currentRscriptJson -or
+    -not ($config.strict_baseline_smoke.rscript_path -is [string]) -or
+    -not ($config.strict_baseline_smoke.rscript_physical_path -is [string]) -or
+    -not ($config.strict_baseline_smoke.rscript_item_id -is [string]) -or
+    -not ($config.strict_baseline_smoke.rscript_link_count -is [long]) -or
+    -not ($config.strict_baseline_smoke.rscript_sha256 -is [string]) -or
+    [long]$oracleRscript.link_count -ne 1L -or
+    [long]$oracleRscript.size_bytes -ne 94720L -or
+    [string]$oracleRscript.sha256 -cne
+      '3ad097e10d867e09eb7e54d8ed1f8ef933779b82be56482a04a27d65536d15f9' -or
+    -not [string]::Equals(
+      (ConvertTo-Issue13V5Path (
+        [string]$config.strict_baseline_smoke.rscript_path)),
+      (ConvertTo-Issue13V5Path ([string]$oracleRscript.logical_path)),
+      [StringComparison]::OrdinalIgnoreCase) -or
+    -not [string]::Equals(
+      [string]$config.strict_baseline_smoke.rscript_physical_path,
+      [string]$oracleRscript.physical_path,
+      [StringComparison]::OrdinalIgnoreCase) -or
+    [string]$config.strict_baseline_smoke.rscript_item_id -cne
+      [string]$oracleRscript.item_id -or
+    [long]$config.strict_baseline_smoke.rscript_link_count -ne
+      [long]$oracleRscript.link_count -or
+    [string]$config.strict_baseline_smoke.rscript_sha256 -cne
+      [string]$oracleRscript.sha256) {
+  throw 'The exact current Rscript identity or its before/after seal changed.'
+}
 $expectedOracleCleared = [string[]]@(
   'LANG', 'LC_ALL', 'LC_CTYPE', 'R_ARCH', 'R_DEFAULT_PACKAGES',
   'R_ENVIRON', 'R_ENVIRON_USER', 'R_HOME', 'R_LIBS', 'R_LIBS_SITE',
@@ -264,11 +1189,7 @@ if ([string]$oracleRLibrary.path -cne [string]$config.r_library -or
     [string]$oracleRLibrary.r_version -notmatch '^R version ' -or
     [string]::IsNullOrWhiteSpace([string]$oracleRLibrary.platform) -or
     [string]$oracleRLibrary.inventory_sha256 -cne
-      [string]$config.oracle_effect.r_library.inventory_sha256 -or
-    [string]$oracleTerminalRuntime.rscript.path -cne
-      [string]$config.oracle_effect.rscript.path -or
-    [string]$oracleTerminalRuntime.rscript.sha256 -cne
-      [string]$config.oracle_effect.rscript.sha256) {
+      [string]$config.oracle_effect.r_library.inventory_sha256) {
   throw 'Oracle-effect terminal R runtime inventory changed.'
 }
 $oracleEnvironmentSetJson = $oracleRLibrary.environment.set |
@@ -294,11 +1215,7 @@ if (-not (Test-Issue13V5ExactBoolean $oracleRuntimeImmutability.immutable $true)
     $oracleRuntimeBeforeJson -cne $oracleRuntimeAfterJson -or
     ($oracleRuntimeImmutability.before.r_library |
       ConvertTo-Json -Depth 30 -Compress) -cne
-      ($oracleRLibrary | ConvertTo-Json -Depth 30 -Compress) -or
-    ($oracleRuntimeImmutability.before.rscript |
-      ConvertTo-Json -Depth 10 -Compress) -cne
-      ($oracleTerminalRuntime.rscript |
-        ConvertTo-Json -Depth 10 -Compress)) {
+      ($oracleRLibrary | ConvertTo-Json -Depth 30 -Compress)) {
   throw 'Oracle-effect terminal R runtime is not immutable.'
 }
 $oracleRuntimeInventorySha256 =
@@ -501,16 +1418,18 @@ $sourceCacheLines = @($script:Issue13V5PreparationCaches | ForEach-Object {
 $commandLines = @($commandEntries | ForEach-Object {
   $record = $_.document
   $argumentsJson = ConvertTo-Json -InputObject @($record.arguments) -Compress
-  $environmentJson = $record.environment | ConvertTo-Json -Compress
-  $removedJson = ConvertTo-Json -InputObject `
-    @($record.environment_removed) -Compress
+  $environmentSetJson = ConvertTo-Json -InputObject `
+    @($record.environment_set) -Depth 5 -Compress
+  $environmentClearedJson = ConvertTo-Json -InputObject `
+    @($record.environment_cleared) -Compress
   '- registro `' + [string]$_.sha256 + '`; label `' +
     [string]$record.label + '`; executável `' +
     [string]$record.executable + '`; cwd `' +
     [string]$record.working_directory + '`; exit `' +
     [string]$record.exit_code + '`; argumentos `' + $argumentsJson +
-    '`; ambiente injetado `' + $environmentJson +
-    '`; ambiente removido `' + $removedJson + '`; stdout `' +
+    '`; `environment_set` `' + $environmentSetJson +
+    '`; `environment_cleared` `' + $environmentClearedJson +
+    '`; stdout `' +
     [string]$record.stdout_sha256 + '`; stderr `' +
     [string]$record.stderr_sha256 + '`.'
 })
@@ -593,6 +1512,17 @@ importado como resultado científico final.
   $($config.candidate_source_inventory.total_bytes) bytes).
 - Inventário de diretórios candidato:
   `$($config.candidate_source_inventory.directory_list_sha256)`.
+- Tooling-fonte Git-bound: commit `$($oracleSourceTooling.candidate_commit)`,
+  raiz de repositório `$($oracleSourceTooling.repository_relative_root)`, raiz
+  lógica `$($oracleSourceTooling.root)` e raiz física
+  `$($oracleSourceTooling.physical_root)`.
+- Tooling-fonte fechado: `$($oracleSourceTooling.file_count)` arquivos,
+  `$($oracleSourceTooling.directory_count)` diretório descendente,
+  `$($sourceToolingTrees.Count)` árvores Git,
+  `$($oracleSourceTooling.total_bytes)` bytes; lista de caminhos
+  `$($oracleSourceTooling.path_list_sha256)` e inventário
+  `$($oracleSourceTooling.inventory_sha256)`. Manifesto, configuração e prova
+  contêm exatamente o mesmo objeto.
 $([string]::Join("`n", $sourceCacheLines))
 
 Identidades das gerações preparadas. Cada braço foi validado contra seu
@@ -604,7 +1534,10 @@ $([string]::Join("`n", $sourceIdentityLines))
 ## commands
 
 Os comandos foram registrados individualmente com argumentos, código de saída,
-tempo e hashes de stdout/stderr. Inventário autenticado:
+tempo, `environment_set`, `environment_cleared` e hashes de stdout/stderr.
+Ausência, remoção e string vazia são estados distintos: valores vazios aparecem
+explicitamente como `""` em `environment_set`, e nenhum nome pode ocorrer nas
+duas coleções. Inventário autenticado:
 `$($commandInventory.inventory_sha256)` ($($commandInventory.file_count) arquivos).
 
 $([string]::Join("`n", $commandLines))
@@ -618,6 +1551,23 @@ $oracleValidationCommandLine
 - `baseline_overlay_patch`: `$($config.baseline_overlay.sha256)`
   (stable patch-id `$($config.baseline_overlay.patch_id)`).
 - `strict_baseline_smoke`: `$($config.strict_baseline_smoke.sha256)`.
+- Harness físico separado do smoke estrito: manifesto
+  `$(Get-Issue13V5Sha256 $strictHarnessManifestPath)`; inventário
+  `$($strictHarnessInventory.inventory_sha256)`
+  (`$($strictHarnessInventory.file_count)` arquivos, `1` diretório,
+  `$($strictHarnessInventory.total_bytes)` bytes; lista de caminhos
+  `$strictHarnessPathListSha256`). Esse runtime histórico não é reutilizado
+  como evidência terminal.
+- Archive write-once `attempts` do smoke estrito:
+  `$($strictAttemptsInventory.inventory_sha256)`
+  (`$($strictAttemptsInventory.file_count)` arquivos,
+  `$($strictAttemptsInventory.directory_count)` diretórios,
+  `$($strictAttemptsInventory.total_bytes)` bytes; lista de caminhos
+  `$strictAttemptsPathListSha256`; diretórios
+  `$($strictAttemptsInventory.directory_list_sha256)`).
+- Worktrees históricos do smoke estrito: `12/12`, commit
+  `cc2c86189a06676bcb9f0e05e08033d710a92509`, árvore
+  `0cb1142cdadd74bf95272010f5393ebe2af79f47`, todos integralmente limpos.
 - `compatibility_baseline_smoke`:
   `$($config.compatibility_baseline_smoke.sha256)`.
 - Smoke dedicado da prova do efeito do oráculo:
@@ -633,6 +1583,14 @@ $oracleValidationCommandLine
   `$($config.oracle_effect.comparison_harness.manifest_sha256)`.
 - Inventário dos 34 controladores-fonte do harness terminal:
   `$($oracleSourceController.inventory_sha256)`.
+- Inventário dos 37 arquivos do tooling-fonte Git-bound:
+  `$($oracleSourceTooling.inventory_sha256)`; árvores Git: `2`;
+  path-list: `$($oracleSourceTooling.path_list_sha256)`.
+- Identidade atual do Rscript: caminho lógico
+  `$($oracleRscript.logical_path)`, caminho físico
+  `$($oracleRscript.physical_path)`, item `$($oracleRscript.item_id)`, links
+  `$($oracleRscript.link_count)`, tamanho `$($oracleRscript.size_bytes)` bytes e
+  SHA-256 `$($oracleRscript.sha256)`; snapshots before/after idênticos.
 - Inventário do runtime R isolado: `$($oracleRLibrary.inventory_sha256)`;
   snapshot imutável `$oracleRuntimeInventorySha256`.
 - Perfil exaustivo de equivalência da preparação:
@@ -673,6 +1631,11 @@ $oracleValidationCommandLine
 - Checks executados: `$($aggregate.check_count)`; falhas: `0`.
 - O smoke estrito em `cc2c861` passou 5 métodos e falhou 7; sua evidência é
   negativa e `final_evidence_eligible=false`.
+- O resumo 5/7 é o registro histórico imutável. O selo integral do diretório
+  `attempts` foi calculado posteriormente sobre o archive preservado; ele prova
+  o estado atual do archive, não constitui prova contemporânea dos bytes
+  físicos de `Rscript.exe` usados em 25/08/2026. A identidade de Rscript acima
+  é o vínculo atual, reaberto e validado antes/depois do workflow.
 - O smoke do oráculo filho passou os 12 métodos; ele também é apenas preflight
   e `final_evidence_eligible=false`.
 - A alteração do baseline executável é o patch integral autenticado do filho
@@ -732,8 +1695,15 @@ substitui o gate V5 final.
 - Controladores-fonte: `34/34`, commit
   `$($oracleSourceController.commit_sha256)`, inventário
   `$($oracleSourceController.inventory_sha256)`.
+- Tooling-fonte: `37/37`, um diretório descendente e duas árvores Git; commit
+  `$($oracleSourceTooling.candidate_commit)`, inventário
+  `$($oracleSourceTooling.inventory_sha256)`, idêntico no manifesto, na
+  configuração e na prova.
 - Rscript autenticado:
-  `$($oracleTerminalRuntime.rscript.sha256)`; biblioteca R
+  `$($oracleRscript.logical_path)` → `$($oracleRscript.physical_path)`, item
+  `$($oracleRscript.item_id)`, links `$($oracleRscript.link_count)`,
+  `$($oracleRscript.size_bytes)` bytes, SHA-256 `$($oracleRscript.sha256)`;
+  biblioteca R
   `$($oracleRLibrary.path)` via `R_LIBS_USER`; inventário
   `$($oracleRLibrary.inventory_sha256)`; os dez comandos usam `--vanilla`,
   `TZ=UTC` e removem as 16 variáveis de ambiente seladas.
@@ -794,28 +1764,123 @@ if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
 $utf8 = [Text.UTF8Encoding]::new($false, $true)
 $temporary = Join-Path $parent ('.issue-13.md-' +
   [Guid]::NewGuid().ToString('N') + '.tmp')
-[IO.File]::WriteAllText($temporary, $text, $utf8)
-$roundtrip = [IO.File]::ReadAllText($temporary, $utf8)
-if (-not [string]::Equals($roundtrip, $text,
-    [StringComparison]::Ordinal) -or $roundtrip.Contains([char]0xFFFD)) {
-  throw 'Issue #13 report UTF-8 round trip failed.'
-}
-foreach ($field in @($config.report.required_fields)) {
-  if ($roundtrip -cnotmatch [regex]::Escape([string]$field)) {
-    throw "Report lacks configured field: $field"
+$writePrimary = $null
+$reportResult = $null
+try {
+  [IO.File]::WriteAllText($temporary, $text, $utf8)
+  $roundtrip = [IO.File]::ReadAllText($temporary, $utf8)
+  if (-not [string]::Equals($roundtrip, $text,
+      [StringComparison]::Ordinal) -or $roundtrip.Contains([char]0xFFFD)) {
+    throw 'Issue #13 report UTF-8 round trip failed.'
   }
+  foreach ($field in @($config.report.required_fields)) {
+    if ($roundtrip -cnotmatch [regex]::Escape([string]$field)) {
+      throw "Report lacks configured field: $field"
+    }
+  }
+
+  $finalBinding = Assert-Issue13V5Config $initialConfigPath
+  $finalConfig = $finalBinding.config
+  $finalConfigCanonical = ConvertTo-Json -InputObject $finalConfig -Depth 100 `
+    -Compress
+  $finalConfigDiskCanonical = ConvertTo-Json -InputObject (
+    Read-Issue13V5Json $initialConfigPath) -Depth 100 -Compress
+  if (-not [string]::Equals(
+      (ConvertTo-Issue13V5Path ([string]$finalBinding.path)),
+      (ConvertTo-Issue13V5Path $initialConfigPath),
+      [StringComparison]::OrdinalIgnoreCase) -or
+      [string]$finalBinding.sha256 -cne $initialConfigSha256 -or
+      (Get-Issue13V5Sha256 $initialConfigPath) -cne $initialConfigSha256 -or
+      $finalConfigCanonical -cne $initialConfigCanonical -or
+      $finalConfigDiskCanonical -cne $initialConfigCanonical) {
+    throw 'Report config changed before atomic installation.'
+  }
+
+  $finalStatePath = ConvertTo-Issue13V5Path (
+    Get-Issue13V5StatePath $finalConfig)
+  if (-not [string]::Equals($finalStatePath, $providedStatePath,
+      [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Report state binding changed before atomic installation.'
+  }
+  $finalStateSha256 = Get-Issue13V5Sha256 $finalStatePath
+  $finalState = Read-Issue13V5Json $finalStatePath
+  $finalStateCanonical = ConvertTo-Json -InputObject $finalState -Depth 100 `
+    -Compress
+  $finalStateDiskCanonical = ConvertTo-Json -InputObject (
+    Read-Issue13V5Json $finalStatePath) -Depth 100 -Compress
+  if ($finalStateSha256 -cne $initialStateSha256 -or
+      (Get-Issue13V5Sha256 $finalStatePath) -cne $initialStateSha256 -or
+      $finalStateCanonical -cne $initialStateCanonical -or
+      $finalStateDiskCanonical -cne $initialStateCanonical) {
+    throw 'Report state changed before atomic installation.'
+  }
+  $null = Assert-Issue13V5FinalBindings $finalConfig $finalState
+  if ((Get-Issue13V5Sha256 $initialConfigPath) -cne
+        $initialConfigSha256 -or
+      (Get-Issue13V5Sha256 $finalStatePath) -cne $initialStateSha256) {
+    throw 'Report config or state changed during final binding validation.'
+  }
+
+  $finalRepository = (Resolve-Path -LiteralPath (
+    [string]$finalConfig.repository_root)).Path
+  if (-not [string]::Equals($finalRepository, $repository,
+      [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Report repository binding changed before atomic installation.'
+  }
+  $finalHead = (Invoke-Issue13V5SealedGit `
+    -C $finalRepository rev-parse HEAD 2>$null).Trim()
+  $finalHeadExitCode = $LASTEXITCODE
+  $finalTrackedStatus = @(Invoke-Issue13V5SealedGit `
+    -C $finalRepository status `
+    '--porcelain=v1' '--untracked-files=no' 2>$null)
+  $finalStatusExitCode = $LASTEXITCODE
+  if ($finalHeadExitCode -ne 0 -or $finalStatusExitCode -ne 0 -or
+      $finalHead -cne [string]$finalConfig.candidate_commit -or
+      $finalTrackedStatus.Count -ne 0) {
+    throw 'Report repository changed before atomic installation.'
+  }
+  if (Test-Path -LiteralPath $outputPath) {
+    throw "Report output appeared before atomic installation: $outputPath"
+  }
+  [IO.File]::Move($temporary, $outputPath)
+  if (-not [string]::Equals(
+      [IO.File]::ReadAllText($outputPath, $utf8), $text,
+      [StringComparison]::Ordinal)) {
+    throw 'Installed Issue #13 report differs from verified UTF-8 payload.'
+  }
+  $reportResult = [pscustomobject]@{
+    status = 'written'
+    path = (Resolve-Path -LiteralPath $outputPath).Path
+    sha256 = Get-Issue13V5Sha256 $outputPath
+    baseline_commit = [string]$config.baseline_commit
+    baseline_runtime_commit = [string]$config.baseline_runtime_commit
+    candidate_commit = [string]$config.candidate_commit
+  }
+} catch {
+  $writePrimary = $_
 }
-[IO.File]::Move($temporary, $outputPath)
-if (-not [string]::Equals(
-    [IO.File]::ReadAllText($outputPath, $utf8), $text,
-    [StringComparison]::Ordinal)) {
-  throw 'Installed Issue #13 report differs from verified UTF-8 payload.'
+$writeCleanupFailures = [Collections.Generic.List[Exception]]::new()
+try {
+  if (Test-Path -LiteralPath $temporary) {
+    [IO.File]::Delete($temporary)
+  }
+  if (Test-Path -LiteralPath $temporary) {
+    throw 'Issue #13 report temporary file survived cleanup.'
+  }
+} catch {
+  $writeCleanupFailures.Add($_.Exception)
 }
-[pscustomobject]@{
-  status = 'written'
-  path = (Resolve-Path -LiteralPath $outputPath).Path
-  sha256 = Get-Issue13V5Sha256 $outputPath
-  baseline_commit = [string]$config.baseline_commit
-  baseline_runtime_commit = [string]$config.baseline_runtime_commit
-  candidate_commit = [string]$config.candidate_commit
+if ($writeCleanupFailures.Count -ne 0) {
+  $writeFailures = [Collections.Generic.List[Exception]]::new()
+  if ($null -ne $writePrimary) {
+    $writeFailures.Add($writePrimary.Exception)
+  }
+  foreach ($failure in $writeCleanupFailures) {
+    $writeFailures.Add($failure)
+  }
+  throw [AggregateException]::new(
+    'Issue #13 report write or temporary cleanup failed.',
+    $writeFailures.ToArray())
 }
+if ($null -ne $writePrimary) { throw $writePrimary }
+$reportResult

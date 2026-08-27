@@ -1,3 +1,428 @@
+$issue13V5CommandCollisionGuard = {
+  param([Management.Automation.Language.ScriptBlockAst]$Ast)
+  $runtimeRoot =
+    'C:\Users\rodri\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\powershell'
+  $moduleRoot = [IO.Path]::Combine($runtimeRoot, 'Modules')
+  $expectedProcessPath = [IO.Path]::Combine($runtimeRoot, 'pwsh.exe')
+  if (-not [string]::Equals(
+      [IO.Path]::GetFullPath([Environment]::ProcessPath),
+      $expectedProcessPath, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'V5 command bootstrap requires the sealed pwsh host.'
+  }
+
+  $trustedRuntimeFiles =
+    [Collections.Generic.Dictionary[string, object]]::new(
+      [StringComparer]::OrdinalIgnoreCase)
+  foreach ($record in [object[]]@(
+      [pscustomobject]@{
+        relative_path = 'pwsh.exe'
+        size_bytes = 301368L
+        sha256 =
+          'DB6DD81183FE57D22E03B911EC9A30A2FD7C40542E97743615355A6FB44F458F'
+      },
+      [pscustomobject]@{
+        relative_path = 'System.Management.Automation.dll'
+        size_bytes = 19597112L
+        sha256 =
+          '5AD53C0024367C81A9BEBA1FCEF3288DCF6A34966E4AB8CF8A31603A8358B317'
+      },
+      [pscustomobject]@{
+        relative_path = 'Microsoft.PowerShell.Commands.Management.dll'
+        size_bytes = 1124192L
+        sha256 =
+          '51120F70291FD7CE7FD96076FD043F9BFC8807C7B8590B18EAA7118D38457F60'
+      },
+      [pscustomobject]@{
+        relative_path = 'Microsoft.PowerShell.Commands.Utility.dll'
+        size_bytes = 1652576L
+        sha256 =
+          '34533CC9A47EB3F070ACA476ED77EE68A470F2749B3D1FC027C3FD991EB6EAD5'
+      },
+      [pscustomobject]@{
+        relative_path = 'Microsoft.Management.Infrastructure.CimCmdlets.dll'
+        size_bytes = 493368L
+        sha256 =
+          '7CE68B9940FD22D785C9AA702903063CB135BAD3AB56B53590B603C72AB9BF94'
+      },
+      [pscustomobject]@{
+        relative_path = 'microsoft.management.infrastructure.dll'
+        size_bytes = 309112L
+        sha256 =
+          'E997C2216F1D72CB1B483A812F80BE940A4D9643E3F6F8EA1258632EE5E1EC1C'
+      },
+      [pscustomobject]@{
+        relative_path = 'microsoft.management.infrastructure.native.dll'
+        size_bytes = 362320L
+        sha256 =
+          '3C86966B8C64ECE8E45C2CC87DAF528AE3651EE101EB08E42B98460CBCF995D9'
+      },
+      [pscustomobject]@{
+        relative_path =
+          'microsoft.management.infrastructure.native.unmanaged.dll'
+        size_bytes = 28192L
+        sha256 =
+          '9BEE4E35576355156F00E2E47EF57AA2C8CA64390C112F083A772F2219026293'
+      },
+      [pscustomobject]@{
+        relative_path =
+          'Modules\Microsoft.PowerShell.Management\Microsoft.PowerShell.Management.psd1'
+        size_bytes = 16100L
+        sha256 =
+          '9AF88C06CDC43CFB8DFFA2A07A40A92A7A2EEC015067DB0B37461614A73B74E1'
+      },
+      [pscustomobject]@{
+        relative_path =
+          'Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1'
+        size_bytes = 16874L
+        sha256 =
+          '7C7A4982CA9C2FFD7FA5FF4ED5E65136A3B967988F9325A6F4DEFC02F887534F'
+      },
+      [pscustomobject]@{
+        relative_path = 'Modules\CimCmdlets\CimCmdlets.psd1'
+        size_bytes = 15295L
+        sha256 =
+          '35F52D09846EC3088DC1B4B976B62EA4209865A84E1DA47A3CD9637FFEB9BF7D'
+      })) {
+    $path = [IO.Path]::GetFullPath(
+      [IO.Path]::Combine($runtimeRoot, [string]$record.relative_path))
+    if (-not $path.StartsWith(
+        $runtimeRoot + [IO.Path]::DirectorySeparatorChar,
+        [StringComparison]::OrdinalIgnoreCase) -or
+        $trustedRuntimeFiles.ContainsKey($path)) {
+      throw 'V5 trusted runtime file allowlist escaped or duplicated.'
+    }
+    $trustedRuntimeFiles.Add($path, $record)
+  }
+  if ($trustedRuntimeFiles.Count -ne 11) {
+    throw 'V5 trusted runtime file allowlist is not exact.'
+  }
+
+  $cursor = [IO.DirectoryInfo]::new($runtimeRoot)
+  while ($null -ne $cursor) {
+    if (($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+      throw 'V5 trusted runtime has a reparse ancestor.'
+    }
+    $cursor = $cursor.Parent
+  }
+  $runtimeFileLeases = [Collections.Generic.List[IO.FileStream]]::new()
+  try {
+    foreach ($path in $trustedRuntimeFiles.Keys) {
+      $fileCursor = [IO.DirectoryInfo]::new([IO.Path]::GetDirectoryName($path))
+      while ($null -ne $fileCursor -and $fileCursor.FullName.StartsWith(
+          $runtimeRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        if (($fileCursor.Attributes -band
+            [IO.FileAttributes]::ReparsePoint) -ne 0) {
+          throw 'V5 trusted runtime file has a reparse ancestor.'
+        }
+        $fileCursor = $fileCursor.Parent
+      }
+      $file = [IO.FileInfo]::new($path)
+      if (($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw 'V5 trusted runtime file is a reparse point.'
+      }
+      $stream = $null
+      $algorithm = $null
+      try {
+        $stream = [IO.File]::Open(
+          $path, [IO.FileMode]::Open, [IO.FileAccess]::Read,
+          [IO.FileShare]::Read)
+        $algorithm = [Security.Cryptography.SHA256]::Create()
+        $digest = [Convert]::ToHexString($algorithm.ComputeHash($stream))
+        $spec = $trustedRuntimeFiles[$path]
+        if ($stream.Length -ne [long]$spec.size_bytes -or
+            $digest -cne [string]$spec.sha256) {
+          throw 'V5 trusted runtime file identity changed.'
+        }
+        $runtimeFileLeases.Add($stream)
+        $stream = $null
+      } finally {
+        if ($null -ne $algorithm) { $algorithm.Dispose() }
+        if ($null -ne $stream) { $stream.Dispose() }
+      }
+    }
+  } catch {
+    foreach ($lease in $runtimeFileLeases) { $lease.Dispose() }
+    throw
+  }
+  if ($runtimeFileLeases.Count -ne 11) {
+    foreach ($lease in $runtimeFileLeases) { $lease.Dispose() }
+    $runtimeFileLeases.Clear()
+    throw 'V5 bootstrap did not retain all eleven runtime file leases.'
+  }
+  $leaseSets = [AppDomain]::CurrentDomain.GetData(
+    'wlv.issue13.v5.powershell.runtime.leases')
+  if ($leaseSets -isnot [Collections.Generic.List[object]]) {
+    $leaseSets = [Collections.Generic.List[object]]::new()
+  }
+  $leaseSets.Add($runtimeFileLeases)
+  [AppDomain]::CurrentDomain.SetData(
+    'wlv.issue13.v5.powershell.runtime.leases', $leaseSets)
+
+  [Environment]::SetEnvironmentVariable(
+    'PSModulePath', $moduleRoot, [EnvironmentVariableTarget]::Process)
+  $global:PSModuleAutoLoadingPreference = 'None'
+
+  $trustedCmdletAssemblies =
+    [Collections.Generic.Dictionary[string, object]]::new(
+      [StringComparer]::OrdinalIgnoreCase)
+  $trustedCmdletAssemblies.Add(
+    [IO.Path]::Combine($runtimeRoot, 'System.Management.Automation.dll'),
+    [pscustomobject]@{
+      full_name =
+        'System.Management.Automation, Version=7.6.0.500, Culture=neutral, PublicKeyToken=31bf3856ad364e35'
+      module_version_id = '7071448b-dbd2-48c8-9dff-f288a19a62d2'
+    })
+  $trustedCmdletAssemblies.Add(
+    [IO.Path]::Combine(
+      $runtimeRoot, 'Microsoft.PowerShell.Commands.Management.dll'),
+    [pscustomobject]@{
+      full_name =
+        'Microsoft.PowerShell.Commands.Management, Version=7.6.0.500, Culture=neutral, PublicKeyToken=31bf3856ad364e35'
+      module_version_id = '4c155aeb-1e5e-4023-8c7f-214e199b9530'
+    })
+  $trustedCmdletAssemblies.Add(
+    [IO.Path]::Combine(
+      $runtimeRoot, 'Microsoft.PowerShell.Commands.Utility.dll'),
+    [pscustomobject]@{
+      full_name =
+        'Microsoft.PowerShell.Commands.Utility, Version=7.6.0.500, Culture=neutral, PublicKeyToken=31bf3856ad364e35'
+      module_version_id = '99be7828-14d8-415d-ae6e-3f0185e7ef9f'
+    })
+  $trustedCmdletAssemblies.Add(
+    [IO.Path]::Combine(
+      $runtimeRoot, 'Microsoft.Management.Infrastructure.CimCmdlets.dll'),
+    [pscustomobject]@{
+      full_name =
+        'Microsoft.Management.Infrastructure.CimCmdlets, Version=7.6.0.500, Culture=neutral, PublicKeyToken=31bf3856ad364e35'
+      module_version_id = '3af4a3ba-947a-4e39-9400-da8fae0c56de'
+    })
+  if ($trustedCmdletAssemblies.Count -ne 4) {
+    throw 'V5 trusted cmdlet assembly allowlist is not exact.'
+  }
+
+  $importModuleCandidates = [object[]](
+    $ExecutionContext.InvokeCommand.GetCommands(
+      'Import-Module', [Management.Automation.CommandTypes]::Cmdlet, $true))
+  if ($importModuleCandidates.Count -ne 1) {
+    throw 'V5 bootstrap Import-Module cmdlet is not singular.'
+  }
+  $importModuleCmdlet = $importModuleCandidates[0]
+  $importAssembly = $importModuleCmdlet.ImplementingType.Assembly
+  $importAssemblyPath = [IO.Path]::GetFullPath(
+    [string]$importAssembly.Location)
+  $importAssemblySpec = $trustedCmdletAssemblies[$importAssemblyPath]
+  if ([string]$importModuleCmdlet.CommandType -cne 'Cmdlet' -or
+      [string]$importModuleCmdlet.ModuleName -cne 'Microsoft.PowerShell.Core' -or
+      [string]$importModuleCmdlet.Source -cne 'Microsoft.PowerShell.Core' -or
+      [string]$importModuleCmdlet.ImplementingType.FullName -cne
+        'Microsoft.PowerShell.Commands.ImportModuleCommand' -or
+      $importAssemblyPath -cne
+        [IO.Path]::Combine($runtimeRoot, 'System.Management.Automation.dll') -or
+      [string]$importAssembly.FullName -cne [string]$importAssemblySpec.full_name -or
+      $importAssembly.ManifestModule.ModuleVersionId.ToString('D') -cne
+        [string]$importAssemblySpec.module_version_id) {
+    throw 'V5 bootstrap Import-Module cmdlet identity changed.'
+  }
+  foreach ($kind in [Management.Automation.CommandTypes[]]@(
+      [Management.Automation.CommandTypes]::Alias,
+      [Management.Automation.CommandTypes]::Function,
+      [Management.Automation.CommandTypes]::Filter,
+      [Management.Automation.CommandTypes]::Application,
+      [Management.Automation.CommandTypes]::ExternalScript)) {
+    if (([object[]]($ExecutionContext.InvokeCommand.GetCommands(
+        'Import-Module', $kind, $true))).Count -ne 0) {
+      throw 'V5 bootstrap Import-Module has a competing command.'
+    }
+  }
+  foreach ($manifest in [string[]]@(
+      [IO.Path]::Combine(
+        $moduleRoot,
+        'Microsoft.PowerShell.Management\Microsoft.PowerShell.Management.psd1'),
+      [IO.Path]::Combine(
+        $moduleRoot,
+        'Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1'),
+      [IO.Path]::Combine($moduleRoot, 'CimCmdlets\CimCmdlets.psd1'))) {
+    $null = & $importModuleCmdlet -Name $manifest -Global -Force -ErrorAction Stop
+  }
+  $global:PSModuleAutoLoadingPreference = 'None'
+
+  $cmdletGroups =
+    [Collections.Generic.Dictionary[string, object]]::new(
+      [StringComparer]::Ordinal)
+  $cmdletGroups.Add('core', [pscustomobject]@{
+      module_name = 'Microsoft.PowerShell.Core'
+      source = 'Microsoft.PowerShell.Core'
+      module_path = ''
+      version = '7.6.0.500'
+      module_guid = ''
+      assembly_path =
+        [IO.Path]::Combine($runtimeRoot, 'System.Management.Automation.dll')
+      commands = [string[]]@(
+        'ForEach-Object', 'Out-Null', 'Set-StrictMode', 'Where-Object')
+    })
+  $cmdletGroups.Add('management', [pscustomobject]@{
+      module_name = 'Microsoft.PowerShell.Management'
+      source = 'Microsoft.PowerShell.Management'
+      module_path = [IO.Path]::Combine(
+        $moduleRoot,
+        'Microsoft.PowerShell.Management\Microsoft.PowerShell.Management.psd1')
+      version = '7.0.0.0'
+      module_guid = 'eefcb906-b326-4e99-9f54-8b4bb6ef3c6d'
+      assembly_path = [IO.Path]::Combine(
+        $runtimeRoot, 'Microsoft.PowerShell.Commands.Management.dll')
+      commands = [string[]]@(
+        'Copy-Item', 'Get-ChildItem', 'Get-Content', 'Get-Item',
+        'Get-Location', 'Get-Process', 'Join-Path', 'Move-Item', 'New-Item',
+        'Remove-Item', 'Resolve-Path', 'Set-Content', 'Set-Item',
+        'Set-Location', 'Split-Path', 'Start-Process', 'Stop-Process',
+        'Test-Path')
+    })
+  $cmdletGroups.Add('utility', [pscustomobject]@{
+      module_name = 'Microsoft.PowerShell.Utility'
+      source = 'Microsoft.PowerShell.Utility'
+      module_path = [IO.Path]::Combine(
+        $moduleRoot,
+        'Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1')
+      version = '7.0.0.0'
+      module_guid = '1da87e53-152b-403e-98dc-74d7b4d63d59'
+      assembly_path = [IO.Path]::Combine(
+        $runtimeRoot, 'Microsoft.PowerShell.Commands.Utility.dll')
+      commands = [string[]]@(
+        'Add-Member', 'Add-Type', 'Compare-Object', 'ConvertFrom-Json',
+        'ConvertTo-Json', 'Format-List', 'Get-FileHash', 'Get-Variable',
+        'Group-Object', 'Import-Csv', 'Invoke-Expression', 'Measure-Object',
+        'New-Object', 'New-Variable', 'Select-Object', 'Set-Variable',
+        'Sort-Object', 'Start-Sleep', 'Test-Json', 'Write-Error',
+        'Write-Output')
+    })
+  $cmdletGroups.Add('cim', [pscustomobject]@{
+      module_name = 'CimCmdlets'
+      source = 'CimCmdlets'
+      module_path = [IO.Path]::Combine(
+        $runtimeRoot, 'Microsoft.Management.Infrastructure.CimCmdlets.dll')
+      version = '7.0.0.0'
+      module_guid = 'fb6cc51d-c096-4b38-b78d-0fed6277096a'
+      assembly_path = [IO.Path]::Combine(
+        $runtimeRoot, 'Microsoft.Management.Infrastructure.CimCmdlets.dll')
+      commands = [string[]]@('Get-CimInstance')
+    })
+
+  $trustedCmdlets =
+    [Collections.Generic.Dictionary[string, object]]::new(
+      [StringComparer]::OrdinalIgnoreCase)
+  foreach ($group in $cmdletGroups.Values) {
+    foreach ($commandName in $group.commands) {
+      if ($trustedCmdlets.ContainsKey($commandName)) {
+        throw 'V5 trusted cmdlet allowlist contains a duplicate.'
+      }
+      $trustedCmdlets.Add($commandName, $group)
+    }
+  }
+  if ($cmdletGroups.Count -ne 4 -or $trustedCmdlets.Count -ne 44) {
+    throw 'V5 trusted cmdlet allowlist is not exact.'
+  }
+
+  $resolvedTrustedCmdlets =
+    [Collections.Generic.Dictionary[string, object]]::new(
+      [StringComparer]::OrdinalIgnoreCase)
+  foreach ($commandName in $trustedCmdlets.Keys) {
+    $candidates = [object[]](
+      $ExecutionContext.InvokeCommand.GetCommands(
+        $commandName, [Management.Automation.CommandTypes]::Cmdlet, $true))
+    if ($candidates.Count -ne 1) {
+      throw "V5 trusted cmdlet is not singular: $commandName"
+    }
+    $cmdlet = $candidates[0]
+    $group = $trustedCmdlets[$commandName]
+    $modulePath = if ($null -eq $cmdlet.Module) { '' } else {
+      [IO.Path]::GetFullPath([string]$cmdlet.Module.Path)
+    }
+    $moduleGuid = if ($null -eq $cmdlet.Module) { '' } else {
+      $cmdlet.Module.Guid.ToString('D')
+    }
+    $assembly = $cmdlet.ImplementingType.Assembly
+    $assemblyPath = [IO.Path]::GetFullPath([string]$assembly.Location)
+    $assemblySpec = if ($trustedCmdletAssemblies.ContainsKey($assemblyPath)) {
+      $trustedCmdletAssemblies[$assemblyPath]
+    } else { $null }
+    $attributes = [object[]]$cmdlet.ImplementingType.GetCustomAttributes(
+      [Management.Automation.CmdletAttribute], $false)
+    $declaredName = if ($attributes.Count -eq 1) {
+      [string]$attributes[0].VerbName + '-' + [string]$attributes[0].NounName
+    } else { '' }
+    if ([string]$cmdlet.CommandType -cne 'Cmdlet' -or
+        [string]$cmdlet.Name -cne $commandName -or
+        [string]$cmdlet.ModuleName -cne [string]$group.module_name -or
+        [string]$cmdlet.Source -cne [string]$group.source -or
+        -not [string]::Equals(
+          $modulePath, [string]$group.module_path,
+          [StringComparison]::OrdinalIgnoreCase) -or
+        [string]$cmdlet.Version -cne [string]$group.version -or
+        $moduleGuid -cne [string]$group.module_guid -or
+        -not [string]::Equals(
+          $assemblyPath, [string]$group.assembly_path,
+          [StringComparison]::OrdinalIgnoreCase) -or
+        $null -eq $assemblySpec -or
+        [string]$assembly.FullName -cne [string]$assemblySpec.full_name -or
+        $assembly.ManifestModule.ModuleVersionId.ToString('D') -cne
+          [string]$assemblySpec.module_version_id -or
+        $declaredName -cne $commandName) {
+      throw "V5 trusted cmdlet identity changed: $commandName"
+    }
+    $resolvedTrustedCmdlets.Add($commandName, $cmdlet)
+  }
+
+  $names = [Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::OrdinalIgnoreCase)
+  $collisions = [Collections.Generic.List[string]]::new()
+  $commandAsts = [object[]]$Ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.CommandAst]
+    }, $true)
+  foreach ($commandAst in $commandAsts) {
+    $name = $commandAst.GetCommandName()
+    if ([string]::IsNullOrWhiteSpace($name) -or -not $names.Add($name)) {
+      continue
+    }
+    foreach ($kind in [Management.Automation.CommandTypes[]]@(
+        [Management.Automation.CommandTypes]::Alias,
+        [Management.Automation.CommandTypes]::Function,
+        [Management.Automation.CommandTypes]::Filter,
+        [Management.Automation.CommandTypes]::Application,
+        [Management.Automation.CommandTypes]::ExternalScript)) {
+      foreach ($collision in [object[]](
+          $ExecutionContext.InvokeCommand.GetCommands($name, $kind, $true))) {
+        $collisions.Add(([string]$kind + ':' + $name))
+      }
+    }
+    $cmdlets = [object[]](
+      $ExecutionContext.InvokeCommand.GetCommands(
+        $name, [Management.Automation.CommandTypes]::Cmdlet, $true))
+    if ($trustedCmdlets.ContainsKey($name)) {
+      if ($cmdlets.Count -ne 1 -or
+          $cmdlets[0].ImplementingType -ne
+            $resolvedTrustedCmdlets[$name].ImplementingType) {
+        $collisions.Add('Cmdlet:' + $name)
+      }
+    } elseif ($cmdlets.Count -ne 0) {
+      $collisions.Add('Cmdlet:' + $name)
+    }
+  }
+  if ($collisions.Count -ne 0) {
+    throw ('V5 command collision bootstrap rejected inherited commands: ' +
+      [string]::Join(', ', [string[]]$collisions.ToArray()))
+  }
+  if ([string][Environment]::GetEnvironmentVariable(
+      'PSModulePath', [EnvironmentVariableTarget]::Process) -cne $moduleRoot -or
+      [string]$global:PSModuleAutoLoadingPreference -cne 'None') {
+    throw 'V5 command bootstrap did not retain its closed module resolver.'
+  }
+}
+& $issue13V5CommandCollisionGuard $MyInvocation.MyCommand.ScriptBlock.Ast
+
+. ([IO.Path]::Combine($PSScriptRoot, 'issue13-v5-coordinator-lib.ps1'))
+$null = Assert-Issue13V5CurrentPwshHost
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -47,6 +472,56 @@ $script:Issue13OracleEffectControllerFiles = @(
   'issue13-v5-static-verify.ps1',
   'issue13-v5-verify-diagnostic-evidence.R'
 )
+$script:Issue13OracleEffectSourceToolingRelativeRoot =
+  'run_logs/issue13-evidence-source-v5'
+$script:Issue13OracleEffectSourceToolingTreePaths = @(
+  '.', 'issue13-evidence-harness'
+)
+$script:Issue13OracleEffectSourceToolingFiles = @(
+  'issue13-evidence-harness/issue13-aggregate-prep-fault.R',
+  'issue13-evidence-harness/issue13-aggregate.R',
+  'issue13-evidence-harness/issue13-audit-prep-fault-plan.R',
+  'issue13-evidence-harness/issue13-baseline-runtime-index-lib.R',
+  'issue13-evidence-harness/issue13-build-calculate-bundle.R',
+  'issue13-evidence-harness/issue13-build-fault-seed-specs.R',
+  'issue13-evidence-harness/issue13-build-paper-bundle.R',
+  'issue13-evidence-harness/issue13-build-prep-fault-specs.R',
+  'issue13-evidence-harness/issue13-build-recalc-bundle.R',
+  'issue13-evidence-harness/issue13-compare-lib.R',
+  'issue13-evidence-harness/issue13-compare-results.R',
+  'issue13-evidence-harness/issue13-compare.R',
+  'issue13-evidence-harness/issue13-import-baseline-lib.R',
+  'issue13-evidence-harness/issue13-import-baseline-run.R',
+  'issue13-evidence-harness/issue13-import-baseline-selftest.R',
+  'issue13-evidence-harness/issue13-import-fault-inputs.R',
+  'issue13-evidence-harness/issue13-lib.R',
+  'issue13-evidence-harness/issue13-matrix.R',
+  'issue13-evidence-harness/issue13-monitor-selftest.ps1',
+  'issue13-evidence-harness/issue13-monitor.ps1',
+  'issue13-evidence-harness/issue13-run-fault-seed-record.ps1',
+  'issue13-evidence-harness/issue13-run-fault-seeds.ps1',
+  'issue13-evidence-harness/issue13-run-plan.ps1',
+  'issue13-evidence-harness/issue13-run-prep-fault-record.ps1',
+  'issue13-evidence-harness/issue13-run-recalc-bundle.ps1',
+  'issue13-evidence-harness/issue13-scenario.R',
+  'issue13-evidence-harness/issue13-seed-channel.R',
+  'issue13-evidence-harness/issue13-seed-runtime-lib.R',
+  'issue13-evidence-harness/issue13-seed-runtime-selftest.R',
+  'issue13-evidence-harness/issue13-selftest.R',
+  'issue13-evidence-harness/issue13-snapshot.R',
+  'issue13-evidence-harness/README.md',
+  'issue13-prep-paper-lib.R',
+  'issue13-preparation-auth-lib.R',
+  'issue13-preparation-compare.R',
+  'issue13-preparation-rule-matrix.json',
+  'issue13-runtime-loader-selftest.R'
+)
+$script:Issue13OracleEffectSourceToolingPathListSha256 =
+  '7bf2e27807e9bc36d3d3766789439d0d9afdd7b2cc5127145ce0e0f6819db00d'
+$script:Issue13OracleEffectRscriptLinkCount = 1L
+$script:Issue13OracleEffectRscriptSizeBytes = 94720L
+$script:Issue13OracleEffectRscriptSha256 =
+  '3ad097e10d867e09eb7e54d8ed1f8ef933779b82be56482a04a27d65536d15f9'
 
 function Assert-Issue13OracleEffect {
   param(
@@ -139,6 +614,36 @@ namespace Issue13V5 {
     private static extern uint QueryDosDevice(
       string deviceName, StringBuilder targetPath, int maximumLength);
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ByHandleFileInformation {
+      public uint FileAttributes;
+      public System.Runtime.InteropServices.ComTypes.FILETIME CreationTime;
+      public System.Runtime.InteropServices.ComTypes.FILETIME LastAccessTime;
+      public System.Runtime.InteropServices.ComTypes.FILETIME LastWriteTime;
+      public uint VolumeSerialNumber;
+      public uint FileSizeHigh;
+      public uint FileSizeLow;
+      public uint NumberOfLinks;
+      public uint FileIndexHigh;
+      public uint FileIndexLow;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetFileInformationByHandle(
+      SafeFileHandle file, out ByHandleFileInformation information);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FileIdInformation {
+      public ulong VolumeSerialNumber;
+      [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
+      public byte[] FileId;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetFileInformationByHandleEx(
+      SafeFileHandle file, int informationClass,
+      out FileIdInformation information, uint bufferSize);
+
     public static string Resolve(string path) {
       using (SafeFileHandle handle = CreateFile(
         path, 0, ShareAll, IntPtr.Zero, OpenExisting,
@@ -175,6 +680,36 @@ namespace Issue13V5 {
           throw new Win32Exception(error);
         }
         capacity *= 2;
+      }
+    }
+
+    public static string Identity(string path) {
+      using (SafeFileHandle handle = CreateFile(
+        path, 0, ShareAll, IntPtr.Zero, OpenExisting,
+        BackupSemantics, IntPtr.Zero)) {
+        if (handle.IsInvalid) {
+          throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+        ByHandleFileInformation information;
+        if (!GetFileInformationByHandle(handle, out information)) {
+          throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+        FileIdInformation fileId;
+        uint fileIdSize = (uint)Marshal.SizeOf(typeof(FileIdInformation));
+        if (!GetFileInformationByHandleEx(
+          handle, 18, out fileId, fileIdSize)) {
+          throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+        Array.Reverse(fileId.FileId);
+        string fileIdHex = BitConverter.ToString(fileId.FileId).
+          Replace("-", "").ToLowerInvariant();
+        uint rawVolume = information.VolumeSerialNumber;
+        uint volume = ((rawVolume & 0x000000ffU) << 24) |
+          ((rawVolume & 0x0000ff00U) << 8) |
+          ((rawVolume & 0x00ff0000U) >> 8) |
+          ((rawVolume & 0xff000000U) >> 24);
+        return ((ulong)volume).ToString("x16") + ":" +
+          fileIdHex + ":" + information.NumberOfLinks.ToString();
       }
     }
   }
@@ -234,6 +769,88 @@ function ConvertTo-Issue13OracleEffectPhysicalPath {
     $canonical = $canonical + '\' + $missing[$index]
   }
   $canonical.TrimEnd('\')
+}
+
+function Get-Issue13OracleEffectRscriptIdentity {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][object]$Spec
+  )
+  Assert-Issue13OracleEffect (
+    [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
+  ) 'Rscript physical identity requires Windows.'
+  $validated = Resolve-Issue13OracleEffectFile $Path 'comparison Rscript'
+  $logical = (Resolve-Path -LiteralPath $validated).Path
+  Assert-Issue13OracleEffect ([IO.Path]::GetFileName($logical) -ceq
+      'Rscript.exe') 'comparison Rscript must name Rscript.exe exactly.'
+  $physical = ConvertTo-Issue13OracleEffectPhysicalPath $logical `
+    'comparison Rscript'
+  $rawIdentity = [Issue13V5.OracleEffectNativePath]::Identity($logical)
+  $parts = [string[]]$rawIdentity.Split(':')
+  Assert-Issue13OracleEffect ($parts.Count -eq 3 -and
+      $parts[0] -cmatch '^[0-9a-f]{16}$' -and
+      $parts[1] -cmatch '^[0-9a-f]{32}$' -and
+      $parts[2] -cmatch '^[0-9]+$') `
+    'comparison Rscript returned an invalid physical identity.'
+  $item = Get-Item -LiteralPath $logical -Force
+  $identity = [pscustomobject][ordered]@{
+    logical_path = $logical
+    physical_path = $physical
+    item_id = $parts[0] + ':' + $parts[1]
+    link_count = [int64]$parts[2]
+    size_bytes = [int64]$item.Length
+    sha256 = Get-Issue13OracleEffectSha256 $logical
+  }
+  Assert-Issue13OracleEffectExactProperties $Spec @(
+    'required_link_count', 'size_bytes', 'sha256'
+  ) 'terminal Rscript spec'
+  Assert-Issue13OracleEffect (
+    [int64]$Spec.required_link_count -eq
+      $script:Issue13OracleEffectRscriptLinkCount -and
+    [int64]$Spec.size_bytes -eq
+      $script:Issue13OracleEffectRscriptSizeBytes -and
+    [string]$Spec.sha256 -ceq
+      $script:Issue13OracleEffectRscriptSha256 -and
+    [int64]$identity.link_count -eq [int64]$Spec.required_link_count -and
+    [int64]$identity.size_bytes -eq [int64]$Spec.size_bytes -and
+    [string]$identity.sha256 -ceq [string]$Spec.sha256
+  ) 'comparison Rscript identity differs from the stable terminal pin.'
+  $identity
+}
+
+function Assert-Issue13OracleEffectRscriptIdentity {
+  param(
+    [Parameter(Mandatory = $true)][object]$Observed,
+    [Parameter(Mandatory = $true)][object]$Expected,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $fields = @(
+    'logical_path', 'physical_path', 'item_id', 'link_count', 'size_bytes',
+    'sha256'
+  )
+  Assert-Issue13OracleEffectExactProperties $Observed $fields $Label
+  Assert-Issue13OracleEffectExactProperties $Expected $fields `
+    "$Label expected"
+  foreach ($record in @($Observed, $Expected)) {
+    Assert-Issue13OracleEffect (
+      $record.logical_path -is [string] -and
+      -not [string]::IsNullOrWhiteSpace([string]$record.logical_path) -and
+      $record.physical_path -is [string] -and
+      -not [string]::IsNullOrWhiteSpace([string]$record.physical_path) -and
+      $record.item_id -is [string] -and
+      [string]$record.item_id -cmatch '^[0-9a-f]{16}:[0-9a-f]{32}$' -and
+      $record.link_count -is [long] -and [long]$record.link_count -gt 0L -and
+      $record.size_bytes -is [long] -and [long]$record.size_bytes -gt 0L -and
+      $record.sha256 -is [string] -and
+      [string]$record.sha256 -cmatch '^[0-9a-f]{64}$'
+    ) "$Label contains an invalid Rscript identity field."
+  }
+  foreach ($field in $fields) {
+    Assert-Issue13OracleEffect (
+      [string]$Observed.$field -ceq [string]$Expected.$field
+    ) "$Label differs: $field"
+  }
+  $true
 }
 
 function Test-Issue13OracleEffectPathEqual {
@@ -475,7 +1092,8 @@ function Invoke-Issue13OracleEffectGit {
     [Parameter(Mandatory = $true)][string]$RepositoryRoot,
     [Parameter(Mandatory = $true)][string[]]$Arguments
   )
-  $lines = @(& git -C $RepositoryRoot @Arguments 2>&1)
+  $lines = @(Invoke-Issue13V5SealedGit `
+    -C $RepositoryRoot @Arguments 2>&1)
   Assert-Issue13OracleEffect ($LASTEXITCODE -eq 0) `
     "git $($Arguments -join ' ') failed: $($lines -join ' ')"
   (($lines | ForEach-Object { [string]$_ }) -join "`n").Trim()
@@ -504,38 +1122,301 @@ function Get-Issue13OracleEffectGitBlobIdentity {
       [Globalization.CultureInfo]::InvariantCulture, [ref]$size
     ) -and $size -ge 0) "controller Git blob size is malformed: $relative"
 
-  $git = (Get-Command git -ErrorAction Stop).Source
-  $start = [Diagnostics.ProcessStartInfo]::new()
-  $start.FileName = $git
-  $start.UseShellExecute = $false
-  $start.CreateNoWindow = $true
-  $start.RedirectStandardOutput = $true
-  $start.RedirectStandardError = $true
-  foreach ($argument in @('-C', $RepositoryRoot, 'cat-file', 'blob', $objectSpec)) {
-    $null = $start.ArgumentList.Add([string]$argument)
-  }
-  $process = [Diagnostics.Process]::new()
-  $process.StartInfo = $start
-  $hasher = [Security.Cryptography.SHA256]::Create()
-  try {
-    Assert-Issue13OracleEffect $process.Start() `
-      "cannot start git cat-file for controller blob: $relative"
-    $stderrTask = $process.StandardError.ReadToEndAsync()
-    $sha = (($hasher.ComputeHash($process.StandardOutput.BaseStream) |
-      ForEach-Object { $_.ToString('x2') }) -join '')
-    $process.WaitForExit()
-    $stderr = $stderrTask.GetAwaiter().GetResult()
-    Assert-Issue13OracleEffect ($process.ExitCode -eq 0) `
-      "git cat-file failed for controller blob $relative`: $stderr"
-  } finally {
-    $hasher.Dispose()
-    $process.Dispose()
-  }
+  $raw = Invoke-Issue13V5GitRaw $RepositoryRoot @(
+    'cat-file', 'blob', $objectSpec)
+  Assert-Issue13OracleEffect `
+    ([long]$raw.stdout.LongLength -eq $size) `
+    "controller Git blob length changed: $relative"
+  $sha = [Convert]::ToHexString(
+    [Security.Cryptography.SHA256]::HashData(
+      [byte[]]$raw.stdout)).ToLowerInvariant()
   [pscustomobject][ordered]@{
     git_blob = $blob
     size_bytes = $size
     sha256 = $sha
   }
+}
+
+function Invoke-Issue13OracleEffectGitBytes {
+  param(
+    [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+    [Parameter(Mandatory = $true)][string[]]$Arguments,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $raw = Invoke-Issue13V5GitRaw $RepositoryRoot $Arguments
+  [byte[]]$raw.stdout
+}
+
+function ConvertFrom-Issue13OracleEffectGitText {
+  param(
+    [Parameter(Mandatory = $true)][byte[]]$Bytes,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $encoding = [Text.UTF8Encoding]::new($false, $true)
+  try {
+    $encoding.GetString($Bytes)
+  } catch {
+    throw "Issue #13 oracle-effect proof rejected: git returned non-UTF-8 text for $Label."
+  }
+}
+
+function Get-Issue13OracleEffectGitLsTreeRecords {
+  param(
+    [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+    [Parameter(Mandatory = $true)][string]$Commit,
+    [Parameter(Mandatory = $true)][string]$RepositoryPath,
+    [switch]$Recursive
+  )
+  $arguments = [Collections.Generic.List[string]]::new()
+  foreach ($value in @('ls-tree', '-z', '--full-tree')) {
+    $arguments.Add($value)
+  }
+  if ($Recursive) { $arguments.Add('-r') }
+  foreach ($value in @($Commit, '--', $RepositoryPath)) {
+    $arguments.Add($value)
+  }
+  $bytes = Invoke-Issue13OracleEffectGitBytes $RepositoryRoot `
+    $arguments.ToArray() "ls-tree $RepositoryPath"
+  Assert-Issue13OracleEffect ($bytes.Length -gt 1 -and
+      $bytes[$bytes.Length - 1] -eq 0) `
+    "git ls-tree is empty or not NUL-terminated: $RepositoryPath"
+  $text = ConvertFrom-Issue13OracleEffectGitText $bytes `
+    "ls-tree $RepositoryPath"
+  $rows = [string[]]$text.Split([char]0)
+  Assert-Issue13OracleEffect ($rows[$rows.Count - 1] -ceq '') `
+    "git ls-tree lacks its terminal empty NUL field: $RepositoryPath"
+  @(
+    for ($index = 0; $index -lt $rows.Count - 1; $index++) {
+      $match = [regex]::Match($rows[$index],
+        '^([0-7]{6}) ([a-z]+) ([0-9a-f]{40})\t(.+)$')
+      Assert-Issue13OracleEffect $match.Success `
+        "malformed NUL-safe ls-tree record: $RepositoryPath"
+      [pscustomobject][ordered]@{
+        mode = $match.Groups[1].Value
+        type = $match.Groups[2].Value
+        object = $match.Groups[3].Value
+        repository_path = $match.Groups[4].Value
+      }
+    }
+  )
+}
+
+function Test-Issue13OracleEffectBytesEqual {
+  param(
+    [Parameter(Mandatory = $true)][byte[]]$Left,
+    [Parameter(Mandatory = $true)][byte[]]$Right
+  )
+  if ($Left.Length -ne $Right.Length) { return $false }
+  for ($index = 0; $index -lt $Left.Length; $index++) {
+    if ($Left[$index] -ne $Right[$index]) { return $false }
+  }
+  $true
+}
+
+function Get-Issue13OracleEffectExpectedSourceTooling {
+  param(
+    [Parameter(Mandatory = $true)][object]$Spec,
+    [Parameter(Mandatory = $true)][string]$ExpectedCandidateCommit,
+    [Parameter(Mandatory = $true)][string]$RepositoryRoot
+  )
+  $repository = Resolve-Issue13OracleEffectDirectory $RepositoryRoot `
+    'source-tooling repository root'
+  Assert-Issue13OracleEffect ($ExpectedCandidateCommit -cmatch
+      '^[0-9a-f]{40}$') `
+    'source-tooling candidate commit is not lowercase 40-hex.'
+  $resolvedCommitBytes = Invoke-Issue13OracleEffectGitBytes $repository @(
+    'rev-parse', "$ExpectedCandidateCommit^{commit}"
+  ) 'source-tooling candidate commit'
+  $resolvedCommit = (ConvertFrom-Issue13OracleEffectGitText `
+      $resolvedCommitBytes 'source-tooling candidate commit').Trim()
+  Assert-Issue13OracleEffect ($resolvedCommit -ceq $ExpectedCandidateCommit) `
+    'source-tooling candidate commit is unavailable or differs.'
+  $sourceSpec = $Spec.terminal_comparison_runtime.source_tooling
+  Assert-Issue13OracleEffectExactProperties $sourceSpec @(
+    'repository_relative_root', 'file_count', 'directory_count',
+    'path_list_sha256', 'tree_relative_paths', 'required_relative_paths',
+    'tree_mode', 'file_mode'
+  ) 'stable source-tooling spec'
+  Assert-Issue13OracleEffect (
+    [string]$sourceSpec.repository_relative_root -ceq
+      $script:Issue13OracleEffectSourceToolingRelativeRoot -and
+    [int64]$sourceSpec.file_count -eq 37L -and
+    [int64]$sourceSpec.directory_count -eq 1L -and
+    [string]$sourceSpec.path_list_sha256 -ceq
+      $script:Issue13OracleEffectSourceToolingPathListSha256 -and
+    [string]$sourceSpec.tree_mode -ceq '040000' -and
+    [string]$sourceSpec.file_mode -ceq '100644'
+  ) 'stable source-tooling scalar contract differs.'
+  Assert-Issue13OracleEffectExactSet @($sourceSpec.tree_relative_paths) `
+    $script:Issue13OracleEffectSourceToolingTreePaths `
+    'stable source-tooling tree paths'
+  Assert-Issue13OracleEffectExactSet @($sourceSpec.required_relative_paths) `
+    $script:Issue13OracleEffectSourceToolingFiles `
+    'stable source-tooling file paths'
+  Assert-Issue13OracleEffect (
+    [string]::Join("`n", @($sourceSpec.tree_relative_paths)) -ceq
+      [string]::Join("`n", $script:Issue13OracleEffectSourceToolingTreePaths) -and
+    [string]::Join("`n", @($sourceSpec.required_relative_paths)) -ceq
+      [string]::Join("`n", $script:Issue13OracleEffectSourceToolingFiles)
+  ) 'stable source-tooling path order differs.'
+  $pathList = Get-Issue13OracleEffectUtf8Sha256 (
+    [string]::Join("`n", @($sourceSpec.required_relative_paths)))
+  Assert-Issue13OracleEffect ($pathList -ceq
+      [string]$sourceSpec.path_list_sha256) `
+    'stable source-tooling path-list hash differs.'
+  $root = Resolve-Issue13OracleEffectDirectory (
+    Join-Path $repository ([string]$sourceSpec.repository_relative_root)) `
+    'tracked source-tooling root'
+  $physicalRoot = ConvertTo-Issue13OracleEffectPhysicalPath $root `
+    'tracked source-tooling root'
+  Assert-Issue13OracleEffectNoReparseTree $root 'tracked source-tooling root'
+  $localDirectories = @(Get-ChildItem -LiteralPath $root -Directory `
+    -Recurse -Force)
+  $localDirectoryPaths = [string[]]@($localDirectories | ForEach-Object {
+    $_.FullName.Substring($root.Length + 1).Replace('\', '/')
+  })
+  [Array]::Sort($localDirectoryPaths, [StringComparer]::Ordinal)
+  Assert-Issue13OracleEffect ($localDirectoryPaths.Count -eq 1 -and
+      $localDirectoryPaths[0] -ceq 'issue13-evidence-harness') `
+    'tracked source-tooling physical directory topology differs.'
+  $treeRecords = @(
+    foreach ($relativeTree in @($sourceSpec.tree_relative_paths)) {
+      $repositoryPath = if ([string]$relativeTree -ceq '.') {
+        [string]$sourceSpec.repository_relative_root
+      } else {
+        [string]$sourceSpec.repository_relative_root + '/' +
+          [string]$relativeTree
+      }
+      $rows = @(Get-Issue13OracleEffectGitLsTreeRecords $repository `
+        $ExpectedCandidateCommit $repositoryPath)
+      Assert-Issue13OracleEffect ($rows.Count -eq 1 -and
+          [string]$rows[0].repository_path -ceq $repositoryPath -and
+          [string]$rows[0].mode -ceq [string]$sourceSpec.tree_mode -and
+          [string]$rows[0].type -ceq 'tree') `
+        "source-tooling Git tree differs: $relativeTree"
+      $treeTypeBytes = Invoke-Issue13OracleEffectGitBytes $repository @(
+        'cat-file', '-t', [string]$rows[0].object
+      ) "source-tooling tree type $relativeTree"
+      $treeType = (ConvertFrom-Issue13OracleEffectGitText $treeTypeBytes `
+        "source-tooling tree type $relativeTree").Trim()
+      Assert-Issue13OracleEffect ($treeType -ceq 'tree') `
+        "source-tooling object is not a tree: $relativeTree"
+      [pscustomobject][ordered]@{
+        relative_path = [string]$relativeTree
+        repository_path = $repositoryPath
+        mode = [string]$rows[0].mode
+        type = [string]$rows[0].type
+        tree = [string]$rows[0].object
+      }
+    }
+  )
+  $gitFiles = @(Get-Issue13OracleEffectGitLsTreeRecords $repository `
+    $ExpectedCandidateCommit ([string]$sourceSpec.repository_relative_root) `
+    -Recursive)
+  Assert-Issue13OracleEffect ($gitFiles.Count -eq 37) `
+    'source-tooling recursive Git file count differs from 37.'
+  $rawRecords = @(
+    foreach ($gitFile in $gitFiles) {
+      $prefix = [string]$sourceSpec.repository_relative_root + '/'
+      Assert-Issue13OracleEffect (
+        ([string]$gitFile.repository_path).StartsWith(
+          $prefix, [StringComparison]::Ordinal)
+      ) 'source-tooling Git file escaped its repository root.'
+      $relative = [string]$gitFile.repository_path.Substring($prefix.Length)
+      Assert-Issue13OracleEffect (
+        [string]$gitFile.mode -ceq [string]$sourceSpec.file_mode -and
+        [string]$gitFile.type -ceq 'blob'
+      ) "source-tooling Git file mode/type differs: $relative"
+      $local = Resolve-Issue13OracleEffectFile (
+        Join-Path $root $relative.Replace('/', '\')) `
+        "source-tooling local file $relative"
+      $blobBytes = Invoke-Issue13OracleEffectGitBytes $repository @(
+        'cat-file', 'blob', [string]$gitFile.object
+      ) "source-tooling blob $relative"
+      $localBytes = [IO.File]::ReadAllBytes($local)
+      Assert-Issue13OracleEffect (
+        Test-Issue13OracleEffectBytesEqual $localBytes $blobBytes
+      ) "source-tooling local bytes differ from Git blob: $relative"
+      $hashObjectBytes = Invoke-Issue13OracleEffectGitBytes $repository @(
+        'hash-object', '--no-filters', '--', $local
+      ) "source-tooling hash-object $relative"
+      $localBlob = (ConvertFrom-Issue13OracleEffectGitText $hashObjectBytes `
+        "source-tooling hash-object $relative").Trim()
+      Assert-Issue13OracleEffect ($localBlob -ceq
+          [string]$gitFile.object) `
+        "source-tooling hash-object differs from Git blob: $relative"
+      [pscustomobject][ordered]@{
+        relative_path = $relative
+        repository_path = [string]$gitFile.repository_path
+        size_bytes = [int64]$localBytes.Length
+        sha256 = Get-Issue13OracleEffectSha256 $local
+        mode = [string]$gitFile.mode
+        type = [string]$gitFile.type
+        blob = [string]$gitFile.object
+      }
+    }
+  )
+  $recordMap = [Collections.Generic.Dictionary[string, object]]::new(
+    [StringComparer]::Ordinal)
+  foreach ($record in $rawRecords) {
+    Assert-Issue13OracleEffect ($recordMap.TryAdd(
+        [string]$record.relative_path, $record)) `
+      "source-tooling Git returned a duplicate file: $($record.relative_path)"
+  }
+  $records = [object[]]@(
+    foreach ($relative in @($sourceSpec.required_relative_paths)) {
+      Assert-Issue13OracleEffect ($recordMap.ContainsKey([string]$relative)) `
+        "source-tooling Git/local file is missing: $relative"
+      $recordMap[[string]$relative]
+    }
+  )
+  Assert-Issue13OracleEffect ($recordMap.Count -eq $records.Count) `
+    'source-tooling Git returned a file outside the stable allowlist.'
+  Assert-Issue13OracleEffect (
+    [string]::Join("`n", @($records.relative_path)) -ceq
+      [string]::Join("`n", @($sourceSpec.required_relative_paths))
+  ) 'source-tooling Git/local file set or order differs.'
+  $physicalFiles = @(Get-ChildItem -LiteralPath $root -File -Recurse -Force)
+  Assert-Issue13OracleEffect ($physicalFiles.Count -eq 37) `
+    'source-tooling physical file count differs from 37.'
+  $inventoryPayload = [string]::Join("`n", @($records | ForEach-Object {
+    [string]$_.relative_path + '|' + [string]$_.size_bytes + '|' +
+      [string]$_.sha256
+  }))
+  [pscustomobject][ordered]@{
+    candidate_commit = $ExpectedCandidateCommit
+    repository_relative_root = [string]$sourceSpec.repository_relative_root
+    root = $root
+    physical_root = $physicalRoot
+    file_count = [int64]$records.Count
+    directory_count = [int64]$localDirectoryPaths.Count
+    total_bytes = [int64](($records | Measure-Object size_bytes -Sum).Sum)
+    path_list_sha256 = $pathList
+    inventory_sha256 = Get-Issue13OracleEffectUtf8Sha256 $inventoryPayload
+    trees = [object[]]$treeRecords
+    records = [object[]]$records
+  }
+}
+
+function Assert-Issue13OracleEffectSourceTooling {
+  param(
+    [Parameter(Mandatory = $true)][object]$Observed,
+    [Parameter(Mandatory = $true)][object]$Expected,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $fields = @(
+    'candidate_commit', 'repository_relative_root', 'root', 'physical_root',
+    'file_count', 'directory_count', 'total_bytes', 'path_list_sha256',
+    'inventory_sha256', 'trees', 'records'
+  )
+  Assert-Issue13OracleEffectExactProperties $Observed $fields $Label
+  Assert-Issue13OracleEffectExactProperties $Expected $fields `
+    "$Label expected"
+  Assert-Issue13OracleEffect (
+    ($Observed | ConvertTo-Json -Depth 30 -Compress) -ceq
+      ($Expected | ConvertTo-Json -Depth 30 -Compress)
+  ) "$Label differs from independently derived Git/local source tooling."
+  $true
 }
 
 function Assert-Issue13OracleEffectControllerRecords {
@@ -642,32 +1523,236 @@ function Get-Issue13OracleEffectEnvironmentContract {
   }
 }
 
-function Enter-Issue13OracleEffectSanitizedREnvironment {
-  param([Parameter(Mandatory = $true)][string]$RLibrary)
-  $contract = Get-Issue13OracleEffectEnvironmentContract $RLibrary
-  $names = [string[]]@(
-    @($contract.cleared) + @($contract.set | ForEach-Object name))
-  $previous = [ordered]@{}
-  foreach ($name in $names) {
-    $previous[$name] = [Environment]::GetEnvironmentVariable(
-      $name, [EnvironmentVariableTarget]::Process)
+function Assert-Issue13OracleEffectProcessEnvironmentName {
+  param([Parameter(Mandatory = $true)][string]$Name)
+  Assert-Issue13OracleEffect (
+    $Name -cmatch '^[A-Za-z_][A-Za-z0-9_]*$'
+  ) "unsafe process environment variable name: $Name"
+  $Name
+}
+
+function Get-Issue13OracleEffectProcessEnvironmentState {
+  param([Parameter(Mandatory = $true)][string]$Name)
+  $validated = Assert-Issue13OracleEffectProcessEnvironmentName $Name
+  $matches = @(
+    [Environment]::GetEnvironmentVariables(
+      [EnvironmentVariableTarget]::Process).GetEnumerator() |
+      Where-Object {
+        [string]::Equals([string]$_.Key, $validated,
+          [StringComparison]::OrdinalIgnoreCase)
+      }
+  )
+  Assert-Issue13OracleEffect ($matches.Count -le 1) `
+    "process environment contains duplicate case aliases: $validated"
+  [pscustomobject][ordered]@{
+    name = $validated
+    present = ($matches.Count -eq 1)
+    value = if ($matches.Count -eq 1) { [string]$matches[0].Value } else { $null }
+  }
+}
+
+function Test-Issue13OracleEffectProcessEnvironmentState {
+  param(
+    [Parameter(Mandatory = $true)][object]$Observed,
+    [Parameter(Mandatory = $true)][object]$Expected
+  )
+  $fields = @('name', 'present', 'value')
+  Assert-Issue13OracleEffectExactProperties $Observed $fields `
+    'observed process environment state'
+  Assert-Issue13OracleEffectExactProperties $Expected $fields `
+    'expected process environment state'
+  if (-not [string]::Equals([string]$Observed.name, [string]$Expected.name,
+      [StringComparison]::OrdinalIgnoreCase) -or
+      -not (Test-Issue13OracleEffectExactBoolean `
+        $Observed.present $Expected.present)) {
+    return $false
+  }
+  if (Test-Issue13OracleEffectExactBoolean $Expected.present $true) {
+    return ($Observed.value -is [string]) -and
+      ($Expected.value -is [string]) -and
+      ([string]$Observed.value -ceq [string]$Expected.value)
+  }
+  ($null -eq $Observed.value) -and ($null -eq $Expected.value)
+}
+
+function Set-Issue13OracleEffectProcessEnvironmentState {
+  param([Parameter(Mandatory = $true)][object]$State)
+  Assert-Issue13OracleEffectExactProperties $State @(
+    'name', 'present', 'value'
+  ) 'process environment target state'
+  $name = Assert-Issue13OracleEffectProcessEnvironmentName `
+    ([string]$State.name)
+  Assert-Issue13OracleEffect ($State.present -is [bool]) `
+    "process environment presence is not boolean: $name"
+  if (Test-Issue13OracleEffectExactBoolean $State.present $true) {
+    Assert-Issue13OracleEffect ($State.value -is [string]) `
+      "present process environment value is not a string: $name"
     [Environment]::SetEnvironmentVariable(
-      $name, $null, [EnvironmentVariableTarget]::Process)
+      $name, [string]$State.value, [EnvironmentVariableTarget]::Process)
+  } else {
+    Assert-Issue13OracleEffect ($null -eq $State.value) `
+      "absent process environment state carries a value: $name"
+    if ((Get-Issue13OracleEffectProcessEnvironmentState $name).present) {
+      Remove-Item -LiteralPath ('Env:' + $name) -ErrorAction Stop
+    }
+  }
+  $observed = Get-Issue13OracleEffectProcessEnvironmentState $name
+  Assert-Issue13OracleEffect (
+    Test-Issue13OracleEffectProcessEnvironmentState $observed $State
+  ) "process environment target state was not installed: $name"
+  $observed
+}
+
+function Enter-Issue13OracleEffectSanitizedREnvironment {
+  param(
+    [Parameter(Mandatory = $true)][string]$RLibrary,
+    [scriptblock]$MutationObserver
+  )
+  $contract = Get-Issue13OracleEffectEnvironmentContract $RLibrary
+  $seen = [Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::OrdinalIgnoreCase)
+  $targets = [Collections.Generic.List[object]]::new()
+  foreach ($nameValue in @($contract.cleared)) {
+    Assert-Issue13OracleEffect ($nameValue -is [string]) `
+      'cleared process environment name is not a string.'
+    $name = Assert-Issue13OracleEffectProcessEnvironmentName `
+      ([string]$nameValue)
+    Assert-Issue13OracleEffect ($seen.Add($name)) `
+      "duplicate cleared process environment name: $name"
+    $targets.Add([pscustomobject][ordered]@{
+      name = $name; present = $false; value = $null
+    })
   }
   foreach ($record in @($contract.set)) {
-    [Environment]::SetEnvironmentVariable(
-      [string]$record.name, [string]$record.value,
-      [EnvironmentVariableTarget]::Process)
+    Assert-Issue13OracleEffectExactProperties $record @('name', 'value') `
+      'set process environment record'
+    $name = Assert-Issue13OracleEffectProcessEnvironmentName `
+      ([string]$record.name)
+    Assert-Issue13OracleEffect ($record.value -is [string]) `
+      "set process environment value is not a string: $name"
+    Assert-Issue13OracleEffect ($seen.Add($name)) `
+      "set/cleared process environment names overlap or duplicate: $name"
+    $targets.Add([pscustomobject][ordered]@{
+      name = $name; present = $true; value = [string]$record.value
+    })
   }
-  [pscustomobject][ordered]@{ previous = $previous; contract = $contract }
+  $previous = [object[]]@($targets | ForEach-Object {
+    Get-Issue13OracleEffectProcessEnvironmentState ([string]$_.name)
+  })
+  $applied = [Collections.Generic.List[object]]::new()
+  try {
+    for ($index = 0; $index -lt $targets.Count; $index++) {
+      $applied.Add($previous[$index])
+      $null = Set-Issue13OracleEffectProcessEnvironmentState $targets[$index]
+      if ($null -ne $MutationObserver) {
+        & $MutationObserver ([string]$targets[$index].name) ($index + 1)
+      }
+    }
+  } catch {
+    $enterError = $_
+    $rollbackErrors = [Collections.Generic.List[string]]::new()
+    for ($index = $applied.Count - 1; $index -ge 0; $index--) {
+      try {
+        $null = Set-Issue13OracleEffectProcessEnvironmentState $applied[$index]
+      } catch {
+        $rollbackErrors.Add($_.Exception.Message)
+      }
+    }
+    $suffix = if ($rollbackErrors.Count -eq 0) { '' } else {
+      '; rollback failures: ' + [string]::Join(' | ', $rollbackErrors)
+    }
+    throw [InvalidOperationException]::new(
+      'sanitized R environment entry failed: ' +
+      $enterError.Exception.Message + $suffix, $enterError.Exception)
+  }
+  [pscustomobject][ordered]@{
+    previous = $previous
+    contract = $contract
+  }
 }
 
 function Exit-Issue13OracleEffectSanitizedREnvironment {
   param([Parameter(Mandatory = $true)][object]$State)
-  foreach ($entry in $State.previous.GetEnumerator()) {
-    [Environment]::SetEnvironmentVariable(
-      [string]$entry.Key, $entry.Value, [EnvironmentVariableTarget]::Process)
+  Assert-Issue13OracleEffectExactProperties $State @('previous', 'contract') `
+    'sanitized R environment state'
+  $previous = @($State.previous)
+  $errors = [Collections.Generic.List[string]]::new()
+  for ($index = $previous.Count - 1; $index -ge 0; $index--) {
+    try {
+      $null = Set-Issue13OracleEffectProcessEnvironmentState $previous[$index]
+    } catch {
+      $errors.Add($_.Exception.Message)
+    }
   }
+  if ($errors.Count -ne 0) {
+    throw [InvalidOperationException]::new(
+      'sanitized R environment restoration failed: ' +
+      [string]::Join(' | ', $errors))
+  }
+}
+
+function Invoke-Issue13OracleEffectWithProcessEnvironment {
+  param(
+    [Parameter(Mandatory = $true)][string]$RLibrary,
+    [Parameter(Mandatory = $true)][scriptblock]$Action
+  )
+  $state = Enter-Issue13OracleEffectSanitizedREnvironment $RLibrary
+  $result = $null
+  $actionError = $null
+  try {
+    $result = @(& $Action)
+  } catch {
+    $actionError = $_
+  }
+  $restoreError = $null
+  try {
+    Exit-Issue13OracleEffectSanitizedREnvironment $state
+  } catch {
+    $restoreError = $_
+  }
+  if ($null -ne $actionError -and $null -ne $restoreError) {
+    throw [AggregateException]::new(
+      'Sanitized R environment action and restoration failed.',
+      [Exception[]]@($actionError.Exception, $restoreError.Exception))
+  }
+  if ($null -ne $actionError) { throw $actionError }
+  if ($null -ne $restoreError) { throw $restoreError }
+  $result
+}
+
+function Invoke-Issue13OracleEffectWithLocation {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][scriptblock]$Action
+  )
+  $target = Resolve-Issue13OracleEffectDirectory $Path `
+    'Oracle-effect command working directory'
+  $previousLocation = Get-Location
+  Assert-Issue13OracleEffect (
+    [string]$previousLocation.Provider.Name -ceq 'FileSystem'
+  ) 'Oracle-effect command requires a filesystem current location.'
+  $result = $null
+  $actionError = $null
+  try {
+    Set-Location -LiteralPath $target
+    $result = @(& $Action)
+  } catch {
+    $actionError = $_
+  }
+  $restoreError = $null
+  try {
+    Set-Location -LiteralPath ([string]$previousLocation.Path)
+  } catch {
+    $restoreError = $_
+  }
+  if ($null -ne $actionError -and $null -ne $restoreError) {
+    throw [AggregateException]::new(
+      'Oracle-effect command action and location restoration failed.',
+      [Exception[]]@($actionError.Exception, $restoreError.Exception))
+  }
+  if ($null -ne $actionError) { throw $actionError }
+  if ($null -ne $restoreError) { throw $restoreError }
+  $result
 }
 
 function Get-Issue13OracleEffectDirectoryInventory {
@@ -740,14 +1825,21 @@ for (package in sort(loadedNamespaces(), method = "radix")) {
       if (package %in% required) "TRUE" else "FALSE", "\n", sep = "")
 }
 '@
-  $environmentState = Enter-Issue13OracleEffectSanitizedREnvironment $libraryPath
-  try {
-    $native = @(& $rscriptPath '--vanilla' '-e' $expression 2>&1 |
-      ForEach-Object { [string]$_ })
-    $exitCode = $LASTEXITCODE
-  } finally {
-    Exit-Issue13OracleEffectSanitizedREnvironment $environmentState
+  $probeEnvironment = New-Issue13V5ClosedREnvironment $libraryPath
+  $probeResult = Invoke-Issue13V5RscriptBounded `
+    -RscriptPath $rscriptPath `
+    -Arguments @('--vanilla', '-e', $expression) `
+    -Label 'Oracle-effect R runtime probe' `
+    -TimeoutSeconds 600 `
+    -ExpectedExitCodes $null `
+    -WorkingDirectory $script:Issue13OracleEffectControllerRoot `
+    -Environment $probeEnvironment
+  $probe = [pscustomobject]@{
+    native = [string[]]$probeResult.combined_lines
+    exit_code = [long]$probeResult.exit_code
   }
+  $native = @($probe.native)
+  $exitCode = [long]$probe.exit_code
   Assert-Issue13OracleEffect ($exitCode -eq 0) `
     "R runtime probe failed: $($native -join ' ')"
   $versionRows = @($native | Where-Object { $_.StartsWith("R_VERSION`t") })
@@ -812,7 +1904,7 @@ for (package in sort(loadedNamespaces(), method = "radix")) {
     'loaded required R packages'
   Assert-Issue13OracleEffect (@($packages.name | Select-Object -Unique).Count -eq
       $packages.Count) 'R runtime probe repeated a loaded package.'
-  $environment = $environmentState.contract
+  $environment = Get-Issue13OracleEffectEnvironmentContract $libraryPath
   $payload = [string]::Join("`n", @(
     'r-version|' + $versionRows[0].Substring("R_VERSION`t".Length)
     'r-platform|' + $platformRows[0].Substring("R_PLATFORM`t".Length)
@@ -879,6 +1971,82 @@ function Test-Issue13OracleEffectNegativeSelfTests {
     $null = Assert-Issue13OracleEffectControllerRecords $tampered $expected `
       'self-test controller hash'
   } 'controller raw-byte hash substitution'
+  $validManifestEnvelope = [pscustomobject][ordered]@{
+    schema = 'wlv-issue13-v5-harness-materialization/1'
+    generation = 'v5-terminal'
+    status = 'materialized'
+    materialized_at_utc = '2026-08-27T00:00:00.0000000Z'
+    baseline_commit = ('a' * 40)
+    baseline_policy = 'authenticated-direct-child-compatibility-oracle'
+    baseline_runtime_commit = ('b' * 40)
+    baseline_runtime_tree = ('c' * 40)
+    baseline_overlay_sha256 = ('d' * 64)
+    baseline_overlay_patch_id = ('e' * 40)
+    strict_negative_evidence_required = $true
+    final_evidence_eligible = $true
+    reuses_candidate_evidence = $false
+    source_controller = [pscustomobject][ordered]@{
+      commit_sha256 = ('f' * 40)
+      file_count = [int64]0
+      records = @()
+    }
+    source_tooling = [pscustomobject]@{}
+    output_tooling = [pscustomobject][ordered]@{
+      file_count = [int64]1
+      total_bytes = [int64]1
+      inventory_sha256 = ('0' * 64)
+    }
+    sealed_output_tooling = [pscustomobject][ordered]@{
+      file_count = [int64]1
+      total_bytes = [int64]1
+      inventory_sha256 = ('0' * 64)
+    }
+    overlays = @(
+      'authenticated-compatibility-oracle-cc2',
+      'authenticated-candidate-runtime-sidecar',
+      'authenticated-arm-specific-source-contracts'
+    )
+  }
+  $null = Assert-Issue13OracleEffectHarnessManifestEnvelope `
+    $validManifestEnvelope
+  $cloneManifestEnvelope = {
+    param([object]$Value)
+    $Value | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+  }
+  $legacyCommit = & $cloneManifestEnvelope $validManifestEnvelope
+  $legacyCommit | Add-Member -NotePropertyName candidate_commit `
+    -NotePropertyValue ('1' * 40)
+  & $mustReject {
+    $null = Assert-Issue13OracleEffectHarnessManifestEnvelope $legacyCommit
+  } 'legacy top-level candidate_commit in harness manifest'
+  $arbitraryField = & $cloneManifestEnvelope $validManifestEnvelope
+  $arbitraryField | Add-Member -NotePropertyName arbitrary_field `
+    -NotePropertyValue 'forbidden'
+  & $mustReject {
+    $null = Assert-Issue13OracleEffectHarnessManifestEnvelope $arbitraryField
+  } 'arbitrary top-level field in harness manifest'
+  $wrongPolicy = & $cloneManifestEnvelope $validManifestEnvelope
+  $wrongPolicy.baseline_policy = 'legacy'
+  & $mustReject {
+    $null = Assert-Issue13OracleEffectHarnessManifestEnvelope $wrongPolicy
+  } 'legacy harness baseline policy'
+  $missingStrictNegative = & $cloneManifestEnvelope $validManifestEnvelope
+  $missingStrictNegative.strict_negative_evidence_required = $false
+  & $mustReject {
+    $null = Assert-Issue13OracleEffectHarnessManifestEnvelope `
+      $missingStrictNegative
+  } 'disabled strict-negative harness evidence'
+  $wrongOverlayOrder = & $cloneManifestEnvelope $validManifestEnvelope
+  [Array]::Reverse($wrongOverlayOrder.overlays)
+  & $mustReject {
+    $null = Assert-Issue13OracleEffectHarnessManifestEnvelope $wrongOverlayOrder
+  } 'reordered harness overlays'
+  $extraOutputField = & $cloneManifestEnvelope $validManifestEnvelope
+  $extraOutputField.output_tooling | Add-Member -NotePropertyName legacy_hash `
+    -NotePropertyValue ('2' * 64)
+  & $mustReject {
+    $null = Assert-Issue13OracleEffectHarnessManifestEnvelope $extraOutputField
+  } 'extra harness output-tooling field'
   $contract = Get-Issue13OracleEffectEnvironmentContract $anchor
   Assert-Issue13OracleEffectExactSet @($contract.cleared) `
     $script:Issue13OracleEffectRClearedEnvironment `
@@ -892,38 +2060,125 @@ function Test-Issue13OracleEffectNegativeSelfTests {
       $script:Issue13OracleEffectRClearedEnvironment `
       'self-test tampered R environment'
   } 'missing R_LIBS_SITE sanitization'
-  $poisoned = [ordered]@{
-    R_LIBS = 'issue13-poison-r-libs'
-    R_LIBS_SITE = 'issue13-poison-r-libs-site'
-    R_LIBS_USER = 'issue13-poison-r-libs-user'
-  }
-  $original = [ordered]@{}
-  $state = $null
+  $environmentNames = [string[]]@(
+    @($contract.cleared) + @($contract.set | ForEach-Object name))
+  $external = [object[]]@($environmentNames | ForEach-Object {
+    Get-Issue13OracleEffectProcessEnvironmentState ([string]$_)
+  })
+  $setup = [object[]]@($external | ForEach-Object {
+    [pscustomobject][ordered]@{
+      name = [string]$_.name
+      present = [bool]$_.present
+      value = $_.value
+    }
+  })
+  $setupByName = @{}
+  foreach ($record in $setup) { $setupByName[[string]$record.name] = $record }
+  $setupByName['LANG'].present = $false
+  $setupByName['LANG'].value = $null
+  $setupByName['LC_ALL'].present = $true
+  $setupByName['LC_ALL'].value = ''
+  $setupByName['LC_CTYPE'].present = $true
+  $setupByName['LC_CTYPE'].value = 'issue13-value'
+  $setupByName['R_LIBS'].present = $true
+  $setupByName['R_LIBS'].value = 'issue13-sentinel'
   try {
-    foreach ($entry in $poisoned.GetEnumerator()) {
-      $original[$entry.Key] = [Environment]::GetEnvironmentVariable(
-        [string]$entry.Key, [EnvironmentVariableTarget]::Process)
-      [Environment]::SetEnvironmentVariable(
-        [string]$entry.Key, [string]$entry.Value,
-        [EnvironmentVariableTarget]::Process)
+    foreach ($record in $setup) {
+      $null = Set-Issue13OracleEffectProcessEnvironmentState $record
+    }
+    foreach ($record in $setup) {
+      Assert-Issue13OracleEffect (
+        Test-Issue13OracleEffectProcessEnvironmentState `
+          (Get-Issue13OracleEffectProcessEnvironmentState $record.name) $record
+      ) "tri-state setup differs: $($record.name)"
     }
     $state = Enter-Issue13OracleEffectSanitizedREnvironment $anchor
-    Assert-Issue13OracleEffect ([string]::IsNullOrEmpty(
-        [Environment]::GetEnvironmentVariable(
-          'R_LIBS', [EnvironmentVariableTarget]::Process)) -and
-        [string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable(
-          'R_LIBS_SITE', [EnvironmentVariableTarget]::Process)) -and
-        [Environment]::GetEnvironmentVariable(
-          'R_LIBS_USER', [EnvironmentVariableTarget]::Process) -ceq $anchor) `
-      'negative self-test did not remove poisoned R library variables.'
-  } finally {
-    if ($null -ne $state) {
-      Exit-Issue13OracleEffectSanitizedREnvironment $state
+    foreach ($name in @($contract.cleared)) {
+      $observed = Get-Issue13OracleEffectProcessEnvironmentState $name
+      Assert-Issue13OracleEffect (
+        Test-Issue13OracleEffectExactBoolean $observed.present $false
+      ) "sanitized environment retained a cleared name: $name"
     }
-    foreach ($entry in $original.GetEnumerator()) {
-      [Environment]::SetEnvironmentVariable(
-        [string]$entry.Key, $entry.Value,
-        [EnvironmentVariableTarget]::Process)
+    foreach ($record in @($contract.set)) {
+      $observed = Get-Issue13OracleEffectProcessEnvironmentState $record.name
+      Assert-Issue13OracleEffect (
+        (Test-Issue13OracleEffectExactBoolean $observed.present $true) -and
+        [string]$observed.value -ceq [string]$record.value
+      ) "sanitized environment did not set an exact value: $($record.name)"
+    }
+    Exit-Issue13OracleEffectSanitizedREnvironment $state
+    foreach ($record in $setup) {
+      Assert-Issue13OracleEffect (
+        Test-Issue13OracleEffectProcessEnvironmentState `
+          (Get-Issue13OracleEffectProcessEnvironmentState $record.name) $record
+      ) "tri-state restoration differs: $($record.name)"
+    }
+    & $mustReject {
+      $null = Invoke-Issue13OracleEffectWithProcessEnvironment $anchor {
+        throw 'issue13 injected action failure'
+      }
+    } 'action failure with exact restoration'
+    foreach ($record in $setup) {
+      Assert-Issue13OracleEffect (
+        Test-Issue13OracleEffectProcessEnvironmentState `
+          (Get-Issue13OracleEffectProcessEnvironmentState $record.name) $record
+      ) "action-exception restoration differs: $($record.name)"
+    }
+    & $mustReject {
+      $null = Enter-Issue13OracleEffectSanitizedREnvironment $anchor {
+        param($name, $mutationIndex)
+        if ($mutationIndex -eq 2) {
+          throw "issue13 injected partial entry failure after $name"
+        }
+      }
+    } 'partial Enter failure with rollback'
+    foreach ($record in $setup) {
+      Assert-Issue13OracleEffect (
+        Test-Issue13OracleEffectProcessEnvironmentState `
+          (Get-Issue13OracleEffectProcessEnvironmentState $record.name) $record
+      ) "partial-entry rollback differs: $($record.name)"
+    }
+  } finally {
+    $restoreErrors = [Collections.Generic.List[string]]::new()
+    for ($index = $external.Count - 1; $index -ge 0; $index--) {
+      try {
+        $null = Set-Issue13OracleEffectProcessEnvironmentState $external[$index]
+      } catch {
+        $restoreErrors.Add($_.Exception.Message)
+      }
+    }
+    if ($restoreErrors.Count -ne 0) {
+      throw [InvalidOperationException]::new(
+        'negative self-test external environment restoration failed: ' +
+        [string]::Join(' | ', $restoreErrors))
+    }
+  }
+  $locationRoot = [IO.Path]::GetFullPath((Join-Path `
+      ([IO.Path]::GetTempPath()) (
+        'issue13-oracle-location-selftest-' + [Guid]::NewGuid().ToString('N'))))
+  $temporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).
+    TrimEnd([IO.Path]::DirectorySeparatorChar)
+  Assert-Issue13OracleEffect (
+    $locationRoot.StartsWith(
+      $temporaryRoot + [IO.Path]::DirectorySeparatorChar,
+      [StringComparison]::OrdinalIgnoreCase)
+  ) 'location self-test root escaped the system temporary directory.'
+  $null = [IO.Directory]::CreateDirectory($locationRoot)
+  $locationBefore = (Get-Location).Path
+  try {
+    & $mustReject {
+      $null = Invoke-Issue13OracleEffectWithLocation $locationRoot {
+        throw 'issue13 injected location action failure'
+      }
+    } 'location action failure with exact restoration'
+    Assert-Issue13OracleEffect (
+      [string]::Equals(
+        (Get-Location).Path, $locationBefore,
+        [StringComparison]::OrdinalIgnoreCase)
+    ) 'location action failure did not restore the current directory.'
+  } finally {
+    if (Test-Path -LiteralPath $locationRoot -PathType Container) {
+      [IO.Directory]::Delete($locationRoot, $true)
     }
   }
   $true
@@ -955,7 +2210,7 @@ function Test-Issue13OracleEffectSpec {
       'requires-terminal-primary-and-replay-comparisons') `
     'the static spec must require fresh terminal primary/replay comparisons.'
   Assert-Issue13OracleEffect ($Spec.proof_schema_sha256 -ceq `
-      '71060076271205ba0134c1f6ccd38f379ca354810996be7c1c40ed1cf15005b4') `
+      '4411f49461962fc3684ea7e4d08aaa3c5b07da2393b903dfbfa2671954322be0') `
     'proof schema hash differs.'
   Assert-Issue13OracleEffect (
     Test-Issue13OracleEffectExactBoolean $Spec.final_evidence_eligible $false
@@ -1009,6 +2264,38 @@ function Test-Issue13OracleEffectSpec {
     $script:Issue13OracleEffectRequiredRPackages 'terminal required R packages'
   Assert-Issue13OracleEffectExactSet @($terminal.required_controller_files) `
     $script:Issue13OracleEffectControllerFiles 'terminal controller files'
+  Assert-Issue13OracleEffectExactProperties $terminal.source_tooling @(
+    'repository_relative_root', 'file_count', 'directory_count',
+    'path_list_sha256', 'tree_relative_paths', 'required_relative_paths',
+    'tree_mode', 'file_mode'
+  ) 'terminal stable source-tooling contract'
+  Assert-Issue13OracleEffect (
+    [string]$terminal.source_tooling.repository_relative_root -ceq
+      $script:Issue13OracleEffectSourceToolingRelativeRoot -and
+    [int64]$terminal.source_tooling.file_count -eq 37L -and
+    [int64]$terminal.source_tooling.directory_count -eq 1L -and
+    [string]$terminal.source_tooling.path_list_sha256 -ceq
+      $script:Issue13OracleEffectSourceToolingPathListSha256 -and
+    [string]$terminal.source_tooling.tree_mode -ceq '040000' -and
+    [string]$terminal.source_tooling.file_mode -ceq '100644'
+  ) 'terminal stable source-tooling scalar contract differs.'
+  Assert-Issue13OracleEffect (
+    [string]::Join("`n", @($terminal.source_tooling.tree_relative_paths)) -ceq
+      [string]::Join("`n", $script:Issue13OracleEffectSourceToolingTreePaths) -and
+    [string]::Join("`n", @($terminal.source_tooling.required_relative_paths)) `
+      -ceq [string]::Join("`n", $script:Issue13OracleEffectSourceToolingFiles)
+  ) 'terminal stable source-tooling ordered paths differ.'
+  Assert-Issue13OracleEffectExactProperties $terminal.rscript @(
+    'required_link_count', 'size_bytes', 'sha256'
+  ) 'terminal Rscript stable contract'
+  Assert-Issue13OracleEffect (
+    [int64]$terminal.rscript.required_link_count -eq
+      $script:Issue13OracleEffectRscriptLinkCount -and
+    [int64]$terminal.rscript.size_bytes -eq
+      $script:Issue13OracleEffectRscriptSizeBytes -and
+    [string]$terminal.rscript.sha256 -ceq
+      $script:Issue13OracleEffectRscriptSha256
+  ) 'terminal Rscript stable contract differs.'
   Assert-Issue13OracleEffect (
     [string]$terminal.sealed_inventory.status -cin @(
       'requires-terminal-reseal', 'sealed'
@@ -1870,6 +3157,61 @@ function Get-Issue13OracleEffectHarnessInventory {
   }
 }
 
+function Assert-Issue13OracleEffectHarnessManifestEnvelope {
+  param([Parameter(Mandatory = $true)][object]$Manifest)
+  Assert-Issue13OracleEffectExactProperties $Manifest @(
+    'schema', 'generation', 'status', 'materialized_at_utc',
+    'baseline_commit', 'baseline_policy', 'baseline_runtime_commit',
+    'baseline_runtime_tree', 'baseline_overlay_sha256',
+    'baseline_overlay_patch_id', 'strict_negative_evidence_required',
+    'final_evidence_eligible', 'reuses_candidate_evidence',
+    'source_controller', 'source_tooling', 'output_tooling',
+    'sealed_output_tooling', 'overlays'
+  ) 'comparison harness manifest properties'
+  Assert-Issue13OracleEffectExactProperties $Manifest.source_controller @(
+    'commit_sha256', 'file_count', 'records'
+  ) 'terminal source_controller properties'
+  foreach ($name in @('output_tooling', 'sealed_output_tooling')) {
+    Assert-Issue13OracleEffectExactProperties $Manifest.$name @(
+      'file_count', 'total_bytes', 'inventory_sha256'
+    ) "terminal $name properties"
+  }
+  $timestamp = [DateTimeOffset]::MinValue
+  Assert-Issue13OracleEffect (
+    [DateTimeOffset]::TryParseExact(
+      [string]$Manifest.materialized_at_utc, 'o',
+      [Globalization.CultureInfo]::InvariantCulture,
+      [Globalization.DateTimeStyles]::RoundtripKind, [ref]$timestamp
+    ) -and $timestamp.Offset -eq [TimeSpan]::Zero -and
+    [string]$Manifest.materialized_at_utc -cmatch 'Z$'
+  ) 'comparison harness materialized_at_utc is not an exact UTC round-trip timestamp.'
+  Assert-Issue13OracleEffect (
+    [string]$Manifest.schema -ceq 'wlv-issue13-v5-harness-materialization/1' -and
+    [string]$Manifest.status -ceq 'materialized' -and
+    [string]$Manifest.generation -ceq 'v5-terminal' -and
+    [string]$Manifest.baseline_policy -ceq
+      'authenticated-direct-child-compatibility-oracle' -and
+    (Test-Issue13OracleEffectExactBoolean `
+      $Manifest.strict_negative_evidence_required $true) -and
+    (Test-Issue13OracleEffectExactBoolean `
+      $Manifest.final_evidence_eligible $true) -and
+    (Test-Issue13OracleEffectExactBoolean `
+      $Manifest.reuses_candidate_evidence $false)
+  ) 'comparison harness manifest identity or policy differs.'
+  $expectedOverlays = @(
+    'authenticated-compatibility-oracle-cc2',
+    'authenticated-candidate-runtime-sidecar',
+    'authenticated-arm-specific-source-contracts'
+  )
+  $observedOverlays = [string[]]@($Manifest.overlays)
+  Assert-Issue13OracleEffect (
+    $observedOverlays.Count -eq $expectedOverlays.Count -and
+    [string]::Join("`n", $observedOverlays) -ceq
+      [string]::Join("`n", $expectedOverlays)
+  ) 'comparison harness overlays differ in value or order.'
+  $true
+}
+
 function Test-Issue13OracleEffectHarnessManifest {
   param(
     [Parameter(Mandatory = $true)][string]$Path,
@@ -1893,19 +3235,14 @@ function Test-Issue13OracleEffectHarnessManifest {
     )) -ceq $ExpectedCandidateCommit
   ) 'ExpectedCandidateCommit is not an available Git commit.'
   $manifest = Read-Issue13OracleEffectJson $resolved 'comparison harness manifest'
-  Assert-Issue13OracleEffect ($manifest.schema -ceq 'wlv-issue13-v5-harness-materialization/1' -and `
-      $manifest.status -ceq 'materialized' -and `
-      $manifest.generation -ceq 'v5-terminal' -and `
-      (Test-Issue13OracleEffectExactBoolean `
-        $manifest.final_evidence_eligible $true) -and `
-      (Test-Issue13OracleEffectExactBoolean `
-        $manifest.reuses_candidate_evidence $false)) `
-    'comparison harness manifest identity differs.'
-  Assert-Issue13OracleEffectExactProperties $manifest.source_controller @(
-    'commit_sha256', 'file_count', 'records'
-  ) 'terminal source_controller properties'
+  $null = Assert-Issue13OracleEffectHarnessManifestEnvelope $manifest
   $expectedController = Get-Issue13OracleEffectExpectedController $Spec `
     $ExpectedCandidateCommit $RepositoryRoot
+  $expectedSourceTooling = Get-Issue13OracleEffectExpectedSourceTooling $Spec `
+    $ExpectedCandidateCommit $RepositoryRoot
+  $null = Assert-Issue13OracleEffectSourceTooling `
+    $manifest.source_tooling $expectedSourceTooling `
+    'terminal manifest source_tooling'
   Assert-Issue13OracleEffect (
     [string]$manifest.source_controller.commit_sha256 -ceq `
       [string]$expectedController.commit_sha256
@@ -1972,6 +3309,7 @@ function Test-Issue13OracleEffectHarnessManifest {
     source_controller_commit_sha256 = `
       [string]$manifest.source_controller.commit_sha256
     source_controller = $expectedController
+    source_tooling = $expectedSourceTooling
     output_tooling = [pscustomobject][ordered]@{
       file_count = [int64]$manifest.output_tooling.file_count
       total_bytes = [int64]$manifest.output_tooling.total_bytes
@@ -2034,7 +3372,7 @@ function Get-Issue13OracleEffectInputContext {
     'oracle-effect proof schema'
   $spec = Read-Issue13OracleEffectJson $specResolved 'oracle-effect spec'
   Assert-Issue13OracleEffect ((Get-Issue13OracleEffectSha256 $specResolved) -ceq `
-      '0de8feceef20c80b40c884a37abde70fdcee3d1f612968e37de1b938c4380211') `
+      '9bb49aa659519d940fa3d1b9865e40b0235d2f0fa61c11ec5ad4f419825d3f5a') `
     'oracle-effect spec bytes differ from the closed terminal manifest.'
   Assert-Issue13OracleEffect ((Get-Issue13OracleEffectSha256 $schemaResolved) -ceq `
       [string]$spec.proof_schema_sha256) `
@@ -2044,14 +3382,47 @@ function Get-Issue13OracleEffectInputContext {
     'strict smoke summary'
   $oraclePath = Resolve-Issue13OracleEffectFile $OracleSmokeSummary `
     'oracle smoke summary'
-  Assert-Issue13OracleEffect ((Get-Issue13OracleEffectSha256 $strictPath) -ceq `
-      [string]$spec.evidence_pins.strict_smoke.summary_sha256) `
+  Assert-Issue13OracleEffect (
+    [string]$spec.evidence_pins.strict_smoke.summary_sha256 -ceq
+      '973079b3cba2df2627b3dcc4dcde0899b261eff9ad1930eb31b2407d23e3dd6d' -and
+    (Get-Issue13OracleEffectSha256 $strictPath) -ceq
+      '973079b3cba2df2627b3dcc4dcde0899b261eff9ad1930eb31b2407d23e3dd6d'
+  ) `
     'strict smoke summary hash differs.'
-  Assert-Issue13OracleEffect ((Get-Issue13OracleEffectSha256 $oraclePath) -ceq `
-      [string]$spec.evidence_pins.oracle_smoke.summary_sha256) `
+  Assert-Issue13OracleEffect (
+    [string]$spec.evidence_pins.oracle_smoke.summary_sha256 -ceq
+      '4ba530a191ef45baaaa08b2aa03ec6dcd0268aa6514caec6520203a0213afdfe' -and
+    (Get-Issue13OracleEffectSha256 $oraclePath) -ceq
+      '4ba530a191ef45baaaa08b2aa03ec6dcd0268aa6514caec6520203a0213afdfe'
+  ) `
     'oracle smoke summary hash differs.'
   $strict = Read-Issue13OracleEffectJson $strictPath 'strict smoke summary'
   $oracle = Read-Issue13OracleEffectJson $oraclePath 'oracle smoke summary'
+  Assert-Issue13OracleEffectExactProperties $strict @(
+    'schema', 'status', 'passed', 'final_evidence_eligible', 'purpose',
+    'baseline_commit', 'started_at_utc', 'finished_at_utc',
+    'source_inventory_sha256', 'harness_manifest_path',
+    'harness_manifest_sha256', 'method_count', 'passed_count', 'failed_count',
+    'records', 'disposition'
+  ) 'sealed historical strict smoke summary'
+  Assert-Issue13OracleEffectExactProperties $oracle @(
+    'schema', 'status', 'passed', 'final_evidence_eligible', 'purpose',
+    'baseline_commit', 'baseline_base_commit', 'baseline_runtime_commit',
+    'started_at_utc', 'finished_at_utc', 'source_inventory_sha256',
+    'harness_manifest_path', 'harness_manifest_sha256',
+    'environment_removed', 'method_count', 'passed_count', 'failed_count',
+    'records', 'disposition'
+  ) 'sealed historical oracle smoke summary'
+  Assert-Issue13OracleEffect (@($strict.PSObject.Properties.Name | Where-Object {
+        $_ -cmatch '^rscript_'
+      }).Count -eq 0 -and
+      @($oracle.PSObject.Properties.Name | Where-Object {
+        $_ -cmatch '^rscript_'
+      }).Count -eq 0) `
+    'historical smoke summaries unexpectedly contain Rscript fields.'
+  Assert-Issue13OracleEffectExactSet @($oracle.environment_removed) @(
+    'LANG', 'LC_ALL', 'LC_CTYPE'
+  ) 'sealed historical oracle smoke environment_removed'
   Assert-Issue13OracleEffect ($strict.schema -ceq `
       $spec.evidence_pins.strict_smoke.schema -and `
       $strict.purpose -ceq $spec.evidence_pins.strict_smoke.purpose -and `
@@ -2065,7 +3436,12 @@ function Get-Issue13OracleEffectInputContext {
       $strict.harness_manifest_sha256 -ceq `
         $spec.evidence_pins.strict_smoke.harness_manifest_sha256 -and `
       [int]$strict.method_count -eq 12 -and `
-      [int]$strict.passed_count -eq 5 -and [int]$strict.failed_count -eq 7) `
+      [int]$spec.evidence_pins.strict_smoke.passed_count -eq 5 -and `
+      [int]$spec.evidence_pins.strict_smoke.failed_count -eq 7 -and `
+      [int]$strict.passed_count -eq `
+        [int]$spec.evidence_pins.strict_smoke.passed_count -and `
+      [int]$strict.failed_count -eq `
+        [int]$spec.evidence_pins.strict_smoke.failed_count) `
     'strict smoke summary envelope differs.'
   Assert-Issue13OracleEffect ($oracle.schema -ceq `
       $spec.evidence_pins.oracle_smoke.schema -and `
@@ -2082,7 +3458,12 @@ function Get-Issue13OracleEffectInputContext {
       $oracle.harness_manifest_sha256 -ceq `
         $spec.evidence_pins.oracle_smoke.harness_manifest_sha256 -and `
       [int]$oracle.method_count -eq 12 -and `
-      [int]$oracle.passed_count -eq 12 -and [int]$oracle.failed_count -eq 0) `
+      [int]$spec.evidence_pins.oracle_smoke.passed_count -eq 12 -and `
+      [int]$spec.evidence_pins.oracle_smoke.failed_count -eq 0 -and `
+      [int]$oracle.passed_count -eq `
+        [int]$spec.evidence_pins.oracle_smoke.passed_count -and `
+      [int]$oracle.failed_count -eq `
+        [int]$spec.evidence_pins.oracle_smoke.failed_count) `
     'oracle smoke summary envelope differs.'
   $strictMap = Get-Issue13OracleEffectSummaryRecords $strict `
     'strict smoke summary'
@@ -2106,9 +3487,10 @@ function Get-Issue13OracleEffectInputContext {
   $harness = Test-Issue13OracleEffectHarnessManifest `
     $ComparisonHarnessManifest $spec $ExpectedCandidateCommit `
     $oracleIdentity.repository_root
-  $rscriptPath = Resolve-Issue13OracleEffectFile $Rscript 'comparison Rscript'
-  $rscriptItem = Get-Item -LiteralPath $rscriptPath -Force
-  $rRuntime = Get-Issue13OracleEffectRRuntime $rscriptPath $RLibrary
+  $rscriptIdentity = Get-Issue13OracleEffectRscriptIdentity $Rscript `
+    $spec.terminal_comparison_runtime.rscript
+  $rRuntime = Get-Issue13OracleEffectRRuntime `
+    $rscriptIdentity.logical_path $RLibrary
   $strictRoot = Split-Path -Parent $strictPath
   $oracleRoot = Split-Path -Parent $oraclePath
   $strictScenarios = @{}
@@ -2182,11 +3564,7 @@ function Get-Issue13OracleEffectInputContext {
     oracle_runs = $oracleRuns
     approved_runs = @($approved.ToArray())
     harness = $harness
-    rscript = [pscustomobject][ordered]@{
-      path = $rscriptPath
-      sha256 = Get-Issue13OracleEffectSha256 $rscriptPath
-      size_bytes = [int64]$rscriptItem.Length
-    }
+    rscript = $rscriptIdentity
     r_library = $rRuntime
   }
 }
@@ -2266,7 +3644,7 @@ function Get-Issue13OracleEffectComparisonCommands {
         '--comparison_mode=strict'
       )
       $payloadParts = New-Object Collections.Generic.List[string]
-      $payloadParts.Add([string]$Context.rscript.path)
+      $payloadParts.Add([string]$Context.rscript.logical_path)
       foreach ($argument in $arguments) {
         $payloadParts.Add([string]$argument)
       }
@@ -2284,7 +3662,7 @@ function Get-Issue13OracleEffectComparisonCommands {
       $commands.Add([pscustomobject][ordered]@{
         phase = $phase
         method = $method
-        executable = [string]$Context.rscript.path
+        executable = [string]$Context.rscript.logical_path
         arguments = $arguments
         working_directory = `
           [string]$Context.harness.installed_inventory.harness_root
@@ -2318,9 +3696,9 @@ function Invoke-Issue13OracleEffectFreshComparisons {
     'replay comparison root'
   $null = Assert-Issue13OracleEffectComparisonIsolation $primary $replay $Context
   $commands = Get-Issue13OracleEffectComparisonCommands $Context $primary $replay
-  $environmentState = Enter-Issue13OracleEffectSanitizedREnvironment `
+  $comparisonEnvironment = New-Issue13V5ClosedREnvironment `
     ([string]$Context.r_library.path)
-  try {
+  $comparisonAction = {
     foreach ($phase in @('primary', 'replay')) {
       $phaseRoot = if ($phase -ceq 'primary') { $primary } else { $replay }
       Assert-Issue13OracleEffect (-not (Test-Path -LiteralPath $phaseRoot)) `
@@ -2337,15 +3715,31 @@ function Invoke-Issue13OracleEffectFreshComparisons {
             $command.output_directory)) `
           "$phase/$($command.method) output appeared before its command."
         $invokeArguments = [string[]]@($command.arguments)
-        Push-Location -LiteralPath $command.working_directory
-        try {
-          $nativeOutput = @(& $command.executable @invokeArguments 2>&1)
-          $exitCode = $LASTEXITCODE
-        } finally {
-          Pop-Location
+        $invocation = [pscustomobject]@{
+          native_output = [object[]]@()
+          exit_code = $null
         }
-        Assert-Issue13OracleEffect ($exitCode -eq 0) `
-          "$phase comparison failed for $($command.method): $($nativeOutput -join ' ')"
+        Assert-Issue13OracleEffect ([string]::Equals(
+            [string]$command.executable,
+            [string]$Context.rscript.logical_path,
+            [StringComparison]::OrdinalIgnoreCase)) `
+          'terminal comparison command escaped the sealed Rscript authority.'
+        $comparisonResult = Invoke-Issue13V5RscriptBounded `
+          -RscriptPath ([string]$command.executable) `
+          -Arguments $invokeArguments `
+          -Label "$phase comparison for $($command.method)" `
+          -TimeoutSeconds 14400 `
+          -ExpectedExitCodes $null `
+          -WorkingDirectory ([string]$command.working_directory) `
+          -Environment $comparisonEnvironment
+        $invocation.native_output = `
+          [object[]]$comparisonResult.combined_lines
+        $invocation.exit_code = [int]$comparisonResult.exit_code
+        Assert-Issue13OracleEffect (
+          $null -ne $invocation.exit_code -and
+          [int]$invocation.exit_code -eq 0
+        ) ("$phase comparison failed for $($command.method): " +
+          [string]::Join(' ', @($invocation.native_output)))
         Assert-Issue13OracleEffect (Test-Path -LiteralPath `
             $command.output_directory -PathType Container) `
           "$phase comparison did not create $($command.method) output."
@@ -2353,9 +3747,9 @@ function Invoke-Issue13OracleEffectFreshComparisons {
       Assert-Issue13OracleEffectNoReparseTree $phaseRoot `
         "$phase comparison root after execution"
     }
-  } finally {
-    Exit-Issue13OracleEffectSanitizedREnvironment $environmentState
   }
+  $null = Invoke-Issue13V5WithCleanup -Action $comparisonAction `
+    -Label 'Oracle-effect terminal comparisons'
   $null = Assert-Issue13OracleEffectComparisonIsolation $primary $replay `
     $Context -RequireExisting
   $commands
@@ -2768,12 +4162,27 @@ function Get-Issue13OracleEffectEvidence {
       }
     }
   )
-  $currentRuntimeSnapshot = [pscustomobject][ordered]@{
+  $currentSourceTooling = Get-Issue13OracleEffectExpectedSourceTooling $spec `
+    $ExpectedCandidateCommit $RepositoryRoot
+  $null = Assert-Issue13OracleEffectSourceTooling `
+    $context.harness.source_tooling $currentSourceTooling `
+    'terminal proof source_tooling'
+  $currentRscript = Get-Issue13OracleEffectRscriptIdentity $Rscript `
+    $spec.terminal_comparison_runtime.rscript
+  $null = Assert-Issue13OracleEffectRscriptIdentity $context.rscript `
+    $currentRscript 'terminal proof Rscript identity'
+  $currentRLibrary = Get-Issue13OracleEffectRRuntime `
+    $currentRscript.logical_path $RLibrary
+  $contextRuntimeSnapshot = [pscustomobject][ordered]@{
     rscript = $context.rscript
     r_library = $context.r_library
   }
+  $currentRuntimeSnapshot = [pscustomobject][ordered]@{
+    rscript = $currentRscript
+    r_library = $currentRLibrary
+  }
   $beforeRuntimeSnapshot = if ($null -eq $RuntimeBefore) {
-    $currentRuntimeSnapshot
+    $contextRuntimeSnapshot
   } else {
     [pscustomobject][ordered]@{
       rscript = $RuntimeBefore.rscript
@@ -2797,8 +4206,8 @@ function Get-Issue13OracleEffectEvidence {
     oracle = $context.oracle_identity
     terminal_runtime = [pscustomobject][ordered]@{
       comparison_harness = $context.harness
-      rscript = $context.rscript
-      r_library = $context.r_library
+      rscript = $currentRscript
+      r_library = $currentRLibrary
       runtime_immutability = [pscustomobject][ordered]@{
         before = $beforeRuntimeSnapshot
         after = $currentRuntimeSnapshot
@@ -2882,7 +4291,7 @@ function Write-Issue13OracleEffectJsonOnce {
     [IO.File]::Move($temporary, $full)
   } finally {
     if (Test-Path -LiteralPath $temporary -PathType Leaf) {
-      Remove-Item -LiteralPath $temporary -Force
+      [IO.File]::Delete($temporary)
     }
   }
   Resolve-Issue13OracleEffectFile $full 'oracle-effect proof output'

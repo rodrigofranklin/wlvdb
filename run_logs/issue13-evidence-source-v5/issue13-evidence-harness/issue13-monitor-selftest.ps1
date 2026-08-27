@@ -1,20 +1,4 @@
-[CmdletBinding()]
-param(
-  [Parameter(Mandatory = $true)][string]$RepositoryRoot,
-  [Parameter(Mandatory = $true)][ValidatePattern('^[0-9a-f]{40}$')]
-    [string]$ExpectedCandidateCommit,
-  [string]$SpecPath,
-  [string]$SchemaPath,
-  [Parameter(Mandatory = $true)][string]$StrictSmokeSummary,
-  [Parameter(Mandatory = $true)][string]$OracleSmokeSummary,
-  [Parameter(Mandatory = $true)][string]$OraclePatch,
-  [Parameter(Mandatory = $true)][string]$ComparisonHarnessManifest,
-  [Parameter(Mandatory = $true)][string]$Rscript,
-  [Parameter(Mandatory = $true)][string]$RLibrary,
-  [Parameter(Mandatory = $true)][string]$ComparisonRoot,
-  [Parameter(Mandatory = $true)][string]$ReplayRoot,
-  [Parameter(Mandatory = $true)][string]$OutputPath
-)
+param([switch]$SkipSyntheticProcess)
 
 $issue13V5CommandCollisionGuard = {
   param([Management.Automation.Language.ScriptBlockAst]$Ast)
@@ -438,153 +422,338 @@ $issue13V5CommandCollisionGuard = {
 }
 & $issue13V5CommandCollisionGuard $MyInvocation.MyCommand.ScriptBlock.Ast
 
-. ([IO.Path]::Combine($PSScriptRoot, 'issue13-v5-oracle-effect-lib.ps1'))
-$null = Assert-Issue13V5CurrentPwshHost
-
-Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
 
-if ([string]::IsNullOrWhiteSpace($SpecPath)) {
-  $SpecPath = Join-Path $PSScriptRoot 'issue13-v5-oracle-effect-spec.json'
+function Read-Issue13ScriptAst([string]$Path, [string]$Label) {
+  $tokens = $null
+  $parseErrors = $null
+  $resolved = Resolve-Path -LiteralPath $Path
+  $ast = [Management.Automation.Language.Parser]::ParseFile(
+    $resolved, [ref]$tokens, [ref]$parseErrors)
+  if ($parseErrors.Count -ne 0) {
+    throw "$Label parser self-test failed."
+  }
+  $ast
 }
-if ([string]::IsNullOrWhiteSpace($SchemaPath)) {
-  $SchemaPath = Join-Path $PSScriptRoot `
-    'issue13-v5-oracle-effect-proof.schema.json'
+
+function Get-Issue13TopLevelFunction(
+  [Management.Automation.Language.ScriptBlockAst]$Ast,
+  [string]$Name,
+  [string]$Label
+) {
+  $definitions = @($Ast.FindAll({
+        param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+          $node.Name -ceq $Name
+      }, $true))
+  if ($definitions.Count -ne 1 -or
+      $definitions[0].Parent -isnot
+        [Management.Automation.Language.NamedBlockAst] -or
+      $definitions[0].Parent.Parent -ne $Ast) {
+    throw "$Label must define exactly one top-level $Name helper."
+  }
+  $definitions[0]
 }
 
-$null = Test-Issue13OracleEffectNegativeSelfTests
-
-$proofProtectedRoots = @(
-  $RepositoryRoot,
-  (Split-Path -Parent ([IO.Path]::GetFullPath($ComparisonHarnessManifest))),
-  $RLibrary,
-  $Rscript,
-  (Split-Path -Parent ([IO.Path]::GetFullPath($StrictSmokeSummary))),
-  (Split-Path -Parent ([IO.Path]::GetFullPath($OracleSmokeSummary))),
-  $OraclePatch,
-  $SpecPath,
-  $SchemaPath,
-  $ComparisonRoot,
-  $ReplayRoot
-)
-$proofFull = Assert-Issue13OracleEffectProofPathIsolation `
-  $OutputPath $proofProtectedRoots
-Assert-Issue13OracleEffect (-not (Test-Path -LiteralPath $proofFull)) `
-  "refusing to overwrite proof output: $proofFull"
-Assert-Issue13OracleEffect (Test-Path -LiteralPath `
-    (Split-Path -Parent $proofFull) -PathType Container) `
-  "proof output parent does not exist: $(Split-Path -Parent $proofFull)"
-Assert-Issue13OracleEffectNoReparseAncestors `
-  (Split-Path -Parent $proofFull) 'proof output parent'
-$primaryFull = Resolve-Issue13OracleEffectNewDirectoryPath $ComparisonRoot `
-  'primary comparison root'
-$replayFull = Resolve-Issue13OracleEffectNewDirectoryPath $ReplayRoot `
-  'replay comparison root'
-Assert-Issue13OracleEffect (-not (Test-Issue13OracleEffectPathEqual `
-    $primaryFull $replayFull)) 'primary and replay roots must differ.'
-
-$before = Get-Issue13OracleEffectInputContext `
-  -RepositoryRoot $RepositoryRoot `
-  -ExpectedCandidateCommit $ExpectedCandidateCommit `
-  -SpecPath $SpecPath `
-  -SchemaPath $SchemaPath `
-  -StrictSmokeSummary $StrictSmokeSummary `
-  -OracleSmokeSummary $OracleSmokeSummary `
-  -OraclePatch $OraclePatch `
-  -ComparisonHarnessManifest $ComparisonHarnessManifest `
-  -Rscript $Rscript `
-  -RLibrary $RLibrary
-$null = Assert-Issue13OracleEffectComparisonIsolation $primaryFull $replayFull `
-  $before
-
-$executedCommands = Invoke-Issue13OracleEffectFreshComparisons `
-  -Context $before `
-  -ComparisonRoot $ComparisonRoot `
-  -ReplayRoot $ReplayRoot
-
-$after = Get-Issue13OracleEffectInputContext `
-  -RepositoryRoot $RepositoryRoot `
-  -ExpectedCandidateCommit $ExpectedCandidateCommit `
-  -SpecPath $SpecPath `
-  -SchemaPath $SchemaPath `
-  -StrictSmokeSummary $StrictSmokeSummary `
-  -OracleSmokeSummary $OracleSmokeSummary `
-  -OraclePatch $OraclePatch `
-  -ComparisonHarnessManifest $ComparisonHarnessManifest `
-  -Rscript $Rscript `
-  -RLibrary $RLibrary
-$null = Assert-Issue13OracleEffectComparisonIsolation $primaryFull $replayFull `
-  $after -RequireExisting
-
-$beforeRuntime = [pscustomobject][ordered]@{
-  harness = $before.harness
-  rscript = $before.rscript
-  r_library = $before.r_library
+function Assert-Issue13EnvironmentState(
+  [string]$Name,
+  [bool]$Present,
+  [AllowNull()][string]$Value,
+  [string]$Label
+) {
+  $state = @(Get-Issue13ProcessEnvironmentState -Names @($Name))
+  if ($state.Count -ne 1 -or $state[0].present -ne $Present -or
+      ($Present -and [string]$state[0].value -cne $Value) -or
+      ((-not $Present) -and $null -ne $state[0].value)) {
+    throw "$Label environment state differs."
+  }
 }
-$afterRuntime = [pscustomobject][ordered]@{
-  harness = $after.harness
-  rscript = $after.rscript
-  r_library = $after.r_library
+
+& {
+$monitorAst = Read-Issue13ScriptAst `
+  (Join-Path $PSScriptRoot 'issue13-monitor.ps1') 'Monitor'
+$recalcAst = Read-Issue13ScriptAst `
+  (Join-Path $PSScriptRoot 'issue13-run-recalc-bundle.ps1') `
+  'Recalculation bundle runner'
+$environmentHelpers = [ordered]@{
+  'Get-Issue13ProcessEnvironmentState' =
+    'Get-Issue13ProcessEnvironmentStateRecalc'
+  'Set-Issue13ProcessEnvironmentState' =
+    'Set-Issue13ProcessEnvironmentStateRecalc'
+  'Invoke-Issue13WithProcessEnvironment' =
+    'Invoke-Issue13WithProcessEnvironmentRecalc'
 }
-Assert-Issue13OracleEffect (
-  ($beforeRuntime | ConvertTo-Json -Depth 100 -Compress) -ceq `
-    ($afterRuntime | ConvertTo-Json -Depth 100 -Compress)
-) 'terminal harness/Rscript/RLibrary changed during primary/replay execution.'
+foreach ($mapping in $environmentHelpers.GetEnumerator()) {
+  $name = [string]$mapping.Key
+  $monitorDefinition = Get-Issue13TopLevelFunction $monitorAst $name 'Monitor'
+  $recalcDefinition = Get-Issue13TopLevelFunction `
+    $recalcAst ([string]$mapping.Value) `
+    'Recalculation bundle runner'
+  $normalizedRecalcText = [string]$recalcDefinition.Extent.Text
+  foreach ($normalization in $environmentHelpers.GetEnumerator()) {
+    $normalizedRecalcText = $normalizedRecalcText.Replace(
+      [string]$normalization.Value, [string]$normalization.Key)
+  }
+  if ($monitorDefinition.Extent.Text -cne $normalizedRecalcText) {
+    throw "Process-environment helper differs between runners: $name"
+  }
+  Invoke-Expression $monitorDefinition.Extent.Text
+}
 
-$evidence = Get-Issue13OracleEffectEvidence `
-  -RepositoryRoot $RepositoryRoot `
-  -ExpectedCandidateCommit $ExpectedCandidateCommit `
-  -SpecPath $SpecPath `
-  -SchemaPath $SchemaPath `
-  -StrictSmokeSummary $StrictSmokeSummary `
-  -OracleSmokeSummary $OracleSmokeSummary `
-  -OraclePatch $OraclePatch `
-  -ComparisonRoot $ComparisonRoot `
-  -ReplayRoot $ReplayRoot `
-  -ComparisonHarnessManifest $ComparisonHarnessManifest `
-  -Rscript $Rscript `
-  -RLibrary $RLibrary `
-  -PreparedContext $after `
-  -RunInventoriesBefore $before.approved_runs `
-  -RuntimeBefore $beforeRuntime
-Assert-Issue13OracleEffect (
-  ($executedCommands | ConvertTo-Json -Depth 20 -Compress) -ceq `
-    ($evidence.comparison_workflow.commands | ConvertTo-Json -Depth 20 -Compress)
-) 'recorded comparison commands differ from the commands actually executed.'
-
-$proof = New-Issue13OracleEffectProofObject -Evidence $evidence
-$proofJson = $proof | ConvertTo-Json -Depth 100
+$testSuffix = [Guid]::NewGuid().ToString('N')
+$absentName = 'WLV13_ENV_ABSENT_' + $testSuffix
+$emptyName = 'WLV13_ENV_EMPTY_' + $testSuffix
+$valueName = 'WLV13_ENV_VALUE_' + $testSuffix
+$removedName = 'WLV13_ENV_REMOVED_' + $testSuffix
+$controlName = 'WLV13_ENV_CONTROL_' + $testSuffix
+$externalState = @(Get-Issue13ProcessEnvironmentState -Names @(
+      $absentName, $emptyName, $valueName, $removedName, $controlName))
 try {
-  $schemaPassed = $proofJson | Test-Json -SchemaFile $SchemaPath -ErrorAction Stop
-} catch {
-  throw "Generated oracle-effect proof fails JSON Schema validation: $($_.Exception.Message)"
-}
-Assert-Issue13OracleEffect (Test-Issue13OracleEffectExactBoolean $schemaPassed $true) `
-  'generated oracle-effect proof fails JSON Schema validation.'
-$written = Write-Issue13OracleEffectJsonOnce -Value $proof -Path $proofFull `
-  -SchemaPath $SchemaPath -ProtectedRoots $proofProtectedRoots
-$roundtrip = Read-Issue13OracleEffectJson $written 'written oracle-effect proof'
-$writtenJson = Get-Content -Raw -LiteralPath $written
-try {
-  $writtenSchemaPassed = $writtenJson | Test-Json -SchemaFile $SchemaPath `
-    -ErrorAction Stop
-} catch {
-  throw "Written oracle-effect proof fails JSON Schema validation: $($_.Exception.Message)"
-}
-Assert-Issue13OracleEffect (Test-Issue13OracleEffectExactBoolean $writtenSchemaPassed $true) `
-  'written oracle-effect proof fails JSON Schema validation.'
-$null = Test-Issue13OracleEffectProofObject $roundtrip $evidence
+  Set-Issue13ProcessEnvironmentState -States @(
+    [pscustomobject][ordered]@{
+      name = $absentName; present = $false; value = $null
+    },
+    [pscustomobject][ordered]@{
+      name = $emptyName; present = $true; value = ''
+    },
+    [pscustomobject][ordered]@{
+      name = $valueName; present = $true; value = 'outside'
+    },
+    [pscustomobject][ordered]@{
+      name = $removedName; present = $true; value = 'remove-me'
+    },
+    [pscustomobject][ordered]@{
+      name = $controlName; present = $true; value = 'control'
+    }
+  )
+  $environment = [pscustomobject][ordered]@{}
+  $environment.PSObject.Properties.Add(
+    [Management.Automation.PSNoteProperty]::new($absentName, 'inside'))
+  $environment.PSObject.Properties.Add(
+    [Management.Automation.PSNoteProperty]::new($emptyName, 'filled'))
+  $environment.PSObject.Properties.Add(
+    [Management.Automation.PSNoteProperty]::new($valueName, ''))
+  $environment.PSObject.Properties.Add(
+    [Management.Automation.PSNoteProperty]::new($removedName, $null))
+  $actionResult = Invoke-Issue13WithProcessEnvironment $environment {
+    Assert-Issue13EnvironmentState $absentName $true 'inside' 'Absent input'
+    Assert-Issue13EnvironmentState $emptyName $true 'filled' 'Empty input'
+    Assert-Issue13EnvironmentState $valueName $true '' 'Value input'
+    Assert-Issue13EnvironmentState $removedName $false $null 'Null input'
+    Assert-Issue13EnvironmentState $controlName $true 'control' `
+      'Undeclared control'
+    'environment-action-result'
+  }
+  if ($actionResult -cne 'environment-action-result') {
+    throw 'Environment action result was not preserved.'
+  }
+  Assert-Issue13EnvironmentState $absentName $false $null 'Absent restore'
+  Assert-Issue13EnvironmentState $emptyName $true '' 'Empty restore'
+  Assert-Issue13EnvironmentState $valueName $true 'outside' 'Value restore'
+  Assert-Issue13EnvironmentState $removedName $true 'remove-me' `
+    'Null restore'
+  Assert-Issue13EnvironmentState $controlName $true 'control' `
+    'Undeclared control restore'
 
-[pscustomobject][ordered]@{
-  schema = 'wlv-issue13-v5-oracle-effect-generation/2'
-  status = 'passed'
-  passed = $true
-  proof_path = $written
-  proof_sha256 = Get-Issue13OracleEffectSha256 $written
-  strict_common_comparison_count = `
-    @($evidence.comparison_workflow.comparisons).Count
-  comparison_execution_count = @($evidence.comparison_workflow.commands).Count
-  approved_run_inventory_count = @($evidence.approved_run_immutability).Count
-  recovered_method_count = @($evidence.recovered_methods).Count
-  final_evidence_eligible = $false
-} | ConvertTo-Json -Depth 5
+  $actionFailed = $false
+  try {
+    Invoke-Issue13WithProcessEnvironment $environment {
+      throw 'issue13-environment-action-failure'
+    }
+  } catch {
+    $actionFailed = $_.Exception.Message -match
+      'issue13-environment-action-failure'
+  }
+  if (-not $actionFailed) {
+    throw 'Environment action exception was not propagated.'
+  }
+  Assert-Issue13EnvironmentState $absentName $false $null `
+    'Exceptional absent restore'
+  Assert-Issue13EnvironmentState $emptyName $true '' `
+    'Exceptional empty restore'
+  Assert-Issue13EnvironmentState $valueName $true 'outside' `
+    'Exceptional value restore'
+  Assert-Issue13EnvironmentState $removedName $true 'remove-me' `
+    'Exceptional null restore'
+  Assert-Issue13EnvironmentState $controlName $true 'control' `
+    'Exceptional undeclared control restore'
+
+  foreach ($invalidValue in @([int64]7, $true)) {
+    $invalidEnvironment = [pscustomobject][ordered]@{}
+    $invalidEnvironment.PSObject.Properties.Add(
+      [Management.Automation.PSNoteProperty]::new(
+        $valueName, $invalidValue))
+    $invalidRan = $false
+    $invalidRejected = $false
+    try {
+      Invoke-Issue13WithProcessEnvironment $invalidEnvironment {
+        $invalidRan = $true
+      }
+    } catch {
+      $invalidRejected = $true
+    }
+    if (-not $invalidRejected -or $invalidRan) {
+      throw 'Non-string environment value was accepted.'
+    }
+    Assert-Issue13EnvironmentState $valueName $true 'outside' `
+      'Invalid value rollback'
+  }
+  $presentNullRejected = $false
+  try {
+    Set-Issue13ProcessEnvironmentState -States @(
+      [pscustomobject][ordered]@{
+        name = $valueName; present = $true; value = $null
+      }
+    )
+  } catch {
+    $presentNullRejected = $true
+  }
+  if (-not $presentNullRejected) {
+    throw 'Present environment state with a null value was accepted.'
+  }
+  Assert-Issue13EnvironmentState $valueName $true 'outside' `
+    'Present-null rejection'
+
+  $partialEnvironment = [pscustomobject][ordered]@{}
+  $partialEnvironment.PSObject.Properties.Add(
+    [Management.Automation.PSNoteProperty]::new($absentName, 'partial'))
+  $partialEnvironment.PSObject.Properties.Add(
+    [Management.Automation.PSNoteProperty]::new(
+      $valueName, "truncated`0value"))
+  $partialFailed = $false
+  $partialProbe = [pscustomobject]@{ ran = $false }
+  try {
+    Invoke-Issue13WithProcessEnvironment $partialEnvironment {
+      $partialProbe.ran = $true
+    }
+  } catch {
+    $partialFailed = $true
+  }
+  if (-not $partialFailed -or $partialProbe.ran) {
+    throw 'Partial environment application did not fail before its action.'
+  }
+  Assert-Issue13EnvironmentState $absentName $false $null `
+    'Partial absent rollback'
+  Assert-Issue13EnvironmentState $valueName $true 'outside' `
+    'Partial value rollback'
+  Assert-Issue13EnvironmentState $controlName $true 'control' `
+    'Partial undeclared control rollback'
+} finally {
+  Set-Issue13ProcessEnvironmentState -States $externalState
+}
+
+$wantedFunctions = @('Process-Key', 'Add-Descendants')
+foreach ($name in $wantedFunctions) {
+  $definition = Get-Issue13TopLevelFunction $monitorAst $name 'Monitor'
+  Invoke-Expression $definition.Extent.Text
+}
+$parentOld = '2026-08-19T12:00:00.0000000+00:00'
+$parentCurrent = '2026-08-24T12:00:00.0000000+00:00'
+$childEarlier = '2026-08-20T12:00:00.0000000+00:00'
+$childLater = '2026-08-24T12:00:01.0000000+00:00'
+$rootRecord = [pscustomobject]@{
+  ProcessId = 41700; ParentProcessId = 1; Name = 'Rscript.exe'
+  Created = $parentCurrent
+}
+$persistentRecord = [pscustomobject]@{
+  ProcessId = 30272; ParentProcessId = 41700; Name = 'Rscript.exe'
+  Created = $childEarlier
+}
+$known = @{ 41700 = $parentCurrent }
+$observed = @{}
+Add-Descendants @($rootRecord, $persistentRecord) $known $observed
+if ($known.ContainsKey(30272)) {
+  throw 'Monitor adopted a child created before its authenticated parent.'
+}
+$laterChild = [pscustomobject]@{
+  ProcessId = 50001; ParentProcessId = 41700; Name = 'Rscript.exe'
+  Created = $childLater
+}
+$known = @{ 41700 = $parentOld }
+$observed = @{}
+Add-Descendants @($rootRecord, $laterChild) $known $observed
+if ($known.ContainsKey(50001)) {
+  throw 'Monitor adopted a child through a reused parent PID.'
+}
+$known = @{ 41700 = $parentCurrent }
+$observed = @{}
+Add-Descendants @($rootRecord, $laterChild) $known $observed
+if (-not $known.ContainsKey(50001) -or
+    [string]$known[50001] -cne $childLater) {
+  throw 'Monitor rejected a valid authenticated parent/child generation.'
+}
+}
+if ($SkipSyntheticProcess) {
+  Write-Output 'issue13 monitor environment self-test: PASS'
+  return
+}
+$temporaryParent = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+$temporaryRoot = Join-Path $temporaryParent `
+  ('wlv13-monitor-selftest-' + [Guid]::NewGuid().ToString('N'))
+$resolvedCandidate = [IO.Path]::GetFullPath($temporaryRoot)
+if (-not $resolvedCandidate.StartsWith(
+    $temporaryParent,
+    [StringComparison]::OrdinalIgnoreCase
+  )) {
+  throw 'Self-test root escaped the system temporary directory.'
+}
+$working = Join-Path $temporaryRoot 'work'
+$evidence = Join-Path $temporaryRoot 'evidence'
+$specPath = Join-Path $temporaryRoot 'process-spec.json'
+try {
+  New-Item -ItemType Directory -Path $working | Out-Null
+  $rscriptEnvironment = [Environment]::GetEnvironmentVariable(
+    'ISSUE13_V5_RSCRIPT_EXECUTABLE', 'Process')
+  if ([string]::IsNullOrWhiteSpace($rscriptEnvironment) -or
+      -not [IO.Path]::IsPathFullyQualified($rscriptEnvironment)) {
+    throw 'ISSUE13_V5_RSCRIPT_EXECUTABLE must be an absolute path.'
+  }
+  $rscript = [IO.Path]::GetFullPath($rscriptEnvironment)
+  if (-not [IO.File]::Exists($rscript)) {
+    throw 'ISSUE13_V5_RSCRIPT_EXECUTABLE does not identify an existing file.'
+  }
+  $spec = [ordered]@{
+    schema = 'wlv-issue13-process-spec/1'
+    scenario_id = 'selftest/monitor'
+    executable = $rscript
+    arguments = @('--vanilla', '-e', 'Sys.sleep(0.35)')
+    working_directory = $working
+    environment = $null
+    expected_exit_codes = @(0)
+    timeout_seconds = 10
+    sample_interval_ms = 100
+    shutdown_grace_seconds = 2
+    expected_worker_processes = 0
+  }
+  $utf8 = [Text.UTF8Encoding]::new($false, $true)
+  [IO.File]::WriteAllText(
+    $specPath,
+    ($spec | ConvertTo-Json -Depth 8) + [Environment]::NewLine,
+    $utf8
+  )
+  & (Join-Path $PSScriptRoot 'issue13-monitor.ps1') `
+    -SpecPath $specPath -EvidenceDir $evidence | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'Monitor self-test process failed.' }
+  $metricsPath = Join-Path $evidence 'process-metrics.json'
+  $metrics = Get-Content -LiteralPath $metricsPath -Raw -Encoding UTF8 |
+    ConvertFrom-Json
+  if (-not $metrics.passed -or $metrics.timed_out -or
+      -not $metrics.cluster_closed -or
+      $metrics.max_concurrent_worker_processes -ne 0 -or
+      $metrics.samples -lt 1) {
+    throw 'Monitor self-test metrics violated an invariant.'
+  }
+  Write-Output 'issue13 monitor synthetic self-test: PASS'
+} finally {
+  if (Test-Path -LiteralPath $temporaryRoot) {
+    $resolved = [IO.Path]::GetFullPath($temporaryRoot)
+    if (-not $resolved.StartsWith(
+        $temporaryParent,
+        [StringComparison]::OrdinalIgnoreCase
+      )) {
+      throw 'Refusing to clean a self-test path outside the temporary root.'
+    }
+    [IO.Directory]::Delete($resolved, $true)
+  }
+}

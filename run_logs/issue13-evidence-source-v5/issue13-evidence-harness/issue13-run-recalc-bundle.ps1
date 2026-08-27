@@ -1,19 +1,5 @@
-[CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)][string]$RepositoryRoot,
-  [Parameter(Mandatory = $true)][ValidatePattern('^[0-9a-f]{40}$')]
-    [string]$ExpectedCandidateCommit,
-  [string]$SpecPath,
-  [string]$SchemaPath,
-  [Parameter(Mandatory = $true)][string]$StrictSmokeSummary,
-  [Parameter(Mandatory = $true)][string]$OracleSmokeSummary,
-  [Parameter(Mandatory = $true)][string]$OraclePatch,
-  [Parameter(Mandatory = $true)][string]$ComparisonHarnessManifest,
-  [Parameter(Mandatory = $true)][string]$Rscript,
-  [Parameter(Mandatory = $true)][string]$RLibrary,
-  [Parameter(Mandatory = $true)][string]$ComparisonRoot,
-  [Parameter(Mandatory = $true)][string]$ReplayRoot,
-  [Parameter(Mandatory = $true)][string]$OutputPath
+  [Parameter(Mandatory = $true)][string]$BundlePath
 )
 
 $issue13V5CommandCollisionGuard = {
@@ -438,153 +424,420 @@ $issue13V5CommandCollisionGuard = {
 }
 & $issue13V5CommandCollisionGuard $MyInvocation.MyCommand.ScriptBlock.Ast
 
-. ([IO.Path]::Combine($PSScriptRoot, 'issue13-v5-oracle-effect-lib.ps1'))
-$null = Assert-Issue13V5CurrentPwshHost
-
-Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
 
-if ([string]::IsNullOrWhiteSpace($SpecPath)) {
-  $SpecPath = Join-Path $PSScriptRoot 'issue13-v5-oracle-effect-spec.json'
+function Get-Issue13ProcessEnvironmentStateRecalc(
+  [Parameter(Mandatory = $true)][string[]]$Names
+) {
+  $seen = [Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::OrdinalIgnoreCase)
+  $states = [Collections.Generic.List[object]]::new()
+  foreach ($name in @($Names)) {
+    if ([string]::IsNullOrWhiteSpace($name) -or
+        $name -cnotmatch '^[A-Za-z_][A-Za-z0-9_]*$' -or
+        -not $seen.Add($name)) {
+      throw "Invalid or duplicate environment variable name: $name"
+    }
+    $path = 'Env:' + $name
+    $present = Test-Path -LiteralPath $path
+    $value = [Environment]::GetEnvironmentVariable($name, 'Process')
+    if ((-not $present) -and $null -ne $value) {
+      throw "Environment absence disagrees with the process block: $name"
+    }
+    if ($present -and $null -eq $value) {
+      throw "Environment presence disagrees with the process block: $name"
+    }
+    $states.Add([pscustomobject][ordered]@{
+        name = $name
+        present = [bool]$present
+        value = if ($present) { [string]$value } else { $null }
+      })
+  }
+  [object[]]$states.ToArray()
 }
-if ([string]::IsNullOrWhiteSpace($SchemaPath)) {
-  $SchemaPath = Join-Path $PSScriptRoot `
-    'issue13-v5-oracle-effect-proof.schema.json'
+
+function Set-Issue13ProcessEnvironmentStateRecalc(
+  [Parameter(Mandatory = $true)][object[]]$States
+) {
+  $records = @($States)
+  $seen = [Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::OrdinalIgnoreCase)
+  foreach ($state in $records) {
+    if ($null -eq $state) {
+      throw 'Environment state cannot be null.'
+    }
+    $actual = @($state.PSObject.Properties.Name | Sort-Object)
+    $expected = @('name', 'present', 'value') | Sort-Object
+    if ([string]::Join("`n", $actual) -cne
+        [string]::Join("`n", $expected) -or
+        $state.name -isnot [string] -or
+        [string]::IsNullOrWhiteSpace([string]$state.name) -or
+        [string]$state.name -cnotmatch '^[A-Za-z_][A-Za-z0-9_]*$' -or
+        -not $seen.Add([string]$state.name) -or
+        $state.present -isnot [bool] -or
+        ([bool]$state.present -and $state.value -isnot [string]) -or
+        ((-not [bool]$state.present) -and $null -ne $state.value)) {
+      throw 'Environment state is invalid or duplicated.'
+    }
+  }
+  foreach ($state in $records) {
+    $name = [string]$state.name
+    $path = 'Env:' + $name
+    if ([bool]$state.present) {
+      $value = [string]$state.value
+      [Environment]::SetEnvironmentVariable($name, $value, 'Process')
+      if (-not (Test-Path -LiteralPath $path) -or
+          [Environment]::GetEnvironmentVariable($name, 'Process') -cne
+            $value) {
+        throw "Failed to set process environment variable: $name"
+      }
+    } else {
+      if (Test-Path -LiteralPath $path) {
+        Remove-Item -LiteralPath ('Env:' + $name) -Force -ErrorAction Stop
+      }
+      if ((Test-Path -LiteralPath $path) -or
+          $null -ne [Environment]::GetEnvironmentVariable($name, 'Process')) {
+        throw "Failed to remove process environment variable: $name"
+      }
+    }
+  }
 }
 
-$null = Test-Issue13OracleEffectNegativeSelfTests
-
-$proofProtectedRoots = @(
-  $RepositoryRoot,
-  (Split-Path -Parent ([IO.Path]::GetFullPath($ComparisonHarnessManifest))),
-  $RLibrary,
-  $Rscript,
-  (Split-Path -Parent ([IO.Path]::GetFullPath($StrictSmokeSummary))),
-  (Split-Path -Parent ([IO.Path]::GetFullPath($OracleSmokeSummary))),
-  $OraclePatch,
-  $SpecPath,
-  $SchemaPath,
-  $ComparisonRoot,
-  $ReplayRoot
-)
-$proofFull = Assert-Issue13OracleEffectProofPathIsolation `
-  $OutputPath $proofProtectedRoots
-Assert-Issue13OracleEffect (-not (Test-Path -LiteralPath $proofFull)) `
-  "refusing to overwrite proof output: $proofFull"
-Assert-Issue13OracleEffect (Test-Path -LiteralPath `
-    (Split-Path -Parent $proofFull) -PathType Container) `
-  "proof output parent does not exist: $(Split-Path -Parent $proofFull)"
-Assert-Issue13OracleEffectNoReparseAncestors `
-  (Split-Path -Parent $proofFull) 'proof output parent'
-$primaryFull = Resolve-Issue13OracleEffectNewDirectoryPath $ComparisonRoot `
-  'primary comparison root'
-$replayFull = Resolve-Issue13OracleEffectNewDirectoryPath $ReplayRoot `
-  'replay comparison root'
-Assert-Issue13OracleEffect (-not (Test-Issue13OracleEffectPathEqual `
-    $primaryFull $replayFull)) 'primary and replay roots must differ.'
-
-$before = Get-Issue13OracleEffectInputContext `
-  -RepositoryRoot $RepositoryRoot `
-  -ExpectedCandidateCommit $ExpectedCandidateCommit `
-  -SpecPath $SpecPath `
-  -SchemaPath $SchemaPath `
-  -StrictSmokeSummary $StrictSmokeSummary `
-  -OracleSmokeSummary $OracleSmokeSummary `
-  -OraclePatch $OraclePatch `
-  -ComparisonHarnessManifest $ComparisonHarnessManifest `
-  -Rscript $Rscript `
-  -RLibrary $RLibrary
-$null = Assert-Issue13OracleEffectComparisonIsolation $primaryFull $replayFull `
-  $before
-
-$executedCommands = Invoke-Issue13OracleEffectFreshComparisons `
-  -Context $before `
-  -ComparisonRoot $ComparisonRoot `
-  -ReplayRoot $ReplayRoot
-
-$after = Get-Issue13OracleEffectInputContext `
-  -RepositoryRoot $RepositoryRoot `
-  -ExpectedCandidateCommit $ExpectedCandidateCommit `
-  -SpecPath $SpecPath `
-  -SchemaPath $SchemaPath `
-  -StrictSmokeSummary $StrictSmokeSummary `
-  -OracleSmokeSummary $OracleSmokeSummary `
-  -OraclePatch $OraclePatch `
-  -ComparisonHarnessManifest $ComparisonHarnessManifest `
-  -Rscript $Rscript `
-  -RLibrary $RLibrary
-$null = Assert-Issue13OracleEffectComparisonIsolation $primaryFull $replayFull `
-  $after -RequireExisting
-
-$beforeRuntime = [pscustomobject][ordered]@{
-  harness = $before.harness
-  rscript = $before.rscript
-  r_library = $before.r_library
+function Invoke-Issue13WithProcessEnvironmentRecalc(
+  [AllowNull()][object]$Environment,
+  [Parameter(Mandatory = $true)][scriptblock]$Action
+) {
+  if ($null -eq $Action) { throw 'Environment action cannot be null.' }
+  $properties = if ($null -eq $Environment) {
+    @()
+  } else {
+    @($Environment.PSObject.Properties)
+  }
+  if ($properties.Count -eq 0) { return (& $Action) }
+  $names = @($properties | ForEach-Object { [string]$_.Name })
+  $snapshot = @(Get-Issue13ProcessEnvironmentStateRecalc -Names $names)
+  $desired = @($properties | ForEach-Object {
+      [pscustomobject][ordered]@{
+        name = [string]$_.Name
+        present = $null -ne $_.Value
+        value = if ($null -ne $_.Value) { $_.Value } else { $null }
+      }
+    })
+  $result = $null
+  $primary = $null
+  try {
+    Set-Issue13ProcessEnvironmentStateRecalc -States $desired
+    $result = & $Action
+  } catch {
+    $primary = $_
+  }
+  $restoreFailures = [Collections.Generic.List[Exception]]::new()
+  foreach ($state in $snapshot) {
+    try {
+      Set-Issue13ProcessEnvironmentStateRecalc -States @($state)
+    } catch {
+      $restoreFailures.Add($_.Exception)
+    }
+  }
+  if ($restoreFailures.Count -ne 0) {
+    $failures = [Collections.Generic.List[Exception]]::new()
+    if ($null -ne $primary) { $failures.Add($primary.Exception) }
+    foreach ($failure in $restoreFailures) { $failures.Add($failure) }
+    throw [AggregateException]::new(
+      'Process environment restoration failed.', $failures.ToArray())
+  }
+  if ($null -ne $primary) { throw $primary }
+  $result
 }
-$afterRuntime = [pscustomobject][ordered]@{
-  harness = $after.harness
-  rscript = $after.rscript
-  r_library = $after.r_library
-}
-Assert-Issue13OracleEffect (
-  ($beforeRuntime | ConvertTo-Json -Depth 100 -Compress) -ceq `
-    ($afterRuntime | ConvertTo-Json -Depth 100 -Compress)
-) 'terminal harness/Rscript/RLibrary changed during primary/replay execution.'
 
-$evidence = Get-Issue13OracleEffectEvidence `
-  -RepositoryRoot $RepositoryRoot `
-  -ExpectedCandidateCommit $ExpectedCandidateCommit `
-  -SpecPath $SpecPath `
-  -SchemaPath $SchemaPath `
-  -StrictSmokeSummary $StrictSmokeSummary `
-  -OracleSmokeSummary $OracleSmokeSummary `
-  -OraclePatch $OraclePatch `
-  -ComparisonRoot $ComparisonRoot `
-  -ReplayRoot $ReplayRoot `
-  -ComparisonHarnessManifest $ComparisonHarnessManifest `
-  -Rscript $Rscript `
-  -RLibrary $RLibrary `
-  -PreparedContext $after `
-  -RunInventoriesBefore $before.approved_runs `
-  -RuntimeBefore $beforeRuntime
-Assert-Issue13OracleEffect (
-  ($executedCommands | ConvertTo-Json -Depth 20 -Compress) -ceq `
-    ($evidence.comparison_workflow.commands | ConvertTo-Json -Depth 20 -Compress)
-) 'recorded comparison commands differ from the commands actually executed.'
-
-$proof = New-Issue13OracleEffectProofObject -Evidence $evidence
-$proofJson = $proof | ConvertTo-Json -Depth 100
-try {
-  $schemaPassed = $proofJson | Test-Json -SchemaFile $SchemaPath -ErrorAction Stop
-} catch {
-  throw "Generated oracle-effect proof fails JSON Schema validation: $($_.Exception.Message)"
+function Get-CanonicalFullPath([string]$Path) {
+  [IO.Path]::GetFullPath($Path).TrimEnd(
+    [IO.Path]::DirectorySeparatorChar,
+    [IO.Path]::AltDirectorySeparatorChar)
 }
-Assert-Issue13OracleEffect (Test-Issue13OracleEffectExactBoolean $schemaPassed $true) `
-  'generated oracle-effect proof fails JSON Schema validation.'
-$written = Write-Issue13OracleEffectJsonOnce -Value $proof -Path $proofFull `
-  -SchemaPath $SchemaPath -ProtectedRoots $proofProtectedRoots
-$roundtrip = Read-Issue13OracleEffectJson $written 'written oracle-effect proof'
-$writtenJson = Get-Content -Raw -LiteralPath $written
-try {
-  $writtenSchemaPassed = $writtenJson | Test-Json -SchemaFile $SchemaPath `
-    -ErrorAction Stop
-} catch {
-  throw "Written oracle-effect proof fails JSON Schema validation: $($_.Exception.Message)"
-}
-Assert-Issue13OracleEffect (Test-Issue13OracleEffectExactBoolean $writtenSchemaPassed $true) `
-  'written oracle-effect proof fails JSON Schema validation.'
-$null = Test-Issue13OracleEffectProofObject $roundtrip $evidence
 
-[pscustomobject][ordered]@{
-  schema = 'wlv-issue13-v5-oracle-effect-generation/2'
-  status = 'passed'
-  passed = $true
-  proof_path = $written
-  proof_sha256 = Get-Issue13OracleEffectSha256 $written
-  strict_common_comparison_count = `
-    @($evidence.comparison_workflow.comparisons).Count
-  comparison_execution_count = @($evidence.comparison_workflow.commands).Count
-  approved_run_inventory_count = @($evidence.approved_run_immutability).Count
-  recovered_method_count = @($evidence.recovered_methods).Count
-  final_evidence_eligible = $false
-} | ConvertTo-Json -Depth 5
+function Get-Sha256([string]$Path) {
+  (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Read-JsonObject([string]$Path, [string]$Label) {
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    throw "$Label is missing."
+  }
+  $value = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+  if ($value -isnot [pscustomobject]) { throw "$Label is not a JSON object." }
+  $value
+}
+
+function Assert-ExactProperties(
+  [object]$Value,
+  [string[]]$Expected,
+  [string]$Label
+) {
+  $actual = @($Value.PSObject.Properties.Name | Sort-Object)
+  $wanted = @($Expected | Sort-Object)
+  if ([string]::Join("`n", $actual) -cne [string]::Join("`n", $wanted)) {
+    throw "$Label property set differs."
+  }
+}
+
+function Assert-NoReparse([string]$Path, [string]$Label) {
+  $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+  if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw "$Label is a reparse point."
+  }
+}
+
+function Assert-NoExecutionCheckpointClaim(
+  [string]$CheckpointPath,
+  [string]$ScenarioId
+) {
+  $checkpoint = Get-CanonicalFullPath $CheckpointPath
+  $parent = Split-Path -Parent $checkpoint
+  $expected = Get-CanonicalFullPath (
+    Join-Path (Split-Path -Parent (Split-Path -Parent $bundleResolved)) `
+      'execution-checkpoint.json')
+  if (-not [string]::Equals($checkpoint, $expected,
+      [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Recalculation checkpoint path is non-canonical: $ScenarioId"
+  }
+  if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
+    throw "Recalculation checkpoint parent is missing: $ScenarioId"
+  }
+  Assert-NoReparse $parent 'Recalculation checkpoint parent'
+  $claims = @(Get-ChildItem -LiteralPath $parent -File -Force | Where-Object {
+      $_.Name -cin @(
+        'execution-checkpoint.started.json', 'execution-checkpoint.json') -or
+        $_.Name -cmatch
+          '^\.execution-checkpoint(?:\.started)?\.json-[0-9a-f]+(?:\.tmp)?$'
+    })
+  $foreignClaims = @(Get-ChildItem -LiteralPath $parent -Force | Where-Object {
+      $_.Name -cmatch '^\.?execution-checkpoint' -and $_ -notin $claims
+    })
+  if ($foreignClaims.Count -ne 0 -or $claims.Count -ne 0) {
+    throw "Recalculation checkpoint prevents process replay: $ScenarioId"
+  }
+}
+
+function Assert-CommittedSeedPublication([object]$SeedSpec) {
+  Assert-ExactProperties $SeedSpec @(
+    'schema', 'scenario_id', 'project_root', 'expected_commit',
+    'expected_seed_commit', 'method', 'channel', 'seed_result_path') `
+    'Recalculation seed specification'
+  if ($SeedSpec.schema -cne 'wlv-issue13-channel-seed/1' -or
+      $SeedSpec.scenario_id -cne [string]$bundle.scenario_id -or
+      $SeedSpec.expected_commit -cne [string]$bundle.runtime_commit -or
+      $SeedSpec.expected_seed_commit -cne [string]$bundle.seed_commit -or
+      $SeedSpec.channel -cne [string]$bundle.channel -or
+      $SeedSpec.project_root -isnot [string] -or
+      $SeedSpec.seed_result_path -isnot [string] -or
+      $SeedSpec.method -isnot [string] -or
+      $SeedSpec.channel -isnot [string] -or
+      [string]$SeedSpec.channel -cnotmatch '^[a-z0-9][a-z0-9._/-]*$' -or
+      [string]$SeedSpec.channel -match '(^|/)\.\.?(/|$)' -or
+      [string]$SeedSpec.method -cnotmatch '^[a-z][a-z0-9_]*$') {
+    throw 'Seed-result staging lacks a canonical seed specification.'
+  }
+  $project = Get-CanonicalFullPath ([string]$SeedSpec.project_root)
+  $results = Get-CanonicalFullPath (Join-Path $project 'results')
+  $channelDirectory = Get-CanonicalFullPath (Join-Path (
+      Join-Path $results 'channels') ([string]$SeedSpec.channel).Replace('/', '\'))
+  if (-not (Test-Path -LiteralPath $channelDirectory -PathType Container)) {
+    throw 'Seed-result staging has no committed channel marker.'
+  }
+  foreach ($path in @($project, $results, (Join-Path $results 'channels'),
+      $channelDirectory)) {
+    Assert-NoReparse $path 'Seed publication path'
+  }
+  $markers = @(Get-ChildItem -LiteralPath $channelDirectory -Force)
+  if ($markers.Count -ne 1 -or $markers[0].PSIsContainer -or
+      $markers[0].Name -cnotmatch
+        '^[0-9]{20}-release-[0-9]{8}T[0-9]{9}Z-[0-9a-f]{16}\.json$') {
+    throw 'Seed-result staging requires exactly one canonical channel marker.'
+  }
+  Assert-NoReparse $markers[0].FullName 'Seed channel marker'
+  $marker = Read-JsonObject $markers[0].FullName 'Seed channel marker'
+  Assert-ExactProperties $marker @(
+    'schema', 'schema_version', 'channel', 'sequence', 'release_id',
+    'release_manifest_path', 'release_manifest_sha256', 'published_at_utc') `
+    'Seed channel marker'
+  $expectedMarkerName = [string]$marker.sequence + '-' +
+    [string]$marker.release_id + '.json'
+  $expectedReleaseRelative = 'releases/' + [string]$marker.release_id +
+    '/release_manifest.json'
+  if ($marker.schema -cne 'wlv-channel-marker' -or
+      $marker.schema_version -cne '1' -or
+      $marker.channel -cne [string]$SeedSpec.channel -or
+      $marker.sequence -isnot [string] -or
+      $marker.sequence -cnotmatch '^[0-9]{20}$' -or
+      $marker.release_id -isnot [string] -or
+      $marker.release_id -cnotmatch
+        '^release-[0-9]{8}T[0-9]{9}Z-[0-9a-f]{16}$' -or
+      $markers[0].Name -cne $expectedMarkerName -or
+      $marker.release_manifest_path -cne $expectedReleaseRelative -or
+      $marker.release_manifest_sha256 -isnot [string] -or
+      $marker.release_manifest_sha256 -cnotmatch '^[0-9a-f]{64}$') {
+    throw 'Seed channel marker identity is invalid.'
+  }
+  $releasePath = Get-CanonicalFullPath (Join-Path $results (
+      $expectedReleaseRelative.Replace('/', '\')))
+  if (-not (Test-Path -LiteralPath $releasePath -PathType Leaf) -or
+      (Get-Sha256 $releasePath) -cne
+        [string]$marker.release_manifest_sha256) {
+    throw 'Seed channel marker does not authenticate its release manifest.'
+  }
+  Assert-NoReparse (Split-Path -Parent $releasePath) 'Seed release directory'
+  Assert-NoReparse $releasePath 'Seed release manifest'
+  $release = Read-JsonObject $releasePath 'Seed release manifest'
+  Assert-ExactProperties $release @(
+    'schema', 'schema_version', 'release_id', 'channel', 'sequence',
+    'created_at_utc', 'metadata', 'runs', 'artifacts') 'Seed release manifest'
+  if ($release.schema -cne 'wlv-release-manifest' -or
+      $release.schema_version -cne '1' -or
+      $release.release_id -cne [string]$marker.release_id -or
+      $release.channel -cne [string]$SeedSpec.channel -or
+      $release.sequence -cne [string]$marker.sequence -or
+      $release.runs -isnot [object[]] -or @($release.runs).Count -ne 1 -or
+      $release.artifacts -isnot [object[]]) {
+    throw 'Seed release manifest identity is invalid.'
+  }
+  $run = $release.runs[0]
+  Assert-ExactProperties $run @(
+    'method', 'run_id', 'result_id', 'manifest_path', 'manifest_sha256') `
+    'Seed release run reference'
+  if ($run.method -cne [string]$SeedSpec.method -or
+      $run.manifest_sha256 -isnot [string] -or
+      $run.manifest_sha256 -cnotmatch '^[0-9a-f]{64}$') {
+    throw 'Seed release run reference is invalid.'
+  }
+}
+
+$bundleResolved = (Resolve-Path -LiteralPath $BundlePath).Path
+$bundle = Get-Content -LiteralPath $bundleResolved -Raw -Encoding UTF8 |
+  ConvertFrom-Json
+if ($bundle.schema -ne 'wlv-issue13-recalc-bundle/1') {
+  throw 'Unsupported recalculation bundle schema.'
+}
+foreach ($path in @($bundle.seed_spec, $bundle.process_spec, $bundle.seed_script)) {
+  if (-not (Test-Path -LiteralPath ([string]$path) -PathType Leaf)) {
+    throw "Bundle input is missing: $path"
+  }
+}
+if (Test-Path -LiteralPath ([string]$bundle.scenario_evidence)) {
+  throw "Refusing to reuse scenario evidence directory: $($bundle.scenario_evidence)"
+}
+$processSpec = Get-Content -LiteralPath ([string]$bundle.process_spec) -Raw `
+  -Encoding UTF8 | ConvertFrom-Json
+$processArguments = @($processSpec.arguments | ForEach-Object { [string]$_ })
+if ($processSpec.schema -cne 'wlv-issue13-process-spec/1' -or
+    $processSpec.scenario_id -cne [string]$bundle.scenario_id -or
+    $processArguments.Count -ne 4) {
+  throw 'Recalculation process specification is invalid.'
+}
+$scenarioSpecPath = (Resolve-Path -LiteralPath $processArguments[2]).Path
+if (-not [string]::Equals(
+    (Get-CanonicalFullPath $scenarioSpecPath),
+    (Get-CanonicalFullPath (Join-Path (Split-Path -Parent $bundleResolved) `
+        'scenario-spec.json')),
+    [StringComparison]::OrdinalIgnoreCase)) {
+  throw 'Recalculation process spec has a foreign scenario specification.'
+}
+$scenarioSpec = Read-JsonObject $scenarioSpecPath `
+  'Recalculation scenario specification'
+if ($scenarioSpec.schema -cne 'wlv-issue13-scenario/1' -or
+    $scenarioSpec.scenario_id -cne [string]$bundle.scenario_id -or
+    $scenarioSpec.checkpoint_path -isnot [string]) {
+  throw 'Recalculation scenario checkpoint binding is invalid.'
+}
+Assert-NoExecutionCheckpointClaim ([string]$scenarioSpec.checkpoint_path) `
+  ([string]$bundle.scenario_id)
+$seedRequired = -not (Test-Path -LiteralPath ([string]$bundle.seed_evidence))
+if (-not $seedRequired) {
+  if (-not (Test-Path -LiteralPath ([string]$bundle.seed_evidence) `
+      -PathType Container)) {
+    throw 'Recalculation seed evidence is not a directory.'
+  }
+  $seedEntries = @(Get-ChildItem -LiteralPath ([string]$bundle.seed_evidence) `
+    -Force)
+  if ($seedEntries.Count -eq 0) {
+    [IO.Directory]::Delete([string]$bundle.seed_evidence, $false)
+    $seedRequired = $true
+  } elseif ($seedEntries.Count -eq 1 -and
+      -not $seedEntries[0].PSIsContainer -and
+      $seedEntries[0].Name -cmatch
+        '^\.seed-result\.json-[0-9a-f]+(?:\.tmp)?$') {
+    # The channel seeder authenticates the already-visible release/marker and
+    # either promotes an exact staged result or reconstructs an unreadable one.
+    # No calculation is repeated by this recovery path.
+    $seedSpec = Read-JsonObject ([string]$bundle.seed_spec) `
+      'Recalculation seed specification'
+    Assert-CommittedSeedPublication $seedSpec
+    $seedRequired = $true
+  } elseif ($seedEntries.Count -ne 1 -or $seedEntries[0].PSIsContainer -or
+      $seedEntries[0].Name -cne 'seed-result.json') {
+    throw 'Recalculation seed evidence is partial or contains foreign entries.'
+  }
+  if (-not $seedRequired) {
+    $seedResult = Get-Content -LiteralPath $seedEntries[0].FullName -Raw `
+      -Encoding UTF8 | ConvertFrom-Json
+    if ($seedResult.schema -cne 'wlv-issue13-channel-seed-result/1' -or
+        $seedResult.scenario_id -cne [string]$bundle.scenario_id -or
+        $seedResult.status -cne 'passed' -or
+        $seedResult.passed -isnot [bool] -or -not $seedResult.passed -or
+        $seedResult.expected_commit -cne [string]$bundle.runtime_commit -or
+        $seedResult.expected_seed_commit -cne [string]$bundle.seed_commit -or
+        $seedResult.channel -cne [string]$bundle.channel) {
+      throw 'Recalculation seed evidence is not reusable.'
+    }
+  }
+}
+$rscriptEnvironment = [Environment]::GetEnvironmentVariable(
+  'ISSUE13_V5_RSCRIPT_EXECUTABLE', 'Process')
+if ([string]::IsNullOrWhiteSpace($rscriptEnvironment) -or
+    -not [IO.Path]::IsPathFullyQualified($rscriptEnvironment)) {
+  throw 'ISSUE13_V5_RSCRIPT_EXECUTABLE must be an absolute path.'
+}
+$expectedRscript = [IO.Path]::GetFullPath($rscriptEnvironment)
+$declaredRscript = [string]$processSpec.executable
+if ([string]::IsNullOrWhiteSpace($declaredRscript) -or
+    -not [IO.Path]::IsPathFullyQualified($declaredRscript)) {
+  throw 'Recalculation process executable must be an absolute path.'
+}
+$declaredRscript = [IO.Path]::GetFullPath($declaredRscript)
+if (-not [string]::Equals(
+      $declaredRscript, $expectedRscript,
+      [StringComparison]::OrdinalIgnoreCase)) {
+  throw 'Recalculation process executable differs from the sealed Rscript.'
+}
+if (-not [IO.File]::Exists($expectedRscript)) {
+  throw 'ISSUE13_V5_RSCRIPT_EXECUTABLE does not identify an existing file.'
+}
+$rscript = $expectedRscript
+Invoke-Issue13WithProcessEnvironmentRecalc $processSpec.environment {
+  if ($seedRequired) {
+    Assert-NoExecutionCheckpointClaim ([string]$scenarioSpec.checkpoint_path) `
+      ([string]$bundle.scenario_id)
+    & $rscript --vanilla ([string]$bundle.seed_script) `
+      ([string]$bundle.seed_spec) ([string]$bundle.seed_evidence)
+    if ($LASTEXITCODE -ne 0) {
+      throw "Channel seeding failed for $($bundle.scenario_id)."
+    }
+    $installedSeedEntries = @(Get-ChildItem -LiteralPath `
+      ([string]$bundle.seed_evidence) -Force)
+    if ($installedSeedEntries.Count -ne 1 -or
+        $installedSeedEntries[0].PSIsContainer -or
+        $installedSeedEntries[0].Name -cne 'seed-result.json') {
+      throw "Channel seeding left partial evidence for $($bundle.scenario_id)."
+    }
+  }
+}
+Assert-NoExecutionCheckpointClaim ([string]$scenarioSpec.checkpoint_path) `
+  ([string]$bundle.scenario_id)
+& (Join-Path $PSScriptRoot 'issue13-monitor.ps1') `
+  -SpecPath ([string]$bundle.process_spec) `
+  -EvidenceDir ([string]$bundle.scenario_evidence)
+if ($LASTEXITCODE -ne 0) {
+  throw "Recalculation scenario failed for $($bundle.scenario_id)."
+}
+Write-Output ([string]$bundle.scenario_evidence)

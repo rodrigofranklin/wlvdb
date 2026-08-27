@@ -1,19 +1,6 @@
-[CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)][string]$RepositoryRoot,
-  [Parameter(Mandatory = $true)][ValidatePattern('^[0-9a-f]{40}$')]
-    [string]$ExpectedCandidateCommit,
-  [string]$SpecPath,
-  [string]$SchemaPath,
-  [Parameter(Mandatory = $true)][string]$StrictSmokeSummary,
-  [Parameter(Mandatory = $true)][string]$OracleSmokeSummary,
-  [Parameter(Mandatory = $true)][string]$OraclePatch,
-  [Parameter(Mandatory = $true)][string]$ComparisonHarnessManifest,
-  [Parameter(Mandatory = $true)][string]$Rscript,
-  [Parameter(Mandatory = $true)][string]$RLibrary,
-  [Parameter(Mandatory = $true)][string]$ComparisonRoot,
-  [Parameter(Mandatory = $true)][string]$ReplayRoot,
-  [Parameter(Mandatory = $true)][string]$OutputPath
+  [Parameter(Mandatory = $true)][string]$PlanPath,
+  [Parameter(Mandatory = $true)][string]$ScenarioId
 )
 
 $issue13V5CommandCollisionGuard = {
@@ -438,153 +425,137 @@ $issue13V5CommandCollisionGuard = {
 }
 & $issue13V5CommandCollisionGuard $MyInvocation.MyCommand.ScriptBlock.Ast
 
-. ([IO.Path]::Combine($PSScriptRoot, 'issue13-v5-oracle-effect-lib.ps1'))
-$null = Assert-Issue13V5CurrentPwshHost
-
-Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
 
-if ([string]::IsNullOrWhiteSpace($SpecPath)) {
-  $SpecPath = Join-Path $PSScriptRoot 'issue13-v5-oracle-effect-spec.json'
-}
-if ([string]::IsNullOrWhiteSpace($SchemaPath)) {
-  $SchemaPath = Join-Path $PSScriptRoot `
-    'issue13-v5-oracle-effect-proof.schema.json'
+function Resolve-ExactPath([string]$Path, [string]$Label) {
+  if (-not (Test-Path -LiteralPath $Path)) { throw "$Label is missing: $Path" }
+  return (Resolve-Path -LiteralPath $Path).Path
 }
 
-$null = Test-Issue13OracleEffectNegativeSelfTests
-
-$proofProtectedRoots = @(
-  $RepositoryRoot,
-  (Split-Path -Parent ([IO.Path]::GetFullPath($ComparisonHarnessManifest))),
-  $RLibrary,
-  $Rscript,
-  (Split-Path -Parent ([IO.Path]::GetFullPath($StrictSmokeSummary))),
-  (Split-Path -Parent ([IO.Path]::GetFullPath($OracleSmokeSummary))),
-  $OraclePatch,
-  $SpecPath,
-  $SchemaPath,
-  $ComparisonRoot,
-  $ReplayRoot
-)
-$proofFull = Assert-Issue13OracleEffectProofPathIsolation `
-  $OutputPath $proofProtectedRoots
-Assert-Issue13OracleEffect (-not (Test-Path -LiteralPath $proofFull)) `
-  "refusing to overwrite proof output: $proofFull"
-Assert-Issue13OracleEffect (Test-Path -LiteralPath `
-    (Split-Path -Parent $proofFull) -PathType Container) `
-  "proof output parent does not exist: $(Split-Path -Parent $proofFull)"
-Assert-Issue13OracleEffectNoReparseAncestors `
-  (Split-Path -Parent $proofFull) 'proof output parent'
-$primaryFull = Resolve-Issue13OracleEffectNewDirectoryPath $ComparisonRoot `
-  'primary comparison root'
-$replayFull = Resolve-Issue13OracleEffectNewDirectoryPath $ReplayRoot `
-  'replay comparison root'
-Assert-Issue13OracleEffect (-not (Test-Issue13OracleEffectPathEqual `
-    $primaryFull $replayFull)) 'primary and replay roots must differ.'
-
-$before = Get-Issue13OracleEffectInputContext `
-  -RepositoryRoot $RepositoryRoot `
-  -ExpectedCandidateCommit $ExpectedCandidateCommit `
-  -SpecPath $SpecPath `
-  -SchemaPath $SchemaPath `
-  -StrictSmokeSummary $StrictSmokeSummary `
-  -OracleSmokeSummary $OracleSmokeSummary `
-  -OraclePatch $OraclePatch `
-  -ComparisonHarnessManifest $ComparisonHarnessManifest `
-  -Rscript $Rscript `
-  -RLibrary $RLibrary
-$null = Assert-Issue13OracleEffectComparisonIsolation $primaryFull $replayFull `
-  $before
-
-$executedCommands = Invoke-Issue13OracleEffectFreshComparisons `
-  -Context $before `
-  -ComparisonRoot $ComparisonRoot `
-  -ReplayRoot $ReplayRoot
-
-$after = Get-Issue13OracleEffectInputContext `
-  -RepositoryRoot $RepositoryRoot `
-  -ExpectedCandidateCommit $ExpectedCandidateCommit `
-  -SpecPath $SpecPath `
-  -SchemaPath $SchemaPath `
-  -StrictSmokeSummary $StrictSmokeSummary `
-  -OracleSmokeSummary $OracleSmokeSummary `
-  -OraclePatch $OraclePatch `
-  -ComparisonHarnessManifest $ComparisonHarnessManifest `
-  -Rscript $Rscript `
-  -RLibrary $RLibrary
-$null = Assert-Issue13OracleEffectComparisonIsolation $primaryFull $replayFull `
-  $after -RequireExisting
-
-$beforeRuntime = [pscustomobject][ordered]@{
-  harness = $before.harness
-  rscript = $before.rscript
-  r_library = $before.r_library
+function File-Hash([string]$Path) {
+  (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
-$afterRuntime = [pscustomobject][ordered]@{
-  harness = $after.harness
-  rscript = $after.rscript
-  r_library = $after.r_library
-}
-Assert-Issue13OracleEffect (
-  ($beforeRuntime | ConvertTo-Json -Depth 100 -Compress) -ceq `
-    ($afterRuntime | ConvertTo-Json -Depth 100 -Compress)
-) 'terminal harness/Rscript/RLibrary changed during primary/replay execution.'
 
-$evidence = Get-Issue13OracleEffectEvidence `
-  -RepositoryRoot $RepositoryRoot `
-  -ExpectedCandidateCommit $ExpectedCandidateCommit `
-  -SpecPath $SpecPath `
-  -SchemaPath $SchemaPath `
-  -StrictSmokeSummary $StrictSmokeSummary `
-  -OracleSmokeSummary $OracleSmokeSummary `
-  -OraclePatch $OraclePatch `
-  -ComparisonRoot $ComparisonRoot `
-  -ReplayRoot $ReplayRoot `
-  -ComparisonHarnessManifest $ComparisonHarnessManifest `
-  -Rscript $Rscript `
-  -RLibrary $RLibrary `
-  -PreparedContext $after `
-  -RunInventoriesBefore $before.approved_runs `
-  -RuntimeBefore $beforeRuntime
-Assert-Issue13OracleEffect (
-  ($executedCommands | ConvertTo-Json -Depth 20 -Compress) -ceq `
-    ($evidence.comparison_workflow.commands | ConvertTo-Json -Depth 20 -Compress)
-) 'recorded comparison commands differ from the commands actually executed.'
-
-$proof = New-Issue13OracleEffectProofObject -Evidence $evidence
-$proofJson = $proof | ConvertTo-Json -Depth 100
-try {
-  $schemaPassed = $proofJson | Test-Json -SchemaFile $SchemaPath -ErrorAction Stop
-} catch {
-  throw "Generated oracle-effect proof fails JSON Schema validation: $($_.Exception.Message)"
+function Assert-NoExecutionCheckpointClaim(
+  [string]$CheckpointPath,
+  [string]$ScenarioSpecPath,
+  [string]$ScenarioId
+) {
+  $checkpoint = [IO.Path]::GetFullPath($CheckpointPath)
+  $expected = [IO.Path]::GetFullPath((Join-Path (
+      Split-Path -Parent $ScenarioSpecPath) 'execution-checkpoint.json'))
+  if (-not [string]::Equals($checkpoint, $expected,
+      [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Scenario checkpoint path is non-canonical: $ScenarioId"
+  }
+  $parent = Split-Path -Parent $checkpoint
+  $parentItem = Get-Item -LiteralPath $parent -Force -ErrorAction Stop
+  if (($parentItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw "Scenario checkpoint parent is a reparse point: $ScenarioId"
+  }
+  $entries = @(Get-ChildItem -LiteralPath $parent -Force)
+  $claims = @($entries | Where-Object {
+      $_.Name -cin @(
+        'execution-checkpoint.started.json', 'execution-checkpoint.json') -or
+        $_.Name -cmatch
+          '^\.execution-checkpoint(?:\.started)?\.json-[0-9a-f]+(?:\.tmp)?$'
+    })
+  $foreignClaims = @($entries | Where-Object {
+      $_.Name -cmatch '^\.?execution-checkpoint' -and $_ -notin $claims
+    })
+  if ($claims.Count -ne 0 -or $foreignClaims.Count -ne 0) {
+    throw "Scenario checkpoint prevents process replay: $ScenarioId"
+  }
 }
-Assert-Issue13OracleEffect (Test-Issue13OracleEffectExactBoolean $schemaPassed $true) `
-  'generated oracle-effect proof fails JSON Schema validation.'
-$written = Write-Issue13OracleEffectJsonOnce -Value $proof -Path $proofFull `
-  -SchemaPath $SchemaPath -ProtectedRoots $proofProtectedRoots
-$roundtrip = Read-Issue13OracleEffectJson $written 'written oracle-effect proof'
-$writtenJson = Get-Content -Raw -LiteralPath $written
-try {
-  $writtenSchemaPassed = $writtenJson | Test-Json -SchemaFile $SchemaPath `
-    -ErrorAction Stop
-} catch {
-  throw "Written oracle-effect proof fails JSON Schema validation: $($_.Exception.Message)"
-}
-Assert-Issue13OracleEffect (Test-Issue13OracleEffectExactBoolean $writtenSchemaPassed $true) `
-  'written oracle-effect proof fails JSON Schema validation.'
-$null = Test-Issue13OracleEffectProofObject $roundtrip $evidence
 
-[pscustomobject][ordered]@{
-  schema = 'wlv-issue13-v5-oracle-effect-generation/2'
-  status = 'passed'
-  passed = $true
-  proof_path = $written
-  proof_sha256 = Get-Issue13OracleEffectSha256 $written
-  strict_common_comparison_count = `
-    @($evidence.comparison_workflow.comparisons).Count
-  comparison_execution_count = @($evidence.comparison_workflow.commands).Count
-  approved_run_inventory_count = @($evidence.approved_run_immutability).Count
-  recovered_method_count = @($evidence.recovered_methods).Count
-  final_evidence_eligible = $false
-} | ConvertTo-Json -Depth 5
+$planResolved = Resolve-ExactPath $PlanPath 'Preparation/fault plan'
+$plan = Get-Content -LiteralPath $planResolved -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($plan.schema -ne 'wlv-issue13-prep-fault-plan/2' -or
+    [bool]$plan.execution_started -or
+    @($plan.records).Count -ne 12) {
+  throw 'Preparation/fault plan schema or cardinality is invalid.'
+}
+$auditPath = Join-Path (Split-Path -Parent $planResolved) 'plan-audit.json'
+$auditResolved = Resolve-ExactPath $auditPath 'Preparation/fault plan audit'
+$audit = Get-Content -LiteralPath $auditResolved -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($audit.schema -ne 'wlv-issue13-prep-fault-plan-audit/2' -or
+    -not [bool]$audit.passed -or $audit.status -ne 'passed' -or
+    [string]$audit.plan_sha256 -ne (File-Hash $planResolved)) {
+  throw 'Preparation/fault plan audit is missing, stale, or failed.'
+}
+$harnessCount = @($plan.harness_files).Count
+if ($harnessCount -ne 17 -or
+    @($audit.harness_files).Count -ne $harnessCount) {
+  throw 'Authenticated harness file inventory is incomplete.'
+}
+for ($index = 0; $index -lt $harnessCount; $index++) {
+  $plannedHarness = $plan.harness_files[$index]
+  $auditedHarness = $audit.harness_files[$index]
+  $harnessPath = Resolve-ExactPath ([string]$plannedHarness.path) 'Harness file'
+  if ([string]$plannedHarness.name -ne [string]$auditedHarness.name -or
+      [string]$plannedHarness.sha256 -ne [string]$auditedHarness.sha256 -or
+      (File-Hash $harnessPath) -ne [string]$plannedHarness.sha256) {
+    throw "Harness file changed after preflight: $($plannedHarness.name)"
+  }
+}
+$records = @($plan.records | Where-Object { [string]$_.scenario_id -eq $ScenarioId })
+if ($records.Count -ne 1) { throw "Unknown or duplicate scenario id: $ScenarioId" }
+$record = $records[0]
+$scenarioSpec = Resolve-ExactPath ([string]$record.scenario_spec_path) 'Scenario spec'
+$processSpec = Resolve-ExactPath ([string]$record.process_spec_path) 'Process spec'
+if ((File-Hash $scenarioSpec) -ne [string]$record.scenario_spec_sha256 -or
+    (File-Hash $processSpec) -ne [string]$record.process_spec_sha256) {
+  throw 'Scenario/process spec bytes changed after the audited plan.'
+}
+$scenario = Get-Content -LiteralPath $scenarioSpec -Raw -Encoding UTF8 |
+  ConvertFrom-Json
+if ($scenario.schema -cne 'wlv-issue13-scenario/1' -or
+    $scenario.scenario_id -cne $ScenarioId -or
+    $scenario.checkpoint_path -isnot [string] -or
+    $record.checkpoint_path -isnot [string] -or
+    -not [string]::Equals(
+      [IO.Path]::GetFullPath([string]$scenario.checkpoint_path),
+      [IO.Path]::GetFullPath([string]$record.checkpoint_path),
+      [StringComparison]::OrdinalIgnoreCase)) {
+  throw 'Scenario checkpoint binding differs from the audited plan.'
+}
+$process = Get-Content -LiteralPath $processSpec -Raw -Encoding UTF8 | ConvertFrom-Json
+$arguments = @($process.arguments | ForEach-Object { [string]$_ })
+if ($process.schema -ne 'wlv-issue13-process-spec/1' -or
+    [string]$process.scenario_id -ne $ScenarioId -or
+    $arguments.Count -ne 4 -or
+    (Resolve-ExactPath $arguments[2] 'Bound scenario spec') -ne $scenarioSpec) {
+  throw 'Process spec is not bound to the selected scenario.'
+}
+$evidence = [System.IO.Path]::GetFullPath([string]$record.evidence_directory)
+if ([System.IO.Path]::GetFullPath($arguments[3]) -ne $evidence) {
+  throw 'Process spec evidence path differs from the audited record.'
+}
+if (Test-Path -LiteralPath $evidence) {
+  throw "Scenario evidence already exists; reruns are forbidden: $evidence"
+}
+Assert-NoExecutionCheckpointClaim ([string]$record.checkpoint_path) `
+  $scenarioSpec $ScenarioId
+New-Item -ItemType Directory -Path $evidence | Out-Null
+$monitor = Join-Path $PSScriptRoot 'issue13-monitor.ps1'
+Assert-NoExecutionCheckpointClaim ([string]$record.checkpoint_path) `
+  $scenarioSpec $ScenarioId
+& $monitor -SpecPath $processSpec -EvidenceDir $evidence
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+$metrics = Join-Path $evidence 'process-metrics.json'
+$result = Join-Path $evidence 'scenario-result.json'
+if (-not (Test-Path -LiteralPath $metrics -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $result -PathType Leaf)) {
+  throw 'Monitored scenario did not emit metrics and scenario result.'
+}
+if ([string]$record.kind -eq 'calculate' -or
+    [string]$record.kind -eq 'prepare_euklems') {
+  $fault = Join-Path $evidence 'fault-result.json'
+  if (-not (Test-Path -LiteralPath $fault -PathType Leaf)) {
+    throw 'Fault scenario did not emit fault-result.json.'
+  }
+}
+Write-Output "Scenario passed: $ScenarioId"
+exit 0
