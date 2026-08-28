@@ -2390,7 +2390,7 @@ $issue13ExpectedControllerSourceSha256 = @{
   'issue13-v5-oracle-effect-lib.ps1' = 'F49425C3A1AF813ABBEF1F515240C570316E08143BC26E50DE34BDB0C3877CC4'
   'issue13-v5-oracle-effect-validate.ps1' = '11912422CEB54A45A791E49E11688F974AB45A4CC0F2FB89145D90176AAB0140'
   'issue13-v5-render-report.ps1' = '756ACAB7E8BFC6CF7E0A7235B0634E24F4D805A4F30D060291260A62726B710A'
-    'issue13-v5-static-verify.ps1' = 'CF5011656DAC311C7B06EE1D285A837FEF8E4F11EE5FEA689F2656AA5560CD8E'
+    'issue13-v5-static-verify.ps1' = '0A47CC33FB037F4EF2FEE762DB3F5720476D81EC70AC5CE6D4660A69D4B8A40E'
 }
 $issue13ExpectedDotSourceSignatures = @{
   'issue13-v5-attest-delivery.ps1' = @(
@@ -4883,10 +4883,10 @@ $boundedRscriptCallerSignatures = [ordered]@{
   )
   'issue13-v5-oracle-effect-lib.ps1' = [string[]]@(
     ('Invoke-Issue13V5RscriptBounded-RscriptPath$rscriptPath' +
-      '-Arguments@(''--vanilla'',''-e'',$expression)' +
-      '-Label''Oracle-effectRruntimeprobe''-TimeoutSeconds600' +
+      '-Arguments@(''--vanilla'',''-e'',$expression,$temporaryRoot)' +
+      '-Label''Oracle-effectisolatedrenvactivationprobe''-TimeoutSeconds600' +
       '-ExpectedExitCodes$null' +
-      '-WorkingDirectory$script:Issue13OracleEffectControllerRoot' +
+      '-WorkingDirectory$temporaryRoot' +
       '-Environment$probeEnvironment'),
     ('Invoke-Issue13V5RscriptBounded' +
       '-RscriptPath([string]$command.executable)' +
