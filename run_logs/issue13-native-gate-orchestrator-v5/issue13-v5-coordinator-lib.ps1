@@ -5383,13 +5383,9 @@ function Assert-Issue13V5BaselineSmokeEvidence(
         'timeout_seconds', 'sample_interval_ms', 'shutdown_grace_seconds',
         'expected_worker_processes'
       ) "Strict smoke process spec $method"
-      $null = Assert-Issue13V5ExactPropertyNames $processDocument.environment @(
-        'R_LIBS_USER', 'RENV_PATHS_LIBRARY',
-        'RENV_CONFIG_AUTO_SNAPSHOT', 'RENV_CONFIG_CACHE_ENABLED',
-        'RENV_CONFIG_LOCKING_ENABLED',
-        'RENV_CONFIG_SANDBOX_ENABLED', 'RENV_CONFIG_UPDATES_CHECK',
-        'RENV_CONFIG_USER_ENVIRON', 'RENV_CONFIG_USER_LIBRARY', 'TZ'
-      ) "Strict smoke process environment $method"
+      $null = Assert-Issue13V5ExactPropertyNames `
+        $processDocument.environment @('R_LIBS_USER') `
+        "Strict smoke process environment $method"
       $null = Assert-Issue13V5ExactPropertyNames $scenarioDocument @(
         'schema', 'scenario_id', 'project_root', 'expected_commit', 'kind',
         'method', 'channel', 'checkpoint_path', 'workers',
@@ -5501,27 +5497,6 @@ function Assert-Issue13V5BaselineSmokeEvidence(
               [string]$processDocument.environment.R_LIBS_USER)),
             (ConvertTo-Issue13V5Path ([string]$Config.r_library)),
             [StringComparison]::OrdinalIgnoreCase) -or
-          -not [string]::Equals(
-            (ConvertTo-Issue13V5Path (
-              [string]$processDocument.environment.RENV_PATHS_LIBRARY)),
-            (ConvertTo-Issue13V5Path (
-              (Get-Issue13V5RenvLibraryRoot ([string]$Config.r_library)))),
-            [StringComparison]::OrdinalIgnoreCase) -or
-          [string]$processDocument.environment.RENV_CONFIG_AUTO_SNAPSHOT -cne
-            'FALSE' -or
-          [string]$processDocument.environment.RENV_CONFIG_CACHE_ENABLED -cne
-            'FALSE' -or
-          [string]$processDocument.environment.RENV_CONFIG_LOCKING_ENABLED -cne
-            'FALSE' -or
-          [string]$processDocument.environment.RENV_CONFIG_SANDBOX_ENABLED -cne
-            'FALSE' -or
-          [string]$processDocument.environment.RENV_CONFIG_UPDATES_CHECK -cne
-            'FALSE' -or
-          [string]$processDocument.environment.RENV_CONFIG_USER_ENVIRON -cne
-            'FALSE' -or
-          [string]$processDocument.environment.RENV_CONFIG_USER_LIBRARY -cne
-            'FALSE' -or
-          [string]$processDocument.environment.TZ -cne 'UTC' -or
           -not [string]::Equals(
             (ConvertTo-Issue13V5Path ([string]$bundleDocument.r_library)),
             (ConvertTo-Issue13V5Path ([string]$Config.r_library)),

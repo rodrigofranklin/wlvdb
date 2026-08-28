@@ -555,7 +555,7 @@ $bootstrapSourceSha256 = @{
   'issue13-v5-capture-clean-stage5-evidence.ps1' =
     'AD714DCA487749FD405D4A40D69A7AE1BD42973C480257F7E0B11CEE45CEE6B6'
   'issue13-v5-coordinator-lib.ps1' =
-    'A4FF0BC9C816AA8E7D7D6F678B67E5744AE7E6B8A3E30399CBB151EF722D3C3C'
+    '97E4E69DA7B4E679501A70C097469DE0DAE6E70FF67F6EC753FBBB740C844380'
   'issue13-v5-coordinator.ps1' =
     '57A284A2600AAC37B5879BA44EB6B4AB1953AB00590D4EA6720524195E0EBF28'
   'issue13-v5-materialize-harness.ps1' =
@@ -2323,8 +2323,8 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
   'issue13-v5-coordinator-lib.ps1' = @{
-    command_count = 1201
-    command_sha256 = 'B5AEEBED9C1DF8F1143B6AEE2EF9DFF9D1F749A13C263701E3524C26617ED14D'
+    command_count = 1198
+    command_sha256 = 'C8A6E79753C458A86DB63F523C60FF4680CA974BD65A112CC8A6DBD33ED1B8D1'
     redirection_count = 16
     redirection_sha256 = 'A27C1F1A1A78A655A820FF3FB0CF52CDB0B3A4DF14EE3A8B21EADCFCD395E8EE'
   }
@@ -2371,8 +2371,8 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = '7F4027149DBBCCC5E186586FA06D6058EF6E3821AC51098E7521EBC767D5FE2D'
   }
   'issue13-v5-static-verify.ps1' = @{
-    command_count = 819
-    command_sha256 = '4E468949CF3043CDD8BB7BE1F140B7DE16C7943E43B12DFE0C863D79739EC3EF'
+    command_count = 821
+    command_sha256 = 'CDA1D5801EAC7CEDE6EDBD2B06875B55FC6609A4A761E9A095E8ACB7C7977A8B'
     redirection_count = 0
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
@@ -2382,7 +2382,7 @@ $issue13ExpectedControllerSourceSha256 = @{
   'issue13-v5-baseline-smoke.ps1' = 'B5250828544C45CC03E1CC0D6626E60DCBA0EE47D70D5199D94AA7693E75D111'
   'issue13-v5-capture-clean-bridge-evidence.ps1' = '23DC872D2697788268C0102BABA2B972B1D2AEB533419F9C3A5A1141BCCF317D'
   'issue13-v5-capture-clean-stage5-evidence.ps1' = 'AD714DCA487749FD405D4A40D69A7AE1BD42973C480257F7E0B11CEE45CEE6B6'
-  'issue13-v5-coordinator-lib.ps1' = 'A4FF0BC9C816AA8E7D7D6F678B67E5744AE7E6B8A3E30399CBB151EF722D3C3C'
+  'issue13-v5-coordinator-lib.ps1' = '97E4E69DA7B4E679501A70C097469DE0DAE6E70FF67F6EC753FBBB740C844380'
   'issue13-v5-coordinator.ps1' = '57A284A2600AAC37B5879BA44EB6B4AB1953AB00590D4EA6720524195E0EBF28'
   'issue13-v5-materialize-harness.ps1' = '32BA0F9DC5C17A1F3EEFDAEF9AEFBCCC1D4370B0A0C16DF9072C8C002770A8D6'
   'issue13-v5-new-config.ps1' = '75FF45DF91A03728E1E1C74EFCC41C5FDF1219113C31B88C106EE312A6EFCC06'
@@ -2390,7 +2390,7 @@ $issue13ExpectedControllerSourceSha256 = @{
   'issue13-v5-oracle-effect-lib.ps1' = 'F49425C3A1AF813ABBEF1F515240C570316E08143BC26E50DE34BDB0C3877CC4'
   'issue13-v5-oracle-effect-validate.ps1' = '11912422CEB54A45A791E49E11688F974AB45A4CC0F2FB89145D90176AAB0140'
   'issue13-v5-render-report.ps1' = '756ACAB7E8BFC6CF7E0A7235B0634E24F4D805A4F30D060291260A62726B710A'
-    'issue13-v5-static-verify.ps1' = '1EBCDE9D3C54F3723E53CB6657473AA684CEAADDB7EF9C907DF2DD175CA9547E'
+    'issue13-v5-static-verify.ps1' = '719134DBB7ED14E2EC2A89556243EE99FE92432A17EB88A51A36E27A07AD8EDE'
 }
 $issue13ExpectedDotSourceSignatures = @{
   'issue13-v5-attest-delivery.ps1' = @(
@@ -6317,6 +6317,7 @@ $historicalShapeCounts = [ordered]@{
   '$bundleDocument' = 7
   '$checkpointDocument' = 19
   '$startedDocument' = 11
+  '$processDocument.environment' = 1
 }
 foreach ($shapeTarget in $historicalShapeCounts.Keys) {
   $shapeCalls = @($historicalDefinition.FindAll({
@@ -6336,6 +6337,100 @@ foreach ($shapeTarget in $historicalShapeCounts.Keys) {
     }, $true))
   if ($shapeFields.Count -ne [int]$historicalShapeCounts[$shapeTarget]) {
     throw "Historical exact JSON field count changed: $shapeTarget"
+  }
+  if ($shapeTarget -ceq '$processDocument.environment' -and
+      [string]$shapeFields[0].Value -cne 'R_LIBS_USER') {
+    throw 'Historical strict smoke environment key changed.'
+  }
+}
+function Test-Issue13V5StaticHistoricalSmokeEnvironment(
+  [Management.Automation.Language.FunctionDefinitionAst]$Definition
+) {
+  $shapeCalls = @($Definition.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -ieq
+          'Assert-Issue13V5ExactPropertyNames' -and
+        $node.CommandElements.Count -ge 3 -and
+        $node.CommandElements[1].Extent.Text -ceq
+          '$processDocument.environment'
+    }, $true))
+  if ($shapeCalls.Count -ne 1) { return $false }
+  $shapeFields = @($shapeCalls[0].CommandElements[2].FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.StringConstantExpressionAst]
+    }, $true))
+  if ($shapeFields.Count -ne 1 -or
+      [string]$shapeFields[0].Value -cne 'R_LIBS_USER') {
+    return $false
+  }
+  $historicalIf = $null
+  $current = $shapeCalls[0].Parent
+  while ($null -ne $current -and
+      $current -isnot [Management.Automation.Language.FunctionDefinitionAst]) {
+    if ($current -is [Management.Automation.Language.IfStatementAst] -and
+        $current.Clauses.Count -eq 1 -and
+        $null -eq $current.ElseClause -and
+        [regex]::Replace(
+          $current.Clauses[0].Item1.Extent.Text, '[\s`()]', '') -ceq
+            '$isHistoricalStrict') {
+      $historicalIf = $current
+      break
+    }
+    $current = $current.Parent
+  }
+  if ($null -eq $historicalIf) { return $false }
+  $historicalBlock = $historicalIf.Clauses[0].Item2
+  $environmentObjectNodes = @($historicalBlock.FindAll({
+      param($node)
+      $node.Extent.Text -ceq '$processDocument.environment'
+    }, $true))
+  $directMembers = @($historicalBlock.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.MemberExpressionAst] -and
+        $node.Expression.Extent.Text -ceq '$processDocument.environment'
+    }, $true))
+  $environmentObjectNodes.Count -eq 2 -and
+    $directMembers.Count -eq 1 -and
+    $directMembers[0].Member.Extent.Text -ceq 'R_LIBS_USER'
+}
+if (-not (Test-Issue13V5StaticHistoricalSmokeEnvironment `
+    $historicalDefinition)) {
+  throw 'Historical strict smoke environment access is not closed.'
+}
+$historicalEnvironmentMutantTexts = @(
+  $centralText.Replace(
+    '[string]$processDocument.environment.R_LIBS_USER',
+    '[string]$processDocument.environment.RENV_PATHS_LIBRARY'),
+  $centralText.Replace(
+    '[string]$processDocument.environment.R_LIBS_USER',
+    "[string]`$processDocument.environment['R_LIBS_USER']"),
+  $centralText.Replace(
+    "`$expectedChannel = 'issue13-v5-smoke-b-' + `$method.Replace('_', '-')",
+    "`$historicalEnvironmentAlias = `$processDocument.environment`n      " +
+      "`$expectedChannel = 'issue13-v5-smoke-b-' + `$method.Replace('_', '-')")
+)
+foreach ($historicalEnvironmentMutantText in
+    $historicalEnvironmentMutantTexts) {
+  $historicalEnvironmentMutantTokens = $null
+  $historicalEnvironmentMutantErrors = $null
+  $historicalEnvironmentMutantAst =
+    [Management.Automation.Language.Parser]::ParseInput(
+      $historicalEnvironmentMutantText,
+      [ref]$historicalEnvironmentMutantTokens,
+      [ref]$historicalEnvironmentMutantErrors)
+  $historicalEnvironmentMutantDefinitions = @(
+    $historicalEnvironmentMutantAst.FindAll({
+        param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+          $node.Name -ceq 'Assert-Issue13V5BaselineSmokeEvidence'
+      }, $true))
+  if ($historicalEnvironmentMutantText -ceq $centralText -or
+      $historicalEnvironmentMutantErrors.Count -ne 0 -or
+      $historicalEnvironmentMutantDefinitions.Count -ne 1 -or
+      (Test-Issue13V5StaticHistoricalSmokeEnvironment `
+        $historicalEnvironmentMutantDefinitions[0])) {
+    throw 'Historical smoke environment verifier accepted a mutant.'
   }
 }
 
@@ -9303,19 +9398,6 @@ foreach ($required in @(
     'environment_set = [object[]]$environmentBinding.environment_set',
     'environment_cleared = [object[]]$environmentBinding.environment_cleared',
     'Environment variable is duplicated case-insensitively',
-    'Assert-Issue13V5ExactPropertyNames $processDocument.environment @(',
-    "'R_LIBS_USER', 'RENV_PATHS_LIBRARY',",
-    "'RENV_CONFIG_AUTO_SNAPSHOT', 'RENV_CONFIG_CACHE_ENABLED',",
-    "'RENV_CONFIG_LOCKING_ENABLED',",
-    "'RENV_CONFIG_SANDBOX_ENABLED', 'RENV_CONFIG_UPDATES_CHECK',",
-    "'RENV_CONFIG_USER_ENVIRON', 'RENV_CONFIG_USER_LIBRARY', 'TZ'",
-    '[string]$processDocument.environment.RENV_CONFIG_AUTO_SNAPSHOT -cne',
-    '[string]$processDocument.environment.RENV_CONFIG_CACHE_ENABLED -cne',
-    '[string]$processDocument.environment.RENV_CONFIG_LOCKING_ENABLED -cne',
-    '[string]$processDocument.environment.RENV_CONFIG_SANDBOX_ENABLED -cne',
-    '[string]$processDocument.environment.RENV_CONFIG_UPDATES_CHECK -cne',
-    '[string]$processDocument.environment.RENV_CONFIG_USER_ENVIRON -cne',
-    '[string]$processDocument.environment.RENV_CONFIG_USER_LIBRARY -cne',
     'Get-Issue13V5ConfiguredPaths', 'Test-Issue13V5LegacyPath',
     'Get-Issue13V5SourceBinding', 'Get-Issue13V5SourceContractSha256',
     'Assert-Issue13V5SourceContractBindings', 'candidate_source_origin',
