@@ -555,7 +555,7 @@ $bootstrapSourceSha256 = @{
   'issue13-v5-capture-clean-stage5-evidence.ps1' =
     'AD714DCA487749FD405D4A40D69A7AE1BD42973C480257F7E0B11CEE45CEE6B6'
   'issue13-v5-coordinator-lib.ps1' =
-    '1F73F33A3B14738A5032624BDE428B0AC2EC53226C02432916B3FF2B40C38526'
+    'A4FF0BC9C816AA8E7D7D6F678B67E5744AE7E6B8A3E30399CBB151EF722D3C3C'
   'issue13-v5-coordinator.ps1' =
     '57A284A2600AAC37B5879BA44EB6B4AB1953AB00590D4EA6720524195E0EBF28'
   'issue13-v5-materialize-harness.ps1' =
@@ -565,7 +565,7 @@ $bootstrapSourceSha256 = @{
   'issue13-v5-oracle-effect-generate.ps1' =
     '6C1E26154794A253974B7E51C5D15B054AE2D31E09736BF19B624F56EA3C30F9'
   'issue13-v5-oracle-effect-lib.ps1' =
-    '3BFCB34130F66D9E4E2EA68E563A3D3C8BF7EFAEEAAFA1DB632CE031197506E6'
+    'F49425C3A1AF813ABBEF1F515240C570316E08143BC26E50DE34BDB0C3877CC4'
   'issue13-v5-oracle-effect-validate.ps1' =
     '11912422CEB54A45A791E49E11688F974AB45A4CC0F2FB89145D90176AAB0140'
   'issue13-v5-render-report.ps1' =
@@ -2146,6 +2146,7 @@ $issue13CriticalPowerShellNames = @(
   'Get-Issue13V5ProcessEnvironmentState',
   'Set-Issue13V5ProcessEnvironmentState',
   'Invoke-Issue13V5WithCleanup',
+  'Test-Issue13V5WithCleanupSelfTest',
   'Enter-Issue13V5ProcessEnvironment',
   'Exit-Issue13V5ProcessEnvironment',
   'Invoke-Issue13V5WithProcessEnvironment',
@@ -2234,6 +2235,7 @@ $issue13CriticalDefinitionOwners = @{
     'Get-Issue13V5ProcessEnvironmentState',
     'Set-Issue13V5ProcessEnvironmentState',
     'Invoke-Issue13V5WithCleanup',
+    'Test-Issue13V5WithCleanupSelfTest',
     'Enter-Issue13V5ProcessEnvironment',
     'Exit-Issue13V5ProcessEnvironment',
     'Invoke-Issue13V5WithProcessEnvironment',
@@ -2321,8 +2323,8 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
   'issue13-v5-coordinator-lib.ps1' = @{
-    command_count = 1190
-    command_sha256 = '2387C6743A807FE5C7F9720856928E914B3B9A9D1F4097769BE590DB57A5B01C'
+    command_count = 1201
+    command_sha256 = 'B5AEEBED9C1DF8F1143B6AEE2EF9DFF9D1F749A13C263701E3524C26617ED14D'
     redirection_count = 16
     redirection_sha256 = 'A27C1F1A1A78A655A820FF3FB0CF52CDB0B3A4DF14EE3A8B21EADCFCD395E8EE'
   }
@@ -2351,8 +2353,8 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
   'issue13-v5-oracle-effect-lib.ps1' = @{
-    command_count = 993
-    command_sha256 = '2DBB797D0A8ECAA1442D9E966B73DBE3C92DA2D0E99CD374C6C36D68D7101D03'
+    command_count = 992
+    command_sha256 = '44B5E284EBE97457731BBD57CFEBF2F883E2BA0AB091545FB3F4ECED557C996F'
     redirection_count = 0
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
@@ -2369,8 +2371,8 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = '7F4027149DBBCCC5E186586FA06D6058EF6E3821AC51098E7521EBC767D5FE2D'
   }
   'issue13-v5-static-verify.ps1' = @{
-    command_count = 802
-    command_sha256 = '50FC1B4AA0DE9646B823399AEF21E0DE9058A223D6E66548A834529E9FDFA5F8'
+    command_count = 819
+    command_sha256 = '4E468949CF3043CDD8BB7BE1F140B7DE16C7943E43B12DFE0C863D79739EC3EF'
     redirection_count = 0
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
@@ -2380,15 +2382,15 @@ $issue13ExpectedControllerSourceSha256 = @{
   'issue13-v5-baseline-smoke.ps1' = 'B5250828544C45CC03E1CC0D6626E60DCBA0EE47D70D5199D94AA7693E75D111'
   'issue13-v5-capture-clean-bridge-evidence.ps1' = '23DC872D2697788268C0102BABA2B972B1D2AEB533419F9C3A5A1141BCCF317D'
   'issue13-v5-capture-clean-stage5-evidence.ps1' = 'AD714DCA487749FD405D4A40D69A7AE1BD42973C480257F7E0B11CEE45CEE6B6'
-  'issue13-v5-coordinator-lib.ps1' = '1F73F33A3B14738A5032624BDE428B0AC2EC53226C02432916B3FF2B40C38526'
+  'issue13-v5-coordinator-lib.ps1' = 'A4FF0BC9C816AA8E7D7D6F678B67E5744AE7E6B8A3E30399CBB151EF722D3C3C'
   'issue13-v5-coordinator.ps1' = '57A284A2600AAC37B5879BA44EB6B4AB1953AB00590D4EA6720524195E0EBF28'
   'issue13-v5-materialize-harness.ps1' = '32BA0F9DC5C17A1F3EEFDAEF9AEFBCCC1D4370B0A0C16DF9072C8C002770A8D6'
   'issue13-v5-new-config.ps1' = '75FF45DF91A03728E1E1C74EFCC41C5FDF1219113C31B88C106EE312A6EFCC06'
   'issue13-v5-oracle-effect-generate.ps1' = '6C1E26154794A253974B7E51C5D15B054AE2D31E09736BF19B624F56EA3C30F9'
-  'issue13-v5-oracle-effect-lib.ps1' = '3BFCB34130F66D9E4E2EA68E563A3D3C8BF7EFAEEAAFA1DB632CE031197506E6'
+  'issue13-v5-oracle-effect-lib.ps1' = 'F49425C3A1AF813ABBEF1F515240C570316E08143BC26E50DE34BDB0C3877CC4'
   'issue13-v5-oracle-effect-validate.ps1' = '11912422CEB54A45A791E49E11688F974AB45A4CC0F2FB89145D90176AAB0140'
   'issue13-v5-render-report.ps1' = '756ACAB7E8BFC6CF7E0A7235B0634E24F4D805A4F30D060291260A62726B710A'
-    'issue13-v5-static-verify.ps1' = '174DEF5990F7B35B65742615B785A683569FAE4C4CEEFB6AF1FE75F11E55AC07'
+    'issue13-v5-static-verify.ps1' = 'CF5011656DAC311C7B06EE1D285A837FEF8E4F11EE5FEA689F2656AA5560CD8E'
 }
 $issue13ExpectedDotSourceSignatures = @{
   'issue13-v5-attest-delivery.ps1' = @(
@@ -2921,6 +2923,7 @@ $commitECriticalOwners = [ordered]@{
   'Get-Issue13V5ProcessEnvironmentState' = 'issue13-v5-coordinator-lib.ps1'
   'Set-Issue13V5ProcessEnvironmentState' = 'issue13-v5-coordinator-lib.ps1'
   'Invoke-Issue13V5WithCleanup' = 'issue13-v5-coordinator-lib.ps1'
+  'Test-Issue13V5WithCleanupSelfTest' = 'issue13-v5-coordinator-lib.ps1'
   'Enter-Issue13V5ProcessEnvironment' = 'issue13-v5-coordinator-lib.ps1'
   'Exit-Issue13V5ProcessEnvironment' = 'issue13-v5-coordinator-lib.ps1'
   'Invoke-Issue13V5WithProcessEnvironment' = 'issue13-v5-coordinator-lib.ps1'
@@ -3773,6 +3776,347 @@ if (-not $centralGetter.Extent.Text.Contains('Test-Path -LiteralPath $path') -or
   throw 'Environment presence is inferred from a null-collapsing getter.'
 }
 
+function Test-Issue13V5StaticWithCleanupContract(
+  [Management.Automation.Language.ScriptBlockAst]$Ast
+) {
+  $helperDefinitions = @(Get-Issue13V5StaticTopLevelFunctions $Ast `
+      'Invoke-Issue13V5WithCleanup')
+  $selftestDefinitions = @(Get-Issue13V5StaticTopLevelFunctions $Ast `
+      'Test-Issue13V5WithCleanupSelfTest')
+  if ($helperDefinitions.Count -ne 1 -or
+      $selftestDefinitions.Count -ne 1) {
+    return $false
+  }
+  $helper = $helperDefinitions[0]
+  $expectedParameters = @(
+    [pscustomobject][ordered]@{
+      name = 'issue13V5CleanupAction'
+      type = 'System.Management.Automation.ScriptBlock'
+      parameter = '[Parameter(Mandatory = $true, Position = 0)]'
+      alias = "[Alias('Action')]"
+      default = $null
+    },
+    [pscustomobject][ordered]@{
+      name = 'issue13V5CleanupBlocks'
+      type = 'System.Management.Automation.ScriptBlock[]'
+      parameter = '[Parameter(Position = 1)]'
+      alias = "[Alias('Cleanup')]"
+      default = '@()'
+    },
+    [pscustomobject][ordered]@{
+      name = 'issue13V5CleanupLabel'
+      type = 'System.String'
+      parameter = '[Parameter(Position = 2)]'
+      alias = "[Alias('Label')]"
+      default = "'V5 operation'"
+    }
+  )
+  if ($helper.Parameters.Count -ne $expectedParameters.Count) {
+    return $false
+  }
+  for ($index = 0; $index -lt $expectedParameters.Count; $index++) {
+    $parameter = $helper.Parameters[$index]
+    $expected = $expectedParameters[$index]
+    $expectedHasDefault = $null -ne $expected.default
+    $observedHasDefault = $null -ne $parameter.DefaultValue
+    $defaultText = if ($observedHasDefault) {
+      [string]$parameter.DefaultValue.Extent.Text
+    } else { '' }
+    if ($parameter.Name.VariablePath.UserPath -cne [string]$expected.name -or
+        $parameter.StaticType.FullName -cne [string]$expected.type -or
+        $observedHasDefault -ne $expectedHasDefault -or
+        ($expectedHasDefault -and
+          $defaultText -cne [string]$expected.default) -or
+        $parameter.Attributes.Count -ne 3 -or
+        $parameter.Attributes[0] -isnot
+          [Management.Automation.Language.AttributeAst] -or
+        $parameter.Attributes[0].Extent.Text -cne
+          [string]$expected.parameter -or
+        $parameter.Attributes[1] -isnot
+          [Management.Automation.Language.AttributeAst] -or
+        $parameter.Attributes[1].Extent.Text -cne [string]$expected.alias -or
+        $parameter.Attributes[1].PositionalArguments.Count -ne 1 -or
+        $parameter.Attributes[1].PositionalArguments[0] -isnot
+          [Management.Automation.Language.StringConstantExpressionAst] -or
+        $parameter.Attributes[2] -isnot
+          [Management.Automation.Language.TypeConstraintAst]) {
+      return $false
+    }
+  }
+  $forbiddenNames = [string[]]@(
+    'Action', 'Cleanup', 'Label', 'result', 'primary', 'cleanupFailures',
+    'cleanupAction', 'failures', 'failure')
+  $allowedNames = [string[]]@(
+    '_', 'issue13V5AggregateErrors', 'issue13V5CleanupAction',
+    'issue13V5CleanupBlock', 'issue13V5CleanupBlocks',
+    'issue13V5CleanupError', 'issue13V5CleanupErrors',
+    'issue13V5CleanupLabel', 'issue13V5CleanupPrimaryError',
+    'issue13V5CleanupResult', 'null', 'true')
+  $observedNames = [Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::Ordinal)
+  foreach ($variable in @($helper.FindAll({
+        param($node)
+        $node -is [Management.Automation.Language.VariableExpressionAst]
+      }, $true))) {
+    $name = [string]$variable.VariablePath.UserPath
+    if ($forbiddenNames -icontains $name -or
+        $allowedNames -cnotcontains $name) {
+      return $false
+    }
+    $null = $observedNames.Add($name)
+  }
+  if ($observedNames.Count -ne $allowedNames.Count -or
+      @($allowedNames | Where-Object { -not $observedNames.Contains($_) }).Count `
+        -ne 0) {
+    return $false
+  }
+  $actionInvocations = @($helper.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.CommandAst] -and
+        $node.InvocationOperator -eq
+          [Management.Automation.Language.TokenKind]::Ampersand -and
+        $node.CommandElements.Count -eq 1 -and
+        $node.CommandElements[0] -is
+          [Management.Automation.Language.VariableExpressionAst] -and
+        $node.CommandElements[0].VariablePath.UserPath -ceq
+          'issue13V5CleanupAction'
+    }, $true))
+  $cleanupInvocations = @($helper.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.CommandAst] -and
+        $node.InvocationOperator -eq
+          [Management.Automation.Language.TokenKind]::Ampersand -and
+        $node.CommandElements.Count -eq 1 -and
+        $node.CommandElements[0] -is
+          [Management.Automation.Language.VariableExpressionAst] -and
+        $node.CommandElements[0].VariablePath.UserPath -ceq
+          'issue13V5CleanupBlock'
+    }, $true))
+  $helperText = [string]$helper.Extent.Text
+  if ($actionInvocations.Count -ne 1 -or
+      $cleanupInvocations.Count -ne 1 -or
+      -not $helperText.Contains(
+        '$issue13V5CleanupResult = @(& $issue13V5CleanupAction)') -or
+      -not $helperText.Contains(
+        'foreach ($issue13V5CleanupBlock in @($issue13V5CleanupBlocks))') -or
+      -not $helperText.Contains(
+        '$issue13V5AggregateErrors.Add(') -or
+      -not $helperText.Contains(
+        '$issue13V5CleanupPrimaryError.Exception') -or
+      -not $helperText.Contains(
+        'throw $issue13V5CleanupPrimaryError')) {
+    return $false
+  }
+  $selftest = $selftestDefinitions[0]
+  $selftestForbiddenAssignments = @($selftest.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+        $node.Left -is
+          [Management.Automation.Language.VariableExpressionAst] -and
+        $node.Left.VariablePath.UserPath -ceq
+          'issue13V5CleanupSelfTestForbiddenNames'
+    }, $true))
+  if ($selftestForbiddenAssignments.Count -ne 1) {
+    return $false
+  }
+  $selftestForbiddenNames = [string[]]@(
+    $selftestForbiddenAssignments[0].Right.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.StringConstantExpressionAst]
+    }, $true) | ForEach-Object { [string]$_.Value })
+  $selftestCalls = @($selftest.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.CommandAst] -and
+        (Get-Issue13V5PowerShellCommandLeaf ($node.GetCommandName())) -ieq
+          'Invoke-Issue13V5WithCleanup'
+    }, $true))
+  $selftestText = [string]$selftest.Extent.Text
+  $topLevelStatements = @($Ast.EndBlock.Statements)
+  $selftestStatementIndexes = @(
+    for ($statementIndex = 0;
+        $statementIndex -lt $topLevelStatements.Count;
+        $statementIndex++) {
+      if ([object]::ReferenceEquals(
+          $topLevelStatements[$statementIndex], $selftest)) {
+        $statementIndex
+      }
+    })
+  if ($selftestStatementIndexes.Count -ne 1 -or
+      $selftestStatementIndexes[0] -ge $topLevelStatements.Count - 1) {
+    return $false
+  }
+  $selftestInvocationStatement =
+    $topLevelStatements[$selftestStatementIndexes[0] + 1]
+  $topLevelSelftestCalls = @($Ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.CommandAst] -and
+        (Get-Issue13V5PowerShellCommandLeaf ($node.GetCommandName())) -ieq
+          'Test-Issue13V5WithCleanupSelfTest'
+    }, $true))
+  [string]::Join("`n", $selftestForbiddenNames) -ceq
+    [string]::Join("`n", $forbiddenNames) -and
+    $selftestCalls.Count -eq 5 -and
+    $selftestCalls[0].Extent.Text.Contains('-Action') -and
+    $selftestCalls[0].Extent.Text.Contains('-Cleanup') -and
+    $selftestCalls[0].Extent.Text.Contains('-Label') -and
+    $selftestCalls[1].CommandElements.Count -eq 4 -and
+    @($selftestCalls[1].CommandElements | Where-Object {
+        $_ -is [Management.Automation.Language.CommandParameterAst]
+      }).Count -eq 0 -and
+    $selftestText.Contains('${function:Invoke-Issue13V5WithCleanup}') -and
+    $selftestText.Contains('$issue13V5CleanupSelfTestFunction.Ast') -and
+    $selftestText.Contains('collision_name_count = 9L') -and
+    $selftestText.Contains('failure_scenario_count = 3L') -and
+    $selftestInvocationStatement -is
+      [Management.Automation.Language.AssignmentStatementAst] -and
+    $selftestInvocationStatement.Left -is
+      [Management.Automation.Language.VariableExpressionAst] -and
+    $selftestInvocationStatement.Left.VariablePath.UserPath -ceq 'null' -and
+    $selftestInvocationStatement.Right -is
+      [Management.Automation.Language.PipelineAst] -and
+    $selftestInvocationStatement.Right.PipelineElements.Count -eq 1 -and
+    $selftestInvocationStatement.Right.PipelineElements[0] -is
+      [Management.Automation.Language.CommandAst] -and
+    $topLevelSelftestCalls.Count -eq 1 -and
+    [object]::ReferenceEquals(
+      $topLevelSelftestCalls[0],
+      $selftestInvocationStatement.Right.PipelineElements[0]) -and
+    $selftestInvocationStatement.Extent.Text -ceq
+      '$null = Test-Issue13V5WithCleanupSelfTest'
+}
+if (-not (Test-Issue13V5StaticWithCleanupContract $centralAst)) {
+  throw 'Central cleanup helper permits dynamic callback-variable shadowing.'
+}
+$withCleanupDefinition = @(Get-Issue13V5StaticTopLevelFunctions $centralAst `
+    'Invoke-Issue13V5WithCleanup')[0]
+$withCleanupLegacyMutants = @(
+  [pscustomobject]@{ private = 'issue13V5CleanupAction'; legacy = 'aCtIoN' },
+  [pscustomobject]@{ private = 'issue13V5CleanupBlocks'; legacy = 'cLeAnUp' },
+  [pscustomobject]@{ private = 'issue13V5CleanupLabel'; legacy = 'lAbEl' },
+  [pscustomobject]@{ private = 'issue13V5CleanupResult'; legacy = 'rEsUlT' },
+  [pscustomobject]@{ private = 'issue13V5CleanupPrimaryError'; legacy = 'pRiMaRy' },
+  [pscustomobject]@{ private = 'issue13V5CleanupErrors'; legacy = 'cLeAnUpFaIlUrEs' },
+  [pscustomobject]@{ private = 'issue13V5CleanupBlock'; legacy = 'cLeAnUpAcTiOn' },
+  [pscustomobject]@{ private = 'issue13V5AggregateErrors'; legacy = 'fAiLuReS' },
+  [pscustomobject]@{ private = 'issue13V5CleanupError'; legacy = 'fAiLuRe' })
+$withCleanupMutantBodies = @(
+  foreach ($legacyMutant in $withCleanupLegacyMutants) {
+    [regex]::Replace(
+      $withCleanupDefinition.Extent.Text,
+      [regex]::Escape('$' + [string]$legacyMutant.private) +
+        '(?![A-Za-z0-9_])',
+      '$$' + [string]$legacyMutant.legacy,
+      [Text.RegularExpressions.RegexOptions]::CultureInvariant)
+  }
+  $withCleanupDefinition.Extent.Text.Replace(
+    "[Alias('Cleanup')]", "[Alias('CleanupMutant')]"),
+  $withCleanupDefinition.Extent.Text.Replace(
+    'Position = 2', 'Position = 9'))
+foreach ($withCleanupMutantBody in $withCleanupMutantBodies) {
+  $withCleanupMutantText = $centralText.Remove(
+    $withCleanupDefinition.Extent.StartOffset,
+    $withCleanupDefinition.Extent.EndOffset -
+      $withCleanupDefinition.Extent.StartOffset).Insert(
+        $withCleanupDefinition.Extent.StartOffset, $withCleanupMutantBody)
+  $withCleanupMutantTokens = $null
+  $withCleanupMutantErrors = $null
+  $withCleanupMutantAst =
+    [Management.Automation.Language.Parser]::ParseInput(
+      $withCleanupMutantText, [ref]$withCleanupMutantTokens,
+      [ref]$withCleanupMutantErrors)
+  if ($withCleanupMutantBody -ceq $withCleanupDefinition.Extent.Text -or
+      $withCleanupMutantErrors.Count -ne 0 -or
+      (Test-Issue13V5StaticWithCleanupContract $withCleanupMutantAst)) {
+    throw 'Central cleanup-helper verifier accepted an alias/shadow mutant.'
+  }
+}
+$withCleanupSelftestDefinition = @(Get-Issue13V5StaticTopLevelFunctions `
+    $centralAst 'Test-Issue13V5WithCleanupSelfTest')[0]
+$withCleanupTopLevelCall = @($centralAst.EndBlock.Statements)[
+  [Array]::IndexOf(
+    [object[]]@($centralAst.EndBlock.Statements),
+    $withCleanupSelftestDefinition) + 1]
+$withCleanupCallRemovalMutantText = $centralText.Remove(
+  $withCleanupTopLevelCall.Extent.StartOffset,
+  $withCleanupTopLevelCall.Extent.EndOffset -
+    $withCleanupTopLevelCall.Extent.StartOffset)
+$withCleanupCallDuplicationMutantText = $centralText.Insert(
+  $withCleanupTopLevelCall.Extent.EndOffset,
+  "`n" + $withCleanupTopLevelCall.Extent.Text)
+foreach ($withCleanupCallMutantText in @(
+    $withCleanupCallRemovalMutantText,
+    $withCleanupCallDuplicationMutantText)) {
+  $withCleanupCallMutantTokens = $null
+  $withCleanupCallMutantErrors = $null
+  $withCleanupCallMutantAst =
+    [Management.Automation.Language.Parser]::ParseInput(
+      $withCleanupCallMutantText, [ref]$withCleanupCallMutantTokens,
+      [ref]$withCleanupCallMutantErrors)
+  if ($withCleanupCallMutantText -ceq $centralText -or
+      $withCleanupCallMutantErrors.Count -ne 0 -or
+      (Test-Issue13V5StaticWithCleanupContract $withCleanupCallMutantAst)) {
+    throw 'Central cleanup-helper verifier accepted a missing/duplicate self-test call.'
+  }
+}
+
+function Test-Issue13V5StaticOracleComparisonDirectoryCreation(
+  [Management.Automation.Language.ScriptBlockAst]$Ast
+) {
+  $definitions = @(Get-Issue13V5StaticTopLevelFunctions $Ast `
+      'Invoke-Issue13OracleEffectFreshComparisons')
+  if ($definitions.Count -ne 1) { return $false }
+  $definition = $definitions[0]
+  $createCalls = @($definition.FindAll({
+      param($node)
+      $node -is
+        [Management.Automation.Language.InvokeMemberExpressionAst] -and
+        $node.Static -and
+        $node.Expression.Extent.Text -ceq '[IO.Directory]' -and
+        $node.Member.Extent.Text -ceq 'CreateDirectory' -and
+        $node.Arguments.Count -eq 1 -and
+        $node.Arguments[0].Extent.Text -ceq '$phaseRoot'
+    }, $true))
+  $newItemCalls = @($definition.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.CommandAst] -and
+        (Get-Issue13V5PowerShellCommandLeaf ($node.GetCommandName())) -ieq
+          'New-Item'
+    }, $true))
+  if ($createCalls.Count -ne 1 -or $newItemCalls.Count -ne 0) {
+    return $false
+  }
+  $text = [string]$definition.Extent.Text
+  $absentOffset = $text.IndexOf(
+    '"$phase comparison root appeared before generator creation."',
+    [StringComparison]::Ordinal)
+  $createOffset = $text.IndexOf(
+    '$null = [IO.Directory]::CreateDirectory($phaseRoot)',
+    [StringComparison]::Ordinal)
+  $reparseOffset = $text.IndexOf(
+    'Assert-Issue13OracleEffectNoReparseTree $phaseRoot',
+    [Math]::Max(0, $createOffset), [StringComparison]::Ordinal)
+  $absentOffset -ge 0 -and $createOffset -gt $absentOffset -and
+    $reparseOffset -gt $createOffset
+}
+if (-not (Test-Issue13V5StaticOracleComparisonDirectoryCreation $oracleAst)) {
+  throw 'Oracle comparison directory creation is not host-compatible and sealed.'
+}
+$oracleDirectoryMutantText = $oracleAst.Extent.Text.Replace(
+  '$null = [IO.Directory]::CreateDirectory($phaseRoot)',
+  '$null = New-Item -ItemType Directory -LiteralPath $phaseRoot')
+$oracleDirectoryMutantTokens = $null
+$oracleDirectoryMutantErrors = $null
+$oracleDirectoryMutantAst =
+  [Management.Automation.Language.Parser]::ParseInput(
+    $oracleDirectoryMutantText, [ref]$oracleDirectoryMutantTokens,
+    [ref]$oracleDirectoryMutantErrors)
+if ($oracleDirectoryMutantText -ceq $oracleAst.Extent.Text -or
+    $oracleDirectoryMutantErrors.Count -ne 0 -or
+    (Test-Issue13V5StaticOracleComparisonDirectoryCreation `
+      $oracleDirectoryMutantAst)) {
+  throw 'Oracle comparison directory verifier accepted a New-Item mutant.'
+}
+
 $expectedCommandRecordProperties = [string[]]@(
   'schema', 'label', 'executable', 'arguments', 'environment_set',
   'environment_cleared', 'working_directory', 'started_at_utc',
@@ -3890,11 +4234,14 @@ function Test-Issue13V5StaticCentralEnvironmentContract(
     $enterText.Contains(
       'for ($index = $snapshot.Count - 1; $index -ge 0; $index--)') -and
     $enterText.Contains('$failures.Add($primary.Exception)') -and
-    $cleanupText.Contains('foreach ($cleanupAction in @($Cleanup))') -and
-    $cleanupText.Contains('$failures.Add($primary.Exception)') -and
-    $cleanupText.Contains('foreach ($failure in $cleanupFailures)') -and
+    (Test-Issue13V5StaticWithCleanupContract $Ast) -and
+    $cleanupText.Contains(
+      'foreach ($issue13V5CleanupBlock in @($issue13V5CleanupBlocks))') -and
+    $cleanupText.Contains('$issue13V5CleanupPrimaryError.Exception') -and
+    $cleanupText.Contains(
+      '$issue13V5AggregateErrors.Add($issue13V5CleanupError)') -and
     $cleanupText.Contains('throw [AggregateException]::new(') -and
-    $cleanupText.Contains('if ($null -ne $primary) { throw $primary }') -and
+    $cleanupText.Contains('throw $issue13V5CleanupPrimaryError') -and
     $scopeText.Contains('Enter-Issue13V5ProcessEnvironment $Environment') -and
     $scopeText.Contains('Invoke-Issue13V5WithCleanup -Action $Action') -and
     $scopeText.Contains('Exit-Issue13V5ProcessEnvironment $state') -and

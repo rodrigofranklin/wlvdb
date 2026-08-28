@@ -2406,35 +2406,243 @@ function Set-Issue13V5ProcessEnvironmentState(
 }
 
 function Invoke-Issue13V5WithCleanup(
-  [Parameter(Mandatory = $true)][scriptblock]$Action,
-  [scriptblock[]]$Cleanup = @(),
-  [string]$Label = 'V5 operation'
+  [Parameter(Mandatory = $true, Position = 0)]
+    [Alias('Action')][scriptblock]$issue13V5CleanupAction,
+  [Parameter(Position = 1)]
+    [Alias('Cleanup')][scriptblock[]]$issue13V5CleanupBlocks = @(),
+  [Parameter(Position = 2)]
+    [Alias('Label')][string]$issue13V5CleanupLabel = 'V5 operation'
 ) {
-  $result = @()
-  $primary = $null
+  $issue13V5CleanupResult = @()
+  $issue13V5CleanupPrimaryError = $null
   try {
-    $result = @(& $Action)
+    $issue13V5CleanupResult = @(& $issue13V5CleanupAction)
   } catch {
-    $primary = $_
+    $issue13V5CleanupPrimaryError = $_
   }
-  $cleanupFailures = [Collections.Generic.List[Exception]]::new()
-  foreach ($cleanupAction in @($Cleanup)) {
+  $issue13V5CleanupErrors = [Collections.Generic.List[Exception]]::new()
+  foreach ($issue13V5CleanupBlock in @($issue13V5CleanupBlocks)) {
     try {
-      $null = & $cleanupAction
+      $null = & $issue13V5CleanupBlock
     } catch {
-      $cleanupFailures.Add($_.Exception)
+      $issue13V5CleanupErrors.Add($_.Exception)
     }
   }
-  if ($cleanupFailures.Count -ne 0) {
-    $failures = [Collections.Generic.List[Exception]]::new()
-    if ($null -ne $primary) { $failures.Add($primary.Exception) }
-    foreach ($failure in $cleanupFailures) { $failures.Add($failure) }
+  if ($issue13V5CleanupErrors.Count -ne 0) {
+    $issue13V5AggregateErrors = [Collections.Generic.List[Exception]]::new()
+    if ($null -ne $issue13V5CleanupPrimaryError) {
+      $issue13V5AggregateErrors.Add(
+        $issue13V5CleanupPrimaryError.Exception)
+    }
+    foreach ($issue13V5CleanupError in $issue13V5CleanupErrors) {
+      $issue13V5AggregateErrors.Add($issue13V5CleanupError)
+    }
     throw [AggregateException]::new(
-      "$Label cleanup failed.", $failures.ToArray())
+      "$issue13V5CleanupLabel cleanup failed.",
+      $issue13V5AggregateErrors.ToArray())
   }
-  if ($null -ne $primary) { throw $primary }
-  $result
+  if ($null -ne $issue13V5CleanupPrimaryError) {
+    throw $issue13V5CleanupPrimaryError
+  }
+  $issue13V5CleanupResult
 }
+
+function Test-Issue13V5WithCleanupSelfTest {
+  $Action = 'caller-action-sentinel'
+  $Cleanup = 'caller-cleanup-sentinel'
+  $Label = 'caller-label-sentinel'
+  $result = 'caller-result-sentinel'
+  $primary = 'caller-primary-sentinel'
+  $cleanupFailures = 'caller-cleanup-failures-sentinel'
+  $cleanupAction = 'caller-cleanup-action-sentinel'
+  $failures = 'caller-failures-sentinel'
+  $failure = 'caller-failure-sentinel'
+  $issue13V5CleanupSelfTestExpected = [ordered]@{
+    Action = $Action
+    Cleanup = $Cleanup
+    Label = $Label
+    result = $result
+    primary = $primary
+    cleanupFailures = $cleanupFailures
+    cleanupAction = $cleanupAction
+    failures = $failures
+    failure = $failure
+  }
+  $issue13V5CleanupSelfTestProbe = {
+    [pscustomobject][ordered]@{
+      Action = [string]$Action
+      Cleanup = [string]$Cleanup
+      Label = [string]$Label
+      result = [string]$result
+      primary = [string]$primary
+      cleanupFailures = [string]$cleanupFailures
+      cleanupAction = [string]$cleanupAction
+      failures = [string]$failures
+      failure = [string]$failure
+    }
+  }
+  $issue13V5CleanupSelfTestAssertProbe = {
+    param(
+      [Parameter(Mandatory = $true)][object]$issue13V5CleanupSelfTestObserved,
+      [Parameter(Mandatory = $true)][string]$issue13V5CleanupSelfTestPhase
+    )
+    foreach ($issue13V5CleanupSelfTestName in
+        $issue13V5CleanupSelfTestExpected.Keys) {
+      if ([string]$issue13V5CleanupSelfTestObserved.
+          $issue13V5CleanupSelfTestName -cne
+          [string]$issue13V5CleanupSelfTestExpected[
+            $issue13V5CleanupSelfTestName]) {
+        throw ("WithCleanup shadowed $issue13V5CleanupSelfTestName during " +
+          "$issue13V5CleanupSelfTestPhase.")
+      }
+    }
+  }
+
+  $issue13V5CleanupSelfTestFunction =
+    ${function:Invoke-Issue13V5WithCleanup}
+  if ($null -eq $issue13V5CleanupSelfTestFunction) {
+    throw 'WithCleanup function definition is unavailable to its self-test.'
+  }
+  $issue13V5CleanupSelfTestForbiddenNames = [string[]]@(
+    'Action', 'Cleanup', 'Label', 'result', 'primary', 'cleanupFailures',
+    'cleanupAction', 'failures', 'failure'
+  )
+  $issue13V5CleanupSelfTestAst =
+    $issue13V5CleanupSelfTestFunction.Ast
+  $issue13V5CleanupSelfTestForbiddenVariables = @(
+    $issue13V5CleanupSelfTestAst.FindAll({
+      param($issue13V5CleanupSelfTestNode)
+      $issue13V5CleanupSelfTestNode -is
+        [Management.Automation.Language.VariableExpressionAst] -and
+        $issue13V5CleanupSelfTestForbiddenNames -ccontains
+          $issue13V5CleanupSelfTestNode.VariablePath.UserPath
+    }, $true)
+  )
+  if ($issue13V5CleanupSelfTestForbiddenVariables.Count -ne 0) {
+    throw ('WithCleanup retains a dynamically visible callback collision: ' +
+      [string]::Join(', ', @($issue13V5CleanupSelfTestForbiddenVariables |
+          ForEach-Object { $_.VariablePath.UserPath })))
+  }
+
+  $issue13V5CleanupSelfTestNamedState = [pscustomobject]@{
+    cleanup_count = 0L
+    cleanup_probe = $null
+  }
+  $issue13V5CleanupSelfTestNamedResult = @(
+    Invoke-Issue13V5WithCleanup `
+      -Action { & $issue13V5CleanupSelfTestProbe } `
+      -Cleanup @({
+          $issue13V5CleanupSelfTestNamedState.cleanup_count++
+          $issue13V5CleanupSelfTestNamedState.cleanup_probe =
+            & $issue13V5CleanupSelfTestProbe
+        }) `
+      -Label 'named-alias-self-test-label'
+  )
+  if ($issue13V5CleanupSelfTestNamedResult.Count -ne 1 -or
+      $issue13V5CleanupSelfTestNamedState.cleanup_count -ne 1L -or
+      $null -eq $issue13V5CleanupSelfTestNamedState.cleanup_probe) {
+    throw 'WithCleanup named-alias success result differs.'
+  }
+  $null = & $issue13V5CleanupSelfTestAssertProbe `
+    $issue13V5CleanupSelfTestNamedResult[0] 'named action'
+  $null = & $issue13V5CleanupSelfTestAssertProbe `
+    $issue13V5CleanupSelfTestNamedState.cleanup_probe 'named cleanup'
+
+  $issue13V5CleanupSelfTestPositionalState = [pscustomobject]@{ count = 0L }
+  $issue13V5CleanupSelfTestPositionalResult = @(
+    Invoke-Issue13V5WithCleanup `
+      { 'positional-success' } `
+      @({ $issue13V5CleanupSelfTestPositionalState.count++ }) `
+      'positional-self-test-label'
+  )
+  if ($issue13V5CleanupSelfTestPositionalResult.Count -ne 1 -or
+      [string]$issue13V5CleanupSelfTestPositionalResult[0] -cne
+        'positional-success' -or
+      $issue13V5CleanupSelfTestPositionalState.count -ne 1L) {
+    throw 'WithCleanup positional success result differs.'
+  }
+
+  $issue13V5CleanupSelfTestPrimaryState = [pscustomobject]@{ count = 0L }
+  $issue13V5CleanupSelfTestPrimaryError = $null
+  try {
+    $null = Invoke-Issue13V5WithCleanup `
+      -Action { throw 'with-cleanup-primary-self-test' } `
+      -Cleanup @({ $issue13V5CleanupSelfTestPrimaryState.count++ }) `
+      -Label 'primary-self-test-label'
+  } catch {
+    $issue13V5CleanupSelfTestPrimaryError = $_
+  }
+  if ($null -eq $issue13V5CleanupSelfTestPrimaryError -or
+      $issue13V5CleanupSelfTestPrimaryError.Exception -is
+        [AggregateException] -or
+      $issue13V5CleanupSelfTestPrimaryError.Exception.Message -cne
+        'with-cleanup-primary-self-test' -or
+      $issue13V5CleanupSelfTestPrimaryState.count -ne 1L) {
+    throw 'WithCleanup primary-only failure semantics differ.'
+  }
+
+  $issue13V5CleanupSelfTestCleanupOnlyError = $null
+  try {
+    $null = Invoke-Issue13V5WithCleanup `
+      -Action { 'cleanup-only-action-output' } `
+      -Cleanup @({ throw 'with-cleanup-cleanup-only-self-test' }) `
+      -Label 'cleanup-only-self-test-label'
+  } catch {
+    $issue13V5CleanupSelfTestCleanupOnlyError = $_.Exception
+  }
+  if ($issue13V5CleanupSelfTestCleanupOnlyError -isnot [AggregateException] -or
+      $issue13V5CleanupSelfTestCleanupOnlyError.InnerExceptions.Count -ne 1 -or
+      $issue13V5CleanupSelfTestCleanupOnlyError.InnerExceptions[0].Message -cne
+        'with-cleanup-cleanup-only-self-test' -or
+      -not $issue13V5CleanupSelfTestCleanupOnlyError.Message.StartsWith(
+        'cleanup-only-self-test-label cleanup failed.',
+        [StringComparison]::Ordinal)) {
+    throw 'WithCleanup cleanup-only failure semantics differ.'
+  }
+
+  $issue13V5CleanupSelfTestAggregateState = [pscustomobject]@{ count = 0L }
+  $issue13V5CleanupSelfTestAggregateError = $null
+  try {
+    $null = Invoke-Issue13V5WithCleanup `
+      -Action { throw 'with-cleanup-aggregate-primary-self-test' } `
+      -Cleanup @(
+        {
+          $issue13V5CleanupSelfTestAggregateState.count++
+          throw 'with-cleanup-aggregate-first-self-test'
+        },
+        {
+          $issue13V5CleanupSelfTestAggregateState.count++
+          throw 'with-cleanup-aggregate-second-self-test'
+        }
+      ) `
+      -Label 'aggregate-self-test-label'
+  } catch {
+    $issue13V5CleanupSelfTestAggregateError = $_.Exception
+  }
+  if ($issue13V5CleanupSelfTestAggregateError -isnot [AggregateException] -or
+      $issue13V5CleanupSelfTestAggregateError.InnerExceptions.Count -ne 3 -or
+      $issue13V5CleanupSelfTestAggregateError.InnerExceptions[0].Message -cne
+        'with-cleanup-aggregate-primary-self-test' -or
+      $issue13V5CleanupSelfTestAggregateError.InnerExceptions[1].Message -cne
+        'with-cleanup-aggregate-first-self-test' -or
+      $issue13V5CleanupSelfTestAggregateError.InnerExceptions[2].Message -cne
+        'with-cleanup-aggregate-second-self-test' -or
+      $issue13V5CleanupSelfTestAggregateState.count -ne 2L -or
+      -not $issue13V5CleanupSelfTestAggregateError.Message.StartsWith(
+        'aggregate-self-test-label cleanup failed.',
+        [StringComparison]::Ordinal)) {
+    throw 'WithCleanup primary/cleanup aggregation semantics differ.'
+  }
+
+  [pscustomobject][ordered]@{
+    passed = $true
+    public_alias_count = 3L
+    binding_mode_count = 2L
+    collision_name_count = 9L
+    failure_scenario_count = 3L
+  }
+}
+$null = Test-Issue13V5WithCleanupSelfTest
 
 function Enter-Issue13V5ProcessEnvironment(
   [AllowNull()][Collections.IDictionary]$Environment

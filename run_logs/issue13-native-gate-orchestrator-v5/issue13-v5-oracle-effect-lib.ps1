@@ -4255,7 +4255,7 @@ function Invoke-Issue13OracleEffectFreshComparisons {
       $phaseRoot = if ($phase -ceq 'primary') { $primary } else { $replay }
       Assert-Issue13OracleEffect (-not (Test-Path -LiteralPath $phaseRoot)) `
         "$phase comparison root appeared before generator creation."
-      $null = New-Item -ItemType Directory -LiteralPath $phaseRoot
+      $null = [IO.Directory]::CreateDirectory($phaseRoot)
       Assert-Issue13OracleEffectNoReparseTree $phaseRoot `
         "$phase comparison root after creation"
       if ($phase -ceq 'replay') {

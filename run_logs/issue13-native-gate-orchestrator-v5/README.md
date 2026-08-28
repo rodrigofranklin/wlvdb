@@ -280,7 +280,7 @@ $candidate = (git rev-parse HEAD).Trim()
 & $pwsh -NoLogo -NoProfile -NonInteractive -File `
   (Join-Path $controller 'issue13-v5-materialize-harness.ps1') `
   -CandidateCommit $candidate `
-  -Destination D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal-rerun-008 `
+  -Destination D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal-rerun-009 `
   -ConfirmMaterialize
 ```
 
@@ -313,8 +313,8 @@ Em um processo novo do `pwsh` selado, aplique ao filho R o mesmo contrato
 ```powershell
 & $rscript --vanilla `
   ./run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-build-baseline-index.R `
-  D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal-rerun-008\issue13-evidence-harness `
-  D:\Trabalho\Code\wlvdb-issue13-native-final-index-v5-terminal-rerun-008\baseline-runtime-index.json `
+  D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal-rerun-009\issue13-evidence-harness `
+  D:\Trabalho\Code\wlvdb-issue13-native-final-index-v5-terminal-rerun-009\baseline-runtime-index.json `
   e2f4d6dae9a6d35c966b305fabac52e489faa3e7 `
   D:\Trabalho\Code\wlvdb-issue13-v5-baseline-oracle-v2-e2f4d6dae9a6-canonical.patch
 ```
@@ -324,8 +324,8 @@ Execute o preflight descartável do oráculo antes do gate longo:
 ```powershell
 & $pwsh -NoLogo -NoProfile -NonInteractive -File `
   (Join-Path $controller 'issue13-v5-baseline-smoke.ps1') `
-  -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal-rerun-008 `
-  -SmokeRoot D:\Trabalho\Code\wlvdb-issue13-v5-terminal-smoke-008 `
+  -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal-rerun-009 `
+  -SmokeRoot D:\Trabalho\Code\wlvdb-issue13-v5-terminal-smoke-009 `
   -BaselineRuntimeCommit e2f4d6dae9a6d35c966b305fabac52e489faa3e7 `
   -Purpose compatibility-oracle-executability-preflight `
   -ConfirmCreateWorktrees `
@@ -352,9 +352,9 @@ inventários físicos dos 17 runs aprovados:
 ```powershell
 $rscript = 'C:\Users\rodri\AppData\Local\Programs\R\R-4.6.1\bin\x64\Rscript.exe'
 $rLibrary = 'D:\Trabalho\Code\wlvdb\renv\library\windows\R-4.6\x86_64-w64-mingw32'
-$oraclePrimary = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-primary-terminal-rerun-008'
-$oracleReplay = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-replay-terminal-rerun-008'
-$oracleProof = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-proof-terminal-rerun-008.json'
+$oraclePrimary = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-primary-terminal-rerun-009'
+$oracleReplay = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-replay-terminal-rerun-009'
+$oracleProof = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-proof-terminal-rerun-009.json'
 
 & $pwsh -NoLogo -NoProfile -NonInteractive -File `
   (Join-Path $controller 'issue13-v5-oracle-effect-generate.ps1') `
@@ -363,7 +363,7 @@ $oracleProof = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-proof-terminal-reru
   -StrictSmokeSummary D:\Trabalho\Code\wlvdb-issue13-v5-cc2-smoke-003\baseline-smoke-summary.json `
   -OracleSmokeSummary D:\Trabalho\Code\wlvdb-issue13-v5-compat-smoke-003\baseline-smoke-summary.json `
   -OraclePatch D:\Trabalho\Code\wlvdb-issue13-v5-baseline-oracle-v2-e2f4d6dae9a6-canonical.patch `
-  -ComparisonHarnessManifest D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal-rerun-008\v5-harness-manifest.json `
+  -ComparisonHarnessManifest D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal-rerun-009\v5-harness-manifest.json `
   -Rscript $rscript `
   -RLibrary $rLibrary `
   -ComparisonRoot $oraclePrimary `
@@ -406,12 +406,12 @@ $candidate = (git rev-parse HEAD).Trim()
 & $pwsh -NoLogo -NoProfile -NonInteractive -File `
   (Join-Path $controller 'issue13-v5-new-config.ps1') `
   -CandidateCommit $candidate `
-  -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal-rerun-008 `
-  -BaselineRuntimeIndex D:\Trabalho\Code\wlvdb-issue13-native-final-index-v5-terminal-rerun-008\baseline-runtime-index.json `
+  -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal-rerun-009 `
+  -BaselineRuntimeIndex D:\Trabalho\Code\wlvdb-issue13-native-final-index-v5-terminal-rerun-009\baseline-runtime-index.json `
   -BaselineRuntimeCommit e2f4d6dae9a6d35c966b305fabac52e489faa3e7 `
   -BaselineOverlayPatch D:\Trabalho\Code\wlvdb-issue13-v5-baseline-oracle-v2-e2f4d6dae9a6-canonical.patch `
   -StrictBaselineSmokeSummary D:\Trabalho\Code\wlvdb-issue13-v5-cc2-smoke-003\baseline-smoke-summary.json `
-  -CompatibilityBaselineSmokeSummary D:\Trabalho\Code\wlvdb-issue13-v5-terminal-smoke-008\baseline-smoke-summary.json `
+  -CompatibilityBaselineSmokeSummary D:\Trabalho\Code\wlvdb-issue13-v5-terminal-smoke-009\baseline-smoke-summary.json `
   -OracleEffectSmokeSummary D:\Trabalho\Code\wlvdb-issue13-v5-compat-smoke-003\baseline-smoke-summary.json `
   -ProofPath $oracleProof `
   -ComparisonRoot $oraclePrimary `
@@ -419,21 +419,21 @@ $candidate = (git rev-parse HEAD).Trim()
   -Rscript $rscript `
   -RLibrary $rLibrary `
   -CandidateSourceOrigin D:\Trabalho\Code\wlvdb-issue13-candidate-source-v5c5-prep-001\source_data `
-  -WorktreeRoot D:\Trabalho\Code\wlvdb-issue13-native-worktrees-v5-terminal-rerun-008 `
-  -EvidenceRoot D:\Trabalho\Code\wlvdb-issue13-native-final-evidence-v5-terminal-rerun-008 `
-  -ControlRoot D:\Trabalho\Code\wlvdb-issue13-native-final-control-v5-terminal-rerun-008 `
-  -Output D:\Trabalho\Code\wlvdb-issue13-native-final-config-v5-terminal-rerun-008\gate-config.json
+  -WorktreeRoot D:\Trabalho\Code\wlvdb-issue13-native-worktrees-v5-terminal-rerun-009 `
+  -EvidenceRoot D:\Trabalho\Code\wlvdb-issue13-native-final-evidence-v5-terminal-rerun-009 `
+  -ControlRoot D:\Trabalho\Code\wlvdb-issue13-native-final-control-v5-terminal-rerun-009 `
+  -Output D:\Trabalho\Code\wlvdb-issue13-native-final-config-v5-terminal-rerun-009\gate-config.json
 ```
 
 ## Validação, execução e monitoramento
 
 ```powershell
-$config = 'D:\Trabalho\Code\wlvdb-issue13-native-final-config-v5-terminal-rerun-008\gate-config.json'
+$config = 'D:\Trabalho\Code\wlvdb-issue13-native-final-config-v5-terminal-rerun-009\gate-config.json'
 
 & $pwsh -NoLogo -NoProfile -NonInteractive -File `
   (Join-Path $controller 'issue13-v5-static-verify.ps1') `
   -CandidateCommit $candidate `
-  -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal-rerun-008
+  -HarnessRuntimeRoot D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal-rerun-009
 
 & $pwsh -NoLogo -NoProfile -NonInteractive -File `
   (Join-Path $controller 'issue13-v5-coordinator.ps1') `
@@ -470,7 +470,7 @@ Para executar todo o restante, sem escrever o relatório prematuramente:
 
 `Status` não toma o lock de execução e pode ser chamado durante `RunAll`. O
 estado retomável fica em
-`D:\Trabalho\Code\wlvdb-issue13-native-final-control-v5-terminal-rerun-008\gate-state.json`.
+`D:\Trabalho\Code\wlvdb-issue13-native-final-control-v5-terminal-rerun-009\gate-state.json`.
 O `Initialize` também cria, de forma write-once,
 `oracle-effect-validation.json`: ele registra a invocação exata do validador,
 os hashes da prova/patch/harness, os inventários separados de `primary` e
