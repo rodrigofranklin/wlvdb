@@ -2390,7 +2390,7 @@ $issue13ExpectedControllerSourceSha256 = @{
   'issue13-v5-oracle-effect-lib.ps1' = 'F49425C3A1AF813ABBEF1F515240C570316E08143BC26E50DE34BDB0C3877CC4'
   'issue13-v5-oracle-effect-validate.ps1' = '11912422CEB54A45A791E49E11688F974AB45A4CC0F2FB89145D90176AAB0140'
   'issue13-v5-render-report.ps1' = '756ACAB7E8BFC6CF7E0A7235B0634E24F4D805A4F30D060291260A62726B710A'
-    'issue13-v5-static-verify.ps1' = '3ABD55CFDD20DC46E8B1EE79F0AE0085A6CC852889E71CA746872BD667BB0904'
+    'issue13-v5-static-verify.ps1' = '1EBCDE9D3C54F3723E53CB6657473AA684CEAADDB7EF9C907DF2DD175CA9547E'
 }
 $issue13ExpectedDotSourceSignatures = @{
   'issue13-v5-attest-delivery.ps1' = @(
@@ -9367,6 +9367,7 @@ foreach ($name in $booleanGuardFiles) {
   }
 }
 $expectedBooleanConversions = @(
+  'issue13-v5-capture-clean-stage5-evidence.ps1|[bool]$before.absent',
   'issue13-v5-coordinator-lib.ps1|[bool]$_.present',
   'issue13-v5-coordinator-lib.ps1|[bool]$Expected',
   'issue13-v5-coordinator-lib.ps1|[bool]$mutation.present',
@@ -9387,6 +9388,8 @@ $expectedBooleanConversions = @(
   'issue13-v5-coordinator-lib.ps1|[bool]$Value',
   'issue13-v5-oracle-effect-lib.ps1|[bool]$_.present',
   'issue13-v5-oracle-effect-lib.ps1|[bool]$Expected',
+  'issue13-v5-oracle-effect-lib.ps1|[bool]$probeState.project_library_absent_after',
+  'issue13-v5-oracle-effect-lib.ps1|[bool]$probeState.project_library_absent_before',
   'issue13-v5-oracle-effect-lib.ps1|[bool]$Value',
   ('issue13-v5-static-verify.ps1|[bool](' + "`n" +
     '      $issue13AliasCollisionPreflightResult.' +
