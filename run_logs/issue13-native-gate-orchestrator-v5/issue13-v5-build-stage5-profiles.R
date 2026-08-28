@@ -1704,7 +1704,10 @@ wlv13_v5d_validate_stage5_capture <- function(
     ), "84") && identical(wlv13_v5d_capture_field(
       stage_lines, "source_data_physical_directory_count"
     ), "5") && all(grepl(sha, stage_bridge_physical_hashes)) &&
-    identical(stage_bridge_physical_hashes, bridge_physical_hashes) &&
+    identical(
+      unname(stage_bridge_physical_hashes),
+      unname(bridge_physical_hashes)
+    ) &&
     identical(stage_bridge_physical_hashes[[1L]],
       stage_bridge_physical_hashes[[2L]]) &&
     identical(stage_bridge_physical_hashes[[3L]],
