@@ -552,6 +552,25 @@ function ConvertTo-Issue13V5RendererRscriptJson(
   ConvertTo-Json -InputObject $canonical -Depth 5 -Compress
 }
 
+function Assert-Issue13V5OrdinalEnvironmentSetOrder(
+  [object[]]$EnvironmentSet,
+  [string]$Label
+) {
+  $observedNames = [string[]]@($EnvironmentSet | ForEach-Object {
+      [string]$_.name
+    })
+  $orderedNames = [string[]]@($observedNames)
+  [Array]::Sort($orderedNames, [StringComparer]::Ordinal)
+  if ($observedNames.Count -ne $orderedNames.Count) {
+    throw "$Label environment_set name count changed while ordering."
+  }
+  for ($index = 0; $index -lt $observedNames.Count; $index++) {
+    if ($observedNames[$index] -cne $orderedNames[$index]) {
+      throw "$Label environment_set is not in ordinal name order."
+    }
+  }
+}
+
 $initialConfigPath = (Resolve-Path -LiteralPath $ConfigPath).Path
 $initialConfigSha256 = Get-Issue13V5Sha256 $initialConfigPath
 $binding = Assert-Issue13V5Config $ConfigPath
@@ -783,6 +802,8 @@ foreach ($record in $commandRecords) {
       throw "Invalid or duplicate environment_set item: $($record.label)"
     }
   }
+  Assert-Issue13V5OrdinalEnvironmentSetOrder `
+    ([object[]]@($record.environment_set)) "Command record $($record.label)"
   $clearedNames = [Collections.Generic.HashSet[string]]::new(
     [StringComparer]::OrdinalIgnoreCase)
   foreach ($name in @($record.environment_cleared)) {
@@ -1166,6 +1187,8 @@ $expectedOracleCleared = [string[]]@(
 $observedOracleCleared = [string[]]@(
   $oracleRLibrary.environment.cleared) | Sort-Object
 $oracleEnvironmentSet = @($oracleRLibrary.environment.set)
+Assert-Issue13V5OrdinalEnvironmentSetOrder `
+  ([object[]]$oracleEnvironmentSet) 'Oracle terminal R library'
 $oracleLibsUserSet = @($oracleEnvironmentSet | Where-Object {
   [string]$_.name -ceq 'R_LIBS_USER' -and
   [string]$_.value -ceq [string]$config.r_library

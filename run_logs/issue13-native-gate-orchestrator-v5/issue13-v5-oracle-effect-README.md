@@ -107,7 +107,7 @@ A prova armazena o commit esperado, o hash do manifest, os três inventários e
 o inventário físico completo instalado.
 
 O fixture terminal está marcado `status = "sealed"` e fixa a tripla física
-`47 / 1640833 / 85eebd53…13daaa`, derivada de uma staging write-once. Gerador e
+`47 / 2582487 / f60f98bd…c83b45`, derivada de uma staging write-once. Gerador e
 validador recusam produzir ou adotar proof se status, contagem, bytes ou hash
 divergirem desse selo.
 
@@ -203,35 +203,45 @@ prova ou raízes.
 ```powershell
 $repo = 'D:\Trabalho\Code\wlvdb'
 $toolRoot = Join-Path $repo 'run_logs\issue13-native-gate-orchestrator-v5'
+$pwsh = 'C:\Users\rodri\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\powershell\pwsh.exe'
 $strictRoot = 'D:\Trabalho\Code\wlvdb-issue13-v5-cc2-smoke-003'
 $oracleRoot = 'D:\Trabalho\Code\wlvdb-issue13-v5-compat-smoke-003'
-$runtimeRoot = 'D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal'
+$runtimeRoot = 'D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal-rerun-008'
 $rscript = 'C:\Users\rodri\AppData\Local\Programs\R\R-4.6.1\bin\x64\Rscript.exe'
-$rLibrary = 'D:\Trabalho\Code\wlvdb-renv-library'
+$rLibrary = 'D:\Trabalho\Code\wlvdb\renv\library\windows\R-4.6\x86_64-w64-mingw32'
 $candidateCommit = '<commit Git de 40 hex que materializou o runtime terminal>'
-$comparisonRoot = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-primary'
-$replayRoot = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-replay'
-$proof = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-proof.json'
+$comparisonRoot = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-primary-terminal-rerun-008'
+$replayRoot = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-replay-terminal-rerun-008'
+$proof = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-proof-terminal-rerun-008.json'
 
-$common = @{
-  RepositoryRoot = $repo
-  ExpectedCandidateCommit = $candidateCommit
-  StrictSmokeSummary = Join-Path $strictRoot 'baseline-smoke-summary.json'
-  OracleSmokeSummary = Join-Path $oracleRoot 'baseline-smoke-summary.json'
-  OraclePatch = 'D:\Trabalho\Code\wlvdb-issue13-v5-baseline-oracle-v2-e2f4d6dae9a6-canonical.patch'
-  ComparisonHarnessManifest = Join-Path $runtimeRoot 'v5-harness-manifest.json'
-  Rscript = $rscript
-  RLibrary = $rLibrary
-  ComparisonRoot = $comparisonRoot
-  ReplayRoot = $replayRoot
-}
-
-& (Join-Path $toolRoot 'issue13-v5-oracle-effect-generate.ps1') `
-  @common -OutputPath $proof
+& $pwsh -NoLogo -NoProfile -NonInteractive -File `
+  (Join-Path $toolRoot 'issue13-v5-oracle-effect-generate.ps1') `
+  -RepositoryRoot $repo `
+  -ExpectedCandidateCommit $candidateCommit `
+  -StrictSmokeSummary (Join-Path $strictRoot 'baseline-smoke-summary.json') `
+  -OracleSmokeSummary (Join-Path $oracleRoot 'baseline-smoke-summary.json') `
+  -OraclePatch D:\Trabalho\Code\wlvdb-issue13-v5-baseline-oracle-v2-e2f4d6dae9a6-canonical.patch `
+  -ComparisonHarnessManifest (Join-Path $runtimeRoot 'v5-harness-manifest.json') `
+  -Rscript $rscript `
+  -RLibrary $rLibrary `
+  -ComparisonRoot $comparisonRoot `
+  -ReplayRoot $replayRoot `
+  -OutputPath $proof
 if ($LASTEXITCODE -ne 0) { throw 'Oracle-effect proof generation failed.' }
 
-& (Join-Path $toolRoot 'issue13-v5-oracle-effect-validate.ps1') `
-  @common -ProofPath $proof
+& $pwsh -NoLogo -NoProfile -NonInteractive -File `
+  (Join-Path $toolRoot 'issue13-v5-oracle-effect-validate.ps1') `
+  -RepositoryRoot $repo `
+  -ExpectedCandidateCommit $candidateCommit `
+  -StrictSmokeSummary (Join-Path $strictRoot 'baseline-smoke-summary.json') `
+  -OracleSmokeSummary (Join-Path $oracleRoot 'baseline-smoke-summary.json') `
+  -OraclePatch D:\Trabalho\Code\wlvdb-issue13-v5-baseline-oracle-v2-e2f4d6dae9a6-canonical.patch `
+  -ComparisonHarnessManifest (Join-Path $runtimeRoot 'v5-harness-manifest.json') `
+  -Rscript $rscript `
+  -RLibrary $rLibrary `
+  -ComparisonRoot $comparisonRoot `
+  -ReplayRoot $replayRoot `
+  -ProofPath $proof
 if ($LASTEXITCODE -ne 0) { throw 'Oracle-effect proof validation failed.' }
 ```
 

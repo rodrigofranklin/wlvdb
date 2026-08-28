@@ -549,27 +549,27 @@ $bootstrapSourceSha256 = @{
   'issue13-v5-attest-delivery.ps1' =
     '2E1A9D527AB98C3EFCF296DB56E59FCE34461C9A7A0A979044EC70E2B54B981D'
   'issue13-v5-baseline-smoke.ps1' =
-    '12DF08AFFF554B24B60DCAE2E50EF43D6B08C56F6C80F2D07A2CE919F09E71F5'
+    'B5250828544C45CC03E1CC0D6626E60DCBA0EE47D70D5199D94AA7693E75D111'
   'issue13-v5-capture-clean-bridge-evidence.ps1' =
-    '38F6785C5974989FD7B832BE96CC248F6B0A90C382A366CFE911501D600F4942'
+    '23DC872D2697788268C0102BABA2B972B1D2AEB533419F9C3A5A1141BCCF317D'
   'issue13-v5-capture-clean-stage5-evidence.ps1' =
-    '17609C95780A00ADFC897DBFB9C6140D6A44EC87F3F69E5718725D0B71FE6F2E'
+    'AD714DCA487749FD405D4A40D69A7AE1BD42973C480257F7E0B11CEE45CEE6B6'
   'issue13-v5-coordinator-lib.ps1' =
-    'BBFB703DF93B70D62F9947AC7D10D6309DF9982A044E1941E05DC4AEF0AEFEF4'
+    '1F73F33A3B14738A5032624BDE428B0AC2EC53226C02432916B3FF2B40C38526'
   'issue13-v5-coordinator.ps1' =
     '57A284A2600AAC37B5879BA44EB6B4AB1953AB00590D4EA6720524195E0EBF28'
   'issue13-v5-materialize-harness.ps1' =
-    '7B1699E966D4B68B47A5638F646CDEADF88EBEE62D057DDCB84295C88F6B8F92'
+    '32BA0F9DC5C17A1F3EEFDAEF9AEFBCCC1D4370B0A0C16DF9072C8C002770A8D6'
   'issue13-v5-new-config.ps1' =
-    'A638DA489DFE10DC0D3382B4FFAF370E1FD112C4675F9358EBC00FE1618FBD66'
+    '75FF45DF91A03728E1E1C74EFCC41C5FDF1219113C31B88C106EE312A6EFCC06'
   'issue13-v5-oracle-effect-generate.ps1' =
     '6C1E26154794A253974B7E51C5D15B054AE2D31E09736BF19B624F56EA3C30F9'
   'issue13-v5-oracle-effect-lib.ps1' =
-    '97B8F56562773DA71133CE1699AAACFA5F98D7B0B3EE0E1FD66C2ECD18B5930D'
+    '3BFCB34130F66D9E4E2EA68E563A3D3C8BF7EFAEEAAFA1DB632CE031197506E6'
   'issue13-v5-oracle-effect-validate.ps1' =
     '11912422CEB54A45A791E49E11688F974AB45A4CC0F2FB89145D90176AAB0140'
   'issue13-v5-render-report.ps1' =
-    'F7B11D7CD0AF8F867467AED19D220E135C6F69D6416413C81FC2AFDCD842153B'
+    '756ACAB7E8BFC6CF7E0A7235B0634E24F4D805A4F30D060291260A62726B710A'
 }
 $bootstrapSourceTexts = @{}
 $bootstrapSourceAsts = @{}
@@ -1133,6 +1133,7 @@ foreach ($required in @(
     'wlv13_v5d_artifact_presence_valid <- function',
     'wlv13_v5d_bridge_artifact <- function',
     'wlv13_v5d_artifact_presence_selftest <- function',
+    'wlv13_v5d_unit_bridge_projection_selftest <- function',
     'missing_required = function(count, required) count <= 1L',
     'missing_optional = function(count, required) count == 1L',
     'duplicate_optional = function(count, required) !required || count == 1L',
@@ -1142,7 +1143,11 @@ foreach ($required in @(
     'identical(presence_selftest$assertions, 22L)',
     'identical(presence_selftest$cases, 6L)',
     'identical(presence_selftest$mutants, 4L)',
-    'identical(profile_selftest$assertions, 26L)'
+    'identical(profile_selftest$assertions, 26L)',
+    'identical(unit_projection_selftest$assertions, 29L)',
+    'identical(unit_projection_selftest$scientific_columns, 24L)',
+    'identical(unit_projection_selftest$structural_mutants, 4L)',
+    'unit_projection_selftest$assertions'
   )) {
   if (-not $diagnosticControllerText[
       'issue13-v5-build-diagnostic-bridges.R'].Contains($required)) {
@@ -2304,20 +2309,20 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = '3ADEEFA5B4469B07E9149CD294980C3F82241C9EE64016075D92540C0A44D3CA'
   }
   'issue13-v5-capture-clean-bridge-evidence.ps1' = @{
-    command_count = 148
-    command_sha256 = '3EC4C3F6DDC4D9F9116C9296F6FF590906B77560677F86EDD4E49C20EB3936B8'
+    command_count = 158
+    command_sha256 = '66AF440E1B8E9F8DF34F2DC6478465253468337CD49CA1989BC4674863AE803F'
     redirection_count = 0
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
   'issue13-v5-capture-clean-stage5-evidence.ps1' = @{
-    command_count = 246
-    command_sha256 = 'E6BF20514A0D61CC1A0E54ACD1BE3C44BE7931F0D713E7FED9576894675995B2'
+    command_count = 292
+    command_sha256 = 'DF1815F42FDEABA6F89F3F7E5F9806A3AEB6144B81565D75B27C57CA42B79C75'
     redirection_count = 0
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
   'issue13-v5-coordinator-lib.ps1' = @{
-    command_count = 1169
-    command_sha256 = 'ACC2BDE3A990CC90ECECB2F7F3FFFB93C291BAA0F0B912D3C844A344978D6900'
+    command_count = 1190
+    command_sha256 = '2387C6743A807FE5C7F9720856928E914B3B9A9D1F4097769BE590DB57A5B01C'
     redirection_count = 16
     redirection_sha256 = 'A27C1F1A1A78A655A820FF3FB0CF52CDB0B3A4DF14EE3A8B21EADCFCD395E8EE'
   }
@@ -2346,8 +2351,8 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
   'issue13-v5-oracle-effect-lib.ps1' = @{
-    command_count = 889
-    command_sha256 = 'CD7A6A23CA67894C2C92AF3F4F26B6DF8C75602C3C602FB515EE03AC50F04F5B'
+    command_count = 993
+    command_sha256 = '2DBB797D0A8ECAA1442D9E966B73DBE3C92DA2D0E99CD374C6C36D68D7101D03'
     redirection_count = 0
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
@@ -2358,32 +2363,32 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
   'issue13-v5-render-report.ps1' = @{
-    command_count = 297
-    command_sha256 = 'F5E15E521804842E0B2F570862A4322D072267594F1F0FFF859B853FFCBE0D1E'
+    command_count = 313
+    command_sha256 = '7B7CC1F1EEC3D636CF21F160BAE52386443F7CB9CF32FF26DC617DB19A07AA43'
     redirection_count = 9
     redirection_sha256 = '7F4027149DBBCCC5E186586FA06D6058EF6E3821AC51098E7521EBC767D5FE2D'
   }
   'issue13-v5-static-verify.ps1' = @{
-    command_count = 740
-    command_sha256 = 'B36963B5DDDFEF3C25AC561BEB0F7CA0805F6D5940E6EB84AB16A21215AD1B1B'
+    command_count = 802
+    command_sha256 = '50FC1B4AA0DE9646B823399AEF21E0DE9058A223D6E66548A834529E9FDFA5F8'
     redirection_count = 0
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
 }
 $issue13ExpectedControllerSourceSha256 = @{
   'issue13-v5-attest-delivery.ps1' = '2E1A9D527AB98C3EFCF296DB56E59FCE34461C9A7A0A979044EC70E2B54B981D'
-  'issue13-v5-baseline-smoke.ps1' = '12DF08AFFF554B24B60DCAE2E50EF43D6B08C56F6C80F2D07A2CE919F09E71F5'
-  'issue13-v5-capture-clean-bridge-evidence.ps1' = '38F6785C5974989FD7B832BE96CC248F6B0A90C382A366CFE911501D600F4942'
-  'issue13-v5-capture-clean-stage5-evidence.ps1' = '17609C95780A00ADFC897DBFB9C6140D6A44EC87F3F69E5718725D0B71FE6F2E'
-  'issue13-v5-coordinator-lib.ps1' = 'BBFB703DF93B70D62F9947AC7D10D6309DF9982A044E1941E05DC4AEF0AEFEF4'
+  'issue13-v5-baseline-smoke.ps1' = 'B5250828544C45CC03E1CC0D6626E60DCBA0EE47D70D5199D94AA7693E75D111'
+  'issue13-v5-capture-clean-bridge-evidence.ps1' = '23DC872D2697788268C0102BABA2B972B1D2AEB533419F9C3A5A1141BCCF317D'
+  'issue13-v5-capture-clean-stage5-evidence.ps1' = 'AD714DCA487749FD405D4A40D69A7AE1BD42973C480257F7E0B11CEE45CEE6B6'
+  'issue13-v5-coordinator-lib.ps1' = '1F73F33A3B14738A5032624BDE428B0AC2EC53226C02432916B3FF2B40C38526'
   'issue13-v5-coordinator.ps1' = '57A284A2600AAC37B5879BA44EB6B4AB1953AB00590D4EA6720524195E0EBF28'
-  'issue13-v5-materialize-harness.ps1' = '7B1699E966D4B68B47A5638F646CDEADF88EBEE62D057DDCB84295C88F6B8F92'
-  'issue13-v5-new-config.ps1' = 'A638DA489DFE10DC0D3382B4FFAF370E1FD112C4675F9358EBC00FE1618FBD66'
+  'issue13-v5-materialize-harness.ps1' = '32BA0F9DC5C17A1F3EEFDAEF9AEFBCCC1D4370B0A0C16DF9072C8C002770A8D6'
+  'issue13-v5-new-config.ps1' = '75FF45DF91A03728E1E1C74EFCC41C5FDF1219113C31B88C106EE312A6EFCC06'
   'issue13-v5-oracle-effect-generate.ps1' = '6C1E26154794A253974B7E51C5D15B054AE2D31E09736BF19B624F56EA3C30F9'
-  'issue13-v5-oracle-effect-lib.ps1' = '97B8F56562773DA71133CE1699AAACFA5F98D7B0B3EE0E1FD66C2ECD18B5930D'
+  'issue13-v5-oracle-effect-lib.ps1' = '3BFCB34130F66D9E4E2EA68E563A3D3C8BF7EFAEEAAFA1DB632CE031197506E6'
   'issue13-v5-oracle-effect-validate.ps1' = '11912422CEB54A45A791E49E11688F974AB45A4CC0F2FB89145D90176AAB0140'
-  'issue13-v5-render-report.ps1' = 'F7B11D7CD0AF8F867467AED19D220E135C6F69D6416413C81FC2AFDCD842153B'
-    'issue13-v5-static-verify.ps1' = 'D1DE4628E81D99204D82D4757E2BF9CED4BEA152FFACC0A74FAA2879CE7BA9F4'
+  'issue13-v5-render-report.ps1' = '756ACAB7E8BFC6CF7E0A7235B0634E24F4D805A4F30D060291260A62726B710A'
+    'issue13-v5-static-verify.ps1' = '174DEF5990F7B35B65742615B785A683569FAE4C4CEEFB6AF1FE75F11E55AC07'
 }
 $issue13ExpectedDotSourceSignatures = @{
   'issue13-v5-attest-delivery.ps1' = @(
@@ -3553,12 +3558,15 @@ if (-not $outputLimitRejected -or
 }
 $artifactPresenceSelftestCode = @'
 arguments <- commandArgs(TRUE)
-if (length(arguments) != 1L) {
+if (length(arguments) != 2L) {
   stop("Artifact-presence self-test received invalid arguments.", call. = FALSE)
 }
 environment <- new.env(parent = globalenv())
+sys.source(arguments[[2L]], envir = environment)
 sys.source(arguments[[1L]], envir = environment)
 value <- environment$wlv13_v5d_artifact_presence_selftest()
+unit_projection_value <-
+  environment$wlv13_v5d_unit_bridge_projection_selftest()
 expected_bindings <- list(
   anomalies = quote(wlv13_v5d_bridge_artifact(
     inventory$records, run_root, "_anomalies.csv"
@@ -3669,6 +3677,9 @@ compound_mutant_assignments <- resolver_assignment_count(
 if (!identical(value$assertions, 22L) ||
     !identical(value$cases, 6L) ||
     !identical(value$mutants, 4L) ||
+    !identical(unit_projection_value$assertions, 29L) ||
+    !identical(unit_projection_value$scientific_columns, 24L) ||
+    !identical(unit_projection_value$structural_mutants, 4L) ||
     !identical(consumer_bindings, 3L) ||
     !identical(formals(consumer), expected_formals) ||
     !identical(resolver_globals, 1L) ||
@@ -3685,20 +3696,26 @@ cat(sprintf(
     "presence_assertions=%d cases=%d mutants=%d consumer_bindings=%d ",
     "resolver_globals=%d formals=%d dynamic=%d assignments=%d ",
     "optional_mutant_bindings=%d shadow_dynamic=%d compound_dynamic=%d ",
-    "compound_assignments=%d\n"
+    "compound_assignments=%d unit_projection_assertions=%d ",
+    "scientific_columns=%d structural_mutants=%d\n"
   ),
   value$assertions, value$cases, value$mutants, consumer_bindings,
   resolver_globals, length(formals(consumer)), consumer_dynamic_functions,
   consumer_resolver_assignments, optional_mutant_bindings,
   shadow_mutant_dynamic_functions, compound_mutant_dynamic_functions,
-  compound_mutant_assignments
+  compound_mutant_assignments, unit_projection_value$assertions,
+  unit_projection_value$scientific_columns,
+  unit_projection_value$structural_mutants
 ))
 '@
 $artifactPresenceExecution = Invoke-Issue13V5RscriptBounded `
   -RscriptPath ([string]$script:Issue13V5RscriptLogicalPath) `
   -Arguments @(
     '--vanilla', '-e', $artifactPresenceSelftestCode,
-    (Join-Path $root 'issue13-v5-build-diagnostic-bridges.R')) `
+    (Join-Path $root 'issue13-v5-build-diagnostic-bridges.R'),
+    (Join-Path $RepositoryRoot (
+      'run_logs\issue13-evidence-source-v5\issue13-evidence-harness\' +
+      'issue13-compare-lib.R'))) `
   -Label 'diagnostic-artifact-presence-selftest' `
   -TimeoutSeconds 120 `
   -ExpectedExitCodes @(0) `
@@ -3711,7 +3728,8 @@ $expectedArtifactPresenceOutput =
   ('presence_assertions=22 cases=6 mutants=4 consumer_bindings=3 ' +
     'resolver_globals=1 formals=4 dynamic=0 assignments=0 ' +
     'optional_mutant_bindings=2 shadow_dynamic=2 compound_dynamic=1 ' +
-    'compound_assignments=1')
+    'compound_assignments=1 unit_projection_assertions=29 ' +
+    'scientific_columns=24 structural_mutants=4')
 if ([int]$artifactPresenceExecution.exit_code -ne 0 -or
     [string]$artifactPresenceExecution.stdout.Trim() -cne
       $expectedArtifactPresenceOutput -or
@@ -3862,6 +3880,11 @@ function Test-Issue13V5StaticCentralEnvironmentContract(
     $convertText.Contains('present = $null -ne $value') -and
     $convertText.Contains(
       'value = if ($null -eq $value) { $null } else { [string]$value }') -and
+    $convertText.Contains(
+      '$orderedNames = [string[]]$names.ToArray()') -and
+    $convertText.Contains(
+      '[Array]::Sort($orderedNames, [StringComparer]::Ordinal)') -and
+    $convertText.Contains('foreach ($name in $orderedNames)') -and
     -not $convertText.Contains('IsNullOrEmpty') -and
     $snapshotOffset -ge 0 -and $mutationOffset -gt $snapshotOffset -and
     $enterText.Contains(
@@ -3925,6 +3948,15 @@ $centralEnvironmentMutantTexts = @(
   $centralText.Replace(
     '[StringComparer]::OrdinalIgnoreCase', '[StringComparer]::Ordinal'),
   $centralText.Replace(
+    '$orderedNames = [string[]]$names.ToArray()',
+    '$orderedNames = [string[]]@($names.ToArray())'),
+  $centralText.Replace(
+    '[Array]::Sort($orderedNames, [StringComparer]::Ordinal)',
+    '[Array]::Reverse($orderedNames)'),
+  $centralText.Replace(
+    'foreach ($name in $orderedNames)',
+    'foreach ($name in $names)'),
+  $centralText.Replace(
     'for ($index = $snapshot.Count - 1; $index -ge 0; $index--)',
     'for ($index = $snapshot.Count - 1; $index -gt 0; $index--)'),
   $centralText.Replace(
@@ -3982,6 +4014,53 @@ foreach ($centralEnvironmentMutantText in $centralEnvironmentMutantTexts) {
       (Test-Issue13V5StaticCentralEnvironmentContract `
         $centralEnvironmentMutantAst)) {
     throw 'Central environment verifier accepted a tri-state/cleanup mutant.'
+  }
+}
+function Test-Issue13V5StaticOracleEnvironmentOrder(
+  [Management.Automation.Language.ScriptBlockAst]$Ast
+) {
+  $definitions = @(Get-Issue13V5StaticTopLevelFunctions $Ast `
+      'Get-Issue13OracleEffectEnvironmentContract')
+  if ($definitions.Count -ne 1 -or
+      $definitions[0].Name -cne
+        'Get-Issue13OracleEffectEnvironmentContract') {
+    return $false
+  }
+  $text = [string]$definitions[0].Extent.Text
+  $text.Contains('$setNames = [string[]]@($values.Keys)') -and
+    $text.Contains(
+      '[Array]::Sort($setNames, [StringComparer]::Ordinal)') -and
+    $text.Contains('foreach ($name in $setNames)') -and
+    $text.Contains('set = $set')
+}
+if (-not (Test-Issue13V5StaticOracleEnvironmentOrder $oracleAst)) {
+  throw 'Oracle proof environment_set is not an ordinal projection.'
+}
+$oracleEnvironmentOrderText = [string]$oracleAst.Extent.Text
+$oracleEnvironmentOrderMutantTexts = @(
+  $oracleEnvironmentOrderText.Replace(
+    '$setNames = [string[]]@($values.Keys)',
+    '$setNames = [string[]]@($values.Keys | Sort-Object)'),
+  $oracleEnvironmentOrderText.Replace(
+    '[Array]::Sort($setNames, [StringComparer]::Ordinal)',
+    '[Array]::Reverse($setNames)'),
+  $oracleEnvironmentOrderText.Replace(
+    'foreach ($name in $setNames)',
+    'foreach ($name in $values.Keys)'))
+foreach ($oracleEnvironmentOrderMutantText in
+    $oracleEnvironmentOrderMutantTexts) {
+  $oracleEnvironmentOrderMutantTokens = $null
+  $oracleEnvironmentOrderMutantErrors = $null
+  $oracleEnvironmentOrderMutantAst =
+    [Management.Automation.Language.Parser]::ParseInput(
+      $oracleEnvironmentOrderMutantText,
+      [ref]$oracleEnvironmentOrderMutantTokens,
+      [ref]$oracleEnvironmentOrderMutantErrors)
+  if ($oracleEnvironmentOrderMutantText -ceq $oracleEnvironmentOrderText -or
+      $oracleEnvironmentOrderMutantErrors.Count -ne 0 -or
+      (Test-Issue13V5StaticOracleEnvironmentOrder `
+        $oracleEnvironmentOrderMutantAst)) {
+    throw 'Oracle environment verifier accepted an ordinal-order mutant.'
   }
 }
 function Test-Issue13V5StaticExternalLifecycle(
@@ -7700,9 +7779,9 @@ $commitETerminalSeal =
     [long]$oracleSpec.terminal_comparison_runtime.sealed_inventory.file_count -eq
       47L -and
     [long]$oracleSpec.terminal_comparison_runtime.sealed_inventory.total_bytes -eq
-      1640833L -and
+      2582487L -and
     [string]$oracleSpec.terminal_comparison_runtime.sealed_inventory.inventory_sha256 -ceq
-      '85eebd5355304d00e36c70896668548e54619c5a69d937657a96977cd013daaa'
+      'f60f98bd57069d74fa9f10e8abfdfe25cf684176bfd2e37f544bd7f8bdc83b45'
 if (-not $commitETerminalSeal) {
   throw 'Commit E static verifier accepts only the exact terminal output seal.'
 }
@@ -7720,20 +7799,31 @@ $expectedBridgeColumns = @(
   'expected_baseline_evidence_rows', 'expected_candidate_evidence_rows',
   'derivation_sha256'
 )
+$expectedBridgeHeader =
+  '"' + [string]::Join('";"', $expectedBridgeColumns) + '"'
+$expectedBridgeSha256 =
+  '85c163073f528e47f5b2221949d1eb919898a4de80f2f631f448ad543ccfa793'
 $bridgeLines = [IO.File]::ReadAllLines(
   $diagnosticBridgePath, [Text.UTF8Encoding]::new($false, $true))
 $observedBridgeColumns = [string[]]@(
   $bridgeLines[0].Split(';') | ForEach-Object { $_.Trim('"') })
 $bridgeRows = @(Import-Csv -LiteralPath $diagnosticBridgePath -Delimiter ';')
-if ($bridgeLines.Count -ne 1 -or $bridgeRows.Count -ne 0 -or
+$bridgeSha256 = Get-Issue13V5Sha256 $diagnosticBridgePath
+if ($bridgeLines.Count -ne 817 -or $bridgeRows.Count -ne 816 -or
+    $bridgeSha256 -cne $expectedBridgeSha256 -or
     [string]::Join("`n", $observedBridgeColumns) -cne
       [string]::Join("`n", $expectedBridgeColumns) -or
-    $bridgeLines[0] -cne [string]::Join(';', $expectedBridgeColumns)) {
-  throw 'Commit E diagnostic-module bridge CSV is not the exact header-only seed.'
+    $bridgeLines[0] -cne $expectedBridgeHeader -or
+    @($bridgeRows | Where-Object {
+      [string]$_.schema_version -cne
+        'issue13-v5-diagnostic-module-bridge/1'
+    }).Count -ne 0 -or
+    @($bridgeRows.bridge_id | Sort-Object -Unique).Count -ne 816) {
+  throw 'Commit E diagnostic-module bridge CSV differs from its exact seal.'
 }
 $records.Add([ordered]@{
   name = $diagnosticBridges
-  sha256 = Get-Issue13V5Sha256 $diagnosticBridgePath
+  sha256 = $bridgeSha256
   command_ast_count = 0L
 })
 
@@ -7770,20 +7860,30 @@ $expectedStage5Columns = @(
   'evidence_capture_record_sha256', 'reference_stage5_sha256',
   'derivation_sha256'
 )
+$expectedStage5Header =
+  '"' + [string]::Join('";"', $expectedStage5Columns) + '"'
+$expectedStage5Sha256 =
+  '26b35dcbde56ac488786388048b8445b2ccc5c0308c4499a399c71d22c63437d'
 $stage5Lines = [IO.File]::ReadAllLines(
   $stage5ProfilePath, [Text.UTF8Encoding]::new($false, $true))
 $observedStage5Columns = [string[]]@(
   $stage5Lines[0].Split(';') | ForEach-Object { $_.Trim('"') })
 $stage5Rows = @(Import-Csv -LiteralPath $stage5ProfilePath -Delimiter ';')
-if ($stage5Lines.Count -ne 1 -or $stage5Rows.Count -ne 0 -or
+$stage5Sha256 = Get-Issue13V5Sha256 $stage5ProfilePath
+if ($stage5Lines.Count -ne 37 -or $stage5Rows.Count -ne 36 -or
+    $stage5Sha256 -cne $expectedStage5Sha256 -or
     [string]::Join("`n", $observedStage5Columns) -cne
       [string]::Join("`n", $expectedStage5Columns) -or
-    $stage5Lines[0] -cne [string]::Join(';', $expectedStage5Columns)) {
-  throw 'Commit E stage-five profile CSV is not the exact header-only seed.'
+    $stage5Lines[0] -cne $expectedStage5Header -or
+    @($stage5Rows | Where-Object {
+      [string]$_.schema_version -cne
+        'issue13-v5-stage5-multiplicity-profile/1'
+    }).Count -ne 0) {
+  throw 'Commit E stage-five profile CSV differs from its exact seal.'
 }
 $records.Add([ordered]@{
   name = $stage5Profiles
-  sha256 = Get-Issue13V5Sha256 $stage5ProfilePath
+  sha256 = $stage5Sha256
   command_ast_count = 0L
 })
 $preparationBuildText = [IO.File]::ReadAllText(
@@ -7930,9 +8030,9 @@ if ([string]$oracleSpec.schema -cne 'wlv-issue13-v5-oracle-effect-spec/2' -or
     [string]$oracleTerminal.sealed_inventory.status -cne
       'sealed' -or
     [long]$oracleTerminal.sealed_inventory.file_count -ne 47L -or
-    [long]$oracleTerminal.sealed_inventory.total_bytes -ne 1640833L -or
+    [long]$oracleTerminal.sealed_inventory.total_bytes -ne 2582487L -or
     [string]$oracleTerminal.sealed_inventory.inventory_sha256 -cne
-      '85eebd5355304d00e36c70896668548e54619c5a69d937657a96977cd013daaa' -or
+      'f60f98bd57069d74fa9f10e8abfdfe25cf684176bfd2e37f544bd7f8bdc83b45' -or
     [string]::Join("`n", @(
       $oracleTerminal.required_controller_files)) -cne
       [string]::Join("`n", $expectedControllerFiles) -or
@@ -10527,9 +10627,9 @@ $harnessBinding = Assert-Issue13V5HarnessBinding $staticConfig
 $manifest = $harnessBinding.manifest
 $inventory = $harnessBinding.inventory
 $expectedHarnessFileCount = 47L
-$expectedHarnessTotalBytes = 1640833L
+$expectedHarnessTotalBytes = 2582487L
 $expectedHarnessInventorySha256 =
-  '85eebd5355304d00e36c70896668548e54619c5a69d937657a96977cd013daaa'
+  'f60f98bd57069d74fa9f10e8abfdfe25cf684176bfd2e37f544bd7f8bdc83b45'
 if ($inventory.file_count -ne $expectedHarnessFileCount -or
     $inventory.total_bytes -ne $expectedHarnessTotalBytes -or
     $inventory.inventory_sha256 -cne $expectedHarnessInventorySha256 -or
@@ -10580,7 +10680,11 @@ if ((Get-Issue13V5Sha256 $materializedDiagnosticBridgesPath) -cne
 foreach ($required in @(
     'cross_engine_source_v1',
     'cross_engine_source && (!identical(candidate$kind, "source")',
-    'normalized = "file:_unit_contract.csv"'
+    'normalized = "file:_unit_contract.csv"',
+    'wlv13_cross_engine_unit_projection <- function(value)',
+    'value[setdiff(names(value), c("module", "aggregation_notes"))]',
+    'wlv13_table_row_keys(wlv13_cross_engine_unit_projection(candidate))',
+    'wlv13_table_row_keys(wlv13_cross_engine_unit_projection(baseline))'
   )) {
   if (-not $materializedCompare.Contains($required)) {
     throw "Materialized comparison runtime lacks source projection: $required"
