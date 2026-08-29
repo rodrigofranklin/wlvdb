@@ -1356,6 +1356,49 @@ wlv_runtime_snapshot_capture_version <- function() {
   "wlv-runtime-snapshot-capture/1.1.0"
 }
 
+wlv_runtime_snapshot_capture_resource_ids <- function(partitions) {
+  unlist(lapply(partitions, function(partition) {
+    paste(
+      c(
+        paste0("io/", wlv_runtime_snapshot_io_resources()),
+        "intermediate/lambda"
+      ),
+      partition,
+      sep = "\034"
+    )
+  }), use.names = FALSE)
+}
+
+wlv_runtime_snapshot_capture_requests <- function(store, partitions) {
+  requests <- lapply(partitions, function(partition) {
+    keys <- c(
+      paste0("io/", wlv_runtime_snapshot_io_resources()),
+      "intermediate/lambda"
+    )
+    do.call(rbind, lapply(keys, function(key) {
+      state <- wlv_runtime_snapshot_terminal(
+        store,
+        wlv_semantic_state_key(key),
+        partition,
+        wlv_native_semantic_state_contract(
+          wlv_runtime_snapshot_contract(key)
+        )
+      )
+      data.frame(
+        id = paste(key, partition, sep = "\034"),
+        key = key,
+        partition = partition,
+        include_value = identical(key, "intermediate/lambda"),
+        state_rows = as.double(NROW(state$value)),
+        stringsAsFactors = FALSE
+      )
+    }))
+  })
+  requests <- do.call(rbind, requests)
+  row.names(requests) <- NULL
+  requests
+}
+
 wlv_runtime_snapshot_capture_store_assert_owned <- function(store) {
   if (!inherits(store, "wlv_resource_store") || !is.environment(store) ||
       environmentIsLocked(store) || isTRUE(store$sealed) ||
@@ -1365,6 +1408,21 @@ wlv_runtime_snapshot_capture_store_assert_owned <- function(store) {
       call. = FALSE
     )
   }
+  invisible(store)
+}
+
+wlv_runtime_snapshot_capture_store_retain <- function(store, requests) {
+  wlv_runtime_snapshot_capture_store_assert_owned(store)
+  retained_keys <- unique(c(
+    requests$key,
+    vapply(requests$key, wlv_semantic_state_key, character(1L))
+  ))
+  retained_partitions <- unique(as.character(requests$partition))
+  retain <- vapply(store$entries, function(entry) {
+    entry$key %in% retained_keys &&
+      !is.null(entry$partition) && entry$partition %in% retained_partitions
+  }, logical(1L))
+  store$entries <- store$entries[retain]
   invisible(store)
 }
 
@@ -1410,16 +1468,9 @@ wlv_runtime_snapshot_capture_assert <- function(capture) {
       )) {
     stop("Runtime snapshot capture partitions are invalid.", call. = FALSE)
   }
-  expected_resources <- unlist(lapply(capture$partitions, function(partition) {
-    paste(
-      c(
-        paste0("io/", wlv_runtime_snapshot_io_resources()),
-        "intermediate/lambda"
-      ),
-      partition,
-      sep = "\034"
-    )
-  }), use.names = FALSE)
+  expected_resources <- wlv_runtime_snapshot_capture_resource_ids(
+    capture$partitions
+  )
   if (!is.list(capture$resources) ||
       !identical(names(capture$resources), expected_resources) ||
       !is.list(capture$panel_states) || !identical(
@@ -1463,7 +1514,8 @@ wlv_runtime_snapshot_capture <- function(
     method,
     source,
     partitions,
-    compatibility) {
+    compatibility,
+    consume_store = FALSE) {
   method <- wlv_runtime_snapshot_scalar(method, "method")
   source <- wlv_runtime_snapshot_scalar(source, "source")
   wlv_runtime_compatibility_assert(compatibility)
@@ -1480,30 +1532,66 @@ wlv_runtime_snapshot_capture <- function(
     stop("Runtime snapshot requires unique IO partitions.", call. = FALSE)
   }
   partitions <- sort(partitions, method = "radix")
+  if (!is.logical(consume_store) || length(consume_store) != 1L ||
+      is.na(consume_store)) {
+    stop("Runtime snapshot store-consumption flag is invalid.", call. = FALSE)
+  }
+  if (isTRUE(consume_store)) {
+    wlv_runtime_snapshot_capture_store_assert_owned(store)
+  }
+  panel_states <- wlv_runtime_snapshot_panel_states(store)
+  panel_provenance <- wlv_runtime_snapshot_panel_provenance(store)
+  requests <- wlv_runtime_snapshot_capture_requests(store, partitions)
+  canonical_ids <- wlv_runtime_snapshot_capture_resource_ids(partitions)
+  if (!identical(as.character(requests$id), canonical_ids)) {
+    stop("Runtime snapshot resource requests are not canonical.", call. = FALSE)
+  }
+  if (isTRUE(consume_store)) {
+    wlv_runtime_snapshot_capture_store_retain(store, requests)
+    request_order <- order(
+      requests$state_rows > 0,
+      -requests$state_rows,
+      requests$include_value,
+      requests$id,
+      method = "radix"
+    )
+  } else {
+    request_order <- seq_len(nrow(requests))
+  }
   resources <- list()
-  for (partition in partitions) {
-    for (resource in wlv_runtime_snapshot_io_resources()) {
-      entry <- wlv_runtime_snapshot_entry(
-        store,
-        paste0("io/", resource),
-        partition,
-        include_value = FALSE
-      )
-      id <- paste(entry$key, partition, sep = "\034")
-      resources[[id]] <- entry
-      rm(entry)
-      invisible(gc(full = TRUE))
-    }
+  for (request_index in request_order) {
+    request <- requests[request_index, , drop = FALSE]
     entry <- wlv_runtime_snapshot_entry(
       store,
-      "intermediate/lambda",
-      partition,
-      include_value = TRUE
+      request$key[[1L]],
+      request$partition[[1L]],
+      include_value = request$include_value[[1L]]
     )
-    id <- paste(entry$key, partition, sep = "\034")
-    resources[[id]] <- entry
+    resources[[request$id[[1L]]]] <- entry
+    if (isTRUE(consume_store)) {
+      released <- wlv_runtime_snapshot_capture_store_release(
+        store,
+        request$key[[1L]],
+        request$partition[[1L]]
+      )
+      if (released < 2L) {
+        stop(
+          sprintf(
+            "Owned snapshot fork did not release `%s[%s]` completely.",
+            request$key[[1L]],
+            request$partition[[1L]]
+          ),
+          call. = FALSE
+        )
+      }
+      rm(released)
+    }
     rm(entry)
     invisible(gc(full = TRUE))
+  }
+  resources <- resources[canonical_ids]
+  if (isTRUE(consume_store) && length(store$entries)) {
+    stop("Owned snapshot fork was not consumed completely.", call. = FALSE)
   }
   parent_imports <- wlv_parent_seed_empty_resolutions()
   capture <- structure(list(
@@ -1514,8 +1602,8 @@ wlv_runtime_snapshot_capture <- function(
     partitions = partitions,
     compatibility = compatibility,
     io_artifacts = NULL,
-    panel_states = wlv_runtime_snapshot_panel_states(store),
-    panel_provenance = wlv_runtime_snapshot_panel_provenance(store),
+    panel_states = panel_states,
+    panel_provenance = panel_provenance,
     parent_imports = parent_imports,
     parent_imports_sha256 = wlv_runtime_snapshot_parent_imports_sha256(
       parent_imports

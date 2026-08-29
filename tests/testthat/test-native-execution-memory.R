@@ -26,52 +26,6 @@ test_that("complete IO periods reuse the assembled artifact", {
   )
 })
 
-test_that("persisted IO arrays can be written before snapshot capture", {
-  runtime <- wlv_test_load_runtime()
-  root <- tempfile("wlv-native-prewrite-io-")
-  source_root <- file.path(root, "source")
-  staging <- file.path(root, "staging")
-  dir.create(source_root, recursive = TRUE)
-  dir.create(staging, recursive = TRUE)
-  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
-
-  m_io <- array(
-    as.double(seq_len(2L * 2L * 2L * 2L)),
-    dim = c(2L, 2L, 2L, 2L),
-    dimnames = list(
-      year = c("2000", "2001"),
-      variable = c("values", "prices"),
-      input = c("A", "B"),
-      output = c("A", "B")
-    )
-  )
-  source_paths <- file.path(
-    source_root,
-    c("m_io.2000.fst", "m_io.2001.fst")
-  )
-  for (index in seq_along(source_paths)) {
-    runtime$write_fst_array(
-      m_io[index, , , , drop = FALSE],
-      source_paths[[index]],
-      drop_axis_names = TRUE
-    )
-  }
-
-  expect_invisible(runtime$wlv_native_write_io_arrays(
-    list(source_io = source_paths),
-    m_io,
-    staging
-  ))
-  for (index in seq_along(source_paths)) {
-    expected <- m_io[index, , , , drop = FALSE]
-    names(dimnames(expected)) <- NULL
-    expect_identical(
-      runtime$read_fst_array(file.path(staging, basename(source_paths[[index]]))),
-      expected
-    )
-  }
-})
-
 test_that("snapshot fork releases persisted m_io without mutating its owner", {
   runtime <- wlv_test_load_runtime()
   value <- array(

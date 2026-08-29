@@ -1138,6 +1138,85 @@ test_that("runtime snapshot persists lambda and IO states without duplicating IO
   )
 })
 
+test_that("owned runtime capture is canonical across multiple partitions", {
+  fixture <- wlv_test_runtime_snapshot_fixture()
+  runtime <- fixture$runtime
+  second_partition <- "2001-2001"
+  partitions <- c(fixture$partition, second_partition)
+  seeds <- unlist(lapply(unname(fixture$store$entries), function(entry) {
+    target_partitions <- if (is.null(entry$partition)) {
+      list(NULL)
+    } else {
+      as.list(partitions)
+    }
+    lapply(target_partitions, function(partition) {
+      runtime$wlv_seed_resource(
+        key = entry$key,
+        value = entry$value,
+        contract = entry$contract,
+        partition = partition,
+        producer = entry$producer
+      )
+    })
+  }), recursive = FALSE)
+  store <- runtime$wlv_new_resource_store(seeds)
+  normal <- runtime$wlv_runtime_snapshot_capture(
+    store,
+    method = "synthetic",
+    source = "wiodr13",
+    partitions = rev(partitions),
+    compatibility = fixture$compatibility
+  )
+  owned_store <- runtime$wlv_runtime_fork_store(store)
+  owned <- runtime$wlv_runtime_snapshot_capture(
+    owned_store,
+    method = "synthetic",
+    source = "wiodr13",
+    partitions = rev(partitions),
+    compatibility = fixture$compatibility,
+    consume_store = TRUE
+  )
+
+  expect_identical(owned, normal)
+  expect_identical(
+    names(owned$resources),
+    runtime$wlv_runtime_snapshot_capture_resource_ids(sort(partitions))
+  )
+  expect_length(owned_store$entries, 0L)
+})
+
+test_that("failed owned runtime capture cannot mutate the sealed store", {
+  fixture <- wlv_test_runtime_snapshot_fixture()
+  runtime <- fixture$runtime
+  sealed_entries <- serialize(fixture$store$entries, NULL, version = 3L)
+  owned_store <- runtime$wlv_runtime_fork_store(fixture$store)
+  target <- which(vapply(owned_store$entries, function(entry) {
+    identical(entry$key, "io/values") &&
+      identical(entry$partition, fixture$partition)
+  }, logical(1L)))
+  expect_length(target, 1L)
+  owned_store$entries[[target]]$value[[1L]] <- NA_real_
+  captured <- NULL
+
+  expect_error(
+    captured <- runtime$wlv_runtime_snapshot_capture(
+      owned_store,
+      method = "synthetic",
+      source = "wiodr13",
+      partitions = fixture$partition,
+      compatibility = fixture$compatibility,
+      consume_store = TRUE
+    )
+  )
+  expect_null(captured)
+  expect_gt(length(owned_store$entries), 0L)
+  expect_lt(length(owned_store$entries), length(fixture$store$entries))
+  expect_identical(
+    serialize(fixture$store$entries, NULL, version = 3L),
+    sealed_entries
+  )
+})
+
 test_that("runtime snapshot states are bound to persisted artifact coordinates", {
   fixture <- wlv_test_runtime_snapshot_fixture()
   runtime <- fixture$runtime
