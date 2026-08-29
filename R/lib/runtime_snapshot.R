@@ -198,14 +198,13 @@ wlv_runtime_snapshot_entry <- function(
     contract,
     paste0(key, "[", partition, "]")
   )
-  wlv_semantic_state_validate(
+  captured_state <- wlv_runtime_snapshot_state_capture(
     state_entry$value,
-    value = value_entry$value,
+    target_value = value_entry$value,
     target_key = key,
     axes = contract$axes,
     state_key = state_key
   )
-  state <- wlv_runtime_snapshot_state_pack_validated(state_entry$value)
   list(
     key = key,
     partition = partition,
@@ -217,9 +216,9 @@ wlv_runtime_snapshot_entry <- function(
       contract$axes
     ),
     value_sha256 = wlv_runtime_snapshot_value_sha256(value_entry$value),
-    state_sha256 = wlv_runtime_snapshot_state_sha256(state),
+    state_sha256 = captured_state$state_sha256,
     value = if (isTRUE(include_value)) value_entry$value else NULL,
-    state = state
+    state = captured_state$state
   )
 }
 
@@ -627,6 +626,217 @@ wlv_runtime_snapshot_state_cartesian_descriptor <- function(value) {
   list(selectors = selectors, state = uniform_state)
 }
 
+wlv_runtime_snapshot_state_shape <- function(
+    value,
+    target_key = NULL,
+    axes = NULL,
+    state_key = NULL) {
+  allowed_attributes <- c(
+    "names", "class", "row.names", "target_key", "axes", "version"
+  )
+  if (!is.data.frame(value) || !identical(
+        class(value),
+        c("wlv_semantic_state", "data.frame")
+      ) || !setequal(names(attributes(value)), allowed_attributes)) {
+    return(NULL)
+  }
+  observed_target <- attr(value, "target_key", exact = TRUE)
+  observed_axes <- attr(value, "axes", exact = TRUE)
+  observed_version <- attr(value, "version", exact = TRUE)
+  if (!is.character(observed_target) || length(observed_target) != 1L ||
+      is.na(observed_target) || !nzchar(observed_target) ||
+      !wlv_semantic_is_stateful_key(observed_target) ||
+      !is.character(observed_axes) || !length(observed_axes) ||
+      anyNA(observed_axes) || any(!nzchar(observed_axes)) ||
+      anyDuplicated(observed_axes) || !identical(
+        observed_version,
+        wlv_semantic_state_version()
+      ) || !identical(names(value), c(observed_axes, "state")) ||
+      any(!vapply(value, is.character, logical(1L))) ||
+      (!is.null(target_key) && !identical(observed_target, target_key)) ||
+      (!is.null(axes) && !identical(observed_axes, axes)) ||
+      (!is.null(state_key) && !identical(
+        wlv_semantic_state_key(observed_target),
+        state_key
+      ))) {
+    return(NULL)
+  }
+  row_count <- nrow(value)
+  expected_row_names <- if (row_count) {
+    c(NA_integer_, -row_count)
+  } else {
+    integer()
+  }
+  if (!identical(.row_names_info(value, type = 0L), expected_row_names)) {
+    return(NULL)
+  }
+  list(
+    target_key = observed_target,
+    axes = observed_axes,
+    state_version = observed_version,
+    row_count = as.double(row_count)
+  )
+}
+
+wlv_runtime_snapshot_state_cartesian_pack <- function(
+    value,
+    target_key = NULL,
+    axes = NULL,
+    state_key = NULL,
+    target_value = NULL,
+    chunk_rows = 65536L,
+    return_commitment = FALSE) {
+  shape <- wlv_runtime_snapshot_state_shape(
+    value,
+    target_key = target_key,
+    axes = axes,
+    state_key = state_key
+  )
+  if (!is.logical(return_commitment) || length(return_commitment) != 1L ||
+      is.na(return_commitment)) {
+    stop("Runtime Cartesian state commitment flag is invalid.", call. = FALSE)
+  }
+  if (is.null(shape) || shape$row_count < 1 ||
+      !is.numeric(chunk_rows) || length(chunk_rows) != 1L ||
+      is.na(chunk_rows) || !is.finite(chunk_rows) || chunk_rows < 1L) {
+    return(NULL)
+  }
+  chunk_rows <- if (isTRUE(return_commitment)) {
+    65536L
+  } else {
+    as.integer(chunk_rows)
+  }
+  cartesian <- wlv_runtime_snapshot_state_cartesian_descriptor(value)
+  if (is.null(cartesian) ||
+      !cartesian$state %in% wlv_semantic_sparse_states()) {
+    return(NULL)
+  }
+  codec <- wlv_runtime_snapshot_new_state_codec(
+    encoding = "cartesian",
+    target_key = shape$target_key,
+    axes = shape$axes,
+    state_version = shape$state_version,
+    row_count = shape$row_count,
+    selectors = cartesian$selectors,
+    state = cartesian$state
+  )
+  # The descriptor has already proved a non-missing uniform state column.
+  # Reconstruct every coordinate column to prove the complete canonical
+  # Cartesian order without allocating global rank/order vectors.
+  columns <- shape$axes
+  commitment_columns <- c(columns, "state")
+  starts <- seq.int(1, shape$row_count, by = chunk_rows)
+  chunks <- if (isTRUE(return_commitment)) {
+    stats::setNames(lapply(commitment_columns, function(column) {
+      character(length(starts))
+    }), commitment_columns)
+  } else {
+    NULL
+  }
+  chunk_index <- 0L
+  for (start in starts) {
+    chunk_index <- chunk_index + 1L
+    end <- min(shape$row_count, start + chunk_rows - 1L)
+    for (column in columns) {
+      observed <- if (isTRUE(return_commitment)) {
+        wlv_runtime_snapshot_materialize_character(
+          value[[column]][start:end]
+        )
+      } else {
+        enc2utf8(value[[column]][start:end])
+      }
+      expected <- wlv_runtime_snapshot_state_cartesian_column_unchecked(
+        codec,
+        column,
+        start,
+        end
+      )
+      if (!identical(observed, expected)) {
+        return(NULL)
+      }
+      if (isTRUE(return_commitment)) {
+        chunks[[column]][[chunk_index]] <- wlv_publication_sha256_raw(
+          serialize(observed, NULL, version = 3L)
+        )
+      }
+      rm(observed, expected)
+    }
+    if (isTRUE(return_commitment)) {
+      state_values <- wlv_runtime_snapshot_materialize_character(rep(
+        codec$state,
+        as.integer(end - start + 1)
+      ))
+      chunks$state[[chunk_index]] <- wlv_publication_sha256_raw(
+        serialize(state_values, NULL, version = 3L)
+      )
+      rm(state_values)
+    }
+  }
+  wlv_runtime_snapshot_state_codec_validate(
+    codec,
+    target_key = target_key,
+    axes = axes,
+    state_key = state_key,
+    target_value = target_value
+  )
+  if (!isTRUE(return_commitment)) {
+    return(codec)
+  }
+  list(
+    state = codec,
+    state_sha256 = wlv_runtime_snapshot_state_commitment_from_chunks(
+      codec,
+      chunks
+    )
+  )
+}
+
+wlv_runtime_snapshot_state_capture <- function(
+    value,
+    target_value,
+    target_key,
+    axes,
+    state_key) {
+  captured <- wlv_runtime_snapshot_state_cartesian_pack(
+    value,
+    target_key = target_key,
+    axes = axes,
+    state_key = state_key,
+    target_value = target_value,
+    return_commitment = TRUE
+  )
+  if (!is.null(captured)) {
+    return(captured)
+  }
+  wlv_semantic_state_validate(
+    value,
+    value = target_value,
+    target_key = target_key,
+    axes = axes,
+    state_key = state_key
+  )
+  state <- wlv_runtime_snapshot_state_pack_validated(value)
+  list(
+    state = state,
+    state_sha256 = wlv_runtime_snapshot_state_sha256(state)
+  )
+}
+
+wlv_runtime_snapshot_state_capture_pack <- function(
+    value,
+    target_value,
+    target_key,
+    axes,
+    state_key) {
+  wlv_runtime_snapshot_state_capture(
+    value,
+    target_value,
+    target_key,
+    axes,
+    state_key
+  )$state
+}
+
 wlv_runtime_snapshot_new_state_codec <- function(
     encoding,
     target_key,
@@ -903,8 +1113,15 @@ wlv_runtime_snapshot_state_unpack <- function(value, target_value = NULL) {
   result
 }
 
-wlv_runtime_snapshot_state_metadata <- function(value) {
+wlv_runtime_snapshot_state_metadata <- function(value, state_sha256 = NULL) {
   codec <- wlv_runtime_snapshot_state_pack(value)
+  if (is.null(state_sha256)) {
+    state_sha256 <- wlv_runtime_snapshot_state_sha256(codec)
+  }
+  if (!is.character(state_sha256) || length(state_sha256) != 1L ||
+      is.na(state_sha256) || !grepl("^[0-9a-f]{64}$", state_sha256)) {
+    stop("Runtime snapshot state metadata hash is invalid.", call. = FALSE)
+  }
   list(
     codec_version = codec$version,
     encoding = codec$encoding,
@@ -912,7 +1129,7 @@ wlv_runtime_snapshot_state_metadata <- function(value) {
     axes = codec$axes,
     state_version = codec$state_version,
     row_count = codec$row_count,
-    state_sha256 = wlv_runtime_snapshot_state_sha256(codec)
+    state_sha256 = state_sha256
   )
 }
 
@@ -1276,23 +1493,32 @@ wlv_runtime_snapshot_binding_sha256 <- function(
     id,
     artifact_sha256,
     state,
-    provenance = NULL) {
-  state <- wlv_runtime_snapshot_state_pack(state)
+    provenance = NULL,
+    state_sha256 = NULL) {
   payload <- list(
     version = "wlv-runtime-state-binding/1.0.0",
     id = id,
     artifact_sha256 = artifact_sha256,
-    state = wlv_runtime_snapshot_state_metadata(state),
+    state = wlv_runtime_snapshot_state_metadata(state, state_sha256),
     provenance = provenance
   )
   wlv_publication_sha256_raw(serialize(payload, NULL, version = 3L))
 }
 
-wlv_runtime_snapshot_state_bindings <- function(snapshot) {
+wlv_runtime_snapshot_state_bindings <- function(
+    snapshot,
+    verify_resource_states = TRUE) {
+  if (!is.logical(verify_resource_states) ||
+      length(verify_resource_states) != 1L || is.na(verify_resource_states)) {
+    stop("Runtime snapshot state-binding validation flag is invalid.",
+      call. = FALSE
+    )
+  }
   definitions <- wlv_runtime_snapshot_panel_definitions()
   ids <- character()
   artifact_sha256 <- character()
   states <- list()
+  state_sha256 <- list()
   provenance <- list()
   for (name in names(definitions)) {
     ids <- c(ids, paste("panel", name, sep = "\034"))
@@ -1305,6 +1531,7 @@ wlv_runtime_snapshot_state_bindings <- function(snapshot) {
       )
     )
     states[[length(states) + 1L]] <- snapshot$panel_states[[name]]
+    state_sha256[length(state_sha256) + 1L] <- list(NULL)
     provenance[[length(provenance) + 1L]] <- snapshot$panel_provenance[
       snapshot$panel_provenance$artifact == name,
       ,
@@ -1325,6 +1552,13 @@ wlv_runtime_snapshot_state_bindings <- function(snapshot) {
     }
     artifact_sha256 <- c(artifact_sha256, token)
     states[[length(states) + 1L]] <- entry$state
+    state_sha256[length(state_sha256) + 1L] <- list(if (isTRUE(
+      verify_resource_states
+    )) {
+      NULL
+    } else {
+      entry$state_sha256
+    })
     provenance[[length(provenance) + 1L]] <- list(
       key = entry$key,
       partition = entry$partition,
@@ -1341,7 +1575,8 @@ wlv_runtime_snapshot_state_bindings <- function(snapshot) {
       ids[[index]],
       artifact_sha256[[index]],
       states[[index]],
-      provenance[[index]]
+      provenance[[index]],
+      state_sha256[[index]]
     )
   }, character(1L))
   data.frame(
@@ -1408,6 +1643,7 @@ wlv_runtime_snapshot_capture_store_assert_owned <- function(store) {
       call. = FALSE
     )
   }
+  wlv_runtime_store_identity_assert(store, "wlv_store_error")
   invisible(store)
 }
 
@@ -1509,13 +1745,11 @@ wlv_runtime_snapshot_capture_assert <- function(capture) {
   invisible(capture)
 }
 
-wlv_runtime_snapshot_capture <- function(
-    store,
+wlv_runtime_snapshot_capture_inputs <- function(
     method,
     source,
     partitions,
-    compatibility,
-    consume_store = FALSE) {
+    compatibility) {
   method <- wlv_runtime_snapshot_scalar(method, "method")
   source <- wlv_runtime_snapshot_scalar(source, "source")
   wlv_runtime_compatibility_assert(compatibility)
@@ -1531,76 +1765,27 @@ wlv_runtime_snapshot_capture <- function(
   ) {
     stop("Runtime snapshot requires unique IO partitions.", call. = FALSE)
   }
-  partitions <- sort(partitions, method = "radix")
-  if (!is.logical(consume_store) || length(consume_store) != 1L ||
-      is.na(consume_store)) {
-    stop("Runtime snapshot store-consumption flag is invalid.", call. = FALSE)
-  }
-  if (isTRUE(consume_store)) {
-    wlv_runtime_snapshot_capture_store_assert_owned(store)
-  }
-  panel_states <- wlv_runtime_snapshot_panel_states(store)
-  panel_provenance <- wlv_runtime_snapshot_panel_provenance(store)
-  requests <- wlv_runtime_snapshot_capture_requests(store, partitions)
-  canonical_ids <- wlv_runtime_snapshot_capture_resource_ids(partitions)
-  if (!identical(as.character(requests$id), canonical_ids)) {
-    stop("Runtime snapshot resource requests are not canonical.", call. = FALSE)
-  }
-  if (isTRUE(consume_store)) {
-    wlv_runtime_snapshot_capture_store_retain(store, requests)
-    request_order <- order(
-      requests$state_rows > 0,
-      -requests$state_rows,
-      requests$include_value,
-      requests$id,
-      method = "radix"
-    )
-  } else {
-    request_order <- seq_len(nrow(requests))
-  }
-  resources <- list()
-  for (request_index in request_order) {
-    request <- requests[request_index, , drop = FALSE]
-    entry <- wlv_runtime_snapshot_entry(
-      store,
-      request$key[[1L]],
-      request$partition[[1L]],
-      include_value = request$include_value[[1L]]
-    )
-    resources[[request$id[[1L]]]] <- entry
-    if (isTRUE(consume_store)) {
-      released <- wlv_runtime_snapshot_capture_store_release(
-        store,
-        request$key[[1L]],
-        request$partition[[1L]]
-      )
-      if (released < 2L) {
-        stop(
-          sprintf(
-            "Owned snapshot fork did not release `%s[%s]` completely.",
-            request$key[[1L]],
-            request$partition[[1L]]
-          ),
-          call. = FALSE
-        )
-      }
-      rm(released)
-    }
-    rm(entry)
-    invisible(gc(full = TRUE))
-  }
-  resources <- resources[canonical_ids]
-  if (isTRUE(consume_store) && length(store$entries)) {
-    stop("Owned snapshot fork was not consumed completely.", call. = FALSE)
-  }
+  list(
+    method = method,
+    source = source,
+    partitions = sort(partitions, method = "radix"),
+    compatibility = compatibility
+  )
+}
+
+wlv_runtime_snapshot_capture_new <- function(
+    inputs,
+    panel_states,
+    panel_provenance,
+    resources) {
   parent_imports <- wlv_parent_seed_empty_resolutions()
   capture <- structure(list(
     version = wlv_runtime_snapshot_capture_version(),
     mode = "calculate",
-    method = method,
-    source = source,
-    partitions = partitions,
-    compatibility = compatibility,
+    method = inputs$method,
+    source = inputs$source,
+    partitions = inputs$partitions,
+    compatibility = inputs$compatibility,
     io_artifacts = NULL,
     panel_states = panel_states,
     panel_provenance = panel_provenance,
@@ -1612,6 +1797,341 @@ wlv_runtime_snapshot_capture <- function(
   ), class = "wlv_runtime_snapshot_capture")
   wlv_runtime_snapshot_capture_assert(capture)
   capture
+}
+
+wlv_runtime_snapshot_capture_preparation_version <- function() {
+  "wlv-runtime-snapshot-capture-preparation/1.0.0"
+}
+
+wlv_runtime_snapshot_capture_preparation_assert <- function(
+    preparation,
+    store) {
+  fields <- c(
+    "canonical_ids", "inputs", "lifecycle", "panel_provenance",
+    "panel_states", "remaining_entry_ids", "requests", "resources",
+    "store_identity_token", "store_reference", "version"
+  )
+  if (!inherits(preparation, "wlv_runtime_snapshot_capture_preparation") ||
+      !is.environment(preparation) || !environmentIsLocked(preparation) ||
+      !identical(parent.env(preparation), emptyenv()) || !identical(
+        ls(preparation, all.names = TRUE, sorted = TRUE),
+        fields
+      ) || !all(vapply(
+        fields,
+        bindingIsLocked,
+        logical(1L),
+        env = preparation
+      )) ||
+      !identical(
+        preparation$version,
+        wlv_runtime_snapshot_capture_preparation_version()
+      )) {
+    stop("Runtime snapshot capture preparation is invalid.", call. = FALSE)
+  }
+  wlv_runtime_snapshot_capture_store_assert_owned(store)
+  if (!identical(store, preparation$store_reference) ||
+      !inherits(preparation$store_identity_token, "wlv_store_identity") ||
+      !is.environment(preparation$store_identity_token) ||
+      !environmentIsLocked(preparation$store_identity_token) ||
+      !identical(store$identity_token, preparation$store_identity_token)) {
+    stop("Runtime snapshot capture preparation belongs to another store.",
+      call. = FALSE
+    )
+  }
+  lifecycle <- preparation$lifecycle
+  if (!inherits(lifecycle, "wlv_runtime_snapshot_capture_lifecycle") ||
+      !is.environment(lifecycle) || !environmentIsLocked(lifecycle) ||
+      !identical(parent.env(lifecycle), emptyenv()) || !identical(
+        ls(lifecycle, all.names = TRUE, sorted = TRUE),
+        "active"
+      ) || !is.logical(lifecycle$active) || length(lifecycle$active) != 1L ||
+      is.na(lifecycle$active) || !isTRUE(lifecycle$active)) {
+    stop("Runtime snapshot capture preparation is no longer active.",
+      call. = FALSE
+    )
+  }
+  inputs <- preparation$inputs
+  if (!is.list(inputs) || !identical(
+        names(inputs),
+        c("method", "source", "partitions", "compatibility")
+      )) {
+    stop("Runtime snapshot capture preparation inputs are invalid.",
+      call. = FALSE
+    )
+  }
+  validated_inputs <- wlv_runtime_snapshot_capture_inputs(
+    inputs$method,
+    inputs$source,
+    inputs$partitions,
+    inputs$compatibility
+  )
+  if (!identical(validated_inputs, inputs)) {
+    stop("Runtime snapshot capture preparation inputs are not canonical.",
+      call. = FALSE
+    )
+  }
+  requests <- preparation$requests
+  request_fields <- c(
+    "id", "key", "partition", "include_value", "state_rows"
+  )
+  if (!is.data.frame(requests) || !identical(names(requests), request_fields) ||
+      !is.character(requests$id) || !is.character(requests$key) ||
+      !is.character(requests$partition) ||
+      !is.logical(requests$include_value) || anyNA(requests$include_value) ||
+      !is.double(requests$state_rows) || anyNA(requests$state_rows) ||
+      any(!is.finite(requests$state_rows)) || any(requests$state_rows < 0) ||
+      any(requests$state_rows != floor(requests$state_rows))) {
+    stop("Runtime snapshot capture requests are invalid.", call. = FALSE)
+  }
+  canonical_ids <- wlv_runtime_snapshot_capture_resource_ids(
+    inputs$partitions
+  )
+  if (!identical(preparation$canonical_ids, canonical_ids) ||
+      !identical(as.character(requests$id), canonical_ids)) {
+    stop("Runtime snapshot capture preparation is not canonical.",
+      call. = FALSE
+    )
+  }
+  zero_ids <- canonical_ids[requests$state_rows == 0]
+  resource_ids <- names(preparation$resources)
+  if (is.null(resource_ids)) {
+    resource_ids <- character()
+  }
+  if (!is.list(preparation$resources) ||
+      !identical(resource_ids, zero_ids) ||
+      !is.list(preparation$panel_states) || !identical(
+        names(preparation$panel_states),
+        names(wlv_runtime_snapshot_panel_definitions())
+      ) || !is.data.frame(preparation$panel_provenance)) {
+    stop("Runtime snapshot capture preparation coverage is invalid.",
+      call. = FALSE
+    )
+  }
+  if (!identical(names(store$entries), preparation$remaining_entry_ids)) {
+    stop("Runtime snapshot capture store inventory changed between phases.",
+      call. = FALSE
+    )
+  }
+  remaining <- requests$state_rows > 0
+  if (length(store$entries)) {
+    retained <- vapply(store$entries, function(entry) {
+      any(
+        requests$key[remaining] == entry$key &
+          requests$partition[remaining] == entry$partition
+      ) || any(
+        vapply(
+          requests$key[remaining],
+          wlv_semantic_state_key,
+          character(1L)
+        ) == entry$key & requests$partition[remaining] == entry$partition
+      )
+    }, logical(1L))
+    if (!all(retained)) {
+      stop("Runtime snapshot capture store contains an unexpected resource.",
+        call. = FALSE
+      )
+    }
+  }
+  invisible(preparation)
+}
+
+wlv_runtime_snapshot_capture_begin <- function(
+    store,
+    method,
+    source,
+    partitions,
+    compatibility) {
+  wlv_runtime_snapshot_capture_store_assert_owned(store)
+  inputs <- wlv_runtime_snapshot_capture_inputs(
+    method,
+    source,
+    partitions,
+    compatibility
+  )
+  panel_states <- wlv_runtime_snapshot_panel_states(store)
+  panel_provenance <- wlv_runtime_snapshot_panel_provenance(store)
+  requests <- wlv_runtime_snapshot_capture_requests(store, inputs$partitions)
+  canonical_ids <- wlv_runtime_snapshot_capture_resource_ids(
+    inputs$partitions
+  )
+  if (!identical(as.character(requests$id), canonical_ids)) {
+    stop("Runtime snapshot resource requests are not canonical.", call. = FALSE)
+  }
+  wlv_runtime_snapshot_capture_store_retain(store, requests)
+  zero_order <- which(requests$state_rows == 0)
+  zero_order <- zero_order[order(
+    requests$include_value[zero_order],
+    requests$id[zero_order],
+    method = "radix"
+  )]
+  resources <- list()
+  for (request_index in zero_order) {
+    request <- requests[request_index, , drop = FALSE]
+    entry <- wlv_runtime_snapshot_entry(
+      store,
+      request$key[[1L]],
+      request$partition[[1L]],
+      include_value = request$include_value[[1L]]
+    )
+    resources[[request$id[[1L]]]] <- entry
+    released <- wlv_runtime_snapshot_capture_store_release(
+      store,
+      request$key[[1L]],
+      request$partition[[1L]]
+    )
+    if (released < 2L) {
+      stop(
+        sprintf(
+          "Owned snapshot fork did not release `%s[%s]` completely.",
+          request$key[[1L]],
+          request$partition[[1L]]
+        ),
+        call. = FALSE
+      )
+    }
+  }
+  resources <- resources[canonical_ids[canonical_ids %in% names(resources)]]
+  lifecycle <- new.env(parent = emptyenv())
+  lifecycle$active <- TRUE
+  class(lifecycle) <- "wlv_runtime_snapshot_capture_lifecycle"
+  lockEnvironment(lifecycle, bindings = FALSE)
+  preparation <- new.env(parent = emptyenv())
+  preparation$version <- wlv_runtime_snapshot_capture_preparation_version()
+  preparation$store_reference <- store
+  preparation$store_identity_token <- store$identity_token
+  preparation$lifecycle <- lifecycle
+  preparation$inputs <- inputs
+  preparation$requests <- requests
+  preparation$canonical_ids <- canonical_ids
+  preparation$remaining_entry_ids <- names(store$entries)
+  preparation$panel_states <- panel_states
+  preparation$panel_provenance <- panel_provenance
+  preparation$resources <- resources
+  class(preparation) <- "wlv_runtime_snapshot_capture_preparation"
+  lockEnvironment(preparation, bindings = TRUE)
+  wlv_runtime_snapshot_capture_preparation_assert(preparation, store)
+  preparation
+}
+
+wlv_runtime_snapshot_capture_finish <- function(preparation, store) {
+  wlv_runtime_snapshot_capture_preparation_assert(preparation, store)
+  lifecycle <- preparation$lifecycle
+  lifecycle$active <- FALSE
+  lockBinding("active", lifecycle)
+  requests <- preparation$requests
+  request_order <- which(requests$state_rows > 0)
+  request_order <- request_order[order(
+    -requests$state_rows[request_order],
+    requests$include_value[request_order],
+    requests$id[request_order],
+    method = "radix"
+  )]
+  resources <- preparation$resources
+  for (position in seq_along(request_order)) {
+    request_index <- request_order[[position]]
+    request <- requests[request_index, , drop = FALSE]
+    entry <- wlv_runtime_snapshot_entry(
+      store,
+      request$key[[1L]],
+      request$partition[[1L]],
+      include_value = request$include_value[[1L]]
+    )
+    resources[[request$id[[1L]]]] <- entry
+    released <- wlv_runtime_snapshot_capture_store_release(
+      store,
+      request$key[[1L]],
+      request$partition[[1L]]
+    )
+    if (released < 2L) {
+      stop(
+        sprintf(
+          "Owned snapshot fork did not release `%s[%s]` completely.",
+          request$key[[1L]],
+          request$partition[[1L]]
+        ),
+        call. = FALSE
+      )
+    }
+    rm(entry, released)
+    remaining <- if (position < length(request_order)) {
+      request_order[(position + 1L):length(request_order)]
+    } else {
+      integer()
+    }
+    if (length(remaining) && any(requests$state_rows[remaining] >= 2^20)) {
+      invisible(gc(full = TRUE))
+    }
+  }
+  resources <- resources[preparation$canonical_ids]
+  if (length(store$entries)) {
+    stop("Owned snapshot fork was not consumed completely.", call. = FALSE)
+  }
+  wlv_runtime_snapshot_capture_new(
+    preparation$inputs,
+    preparation$panel_states,
+    preparation$panel_provenance,
+    resources
+  )
+}
+
+wlv_runtime_snapshot_capture <- function(
+    store,
+    method,
+    source,
+    partitions,
+    compatibility,
+    consume_store = FALSE) {
+  if (!is.logical(consume_store) || length(consume_store) != 1L ||
+      is.na(consume_store)) {
+    stop("Runtime snapshot store-consumption flag is invalid.", call. = FALSE)
+  }
+  if (isTRUE(consume_store)) {
+    preparation <- wlv_runtime_snapshot_capture_begin(
+      store,
+      method,
+      source,
+      partitions,
+      compatibility
+    )
+    invisible(gc(full = TRUE))
+    return(wlv_runtime_snapshot_capture_finish(preparation, store))
+  }
+  inputs <- wlv_runtime_snapshot_capture_inputs(
+    method,
+    source,
+    partitions,
+    compatibility
+  )
+  panel_states <- wlv_runtime_snapshot_panel_states(store)
+  panel_provenance <- wlv_runtime_snapshot_panel_provenance(store)
+  requests <- wlv_runtime_snapshot_capture_requests(store, inputs$partitions)
+  canonical_ids <- wlv_runtime_snapshot_capture_resource_ids(
+    inputs$partitions
+  )
+  if (!identical(as.character(requests$id), canonical_ids)) {
+    stop("Runtime snapshot resource requests are not canonical.", call. = FALSE)
+  }
+  request_order <- seq_len(nrow(requests))
+  resources <- list()
+  for (request_index in request_order) {
+    request <- requests[request_index, , drop = FALSE]
+    entry <- wlv_runtime_snapshot_entry(
+      store,
+      request$key[[1L]],
+      request$partition[[1L]],
+      include_value = request$include_value[[1L]]
+    )
+    resources[[request$id[[1L]]]] <- entry
+    rm(entry)
+    invisible(gc(full = TRUE))
+  }
+  resources <- resources[canonical_ids]
+  wlv_runtime_snapshot_capture_new(
+    inputs,
+    panel_states,
+    panel_provenance,
+    resources
+  )
 }
 
 wlv_runtime_snapshot_capture_update_panel <- function(
@@ -1734,7 +2254,10 @@ wlv_runtime_snapshot_finalize <- function(
     resources = capture$resources,
     state_bindings = NULL
   )
-  snapshot$state_bindings <- wlv_runtime_snapshot_state_bindings(snapshot)
+  snapshot$state_bindings <- wlv_runtime_snapshot_state_bindings(
+    snapshot,
+    verify_resource_states = FALSE
+  )
   if (isTRUE(validate_snapshot)) {
     wlv_runtime_snapshot_validate(snapshot)
   }
@@ -2732,7 +3255,13 @@ wlv_runtime_snapshot_validate <- function(
       )
     }
   }
-  expected_bindings <- wlv_runtime_snapshot_state_bindings(snapshot)
+  # Every resource state was authenticated against its recorded hash in the
+  # loop above. Rebuilding bindings can therefore reuse that authenticated
+  # hash instead of regenerating millions of logical Cartesian rows.
+  expected_bindings <- wlv_runtime_snapshot_state_bindings(
+    snapshot,
+    verify_resource_states = FALSE
+  )
   bindings <- snapshot$state_bindings
   if (
     !is.data.frame(bindings) || !identical(
@@ -2819,20 +3348,58 @@ wlv_runtime_snapshot_authenticate_bound_files <- function(
   observed
 }
 
-wlv_runtime_snapshot_state_commitment_sha256 <- function(value) {
-  codec <- wlv_runtime_snapshot_state_pack(value)
+wlv_runtime_snapshot_state_commitment_from_chunks <- function(codec, chunks) {
+  codec <- wlv_runtime_snapshot_state_pack(codec)
   axes <- codec$axes
   target_key <- codec$target_key
   state_version <- codec$state_version
   columns <- c(axes, "state")
+  chunk_rows <- 65536L
+  expected_chunks <- if (codec$row_count) {
+    ceiling(codec$row_count / chunk_rows)
+  } else {
+    0
+  }
+  valid_chunks <- is.list(chunks) && identical(names(chunks), columns) &&
+    length(chunks) == length(columns)
+  if (isTRUE(valid_chunks)) {
+    valid_chunks <- all(vapply(chunks, function(current) {
+      is.character(current) && length(current) == expected_chunks &&
+        is.null(attributes(current)) && !anyNA(current) &&
+        all(grepl("^[0-9a-f]{64}$", current))
+    }, logical(1L)))
+  }
+  if (!isTRUE(valid_chunks)) {
+    stop("Runtime semantic-state commitment chunks are invalid.", call. = FALSE)
+  }
+  payload <- list(
+    version = "wlv-runtime-state-commitment/1.0.0",
+    target_key = wlv_runtime_snapshot_materialize_character(target_key)[[1L]],
+    axes = wlv_runtime_snapshot_materialize_character(axes),
+    state_version = wlv_runtime_snapshot_materialize_character(
+      state_version
+    )[[1L]],
+    row_count = codec$row_count,
+    chunks = chunks
+  )
+  wlv_publication_sha256_raw(serialize(payload, NULL, version = 3L))
+}
+
+wlv_runtime_snapshot_state_commitment_sha256 <- function(value) {
+  codec <- wlv_runtime_snapshot_state_pack(value)
+  columns <- c(codec$axes, "state")
   chunk_rows <- 65536L
   starts <- if (codec$row_count) {
     seq.int(1, codec$row_count, by = chunk_rows)
   } else {
     integer()
   }
-  chunks <- lapply(columns, function(column) {
-    vapply(starts, function(start) {
+  chunks <- stats::setNames(lapply(columns, function(column) {
+    character(length(starts))
+  }), columns)
+  for (column in columns) {
+    for (chunk_index in seq_along(starts)) {
+      start <- starts[[chunk_index]]
       end <- min(codec$row_count, start + chunk_rows - 1L)
       source <- if (identical(codec$encoding, "rows")) {
         codec$rows[[column]][start:end]
@@ -2847,28 +3414,23 @@ wlv_runtime_snapshot_state_commitment_sha256 <- function(value) {
       current <- wlv_runtime_snapshot_materialize_character(
         source
       )
-      wlv_publication_sha256_raw(serialize(current, NULL, version = 3L))
-    }, character(1L))
-  })
-  names(chunks) <- columns
-  payload <- list(
-    version = "wlv-runtime-state-commitment/1.0.0",
-    target_key = wlv_runtime_snapshot_materialize_character(target_key)[[1L]],
-    axes = wlv_runtime_snapshot_materialize_character(axes),
-    state_version = wlv_runtime_snapshot_materialize_character(
-      state_version
-    )[[1L]],
-    row_count = codec$row_count,
-    chunks = chunks
-  )
-  wlv_publication_sha256_raw(serialize(payload, NULL, version = 3L))
+      chunks[[column]][[chunk_index]] <- wlv_publication_sha256_raw(
+        serialize(current, NULL, version = 3L)
+      )
+      rm(source, current)
+    }
+  }
+  wlv_runtime_snapshot_state_commitment_from_chunks(codec, chunks)
 }
 
 wlv_runtime_snapshot_state_sha256 <- function(value) {
   wlv_runtime_snapshot_state_commitment_sha256(value)
 }
 
-wlv_runtime_snapshot_resource_commitment <- function(id, entry) {
+wlv_runtime_snapshot_resource_commitment <- function(
+    id,
+    entry,
+    verify_state = TRUE) {
   expected <- c(
     "key", "partition", "producer", "state_producer", "contract_sha256",
     "axes_sha256", "value_sha256", "state_sha256", "value", "state"
@@ -2900,8 +3462,20 @@ wlv_runtime_snapshot_resource_commitment <- function(id, entry) {
       )
     )
   }
-  state_metadata <- wlv_runtime_snapshot_state_metadata(entry$state)
-  if (!identical(state_metadata$state_sha256, entry$state_sha256)) {
+  if (!is.logical(verify_state) || length(verify_state) != 1L ||
+      is.na(verify_state)) {
+    stop("Runtime snapshot resource state-validation flag is invalid.",
+      call. = FALSE
+    )
+  }
+  state_metadata <- wlv_runtime_snapshot_state_metadata(
+    entry$state,
+    if (isTRUE(verify_state)) NULL else entry$state_sha256
+  )
+  if (isTRUE(verify_state) && !identical(
+        state_metadata$state_sha256,
+        entry$state_sha256
+      )) {
     stop("Runtime snapshot resource state commitment is invalid.",
       call. = FALSE
     )
@@ -2921,7 +3495,9 @@ wlv_runtime_snapshot_resource_commitment <- function(id, entry) {
   )
 }
 
-wlv_runtime_snapshot_logical_commitment_sha256 <- function(snapshot) {
+wlv_runtime_snapshot_logical_commitment_sha256 <- function(
+    snapshot,
+    verify_resource_states = TRUE) {
   expected <- c(
     "version", "method", "source", "partitions", "compatibility",
     "io_artifacts", "panel_artifacts", "panel_states",
@@ -2933,13 +3509,23 @@ wlv_runtime_snapshot_logical_commitment_sha256 <- function(snapshot) {
       !is.list(snapshot$resources) || is.null(names(snapshot$resources))) {
     stop("Runtime snapshot commitment input is invalid.", call. = FALSE)
   }
+  if (!is.logical(verify_resource_states) ||
+      length(verify_resource_states) != 1L || is.na(verify_resource_states)) {
+    stop("Runtime snapshot commitment validation flag is invalid.",
+      call. = FALSE
+    )
+  }
   panel_states_sha256 <- vapply(
     snapshot$panel_states,
     wlv_runtime_snapshot_state_commitment_sha256,
     character(1L)
   )
   resources <- lapply(names(snapshot$resources), function(id) {
-    wlv_runtime_snapshot_resource_commitment(id, snapshot$resources[[id]])
+    wlv_runtime_snapshot_resource_commitment(
+      id,
+      snapshot$resources[[id]],
+      verify_state = verify_resource_states
+    )
   })
   names(resources) <- names(snapshot$resources)
   payload <- list(
@@ -3008,7 +3594,10 @@ wlv_runtime_snapshot_receipt_files <- function(snapshot, snapshot_sha256) {
   records
 }
 
-wlv_runtime_snapshot_receipt_from_sha256 <- function(snapshot, snapshot_sha256) {
+wlv_runtime_snapshot_receipt_from_sha256 <- function(
+    snapshot,
+    snapshot_sha256,
+    verify_resource_states = TRUE) {
   records <- wlv_runtime_snapshot_receipt_files(
     snapshot,
     snapshot_sha256
@@ -3019,15 +3608,22 @@ wlv_runtime_snapshot_receipt_from_sha256 <- function(snapshot, snapshot_sha256) 
     source = snapshot$source,
     partitions = snapshot$partitions,
     snapshot_commitment_sha256 =
-      wlv_runtime_snapshot_logical_commitment_sha256(snapshot),
+      wlv_runtime_snapshot_logical_commitment_sha256(
+        snapshot,
+        verify_resource_states = verify_resource_states
+      ),
     files = records
   ), class = "wlv_runtime_snapshot_receipt")
 }
 
-wlv_runtime_snapshot_receipt <- function(snapshot, path) {
+wlv_runtime_snapshot_receipt <- function(
+    snapshot,
+    path,
+    verify_resource_states = TRUE) {
   wlv_runtime_snapshot_receipt_from_sha256(
     snapshot,
-    wlv_publication_file_sha256(path)
+    wlv_publication_file_sha256(path),
+    verify_resource_states = verify_resource_states
   )
 }
 
@@ -3276,7 +3872,10 @@ wlv_runtime_snapshot_receipt_assert <- function(
   }
   wlv_runtime_snapshot_validate(snapshot)
   observed_commitment_sha256 <-
-    wlv_runtime_snapshot_logical_commitment_sha256(snapshot)
+    wlv_runtime_snapshot_logical_commitment_sha256(
+      snapshot,
+      verify_resource_states = FALSE
+    )
   if (!identical(
         observed_commitment_sha256,
         receipt$snapshot_commitment_sha256
@@ -3797,7 +4396,11 @@ wlv_runtime_snapshot_write <- function(
   path <- file.path(staging, wlv_runtime_snapshot_filename())
   saveRDS(snapshot, path, version = 3L, compress = "gzip")
   if (isTRUE(defer_verification)) {
-    return(wlv_runtime_snapshot_receipt(snapshot, path))
+    return(wlv_runtime_snapshot_receipt(
+      snapshot,
+      path,
+      verify_resource_states = FALSE
+    ))
   }
   before_sha256 <- wlv_publication_file_sha256(path)
   observed <- readRDS(path)
@@ -3821,7 +4424,8 @@ wlv_runtime_snapshot_write <- function(
   if (isTRUE(return_receipt)) {
     receipt <- wlv_runtime_snapshot_receipt_from_sha256(
       observed,
-      after_sha256
+      after_sha256,
+      verify_resource_states = FALSE
     )
     snapshot_row <- match(wlv_runtime_snapshot_filename(), receipt$files$path)
     receipt <- wlv_runtime_snapshot_receipt_attach_bindings(
@@ -3876,7 +4480,11 @@ wlv_runtime_snapshot_verify_write <- function(
     )
   }
   wlv_runtime_snapshot_validate(observed)
-  verified <- wlv_runtime_snapshot_receipt_from_sha256(observed, after)
+  verified <- wlv_runtime_snapshot_receipt_from_sha256(
+    observed,
+    after,
+    verify_resource_states = FALSE
+  )
   unverified_receipt <- receipt
   attr(
     unverified_receipt,
