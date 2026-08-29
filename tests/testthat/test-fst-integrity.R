@@ -14,6 +14,125 @@ wlv_fst_integrity_files <- function(root) {
   list.files(root, all.files = TRUE, no.. = TRUE)
 }
 
+wlv_fst_integrity_supported_arrays <- function() {
+  labels <- setNames(
+    list(c("r1", "r2"), c("c1", "c2")),
+    c("row", "column")
+  )
+  list(
+    logical = array(c(TRUE, FALSE, NA, TRUE), c(2L, 2L), labels),
+    integer = array(c(1L, NA_integer_, 3L, 4L), c(2L, 2L), labels),
+    double = array(c(1, NA_real_, NaN, Inf), c(2L, 2L), labels),
+    character = array(
+      c("a\u00e7\u00e3o", NA_character_, "\u03b2", "\u6771\u4eac"),
+      c(2L, 2L),
+      labels
+    ),
+    raw = array(as.raw(1:4), c(2L, 2L), labels)
+  )
+}
+
+wlv_fst_integrity_raw_file <- function(path) {
+  readBin(path, what = "raw", n = file.info(path)$size)
+}
+
+wlv_fst_integrity_write_legacy_bundle <- function(
+    runtime,
+    value,
+    path,
+    drop_axis_names = FALSE) {
+  fst::write_fst(
+    data.frame(Data = as.vector(value), check.names = FALSE),
+    path
+  )
+  metadata <- runtime$wlv_fst_sidecar(
+    value,
+    runtime$wlv_fst_file_sha256(path),
+    drop_axis_names = drop_axis_names
+  )
+  saveRDS(metadata, paste0(path, ".meta"), version = 3L)
+  invisible(path)
+}
+
+test_that("canonical FST column tables share every supported array payload", {
+  skip_if_not(capabilities("profmem"))
+
+  supported <- wlv_fst_integrity_supported_arrays()
+  for (name in names(supported)) {
+    value <- supported[[name]]
+    address <- tracemem(value)
+    table <- fst_integrity_environment$wlv_fst_array_column_table(value)
+
+    expect_true(inherits(table, "data.frame"), info = name)
+    expect_identical(names(table), "Data", info = name)
+    expect_identical(nrow(table), length(value), info = name)
+    expect_identical(typeof(table[[1L]]), typeof(value), info = name)
+    expect_identical(dim(table[[1L]]), dim(value), info = name)
+    expect_identical(dimnames(table[[1L]]), dimnames(value), info = name)
+    expect_identical(tracemem(table[[1L]]), address, info = name)
+    untracemem(value)
+
+    legacy_table <- data.frame(Data = as.vector(value), check.names = FALSE)
+    expect_identical(
+      names(attributes(table)),
+      names(attributes(legacy_table)),
+      info = name
+    )
+    expect_identical(
+      attr(table, "row.names", exact = TRUE),
+      attr(legacy_table, "row.names", exact = TRUE),
+      info = name
+    )
+  }
+})
+
+test_that("zero-copy FST bundles are byte-identical to the legacy writer", {
+  skip_if_not_installed("fst")
+  skip_if_not_installed("openssl")
+  root <- wlv_fst_integrity_root("legacy-writer-equivalence")
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+
+  supported <- wlv_fst_integrity_supported_arrays()
+  for (drop_axis_names in c(FALSE, TRUE)) {
+    suffix <- if (drop_axis_names) "dropped" else "named"
+    for (name in names(supported)) {
+      value <- supported[[name]]
+      legacy_path <- file.path(root, paste0(name, "-", suffix, "-legacy.fst"))
+      current_path <- file.path(root, paste0(name, "-", suffix, "-current.fst"))
+      wlv_fst_integrity_write_legacy_bundle(
+        fst_integrity_environment,
+        value,
+        legacy_path,
+        drop_axis_names = drop_axis_names
+      )
+      fst_integrity_environment$write_fst_array(
+        value,
+        current_path,
+        drop_axis_names = drop_axis_names
+      )
+
+      expect_identical(
+        wlv_fst_integrity_raw_file(current_path),
+        wlv_fst_integrity_raw_file(legacy_path),
+        info = paste(name, suffix, "data")
+      )
+      expect_identical(
+        wlv_fst_integrity_raw_file(paste0(current_path, ".meta")),
+        wlv_fst_integrity_raw_file(paste0(legacy_path, ".meta")),
+        info = paste(name, suffix, "sidecar")
+      )
+      current_metadata <- fst::metadata_fst(current_path)
+      legacy_metadata <- fst::metadata_fst(legacy_path)
+      current_metadata$path <- legacy_metadata$path <- NULL
+      expect_identical(
+        current_metadata,
+        legacy_metadata,
+        info = paste(name, suffix, "physical metadata")
+      )
+    }
+  }
+})
+
 test_that("versioned FST bundles preserve values, dimensions, and Unicode dimnames", {
   skip_if_not_installed("fst")
   skip_if_not_installed("openssl")
@@ -103,13 +222,7 @@ test_that("FST bundles preserve base storage and reject lossy attributes", {
   root <- wlv_fst_integrity_root("storage")
   on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
 
-  supported <- list(
-    logical = array(c(TRUE, FALSE, NA, TRUE), c(2L, 2L)),
-    integer = array(c(1L, NA_integer_, 3L, 4L), c(2L, 2L)),
-    double = array(c(1, NA_real_, NaN, Inf), c(2L, 2L)),
-    character = array(c("a", NA_character_, "c", "d"), c(2L, 2L)),
-    raw = array(as.raw(1:4), c(2L, 2L))
-  )
+  supported <- wlv_fst_integrity_supported_arrays()
   for (name in names(supported)) {
     path <- file.path(root, paste0(name, ".fst"))
     fst_integrity_environment$write_fst_array(supported[[name]], path)

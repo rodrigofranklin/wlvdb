@@ -41,6 +41,22 @@ test_that("parent seed requests separate source origin from child locator", {
     resolution$origin_producer,
     "normalize.indicator.go_price.r.id"
   )
+  expect_identical(
+    resolution$state_sha256,
+    runtime$wlv_runtime_snapshot_state_sha256(state)
+  )
+  expect_error(
+    runtime$wlv_parent_seed_resolution(
+      terminal,
+      origin_producer = "normalize.indicator.go_price.r.id",
+      origin_state_producer = "normalize.indicator.go_price.r.id",
+      value = value,
+      state = state,
+      snapshot_sha256 = paste0(rep("a", 64L), collapse = ""),
+      authenticated_state_sha256 = "bad"
+    ),
+    "invalid authenticated state hash"
+  )
 
   exact <- runtime$wlv_parent_seed_request(
     key = "sea/sector/go_price.r.id",
@@ -105,6 +121,11 @@ wlv_test_runtime_snapshot_store <- function(
         c("year", "input", "output")
       )
     )
+    io_states <- runtime$wlv_semantic_state_array(
+      value,
+      c("year", "input", "output")
+    )
+    io_states[is.na(value) & !is.nan(value)] <- "not_applicable"
     seeds <- c(
       seeds,
       runtime$wlv_native_stateful_seed_pair(runtime$wlv_seed_resource(
@@ -113,10 +134,7 @@ wlv_test_runtime_snapshot_store <- function(
         runtime$wlv_native_io_contract(resource),
         partition = partition,
         producer = paste0("parent.", resource)
-      ), states = runtime$wlv_semantic_state_array(
-        value,
-        c("year", "input", "output")
-      ))
+      ), states = io_states)
     )
   }
   seeds <- c(
@@ -486,17 +504,19 @@ test_that("parent IO and lambda reconstruction fail closed without provenance", 
   )
   source_io <- array(
     1,
-    dim = c(1L, 1L, 1L),
-    dimnames = list(year = "2000", input = "A", output = "A")
+    dim = c(1L, 1L, 2L),
+    dimnames = list(year = "2000", input = "A", output = c("A", "FD"))
   )
   io_resources <- runtime$wlv_runtime_snapshot_io_resources()
   parent_io <- array(
-    as.double(seq_along(io_resources)),
-    dim = c(1L, length(io_resources), 1L, 1L),
+    NA_real_,
+    dim = c(1L, length(io_resources), 1L, 2L),
     dimnames = list(
-      year = "2000", variable = io_resources, input = "A", output = "A"
+      year = "2000", variable = io_resources, input = "A",
+      output = c("A", "FD")
     )
   )
+  parent_io[, , , "A"] <- as.double(seq_along(io_resources))
   source_path <- file.path(source_root, "m_io_source.fst")
   parent_io_path <- file.path(parent, "parent-period.fst")
   runtime$write_fst_array(source_io, source_path)
@@ -530,7 +550,7 @@ test_that("parent IO and lambda reconstruction fail closed without provenance", 
       source_io_paths = source_path,
       partitions = "2000-2000",
       resolved = resolved,
-      dimensions = list(lists = list(input = "A", output = "A")),
+      dimensions = list(lists = list(input = "A", output = c("A", "FD"))),
       method = "test_method",
       source = "wiodr13"
     ),
@@ -596,13 +616,18 @@ test_that("parent IO and lambda reconstruction fail closed without provenance", 
       method = "test_method"
     )
   )
+  values_id <- paste("io/values", "2000-2000", sep = "\034")
+  expect_identical(
+    snapshot$resources[[values_id]]$state$encoding,
+    "cartesian"
+  )
   runtime$wlv_runtime_snapshot_write(snapshot, parent)
   imported <- runtime$wlv_native_parent_io_seeds(
     parent_result_dir = parent,
     source_io_paths = source_path,
     partitions = "2000-2000",
     resolved = resolved,
-    dimensions = list(lists = list(input = "A", output = "A")),
+    dimensions = list(lists = list(input = "A", output = c("A", "FD"))),
     method = "test_method",
     source = "wiodr13"
   )
@@ -619,6 +644,29 @@ test_that("parent IO and lambda reconstruction fail closed without provenance", 
     dimnames = dimnames(parent_io)[c("year", "input", "output")]
   )
   expect_identical(imported_values$value, expected_values)
+  imported_values_state <- Filter(function(seed) {
+    identical(seed$key, "semantic_state/io/values")
+  }, imported$seeds)[[1L]]
+  expect_identical(
+    imported_values_state$value,
+    runtime$wlv_runtime_snapshot_state_unpack(
+      snapshot$resources[[values_id]]$state,
+      expected_values
+    )
+  )
+  expect_identical(
+    imported_values_state$value$state,
+    "not_applicable"
+  )
+  values_resolution <- imported$resolutions[
+    imported$resolutions$key == "io/values",
+    ,
+    drop = FALSE
+  ]
+  expect_identical(
+    values_resolution$state_sha256,
+    snapshot$resources[[values_id]]$state_sha256
+  )
   imported_lambda <- Filter(function(seed) {
     identical(seed$key, "intermediate/lambda")
   }, imported$seeds)[[1L]]
@@ -636,7 +684,7 @@ test_that("parent IO and lambda reconstruction fail closed without provenance", 
     source_io_paths = source_path,
     partitions = "2000-2000",
     resolved = incompatible,
-    dimensions = list(lists = list(input = "A", output = "A")),
+    dimensions = list(lists = list(input = "A", output = c("A", "FD"))),
     method = "test_method",
     source = "wiodr13"
   )

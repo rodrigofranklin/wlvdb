@@ -236,6 +236,232 @@ test_that("runtime snapshot hashes semantic states independently of ALTREP", {
   )
 })
 
+test_that("runtime snapshot state codec is compact, canonical, and lossless", {
+  runtime <- runtime_snapshot_environment
+  value <- array(
+    1,
+    dim = c(3L, 2L, 4L),
+    dimnames = list(
+      year = c("2000", "2001", "2002"),
+      input = c("A.S1", "B.S1"),
+      output = c("A.S1", "B.S1", "A.c41", "B.c41")
+    )
+  )
+  states <- runtime$wlv_semantic_state_array(
+    value,
+    c("year", "input", "output")
+  )
+  value[, , c("A.c41", "B.c41")] <- NA_real_
+  states[, , c("A.c41", "B.c41")] <- "not_applicable"
+  resource <- runtime$wlv_semantic_state_encode(
+    value,
+    states,
+    "io/values",
+    c("year", "input", "output")
+  )
+  codec <- runtime$wlv_runtime_snapshot_state_pack(resource)
+
+  expect_s3_class(codec, "wlv_runtime_semantic_state_codec")
+  expect_identical(codec$encoding, "cartesian")
+  expect_identical(codec$row_count, 12)
+  expect_identical(
+    codec$selectors,
+    list(
+      year = c("2000", "2001", "2002"),
+      input = c("A.S1", "B.S1"),
+      output = c("A.c41", "B.c41")
+    )
+  )
+  expect_identical(codec$state, "not_applicable")
+  expect_null(codec$rows)
+  expect_identical(
+    runtime$wlv_runtime_snapshot_state_unpack(codec, value),
+    resource
+  )
+  expect_identical(
+    runtime$wlv_runtime_snapshot_state_sha256(codec),
+    runtime$wlv_runtime_snapshot_state_sha256(resource)
+  )
+  expect_lt(
+    length(serialize(codec, NULL, version = 3L)),
+    length(serialize(resource, NULL, version = 3L))
+  )
+
+  fallback_value <- value
+  fallback_value[is.na(fallback_value)] <- 1
+  l_shape_states <- runtime$wlv_semantic_state_array(
+    fallback_value,
+    c("year", "input", "output")
+  )
+  l_shape_states["2000", "A.S1", "A.c41"] <- "not_applicable"
+  l_shape_states["2001", "B.S1", "B.c41"] <- "not_applicable"
+  l_shape <- runtime$wlv_semantic_state_encode(
+    fallback_value,
+    l_shape_states,
+    "io/values",
+    c("year", "input", "output")
+  )
+  rows_codec <- runtime$wlv_runtime_snapshot_state_pack(l_shape)
+  expect_identical(rows_codec$encoding, "rows")
+  expect_identical(rows_codec$rows, l_shape)
+  expect_identical(
+    runtime$wlv_runtime_snapshot_state_unpack(rows_codec, fallback_value),
+    l_shape
+  )
+  expect_identical(
+    runtime$wlv_runtime_snapshot_state_sha256(rows_codec),
+    runtime$wlv_runtime_snapshot_state_sha256(l_shape)
+  )
+
+  mixed_states <- l_shape_states
+  mixed_states["2001", "B.S1", "B.c41"] <- "source_missing"
+  mixed <- runtime$wlv_semantic_state_encode(
+    fallback_value,
+    mixed_states,
+    "io/values",
+    c("year", "input", "output")
+  )
+  expect_identical(
+    runtime$wlv_runtime_snapshot_state_pack(mixed)$encoding,
+    "rows"
+  )
+  empty <- runtime$wlv_semantic_empty_state(
+    "io/values",
+    c("year", "input", "output")
+  )
+  expect_identical(
+    runtime$wlv_runtime_snapshot_state_pack(empty)$encoding,
+    "rows"
+  )
+})
+
+test_that("runtime snapshot state codec rejects non-canonical tampering", {
+  runtime <- runtime_snapshot_environment
+  value <- array(
+    NA_real_,
+    dim = c(2L, 1L, 2L),
+    dimnames = list(
+      year = c("2000", "2001"),
+      input = "A.S1",
+      output = c("A.c41", "B.c41")
+    )
+  )
+  states <- array(
+    "not_applicable",
+    dim = dim(value),
+    dimnames = dimnames(value)
+  )
+  resource <- runtime$wlv_semantic_state_encode(
+    value,
+    states,
+    "io/values",
+    c("year", "input", "output")
+  )
+  codec <- runtime$wlv_runtime_snapshot_state_pack(resource)
+
+  duplicate <- codec
+  duplicate$selectors$year <- c("2000", "2000")
+  expect_error(
+    runtime$wlv_runtime_snapshot_state_codec_validate(duplicate),
+    "selectors are not canonical"
+  )
+  reordered <- codec
+  reordered$selectors$output <- rev(reordered$selectors$output)
+  expect_error(
+    runtime$wlv_runtime_snapshot_state_codec_validate(reordered),
+    "selectors are not canonical"
+  )
+  wrong_count <- codec
+  wrong_count$row_count <- wrong_count$row_count + 1
+  expect_error(
+    runtime$wlv_runtime_snapshot_state_codec_validate(wrong_count),
+    "count is invalid"
+  )
+  wrong_state <- codec
+  wrong_state$state <- "finite"
+  expect_error(
+    runtime$wlv_runtime_snapshot_state_codec_validate(wrong_state),
+    "payload is invalid"
+  )
+  extra_field <- codec
+  extra_field$unexpected <- TRUE
+  expect_error(
+    runtime$wlv_runtime_snapshot_state_codec_validate(extra_field),
+    "codec is invalid"
+  )
+  noncanonical_rows <- codec
+  noncanonical_rows$encoding <- "rows"
+  noncanonical_rows["selectors"] <- list(NULL)
+  noncanonical_rows["state"] <- list(NULL)
+  noncanonical_rows$rows <- resource
+  expect_error(
+    runtime$wlv_runtime_snapshot_state_codec_validate(noncanonical_rows),
+    "canonical cartesian encoding"
+  )
+  expect_error(
+    runtime$wlv_runtime_snapshot_state_codec_validate(
+      codec,
+      target_key = "io/k_composition"
+    ),
+    "target_key does not match"
+  )
+  unknown_label <- codec
+  unknown_label$selectors$output[[1L]] <- "A.c40"
+  expect_error(
+    runtime$wlv_runtime_snapshot_state_unpack(unknown_label, value),
+    "unknown coordinates"
+  )
+  incomplete <- codec
+  incomplete$selectors$output <- incomplete$selectors$output[[1L]]
+  incomplete$row_count <- 2
+  expect_silent(
+    runtime$wlv_runtime_snapshot_state_codec_validate(incomplete)
+  )
+  expect_error(
+    runtime$wlv_runtime_snapshot_state_unpack(incomplete, value),
+    "Every ordinary NA requires an explicit non-finite semantic state"
+  )
+  empty_rows <- runtime$wlv_runtime_snapshot_state_pack(
+    runtime$wlv_semantic_empty_state(
+      "io/values",
+      c("year", "input", "output")
+    )
+  )
+  expect_identical(empty_rows$encoding, "rows")
+  negative_zero <- empty_rows
+  negative_zero$row_count <- -0
+  expect_false(identical(
+    serialize(negative_zero$row_count, NULL, version = 3L),
+    serialize(empty_rows$row_count, NULL, version = 3L)
+  ))
+  expect_error(
+    runtime$wlv_runtime_snapshot_state_codec_validate(negative_zero),
+    "codec is invalid"
+  )
+  expect_error(
+    runtime$wlv_runtime_snapshot_state_unpack(empty_rows, value),
+    "Every ordinary NA"
+  )
+  changed <- codec
+  changed$state <- "source_missing"
+  expect_false(identical(
+    runtime$wlv_runtime_snapshot_state_sha256(changed),
+    runtime$wlv_runtime_snapshot_state_sha256(codec)
+  ))
+  expect_false(identical(
+    runtime$wlv_runtime_snapshot_binding_sha256(
+      "io-test",
+      paste0(rep("a", 64L), collapse = ""),
+      changed
+    ),
+    runtime$wlv_runtime_snapshot_binding_sha256(
+      "io-test",
+      paste0(rep("a", 64L), collapse = ""),
+      codec
+    )
+  ))
+})
+
 wlv_test_runtime_snapshot_fixture <- function() {
   runtime <- runtime_snapshot_environment
   partition <- "2000-2000"
@@ -893,14 +1119,19 @@ test_that("runtime snapshot persists lambda and IO states without duplicating IO
     fixture$partition
   )
   expect_true(is.array(lambda$value))
-  expect_s3_class(lambda$state, "wlv_semantic_state")
+  expect_s3_class(lambda$state, "wlv_runtime_semantic_state_codec")
+  expect_s3_class(
+    runtime$wlv_runtime_snapshot_state_unpack(lambda$state, lambda$value),
+    "wlv_semantic_state"
+  )
   io <- runtime$wlv_runtime_snapshot_resource(
     observed,
     "io/values",
     fixture$partition
   )
   expect_null(io$value)
-  expect_s3_class(io$state, "wlv_semantic_state")
+  expect_s3_class(io$state, "wlv_runtime_semantic_state_codec")
+  expect_identical(io$state$encoding, "cartesian")
   expect_identical(
     observed$panel_provenance$producer,
     c("snapshot.sector", "snapshot.country")
@@ -956,7 +1187,7 @@ test_that("runtime snapshot states are bound to persisted artifact coordinates",
 
   shifted_io <- snapshot
   io_id <- paste("io/values", fixture$partition, sep = "\034")
-  shifted_io$resources[[io_id]]$state$output[[1L]] <- "AAA.S1"
+  shifted_io$resources[[io_id]]$state$selectors$output[[1L]] <- "AAA.S1"
   expect_error(
     runtime$wlv_runtime_snapshot_validate(shifted_io),
     "provenance is invalid"

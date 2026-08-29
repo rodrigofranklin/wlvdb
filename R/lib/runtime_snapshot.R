@@ -11,7 +11,7 @@ wlv_runtime_snapshot_filename <- function() {
 }
 
 wlv_runtime_snapshot_version <- function() {
-  "wlv-runtime-resources/1.0.0"
+  "wlv-runtime-resources/1.1.0"
 }
 
 wlv_runtime_compatibility_version <- function() {
@@ -205,6 +205,7 @@ wlv_runtime_snapshot_entry <- function(
     axes = contract$axes,
     state_key = state_key
   )
+  state <- wlv_runtime_snapshot_state_pack_validated(state_entry$value)
   list(
     key = key,
     partition = partition,
@@ -216,9 +217,9 @@ wlv_runtime_snapshot_entry <- function(
       contract$axes
     ),
     value_sha256 = wlv_runtime_snapshot_value_sha256(value_entry$value),
-    state_sha256 = wlv_runtime_snapshot_value_sha256(state_entry$value),
+    state_sha256 = wlv_runtime_snapshot_state_sha256(state),
     value = if (isTRUE(include_value)) value_entry$value else NULL,
-    state = state_entry$value
+    state = state
   )
 }
 
@@ -541,26 +542,10 @@ wlv_runtime_snapshot_second_axis_slice_sha256 <- function(
   )
 }
 
-wlv_runtime_snapshot_canonical_state <- function(value) {
-  wlv_semantic_state_validate(value)
-  axes <- wlv_runtime_snapshot_materialize_character(
-    attr(value, "axes", exact = TRUE)
-  )
-  target_key <- wlv_runtime_snapshot_materialize_character(
-    attr(value, "target_key", exact = TRUE)
-  )[[1L]]
-  rows <- wlv_semantic_plain_data_frame(value, c(axes, "state"))
-  rows[] <- lapply(rows, wlv_runtime_snapshot_materialize_character)
-  wlv_semantic_new_state_resource(
-    rows,
-    target_key,
-    axes
-  )
-}
-
 wlv_runtime_snapshot_value_sha256 <- function(value) {
-  if (inherits(value, "wlv_semantic_state")) {
-    value <- wlv_runtime_snapshot_canonical_state(value)
+  if (inherits(value, "wlv_semantic_state") ||
+      inherits(value, "wlv_runtime_semantic_state_codec")) {
+    return(wlv_runtime_snapshot_state_sha256(value))
   }
   if (is.numeric(value) && is.array(value) && !is.null(dimnames(value)) &&
       !any(vapply(dimnames(value), is.null, logical(1L)))) {
@@ -570,6 +555,365 @@ wlv_runtime_snapshot_value_sha256 <- function(value) {
     value <- wlv_runtime_snapshot_materialize_character(value)
   }
   wlv_publication_sha256_raw(serialize(value, NULL, version = 3L))
+}
+
+wlv_runtime_snapshot_state_codec_version <- function() {
+  "wlv-runtime-semantic-state-codec/1.0.0"
+}
+
+wlv_runtime_snapshot_state_codec_fields <- function() {
+  c(
+    "version", "encoding", "target_key", "axes", "state_version",
+    "row_count", "selectors", "state", "rows"
+  )
+}
+
+wlv_runtime_snapshot_is_state_codec <- function(value) {
+  inherits(value, "wlv_runtime_semantic_state_codec")
+}
+
+wlv_runtime_snapshot_state_axis_labels <- function(
+    value,
+    chunk_rows = 65536L) {
+  if (!is.character(value) || anyNA(value) ||
+      !is.numeric(chunk_rows) || length(chunk_rows) != 1L ||
+      is.na(chunk_rows) || !is.finite(chunk_rows) || chunk_rows < 1L) {
+    stop("Runtime state-codec axis labels are invalid.", call. = FALSE)
+  }
+  chunk_rows <- as.integer(chunk_rows)
+  labels <- character()
+  if (length(value)) {
+    for (start in seq.int(1L, length(value), by = chunk_rows)) {
+      end <- min(length(value), start + chunk_rows - 1L)
+      labels <- unique(c(labels, enc2utf8(value[start:end])))
+    }
+  }
+  sort(labels, method = "radix")
+}
+
+wlv_runtime_snapshot_state_uniform_value <- function(
+    value,
+    chunk_rows = 65536L) {
+  if (!is.character(value) || anyNA(value) || !length(value) ||
+      !is.numeric(chunk_rows) || length(chunk_rows) != 1L ||
+      is.na(chunk_rows) || !is.finite(chunk_rows) || chunk_rows < 1L) {
+    return(NULL)
+  }
+  chunk_rows <- as.integer(chunk_rows)
+  candidate <- value[[1L]]
+  for (start in seq.int(1L, length(value), by = chunk_rows)) {
+    end <- min(length(value), start + chunk_rows - 1L)
+    if (any(value[start:end] != candidate)) {
+      return(NULL)
+    }
+  }
+  enc2utf8(candidate)
+}
+
+wlv_runtime_snapshot_state_cartesian_descriptor <- function(value) {
+  axes <- attr(value, "axes", exact = TRUE)
+  uniform_state <- wlv_runtime_snapshot_state_uniform_value(value$state)
+  if (is.null(uniform_state)) {
+    return(NULL)
+  }
+  selectors <- stats::setNames(lapply(axes, function(axis) {
+    wlv_runtime_snapshot_state_axis_labels(value[[axis]])
+  }), axes)
+  expected_rows <- prod(vapply(selectors, length, double(1L)))
+  if (!is.finite(expected_rows) || expected_rows < 1 ||
+      !identical(as.double(nrow(value)), expected_rows)) {
+    return(NULL)
+  }
+  list(selectors = selectors, state = uniform_state)
+}
+
+wlv_runtime_snapshot_new_state_codec <- function(
+    encoding,
+    target_key,
+    axes,
+    state_version,
+    row_count,
+    selectors = NULL,
+    state = NULL,
+    rows = NULL) {
+  structure(list(
+    version = wlv_runtime_snapshot_state_codec_version(),
+    encoding = encoding,
+    target_key = target_key,
+    axes = axes,
+    state_version = state_version,
+    row_count = as.double(row_count),
+    selectors = selectors,
+    state = state,
+    rows = rows
+  ), class = "wlv_runtime_semantic_state_codec")
+}
+
+wlv_runtime_snapshot_state_codec_validate <- function(
+    value,
+    target_key = NULL,
+    axes = NULL,
+    state_key = NULL,
+    target_value = NULL) {
+  if (!is.list(value) || !identical(
+        class(value),
+        "wlv_runtime_semantic_state_codec"
+      ) || !setequal(names(attributes(value)), c("names", "class")) ||
+      !identical(names(value), wlv_runtime_snapshot_state_codec_fields()) ||
+      !identical(value$version, wlv_runtime_snapshot_state_codec_version()) ||
+      !is.character(value$encoding) || length(value$encoding) != 1L ||
+      is.na(value$encoding) || !value$encoding %in% c("cartesian", "rows") ||
+      !is.character(value$target_key) || length(value$target_key) != 1L ||
+      is.na(value$target_key) || !nzchar(value$target_key) ||
+      !is.character(value$axes) || !length(value$axes) || anyNA(value$axes) ||
+      any(!nzchar(value$axes)) || anyDuplicated(value$axes) ||
+      !is.character(value$state_version) || length(value$state_version) != 1L ||
+      is.na(value$state_version) || !identical(
+        value$state_version,
+        wlv_semantic_state_version()
+      ) || !is.double(value$row_count) || length(value$row_count) != 1L ||
+      is.na(value$row_count) || !is.finite(value$row_count) ||
+      value$row_count < 0 || value$row_count != floor(value$row_count) ||
+      identical(1 / value$row_count, -Inf) ||
+      value$row_count > .Machine$integer.max) {
+    stop("Runtime semantic-state codec is invalid.", call. = FALSE)
+  }
+  wlv_semantic_assert_stateful_key(value$target_key)
+  if (!is.null(target_key) && !identical(value$target_key, target_key)) {
+    stop("Runtime state-codec target_key does not match its contract.",
+      call. = FALSE
+    )
+  }
+  if (!is.null(axes) && !identical(value$axes, axes)) {
+    stop("Runtime state-codec axes do not match their contract.",
+      call. = FALSE
+    )
+  }
+  if (!is.null(state_key) && !identical(
+        wlv_semantic_state_key(value$target_key),
+        state_key
+      )) {
+    stop("Runtime state-codec resource key does not match target_key.",
+      call. = FALSE
+    )
+  }
+  if (identical(value$encoding, "rows")) {
+    if (!is.null(value$selectors) || !is.null(value$state) ||
+        !inherits(value$rows, "wlv_semantic_state")) {
+      stop("Runtime rows state-codec payload is invalid.", call. = FALSE)
+    }
+    wlv_semantic_state_validate(
+      value$rows,
+      value = target_value,
+      target_key = value$target_key,
+      axes = value$axes,
+      state_key = wlv_semantic_state_key(value$target_key)
+    )
+    if (!identical(value$row_count, as.double(nrow(value$rows)))) {
+      stop("Runtime rows state-codec count is invalid.", call. = FALSE)
+    }
+    if (!is.null(wlv_runtime_snapshot_state_cartesian_descriptor(value$rows))) {
+      stop("Runtime rows state-codec has a canonical cartesian encoding.",
+        call. = FALSE
+      )
+    }
+    return(invisible(value))
+  }
+  if (!is.null(value$rows) || !is.list(value$selectors) ||
+      !identical(names(value$selectors), value$axes) ||
+      !is.character(value$state) || length(value$state) != 1L ||
+      is.na(value$state) || !value$state %in% wlv_semantic_sparse_states() ||
+      value$row_count < 1) {
+    stop("Runtime cartesian state-codec payload is invalid.", call. = FALSE)
+  }
+  valid_selectors <- vapply(value$selectors, function(selector) {
+    is.character(selector) && length(selector) && !anyNA(selector) &&
+      all(nzchar(selector)) && !anyDuplicated(selector) && identical(
+        selector,
+        sort(enc2utf8(selector), method = "radix")
+      )
+  }, logical(1L))
+  if (!all(valid_selectors)) {
+    stop("Runtime cartesian state-codec selectors are not canonical.",
+      call. = FALSE
+    )
+  }
+  expected_rows <- prod(vapply(value$selectors, length, double(1L)))
+  if (!is.finite(expected_rows) || !identical(value$row_count, expected_rows)) {
+    stop("Runtime cartesian state-codec count is invalid.", call. = FALSE)
+  }
+  if (!is.null(target_value)) {
+    wlv_semantic_assert_value(target_value, value$axes)
+    labels <- dimnames(target_value)
+    unknown <- vapply(seq_along(value$axes), function(index) {
+      any(!value$selectors[[index]] %in% labels[[index]])
+    }, logical(1L))
+    if (any(unknown)) {
+      stop("Sparse semantic states reference unknown coordinates.", call. = FALSE)
+    }
+    dimensions <- dim(target_value)
+    strides <- c(1, cumprod(as.double(dimensions)))[seq_along(dimensions)]
+    selector_positions <- lapply(seq_along(value$axes), function(index) {
+      match(value$selectors[[index]], labels[[index]])
+    })
+    chunk_values <- 2^20
+    total <- length(target_value)
+    if (total) {
+      for (start in seq.int(1, total, by = chunk_values)) {
+        end <- min(total, start + chunk_values - 1)
+        current <- target_value[start:end]
+        ordinary_na <- which(is.na(current) & !is.nan(current))
+        if (!length(ordinary_na)) {
+          next
+        }
+        positions <- as.double(start) + ordinary_na - 2
+        covered <- rep(TRUE, length(ordinary_na))
+        for (index in seq_along(value$axes)) {
+          coordinate <- (positions %/% strides[[index]]) %% dimensions[[index]] + 1
+          covered <- covered & coordinate %in% selector_positions[[index]]
+        }
+        if (any(!covered)) {
+          wlv_semantic_abort(
+            "Every ordinary NA requires an explicit non-finite semantic state."
+          )
+        }
+      }
+    }
+  }
+  invisible(value)
+}
+
+wlv_runtime_snapshot_state_pack_validated <- function(value) {
+  axes <- attr(value, "axes", exact = TRUE)
+  target_key <- attr(value, "target_key", exact = TRUE)
+  state_version <- attr(value, "version", exact = TRUE)
+  row_count <- as.double(nrow(value))
+  cartesian <- wlv_runtime_snapshot_state_cartesian_descriptor(value)
+  codec <- if (!is.null(cartesian)) {
+    wlv_runtime_snapshot_new_state_codec(
+      encoding = "cartesian",
+      target_key = target_key,
+      axes = axes,
+      state_version = state_version,
+      row_count = row_count,
+      selectors = cartesian$selectors,
+      state = cartesian$state
+    )
+  } else {
+    wlv_runtime_snapshot_new_state_codec(
+      encoding = "rows",
+      target_key = target_key,
+      axes = axes,
+      state_version = state_version,
+      row_count = row_count,
+      rows = value
+    )
+  }
+  codec
+}
+
+wlv_runtime_snapshot_state_pack <- function(value) {
+  if (wlv_runtime_snapshot_is_state_codec(value)) {
+    wlv_runtime_snapshot_state_codec_validate(value)
+    return(value)
+  }
+  wlv_semantic_state_validate(value)
+  wlv_runtime_snapshot_state_pack_validated(value)
+}
+
+wlv_runtime_snapshot_state_cartesian_column_unchecked <- function(
+    value,
+    column,
+    start,
+    end) {
+  count <- as.integer(end - start + 1)
+  if (identical(column, "state")) {
+    return(rep(value$state, count))
+  }
+  axis_index <- match(column, value$axes)
+  trailing <- if (axis_index == length(value$axes)) {
+    1
+  } else {
+    prod(vapply(
+      value$selectors[(axis_index + 1L):length(value$axes)],
+      length,
+      double(1L)
+    ))
+  }
+  labels <- value$selectors[[axis_index]]
+  positions <- seq.int(as.double(start) - 1, as.double(end) - 1)
+  indices <- (positions %/% trailing) %% length(labels) + 1
+  labels[as.integer(indices)]
+}
+
+wlv_runtime_snapshot_state_cartesian_column <- function(
+    value,
+    column,
+    start,
+    end) {
+  wlv_runtime_snapshot_state_codec_validate(value)
+  if (!identical(value$encoding, "cartesian") ||
+      !is.character(column) || length(column) != 1L || is.na(column) ||
+      !column %in% c(value$axes, "state") ||
+      !is.numeric(start) || length(start) != 1L || is.na(start) ||
+      !is.numeric(end) || length(end) != 1L || is.na(end) ||
+      start < 1 || end < start || end > value$row_count) {
+    stop("Runtime cartesian state-codec slice is invalid.", call. = FALSE)
+  }
+  wlv_runtime_snapshot_state_cartesian_column_unchecked(
+    value,
+    column,
+    start,
+    end
+  )
+}
+
+wlv_runtime_snapshot_state_unpack <- function(value, target_value = NULL) {
+  wlv_runtime_snapshot_state_codec_validate(
+    value,
+    target_value = target_value
+  )
+  if (identical(value$encoding, "rows")) {
+    result <- value$rows
+  } else {
+    columns <- lapply(c(value$axes, "state"), function(column) {
+      wlv_runtime_snapshot_state_cartesian_column_unchecked(
+        value,
+        column,
+        1,
+        value$row_count
+      )
+    })
+    names(columns) <- c(value$axes, "state")
+    result <- structure(
+      columns,
+      class = c("wlv_semantic_state", "data.frame"),
+      row.names = c(NA_integer_, -as.integer(value$row_count)),
+      target_key = value$target_key,
+      axes = value$axes,
+      version = value$state_version
+    )
+  }
+  wlv_semantic_state_validate(
+    result,
+    target_key = value$target_key,
+    axes = value$axes,
+    state_key = wlv_semantic_state_key(value$target_key)
+  )
+  result
+}
+
+wlv_runtime_snapshot_state_metadata <- function(value) {
+  codec <- wlv_runtime_snapshot_state_pack(value)
+  list(
+    codec_version = codec$version,
+    encoding = codec$encoding,
+    target_key = codec$target_key,
+    axes = codec$axes,
+    state_version = codec$state_version,
+    row_count = codec$row_count,
+    state_sha256 = wlv_runtime_snapshot_state_sha256(codec)
+  )
 }
 
 wlv_runtime_snapshot_parent_imports_sha256 <- function(value) {
@@ -933,11 +1277,12 @@ wlv_runtime_snapshot_binding_sha256 <- function(
     artifact_sha256,
     state,
     provenance = NULL) {
-  state <- wlv_runtime_snapshot_canonical_state(state)
+  state <- wlv_runtime_snapshot_state_pack(state)
   payload <- list(
+    version = "wlv-runtime-state-binding/1.0.0",
     id = id,
     artifact_sha256 = artifact_sha256,
-    state = state,
+    state = wlv_runtime_snapshot_state_metadata(state),
     provenance = provenance
   )
   wlv_publication_sha256_raw(serialize(payload, NULL, version = 3L))
@@ -1008,7 +1353,7 @@ wlv_runtime_snapshot_state_bindings <- function(snapshot) {
 }
 
 wlv_runtime_snapshot_capture_version <- function() {
-  "wlv-runtime-snapshot-capture/1.0.0"
+  "wlv-runtime-snapshot-capture/1.1.0"
 }
 
 wlv_runtime_snapshot_capture_assert <- function(capture) {
@@ -1121,6 +1466,8 @@ wlv_runtime_snapshot_capture <- function(
       )
       id <- paste(entry$key, partition, sep = "\034")
       resources[[id]] <- entry
+      rm(entry)
+      invisible(gc(full = TRUE))
     }
     entry <- wlv_runtime_snapshot_entry(
       store,
@@ -1130,6 +1477,8 @@ wlv_runtime_snapshot_capture <- function(
     )
     id <- paste(entry$key, partition, sep = "\034")
     resources[[id]] <- entry
+    rm(entry)
+    invisible(gc(full = TRUE))
   }
   parent_imports <- wlv_parent_seed_empty_resolutions()
   capture <- structure(list(
@@ -1989,7 +2338,7 @@ wlv_runtime_snapshot_validate_bound_artifacts <- function(
           call. = FALSE
         )
       }
-      wlv_semantic_state_validate(
+      wlv_runtime_snapshot_state_codec_validate(
         entry$state,
         target_key = key,
         axes = contract$axes,
@@ -2251,18 +2600,18 @@ wlv_runtime_snapshot_validate <- function(
           call. = FALSE
         )
       }
-      wlv_semantic_state_validate(
+      wlv_runtime_snapshot_state_codec_validate(
         entry$state,
-        value = entry$value,
         target_key = entry$key,
         axes = contract$axes,
-        state_key = wlv_semantic_state_key(entry$key)
+        state_key = wlv_semantic_state_key(entry$key),
+        target_value = entry$value
       )
     } else {
       if (!is.null(entry$value)) {
         stop("IO snapshot entries must not duplicate public matrix values.", call. = FALSE)
       }
-      wlv_semantic_state_validate(
+      wlv_runtime_snapshot_state_codec_validate(
         entry$state,
         target_key = entry$key,
         axes = contract$axes,
@@ -2358,34 +2707,32 @@ wlv_runtime_snapshot_authenticate_bound_files <- function(
 }
 
 wlv_runtime_snapshot_state_commitment_sha256 <- function(value) {
-  axes <- attr(value, "axes", exact = TRUE)
-  target_key <- attr(value, "target_key", exact = TRUE)
-  state_version <- attr(value, "version", exact = TRUE)
+  codec <- wlv_runtime_snapshot_state_pack(value)
+  axes <- codec$axes
+  target_key <- codec$target_key
+  state_version <- codec$state_version
   columns <- c(axes, "state")
-  if (!is.data.frame(value) || !identical(
-        class(value),
-        c("wlv_semantic_state", "data.frame")
-      ) || !is.character(axes) || !length(axes) || anyNA(axes) ||
-      any(!nzchar(axes)) || anyDuplicated(axes) ||
-      !is.character(target_key) || length(target_key) != 1L ||
-      is.na(target_key) || !nzchar(target_key) ||
-      !is.character(state_version) || length(state_version) != 1L ||
-      is.na(state_version) || !nzchar(state_version) ||
-      !identical(names(value), columns) ||
-      any(!vapply(value, is.character, logical(1L)))) {
-    stop("Runtime snapshot state commitment input is invalid.", call. = FALSE)
-  }
   chunk_rows <- 65536L
-  starts <- if (nrow(value)) {
-    seq.int(1L, nrow(value), by = chunk_rows)
+  starts <- if (codec$row_count) {
+    seq.int(1, codec$row_count, by = chunk_rows)
   } else {
     integer()
   }
   chunks <- lapply(columns, function(column) {
     vapply(starts, function(start) {
-      end <- min(nrow(value), start + chunk_rows - 1L)
+      end <- min(codec$row_count, start + chunk_rows - 1L)
+      source <- if (identical(codec$encoding, "rows")) {
+        codec$rows[[column]][start:end]
+      } else {
+        wlv_runtime_snapshot_state_cartesian_column_unchecked(
+          codec,
+          column,
+          start,
+          end
+        )
+      }
       current <- wlv_runtime_snapshot_materialize_character(
-        value[[column]][start:end]
+        source
       )
       wlv_publication_sha256_raw(serialize(current, NULL, version = 3L))
     }, character(1L))
@@ -2398,10 +2745,14 @@ wlv_runtime_snapshot_state_commitment_sha256 <- function(value) {
     state_version = wlv_runtime_snapshot_materialize_character(
       state_version
     )[[1L]],
-    row_count = as.double(nrow(value)),
+    row_count = codec$row_count,
     chunks = chunks
   )
   wlv_publication_sha256_raw(serialize(payload, NULL, version = 3L))
+}
+
+wlv_runtime_snapshot_state_sha256 <- function(value) {
+  wlv_runtime_snapshot_state_commitment_sha256(value)
 }
 
 wlv_runtime_snapshot_resource_commitment <- function(id, entry) {
@@ -2436,12 +2787,12 @@ wlv_runtime_snapshot_resource_commitment <- function(id, entry) {
       )
     )
   }
-  state_metadata <- list(
-    target_key = attr(entry$state, "target_key", exact = TRUE),
-    axes = attr(entry$state, "axes", exact = TRUE),
-    version = attr(entry$state, "version", exact = TRUE),
-    row_count = as.double(NROW(entry$state))
-  )
+  state_metadata <- wlv_runtime_snapshot_state_metadata(entry$state)
+  if (!identical(state_metadata$state_sha256, entry$state_sha256)) {
+    stop("Runtime snapshot resource state commitment is invalid.",
+      call. = FALSE
+    )
+  }
   list(
     id = id,
     key = entry$key,
@@ -2479,7 +2830,7 @@ wlv_runtime_snapshot_logical_commitment_sha256 <- function(snapshot) {
   })
   names(resources) <- names(snapshot$resources)
   payload <- list(
-    version = "wlv-runtime-snapshot-commitment/1.0.0",
+    version = "wlv-runtime-snapshot-commitment/1.1.0",
     snapshot_version = snapshot$version,
     method = snapshot$method,
     source = snapshot$source,
@@ -3331,7 +3682,7 @@ wlv_runtime_snapshot_write <- function(
   }
   staging <- normalizePath(staging, winslash = "/", mustWork = TRUE)
   path <- file.path(staging, wlv_runtime_snapshot_filename())
-  saveRDS(snapshot, path, version = 3L, compress = FALSE)
+  saveRDS(snapshot, path, version = 3L, compress = "gzip")
   if (isTRUE(defer_verification)) {
     return(wlv_runtime_snapshot_receipt(snapshot, path))
   }

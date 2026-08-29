@@ -542,8 +542,16 @@ wlv_scientific_md5_lines <- function(value) {
   unname(tools::md5sum(path))
 }
 
-wlv_scientific_wiodr13_signed_sea_pin <- function(value, indicator, method) {
-  positions <- which(value < 0, arr.ind = TRUE)
+wlv_scientific_wiodr13_signed_sea_pin <- function(
+    value,
+    indicator,
+    method,
+    negative_positions = NULL) {
+  positions <- if (is.null(negative_positions)) {
+    which(value < 0, arr.ind = TRUE)
+  } else {
+    negative_positions
+  }
   expected_value <- switch(
     indicator,
     capital_stock.s.us = -75458950528.278488,
@@ -570,8 +578,16 @@ wlv_scientific_wiodr13_signed_sea_pin <- function(value, indicator, method) {
   invisible(TRUE)
 }
 
-wlv_scientific_wiodr13_signed_io_pin <- function(value, indicator, method) {
-  positions <- which(value < 0, arr.ind = TRUE)
+wlv_scientific_wiodr13_signed_io_pin <- function(
+    value,
+    indicator,
+    method,
+    negative_positions = NULL) {
+  positions <- if (is.null(negative_positions)) {
+    which(value < 0, arr.ind = TRUE)
+  } else {
+    negative_positions
+  }
   expected <- switch(
     indicator,
     k_composition = c(
@@ -623,6 +639,82 @@ wlv_scientific_wiodr13_signed_io_pin <- function(value, indicator, method) {
   invisible(TRUE)
 }
 
+wlv_scientific_signed_range_scan <- function(
+    value,
+    minimum,
+    maximum,
+    exact_zero = FALSE,
+    chunk_size = 1048576L) {
+  if (!is.numeric(chunk_size) || length(chunk_size) != 1L ||
+      is.na(chunk_size) || !is.finite(chunk_size) || chunk_size < 1 ||
+      chunk_size != floor(chunk_size) || chunk_size > .Machine$integer.max) {
+    stop("Scientific signed-range chunk size is invalid.", call. = FALSE)
+  }
+  chunk_size <- as.integer(chunk_size)
+  starts <- if (length(value)) {
+    seq.int(1, length(value), by = chunk_size)
+  } else {
+    integer()
+  }
+  negative_chunks <- vector("list", length(starts))
+  observations <- 0L
+  maximum_error <- 0
+
+  for (index in seq_along(starts)) {
+    start <- starts[[index]]
+    end <- min(length(value), start + chunk_size - 1)
+    chunk <- value[seq.int(start, end)]
+    selected <- !is.na(chunk)
+    finite_values <- chunk[selected]
+    if (any(!is.finite(finite_values))) {
+      return(list(
+        nonfinite = TRUE,
+        observations = observations,
+        maximum_error = maximum_error,
+        negative_positions = NULL
+      ))
+    }
+    observations <- observations + length(finite_values)
+    if (length(finite_values)) {
+      current_error <- if (exact_zero) {
+        max(abs(finite_values))
+      } else {
+        max(c(
+          minimum - finite_values,
+          finite_values - maximum,
+          0
+        ))
+      }
+      maximum_error <- max(maximum_error, current_error)
+    }
+    local_negative <- which(chunk < 0)
+    if (length(local_negative)) {
+      negative_chunks[[index]] <- start - 1 + local_negative
+    }
+  }
+
+  negative <- unlist(negative_chunks, use.names = FALSE)
+  if (!length(negative)) {
+    negative <- integer()
+  }
+  negative_positions <- if (is.null(dim(value))) {
+    negative
+  } else {
+    arrayInd(
+      negative,
+      .dim = dim(value),
+      .dimnames = dimnames(value),
+      useNames = TRUE
+    )
+  }
+  list(
+    nonfinite = FALSE,
+    observations = observations,
+    maximum_error = maximum_error,
+    negative_positions = negative_positions
+  )
+}
+
 wlv_scientific_check_range <- function(
     value,
     method,
@@ -632,6 +724,68 @@ wlv_scientific_check_range <- function(
     maximum,
     exact_zero = FALSE,
     scope = "all published cells") {
+  signed_wiodr13 <- identical(method, "wiodr13") &&
+    (
+      identical(artifact, "sea_sectors") &&
+        indicator %in% c("capital_stock.s.us", "capital_depreciation.s.us") ||
+      identical(artifact, "m_io") &&
+        indicator %in% c("k_composition", "k_depreciation")
+    )
+  if (signed_wiodr13) {
+    scanned <- wlv_scientific_signed_range_scan(
+      value,
+      minimum,
+      maximum,
+      exact_zero = exact_zero
+    )
+    if (isTRUE(scanned$nonfinite)) {
+      wlv_abort_scientific_validation(
+        method, "method_range", artifact, indicator, scope,
+        "range contains NaN or infinite values"
+      )
+    }
+    if (identical(artifact, "sea_sectors")) {
+      wlv_scientific_wiodr13_signed_sea_pin(
+        value,
+        indicator,
+        method,
+        negative_positions = scanned$negative_positions
+      )
+    } else {
+      wlv_scientific_wiodr13_signed_io_pin(
+        value,
+        indicator,
+        method,
+        negative_positions = scanned$negative_positions
+      )
+    }
+    tolerance <- if (exact_zero) {
+      "exact zero"
+    } else {
+      sprintf(
+        "[%s,%s];componentwise_roundoff=64*eps*max(1,abs(value),abs(bound))",
+        format(minimum, scientific = TRUE),
+        format(maximum, scientific = TRUE)
+      )
+    }
+    return(wlv_scientific_check_row(
+      method = method,
+      check_id = "method_range",
+      artifact = artifact,
+      indicator = indicator,
+      scope = scope,
+      status = "warning",
+      observations = scanned$observations,
+      maximum_absolute_error = scanned$maximum_error,
+      maximum_scaled_error = 0,
+      tolerance = tolerance,
+      detail = paste0(
+        "Pinned WIOD13/2006/GBR.23 signed-domain exception; all other cells ",
+        "remain nonnegative."
+      )
+    ))
+  }
+
   selected <- !is.na(value)
   finite_values <- value[selected]
   if (any(!is.finite(finite_values))) {
@@ -664,21 +818,6 @@ wlv_scientific_check_range <- function(
       format(maximum, scientific = TRUE)
     )
   }
-  signed_wiodr13 <- identical(method, "wiodr13") &&
-    (
-      identical(artifact, "sea_sectors") &&
-        indicator %in% c("capital_stock.s.us", "capital_depreciation.s.us") ||
-      identical(artifact, "m_io") &&
-        indicator %in% c("k_composition", "k_depreciation")
-    )
-  if (signed_wiodr13) {
-    if (identical(artifact, "sea_sectors")) {
-      wlv_scientific_wiodr13_signed_sea_pin(value, indicator, method)
-    } else {
-      wlv_scientific_wiodr13_signed_io_pin(value, indicator, method)
-    }
-    invalid[] <- FALSE
-  }
   if (any(invalid)) {
     positions <- which(selected)[invalid]
     position <- positions[[1L]]
@@ -706,19 +845,12 @@ wlv_scientific_check_range <- function(
     artifact = artifact,
     indicator = indicator,
     scope = scope,
-    status = if (signed_wiodr13) "warning" else "pass",
+    status = "pass",
     observations = length(finite_values),
     maximum_absolute_error = maximum_error,
     maximum_scaled_error = 0,
     tolerance = tolerance,
-    detail = if (signed_wiodr13) {
-      paste0(
-        "Pinned WIOD13/2006/GBR.23 signed-domain exception; all other cells ",
-        "remain nonnegative."
-      )
-    } else {
-      "Method-versioned physical or methodological range."
-    }
+    detail = "Method-versioned physical or methodological range."
   )
 }
 

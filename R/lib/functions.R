@@ -761,6 +761,20 @@ wlv_fst_validate_array_storage <- function(value, name) {
   invisible(value)
 }
 
+wlv_fst_array_column_table <- function(value) {
+  wlv_fst_validate_array_storage(value, "value")
+
+  # `fst` consumes each data-frame column as one linear atomic vector. Build
+  # that one-column envelope directly so the array remains the column's backing
+  # object; `as.vector()` would duplicate the complete payload merely to remove
+  # attributes that `fst` does not persist.
+  structure(
+    list(Data = value),
+    class = "data.frame",
+    row.names = .set_row_names(length(value))
+  )
+}
+
 wlv_fst_verify_bundle_chunks <- function(
     file_name,
     expected,
@@ -1145,10 +1159,10 @@ write_fst_array <- function(m, file_name, drop_axis_names = FALSE) {
     }
   }, add = TRUE)
 
-  values <- as.vector(m)
+  table <- wlv_fst_array_column_table(m)
   tryCatch(
     fst::write_fst(
-      data.frame(Data = values, check.names = FALSE),
+      table,
       temporary_data
     ),
     error = function(error) {
@@ -1162,7 +1176,7 @@ write_fst_array <- function(m, file_name, drop_axis_names = FALSE) {
       )
     }
   )
-  rm(values)
+  rm(table)
   if (
     !file.exists(temporary_data) || is.na(file.info(temporary_data)$size) ||
     file.info(temporary_data)$size <= 0

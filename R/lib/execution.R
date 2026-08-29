@@ -3663,6 +3663,7 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
       }
       runtime_store <- module_result$store
       rm(module_result, module_plan)
+      invisible(gc(full = TRUE))
       snapshot_capture <- if (identical(plan$mode, "recalculate")) {
         if (is.null(parent_snapshot)) {
           stop(
@@ -3695,7 +3696,7 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         staging
       )
       rm(arrays)
-      invisible(gc(full = FALSE))
+      invisible(gc(full = TRUE))
       io_artifact_paths <- file.path(
         staging,
         basename(runtime_data$source_io)

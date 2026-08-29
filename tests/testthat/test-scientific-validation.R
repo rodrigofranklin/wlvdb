@@ -596,6 +596,333 @@ test_that("the WIOD13 signed SEA exception is required, not merely allowed", {
   )
 })
 
+test_that("chunked WIOD13 signed ranges preserve legacy semantics", {
+  environment <- scientific_validation_environment
+  legacy_check <- function(
+      value,
+      artifact,
+      indicator,
+      minimum = 0,
+      maximum = Inf,
+      exact_zero = FALSE,
+      scope = "all published cells") {
+    selected <- !is.na(value)
+    finite_values <- value[selected]
+    if (any(!is.finite(finite_values))) {
+      environment$wlv_abort_scientific_validation(
+        "wiodr13", "method_range", artifact, indicator, scope,
+        "range contains NaN or infinite values"
+      )
+    }
+    if (exact_zero) {
+      invalid <- finite_values != 0
+      tolerance <- "exact zero"
+    } else {
+      lower_scale <- pmax(
+        abs(finite_values),
+        if (is.finite(minimum)) abs(minimum) else 0,
+        1
+      )
+      upper_scale <- pmax(
+        abs(finite_values),
+        if (is.finite(maximum)) abs(maximum) else 0,
+        1
+      )
+      lower_slack <- 64 * .Machine$double.eps * lower_scale
+      upper_slack <- 64 * .Machine$double.eps * upper_scale
+      invalid <- finite_values < minimum - lower_slack |
+        finite_values > maximum + upper_slack
+      tolerance <- sprintf(
+        "[%s,%s];componentwise_roundoff=64*eps*max(1,abs(value),abs(bound))",
+        format(minimum, scientific = TRUE),
+        format(maximum, scientific = TRUE)
+      )
+    }
+    if (identical(artifact, "sea_sectors")) {
+      environment$wlv_scientific_wiodr13_signed_sea_pin(
+        value,
+        indicator,
+        "wiodr13"
+      )
+    } else {
+      environment$wlv_scientific_wiodr13_signed_io_pin(
+        value,
+        indicator,
+        "wiodr13"
+      )
+    }
+    invalid[] <- FALSE
+    maximum_error <- if (!length(finite_values)) {
+      0
+    } else if (exact_zero) {
+      max(abs(finite_values))
+    } else {
+      max(c(minimum - finite_values, finite_values - maximum, 0))
+    }
+    environment$wlv_scientific_check_row(
+      method = "wiodr13",
+      check_id = "method_range",
+      artifact = artifact,
+      indicator = indicator,
+      scope = scope,
+      status = "warning",
+      observations = length(finite_values),
+      maximum_absolute_error = maximum_error,
+      maximum_scaled_error = 0,
+      tolerance = tolerance,
+      detail = paste0(
+        "Pinned WIOD13/2006/GBR.23 signed-domain exception; all other cells ",
+        "remain nonnegative."
+      )
+    )
+  }
+  check <- function(value, artifact, indicator, ...) {
+    environment$wlv_scientific_check_range(
+      value,
+      method = "wiodr13",
+      artifact = artifact,
+      indicator = indicator,
+      ...
+    )
+  }
+  condition <- function(expression) {
+    tryCatch(expression, error = identity)
+  }
+
+  signed_stock <- array(
+    2,
+    dim = c(2L, 1L, 2L, 2L),
+    dimnames = list(
+      year = c("2006", "2007"),
+      indicator = "capital_stock.s.us",
+      sector = c("23", "24"),
+      country = c("GBR", "FRA")
+    )
+  )
+  signed_stock["2006", "capital_stock.s.us", "23", "GBR"] <-
+    -75458950528.278488
+  signed_stock["2007", "capital_stock.s.us", "23", "GBR"] <- NA_real_
+  signed_stock["2006", "capital_stock.s.us", "24", "FRA"] <- NaN
+  signed_stock["2007", "capital_stock.s.us", "24", "FRA"] <- 1e15
+
+  expected <- legacy_check(
+    signed_stock,
+    artifact = "sea_sectors",
+    indicator = "capital_stock.s.us",
+    minimum = 0,
+    maximum = Inf
+  )
+  observed <- check(
+    signed_stock,
+    artifact = "sea_sectors",
+    indicator = "capital_stock.s.us",
+    minimum = 0,
+    maximum = Inf
+  )
+  expect_identical(observed, expected)
+  expect_identical(observed$observations, 6L)
+  expect_identical(
+    observed$maximum_absolute_error,
+    75458950528.278488
+  )
+
+  expected_zero <- legacy_check(
+    signed_stock,
+    artifact = "sea_sectors",
+    indicator = "capital_stock.s.us",
+    minimum = 0,
+    maximum = 0,
+    exact_zero = TRUE
+  )
+  observed_zero <- check(
+    signed_stock,
+    artifact = "sea_sectors",
+    indicator = "capital_stock.s.us",
+    minimum = 0,
+    maximum = 0,
+    exact_zero = TRUE
+  )
+  expect_identical(observed_zero, expected_zero)
+
+  expected_bounded <- legacy_check(
+    signed_stock,
+    artifact = "sea_sectors",
+    indicator = "capital_stock.s.us",
+    minimum = -1e11,
+    maximum = 10
+  )
+  observed_bounded <- check(
+    signed_stock,
+    artifact = "sea_sectors",
+    indicator = "capital_stock.s.us",
+    minimum = -1e11,
+    maximum = 10
+  )
+  expect_identical(observed_bounded, expected_bounded)
+  expect_identical(
+    observed_bounded$maximum_absolute_error,
+    1e15 - 10
+  )
+
+  scan <- environment$wlv_scientific_signed_range_scan(
+    signed_stock,
+    minimum = 0,
+    maximum = Inf,
+    chunk_size = 3L
+  )
+  expect_false(scan$nonfinite)
+  expect_identical(scan$observations, 6L)
+  expect_identical(
+    scan$negative_positions,
+    which(signed_stock < 0, arr.ind = TRUE)
+  )
+  expect_identical(
+    scan$maximum_error,
+    max(c(
+      -signed_stock[!is.na(signed_stock)],
+      signed_stock[!is.na(signed_stock)] - Inf,
+      0
+    ))
+  )
+
+  for (nonfinite in c(Inf, -Inf)) {
+    broken <- signed_stock
+    broken["2007", "capital_stock.s.us", "23", "GBR"] <- nonfinite
+    expected_error <- condition(legacy_check(
+      broken,
+      artifact = "sea_sectors",
+      indicator = "capital_stock.s.us"
+    ))
+    observed_error <- condition(check(
+      broken,
+      artifact = "sea_sectors",
+      indicator = "capital_stock.s.us",
+      minimum = 0,
+      maximum = Inf
+    ))
+    expect_identical(observed_error, expected_error)
+  }
+
+  missing_pin <- signed_stock
+  missing_pin["2006", "capital_stock.s.us", "23", "GBR"] <- NaN
+  expect_identical(
+    condition(check(
+      missing_pin,
+      artifact = "sea_sectors",
+      indicator = "capital_stock.s.us",
+      minimum = 0,
+      maximum = Inf
+    )),
+    condition(legacy_check(
+      missing_pin,
+      artifact = "sea_sectors",
+      indicator = "capital_stock.s.us"
+    ))
+  )
+
+  wrong_value <- signed_stock
+  wrong_value["2006", "capital_stock.s.us", "23", "GBR"] <- -1
+  expect_identical(
+    condition(check(
+      wrong_value,
+      artifact = "sea_sectors",
+      indicator = "capital_stock.s.us",
+      minimum = 0,
+      maximum = Inf
+    )),
+    condition(legacy_check(
+      wrong_value,
+      artifact = "sea_sectors",
+      indicator = "capital_stock.s.us"
+    ))
+  )
+
+  wrong_coordinate <- signed_stock
+  wrong_coordinate["2006", "capital_stock.s.us", "23", "GBR"] <- 1
+  wrong_coordinate["2007", "capital_stock.s.us", "24", "GBR"] <-
+    -75458950528.278488
+  expect_identical(
+    condition(check(
+      wrong_coordinate,
+      artifact = "sea_sectors",
+      indicator = "capital_stock.s.us",
+      minimum = 0,
+      maximum = Inf
+    )),
+    condition(legacy_check(
+      wrong_coordinate,
+      artifact = "sea_sectors",
+      indicator = "capital_stock.s.us"
+    ))
+  )
+
+  expect_error(
+    environment$wlv_scientific_signed_range_scan(
+      signed_stock,
+      0,
+      Inf,
+      chunk_size = 0L
+    ),
+    "Scientific signed-range chunk size is invalid.",
+    fixed = TRUE
+  )
+})
+
+test_that("chunked WIOD13 IO pins preserve count and hash failures", {
+  environment <- scientific_validation_environment
+  condition <- function(expression) {
+    tryCatch(expression, error = identity)
+  }
+  legacy_error <- function(value, indicator) {
+    condition(environment$wlv_scientific_wiodr13_signed_io_pin(
+      value,
+      indicator,
+      "wiodr13"
+    ))
+  }
+  range_error <- function(value, indicator) {
+    condition(environment$wlv_scientific_check_range(
+      value,
+      method = "wiodr13",
+      artifact = "m_io",
+      indicator = indicator,
+      minimum = 0,
+      maximum = Inf
+    ))
+  }
+  io_value <- array(
+    -seq_len(824L),
+    dim = c(1L, 1L, 824L, 1L),
+    dimnames = list(
+      year = "2006",
+      variable = "k_composition",
+      input = sprintf("I%04d", seq_len(824L)),
+      output = "O"
+    )
+  )
+
+  expect_identical(
+    range_error(io_value, "k_composition"),
+    legacy_error(io_value, "k_composition")
+  )
+  expect_match(
+    conditionMessage(range_error(io_value, "k_composition")),
+    "negative-cell pin differs",
+    fixed = TRUE
+  )
+
+  count_mismatch <- io_value[, , -824L, , drop = FALSE]
+  expect_identical(
+    range_error(count_mismatch, "k_composition"),
+    legacy_error(count_mismatch, "k_composition")
+  )
+  expect_match(
+    conditionMessage(range_error(count_mismatch, "k_composition")),
+    "observed=823, expected=824",
+    fixed = TRUE
+  )
+})
+
 test_that("scientific checks and sidecar inventory are deterministic", {
   skip_if_not_installed("Matrix")
   values <- wlv_scientific_test_arrays()

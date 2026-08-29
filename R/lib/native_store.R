@@ -274,7 +274,8 @@ wlv_parent_seed_resolution <- function(
     value,
     state,
     snapshot_sha256,
-    authenticated_value_sha256 = NULL) {
+    authenticated_value_sha256 = NULL,
+    authenticated_state_sha256 = NULL) {
   wlv_parent_seed_request_assert(request)
   origin_producer <- wlv_runtime_scalar_character(
     origin_producer,
@@ -313,6 +314,16 @@ wlv_parent_seed_resolution <- function(
       call. = FALSE
     )
   }
+  if (is.null(authenticated_state_sha256)) {
+    authenticated_state_sha256 <- wlv_runtime_snapshot_state_sha256(state)
+  } else if (!is.character(authenticated_state_sha256) ||
+      length(authenticated_state_sha256) != 1L ||
+      is.na(authenticated_state_sha256) ||
+      !grepl("^[0-9a-f]{64}$", authenticated_state_sha256)) {
+    stop("A parent seed resolution received an invalid authenticated state hash.",
+      call. = FALSE
+    )
+  }
   if (identical(request$source$kind, "exact") &&
       !identical(request$source$producer, origin_producer)) {
     stop(
@@ -346,7 +357,7 @@ wlv_parent_seed_resolution <- function(
       request$contract$axes
     ),
     value_sha256 = authenticated_value_sha256,
-    state_sha256 = wlv_runtime_snapshot_value_sha256(state),
+    state_sha256 = authenticated_state_sha256,
     snapshot_sha256 = snapshot_sha256,
     stringsAsFactors = FALSE
   )
@@ -955,21 +966,19 @@ wlv_native_parent_io_seeds <- function(
           call. = FALSE
         )
       }
-      wlv_semantic_state_validate(
+      state <- wlv_runtime_snapshot_state_unpack(
         entry$state,
-        value = selected,
-        target_key = key,
-        axes = c("year", "input", "output"),
-        state_key = wlv_semantic_state_key(key)
+        target_value = selected
       )
       resolutions[[length(resolutions) + 1L]] <- wlv_parent_seed_resolution(
         request,
         origin_producer = entry$producer,
         origin_state_producer = entry$state_producer,
         value = selected,
-        state = entry$state,
+        state = state,
         snapshot_sha256 = snapshot_sha256,
-        authenticated_value_sha256 = inherited$value_sha256[[resource]]
+        authenticated_value_sha256 = inherited$value_sha256[[resource]],
+        authenticated_state_sha256 = entry$state_sha256
       )
       pair <- wlv_native_stateful_seed_pair(wlv_seed_resource(
         key,
@@ -977,9 +986,9 @@ wlv_native_parent_io_seeds <- function(
         request$contract,
         partition = partition,
         producer = request$child_producer
-      ), states = entry$state)
+      ), states = state)
       seeds <- c(seeds, pair)
-      rm(selected)
+      rm(selected, state)
     }
     lambda_contract <- wlv_native_intermediate_contract(
       "lambda",
@@ -1006,13 +1015,18 @@ wlv_native_parent_io_seeds <- function(
           call. = FALSE
         )
       }
+      lambda_state <- wlv_runtime_snapshot_state_unpack(
+        lambda_entry$state,
+        target_value = lambda_entry$value
+      )
       resolutions[[length(resolutions) + 1L]] <- wlv_parent_seed_resolution(
         lambda_request,
         origin_producer = lambda_entry$producer,
         origin_state_producer = lambda_entry$state_producer,
         value = lambda_entry$value,
-        state = lambda_entry$state,
-        snapshot_sha256 = snapshot_sha256
+        state = lambda_state,
+        snapshot_sha256 = snapshot_sha256,
+        authenticated_state_sha256 = lambda_entry$state_sha256
       )
       pair <- wlv_native_stateful_seed_pair(wlv_seed_resource(
         "intermediate/lambda",
@@ -1020,8 +1034,9 @@ wlv_native_parent_io_seeds <- function(
         lambda_request$contract,
         partition = partition,
         producer = lambda_request$child_producer
-      ), states = lambda_entry$state)
+      ), states = lambda_state)
       seeds <- c(seeds, pair)
+      rm(lambda_state)
     }
     if (!is.null(inherited)) {
       rm(inherited)
