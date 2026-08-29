@@ -39,10 +39,76 @@ test_that("bound FST slices preserve multidimensional column-major order", {
       slices$value_sha256[[selector]],
       runtime$wlv_runtime_snapshot_value_sha256(expected)
     )
+    expect_identical(
+      runtime$wlv_runtime_snapshot_second_axis_slice_sha256(
+        value,
+        match(selector, dimnames(value)$variable),
+        dimnames(value)[c("year", "input", "output")]
+      ),
+      runtime$wlv_runtime_snapshot_value_sha256(expected)
+    )
   }
   expect_identical(
     slices$dimnames$variable,
     c("first", "second", "third")
+  )
+})
+
+test_that("runtime snapshot array hashes preserve integer and double storage", {
+  skip_if_not_installed("fst")
+  runtime <- runtime_snapshot_environment
+  root <- tempfile("wlv-runtime-storage-")
+  dir.create(root)
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  integer_value <- array(
+    seq_len(2L * 2L * 2L * 2L),
+    dim = c(2L, 2L, 2L, 2L),
+    dimnames = list(
+      year = c("2000", "2001"),
+      variable = c("first", "second"),
+      input = c("A", "B"),
+      output = c("X", "Y")
+    )
+  )
+  double_value <- integer_value
+  storage.mode(double_value) <- "double"
+  expect_false(identical(
+    runtime$wlv_runtime_snapshot_value_sha256(integer_value),
+    runtime$wlv_runtime_snapshot_value_sha256(double_value)
+  ))
+  expect_false(identical(
+    runtime$wlv_runtime_snapshot_numeric_chunk_sha256(seq_len(16L)),
+    runtime$wlv_runtime_snapshot_numeric_chunk_sha256(as.double(seq_len(16L)))
+  ))
+
+  path <- file.path(root, "integer-slices.fst")
+  runtime$write_fst_array(integer_value, path, drop_axis_names = TRUE)
+  slices <- runtime$wlv_runtime_snapshot_read_bound_slices(
+    root,
+    basename(path),
+    runtime$wlv_publication_file_sha256(path),
+    runtime$wlv_publication_file_sha256(paste0(path, ".meta")),
+    axes = c("year", "variable", "input", "output"),
+    selectors = "second",
+    max_chunk_values = 5L
+  )
+  expected <- array(
+    integer_value[, "second", , , drop = FALSE],
+    dim = dim(integer_value)[c(1L, 3L, 4L)],
+    dimnames = dimnames(integer_value)[c("year", "input", "output")]
+  )
+  expect_type(slices$values$second, "integer")
+  expect_identical(
+    slices$value_sha256[["second"]],
+    runtime$wlv_runtime_snapshot_value_sha256(expected)
+  )
+  expect_identical(
+    runtime$wlv_runtime_snapshot_second_axis_slice_sha256(
+      integer_value,
+      2L,
+      dimnames(integer_value)[c("year", "input", "output")]
+    ),
+    runtime$wlv_runtime_snapshot_value_sha256(expected)
   )
 })
 
@@ -396,8 +462,409 @@ test_that("runtime snapshot persists lambda and IO states without duplicating IO
     ),
     compatibility = fixture$compatibility
   )
+  capture <- runtime$wlv_runtime_snapshot_capture(
+    fixture$store,
+    method = "synthetic",
+    source = "wiodr13",
+    partitions = fixture$partition,
+    compatibility = fixture$compatibility
+  )
+  phased <- runtime$wlv_runtime_snapshot_finalize(
+    capture,
+    io_artifacts = stats::setNames(io_path, fixture$partition),
+    panel_artifacts = stats::setNames(
+      file.path(root, paste0(names(fixture$panel_values), ".fst")),
+      names(fixture$panel_values)
+    )
+  )
+  expect_identical(phased, snapshot)
+  receipt <- runtime$wlv_runtime_snapshot_write(
+    snapshot,
+    root,
+    return_receipt = TRUE
+  )
+  expect_s3_class(receipt, "wlv_runtime_snapshot_receipt")
+  expect_s3_class(
+    attr(
+      receipt,
+      runtime$wlv_runtime_snapshot_receipt_bindings_attribute(),
+      exact = TRUE
+    ),
+    "wlv_runtime_snapshot_binding_expectations"
+  )
+  expect_match(receipt$snapshot_commitment_sha256, "^[0-9a-f]{64}$")
+  expect_match(
+    attr(
+      receipt,
+      runtime$wlv_runtime_snapshot_receipt_seal_attribute(),
+      exact = TRUE
+    ),
+    "^[0-9a-f]{64}$"
+  )
+  unverified_receipt <- runtime$wlv_runtime_snapshot_write(
+    snapshot,
+    root,
+    validate_snapshot = FALSE,
+    authenticate_bound_files = FALSE,
+    return_receipt = TRUE,
+    defer_verification = TRUE
+  )
+  expect_null(attr(
+    unverified_receipt,
+    runtime$wlv_runtime_snapshot_receipt_bindings_attribute(),
+    exact = TRUE
+  ))
+  expect_null(attr(
+    unverified_receipt,
+    runtime$wlv_runtime_snapshot_receipt_seal_attribute(),
+    exact = TRUE
+  ))
+  deferred_receipt <- runtime$wlv_runtime_snapshot_verify_write(
+    unverified_receipt,
+    root,
+    authenticate_bound_files = TRUE
+  )
+  expect_identical(deferred_receipt, receipt)
+  logical_receipt <- runtime$wlv_runtime_snapshot_write(
+    snapshot,
+    root,
+    validate_snapshot = FALSE,
+    authenticate_bound_files = FALSE,
+    return_receipt = TRUE,
+    defer_verification = TRUE
+  )
+  altered_internal_snapshot <- snapshot
+  altered_internal_snapshot$compatibility$configuration_sha256 <- paste0(
+    rep("0", 64L),
+    collapse = ""
+  )
+  altered_internal_snapshot$compatibility$sha256 <-
+    runtime$wlv_runtime_compatibility_sha256(
+      altered_internal_snapshot$compatibility[setdiff(
+        names(altered_internal_snapshot$compatibility),
+        "sha256"
+      )]
+    )
+  lambda_id <- paste(
+    "intermediate/lambda",
+    fixture$partition,
+    sep = "\034"
+  )
+  altered_internal_snapshot$resources[[lambda_id]]$producer <-
+    "snapshot.lambda.altered"
+  altered_internal_snapshot$resources[[lambda_id]]$state_producer <-
+    "snapshot.lambda.altered"
+  altered_internal_snapshot$state_bindings <-
+    runtime$wlv_runtime_snapshot_state_bindings(altered_internal_snapshot)
+  expect_silent(runtime$wlv_runtime_snapshot_validate(
+    altered_internal_snapshot
+  ))
+  read_hook <- new.env(parent = emptyenv())
+  read_hook$mutated <- FALSE
+  write_environment <- new.env(
+    parent = environment(runtime$wlv_runtime_snapshot_write)
+  )
+  write_environment$readRDS <- function(path) {
+    observed <- base::readRDS(path)
+    if (identical(
+          basename(path),
+          runtime$wlv_runtime_snapshot_filename()
+        ) && !isTRUE(read_hook$mutated)) {
+      read_hook$mutated <- TRUE
+      base::saveRDS(
+        altered_internal_snapshot,
+        path,
+        version = 3L,
+        compress = FALSE
+      )
+    }
+    observed
+  }
+  write_with_mutation <- runtime$wlv_runtime_snapshot_write
+  environment(write_with_mutation) <- write_environment
+  expect_error(
+    write_with_mutation(
+      snapshot,
+      root,
+      return_receipt = TRUE
+    ),
+    "changed during its write round trip"
+  )
   runtime$wlv_runtime_snapshot_write(snapshot, root)
   snapshot_path <- file.path(root, runtime$wlv_runtime_snapshot_filename())
+  saveRDS(
+    altered_internal_snapshot,
+    snapshot_path,
+    version = 3L,
+    compress = FALSE
+  )
+  logical_snapshot_row <- match(
+    runtime$wlv_runtime_snapshot_filename(),
+    logical_receipt$files$path
+  )
+  logical_receipt$files$sha256[[logical_snapshot_row]] <-
+    runtime$wlv_publication_file_sha256(snapshot_path)
+  expect_error(
+    runtime$wlv_runtime_snapshot_verify_write(
+      logical_receipt,
+      root,
+      authenticate_bound_files = FALSE
+    ),
+    "logical commitment"
+  )
+  runtime$wlv_runtime_snapshot_write(snapshot, root)
+  artifacts <- runtime$wlv_capture_validated_run_artifacts(root)
+  bindings <- runtime$wlv_runtime_snapshot_receipt_assert(
+    receipt,
+    method = "synthetic",
+    source = "wiodr13",
+    partitions = fixture$partition,
+    artifacts = artifacts,
+    staging = root
+  )
+  expect_s3_class(bindings, "wlv_runtime_snapshot_binding_expectations")
+  expect_identical(
+    bindings,
+    attr(
+      receipt,
+      runtime$wlv_runtime_snapshot_receipt_bindings_attribute(),
+      exact = TRUE
+    )
+  )
+  io_bindings <- runtime$wlv_runtime_snapshot_io_binding_expectations(bindings)
+  expect_s3_class(
+    io_bindings,
+    "wlv_runtime_snapshot_io_binding_expectations"
+  )
+  expect_false(any(c("panel_states", "panel_provenance") %in% names(io_bindings)))
+  fallback_receipt <- receipt
+  attr(
+    fallback_receipt,
+    runtime$wlv_runtime_snapshot_receipt_bindings_attribute()
+  ) <- NULL
+  attr(
+    fallback_receipt,
+    runtime$wlv_runtime_snapshot_receipt_seal_attribute()
+  ) <- NULL
+  expect_s3_class(
+    runtime$wlv_runtime_snapshot_receipt_assert(
+      fallback_receipt,
+      method = "synthetic",
+      source = "wiodr13",
+      partitions = fixture$partition,
+      artifacts = artifacts,
+      staging = root
+    ),
+    "wlv_runtime_snapshot_binding_expectations"
+  )
+  tampered_receipt <- receipt
+  tampered_expectations <- attr(
+    tampered_receipt,
+    runtime$wlv_runtime_snapshot_receipt_bindings_attribute(),
+    exact = TRUE
+  )
+  tampered_expectations$io$value_sha256[[1L]] <- paste0(
+    rep("0", 64L),
+    collapse = ""
+  )
+  attr(
+    tampered_receipt,
+    runtime$wlv_runtime_snapshot_receipt_bindings_attribute()
+  ) <- tampered_expectations
+  expect_error(
+    runtime$wlv_runtime_snapshot_receipt_assert(
+      tampered_receipt,
+      method = "synthetic",
+      source = "wiodr13",
+      partitions = fixture$partition,
+      artifacts = artifacts,
+      staging = root
+    ),
+    "seal authentication failed"
+  )
+  coordinated_receipt <- receipt
+  coordinated_expectations <- attr(
+    coordinated_receipt,
+    runtime$wlv_runtime_snapshot_receipt_bindings_attribute(),
+    exact = TRUE
+  )
+  forged_sha256 <- paste0(rep("0", 64L), collapse = "")
+  forged_path <- "sea_sectors.fst"
+  coordinated_receipt$files$sha256[
+    coordinated_receipt$files$path == forged_path
+  ] <- forged_sha256
+  coordinated_expectations$panel_provenance$value_sha256[
+    coordinated_expectations$panel_provenance$artifact == "sea_sectors"
+  ] <- forged_sha256
+  attr(
+    coordinated_receipt,
+    runtime$wlv_runtime_snapshot_receipt_bindings_attribute()
+  ) <- coordinated_expectations
+  coordinated_artifacts <- artifacts
+  coordinated_artifact_index <- match(
+    forged_path,
+    vapply(coordinated_artifacts, `[[`, character(1L), "path")
+  )
+  coordinated_artifacts[[coordinated_artifact_index]]$sha256 <- forged_sha256
+  expect_error(
+    runtime$wlv_runtime_snapshot_receipt_assert(
+      coordinated_receipt,
+      method = "synthetic",
+      source = "wiodr13",
+      partitions = fixture$partition,
+      artifacts = coordinated_artifacts,
+      staging = root
+    ),
+    "seal authentication failed"
+  )
+  for (name in names(fixture$panel_values)) {
+    expect_silent(runtime$wlv_runtime_snapshot_validate_materialized_panel(
+      bindings,
+      name,
+      fixture$panel_values[[name]]
+    ))
+  }
+  expect_silent(runtime$wlv_runtime_snapshot_validate_materialized_io(
+    io_bindings,
+    fixture$partition,
+    m_io
+  ))
+  drifted_io <- m_io
+  drifted_io[1L] <- drifted_io[1L] + 1
+  expect_error(
+    runtime$wlv_runtime_snapshot_validate_materialized_io(
+      bindings,
+      fixture$partition,
+      drifted_io
+    ),
+    "IO generation differs"
+  )
+  drifted_panel <- fixture$panel_values$sea_sectors
+  drifted_panel[1L] <- drifted_panel[1L] + 1
+  expect_error(
+    runtime$wlv_runtime_snapshot_validate_materialized_panel(
+      bindings,
+      "sea_sectors",
+      drifted_panel
+    ),
+    "panel generation differs"
+  )
+  drifted_capture <- capture
+  drifted_capture$panel_states$sea_countries$state[[1L]] <- "not_applicable"
+  drifted_snapshot <- runtime$wlv_runtime_snapshot_finalize(
+    drifted_capture,
+    io_artifacts = stats::setNames(io_path, fixture$partition),
+    panel_artifacts = stats::setNames(
+      file.path(root, paste0(names(fixture$panel_values), ".fst")),
+      names(fixture$panel_values)
+    ),
+    validate_snapshot = FALSE,
+    validate_bound = FALSE
+  )
+  drifted_receipt <- runtime$wlv_runtime_snapshot_write(
+    drifted_snapshot,
+    root,
+    validate_snapshot = FALSE,
+    authenticate_bound_files = FALSE,
+    return_receipt = TRUE,
+    defer_verification = TRUE
+  )
+  drifted_receipt <- runtime$wlv_runtime_snapshot_verify_write(
+    drifted_receipt,
+    root,
+    authenticate_bound_files = FALSE
+  )
+  drifted_artifacts <- runtime$wlv_capture_validated_run_artifacts(root)
+  drifted_bindings <- runtime$wlv_runtime_snapshot_receipt_assert(
+    drifted_receipt,
+    method = "synthetic",
+    source = "wiodr13",
+    partitions = fixture$partition,
+    artifacts = drifted_artifacts,
+    staging = root
+  )
+  expect_error(
+    runtime$wlv_runtime_snapshot_validate_materialized_panel(
+      drifted_bindings,
+      "sea_countries",
+      fixture$panel_values$sea_countries
+    ),
+    "panel state generation differs"
+  )
+  runtime$wlv_runtime_snapshot_write(snapshot, root)
+  artifacts <- runtime$wlv_capture_validated_run_artifacts(root)
+  tampered_artifacts <- artifacts
+  snapshot_index <- match(
+    runtime$wlv_runtime_snapshot_filename(),
+    vapply(tampered_artifacts, `[[`, character(1L), "path")
+  )
+  tampered_artifacts[[snapshot_index]]$sha256 <- paste0(rep("0", 64L), collapse = "")
+  expect_error(
+    runtime$wlv_runtime_snapshot_receipt_assert(
+      receipt,
+      method = "synthetic",
+      source = "wiodr13",
+      partitions = fixture$partition,
+      artifacts = tampered_artifacts
+    ),
+    "does not authenticate"
+  )
+  snapshot_path <- file.path(root, runtime$wlv_runtime_snapshot_filename())
+  altered_snapshot <- snapshot
+  altered_snapshot$compatibility$configuration_sha256 <- paste0(
+    rep("0", 64L),
+    collapse = ""
+  )
+  saveRDS(altered_snapshot, snapshot_path, version = 3L, compress = FALSE)
+  expect_error(
+    runtime$wlv_runtime_snapshot_receipt_assert(
+      receipt,
+      method = "synthetic",
+      source = "wiodr13",
+      partitions = fixture$partition,
+      artifacts = artifacts,
+      staging = root
+    ),
+    "failed persisted envelope authentication"
+  )
+  runtime$wlv_runtime_snapshot_write(snapshot, root)
+  expect_identical(
+    runtime$wlv_publication_file_sha256(snapshot_path),
+    receipt$files$sha256[[match(
+      runtime$wlv_runtime_snapshot_filename(),
+      receipt$files$path
+    )]]
+  )
+  expect_error(
+    runtime$wlv_runtime_snapshot_finalize(
+      capture,
+      io_artifacts = stats::setNames(io_path, fixture$partition),
+      panel_artifacts = stats::setNames(
+        file.path(root, paste0(names(fixture$panel_values), ".fst")),
+        names(fixture$panel_values)
+      ),
+      validate_bound = c(FALSE, TRUE)
+    ),
+    "flags are invalid"
+  )
+  expect_error(
+    runtime$wlv_runtime_snapshot_write(
+      snapshot,
+      root,
+      authenticate_bound_files = TRUE,
+      return_receipt = TRUE,
+      defer_verification = TRUE
+    ),
+    "cannot authenticate bound files"
+  )
+  expect_error(
+    runtime$wlv_runtime_snapshot_write(
+      snapshot,
+      root,
+      validate_snapshot = c(FALSE, TRUE)
+    ),
+    "flags are invalid"
+  )
   expect_identical(
     runtime$wlv_runtime_snapshot_read_envelope(
       root,

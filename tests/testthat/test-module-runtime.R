@@ -423,7 +423,11 @@ test_that("create, patch, and replace form one validated resource generation cha
     ),
     store
   )
-  result <- runtime$wlv_run_module_plan(plan, store)
+  result <- runtime$wlv_run_module_plan(
+    plan,
+    store,
+    retain_history = TRUE
+  )
 
   expected <- original
   expected["r1", "c2"] <- 99L
@@ -442,6 +446,235 @@ test_that("create, patch, and replace form one validated resource generation cha
   expect_identical(
     runtime$wlv_store_catalog(result$store)$action,
     c("seed", "patch", "replace")
+  )
+})
+
+test_that("runner prunes dead generations but retains future locators and terminals", {
+  runtime <- module_runtime_environment
+  scalar <- wlv_test_scalar_contract()
+  created <- runtime$wlv_resource_ref(
+    "chain/value",
+    scalar,
+    producer = "create.value"
+  )
+  replaced <- runtime$wlv_resource_ref(
+    "chain/value",
+    scalar,
+    producer = "replace.value"
+  )
+  creator <- runtime$wlv_module_spec(
+    "chain_create",
+    checkpoint = 1L,
+    provides = list(value = wlv_test_output("chain/value", scalar)),
+    run = function(ctx) runtime$wlv_module_result(list(value = 2))
+  )
+  replacer <- runtime$wlv_module_spec(
+    "chain_replace",
+    checkpoint = 2L,
+    requires = list(value = created),
+    provides = list(value = wlv_test_output(
+      "chain/value",
+      scalar,
+      action = "replace",
+      predecessor = created
+    )),
+    run = function(ctx) {
+      runtime$wlv_module_result(list(value = ctx$input("value") * 10))
+    }
+  )
+  consumer <- runtime$wlv_module_spec(
+    "chain_consumer",
+    checkpoint = 3L,
+    requires = list(
+      original = created,
+      current = replaced
+    ),
+    provides = list(value = wlv_test_output("chain/observed", scalar)),
+    run = function(ctx) {
+      runtime$wlv_module_result(list(
+        value = ctx$input("original") + ctx$input("current")
+      ))
+    }
+  )
+  registry <- runtime$wlv_module_registry(list(consumer, replacer, creator))
+  store <- runtime$wlv_new_resource_store()
+  plan <- runtime$wlv_compile_module_plan(
+    registry,
+    list(
+      runtime$wlv_module_instance("consume.value", "chain_consumer"),
+      runtime$wlv_module_instance("replace.value", "chain_replace"),
+      runtime$wlv_module_instance("create.value", "chain_create")
+    ),
+    store
+  )
+
+  expect_false(exists("base_store", envir = plan, inherits = FALSE))
+  expect_identical(plan$base_store_token, store$identity_token)
+  expect_identical(
+    names(plan$terminal_catalog),
+    c(
+      "locator_id", "key", "partition", "producer", "role",
+      "semantic_state"
+    )
+  )
+  expect_true(all(plan$terminal_catalog$role == "value"))
+  expect_false(any(plan$terminal_catalog$semantic_state))
+  observed_id <- plan$terminal_catalog$locator_id[
+    plan$terminal_catalog$key == "chain/observed"
+  ]
+  replacement_id <- plan$terminal_catalog$locator_id[
+    plan$terminal_catalog$key == "chain/value"
+  ]
+  expect_setequal(
+    plan$terminal_catalog$locator_id,
+    c(observed_id, replacement_id)
+  )
+  created_id <- runtime$wlv_runtime_locator_id(
+    "chain/value",
+    NULL,
+    "create.value"
+  )
+  expect_identical(unname(plan$liveness$produced_at[[created_id]]), 1L)
+  expect_identical(unname(plan$liveness$last_use[[created_id]]), 3L)
+  expect_true(observed_id %in% plan$liveness$release_after[[3L]])
+
+  same_catalog <- runtime$wlv_new_resource_store()
+  expect_identical(
+    runtime$wlv_store_catalog(same_catalog),
+    runtime$wlv_store_catalog(store)
+  )
+  expect_error(
+    runtime$wlv_run_module_plan(plan, same_catalog),
+    "identity",
+    class = "wlv_runner_error"
+  )
+  expect_error(
+    runtime$wlv_run_module_plan(
+      plan,
+      store,
+      retain_locator_ids = created_id
+    ),
+    "not a terminal",
+    class = "wlv_runner_error"
+  )
+
+  compact <- runtime$wlv_run_module_plan(plan, store)
+  selected <- runtime$wlv_run_module_plan(
+    plan,
+    store,
+    retain_locator_ids = observed_id
+  )
+  history <- runtime$wlv_run_module_plan(
+    plan,
+    store,
+    retain_history = TRUE,
+    retain_locator_ids = observed_id
+  )
+  expect_false(identical(compact$store$identity_token, store$identity_token))
+
+  expect_identical(
+    runtime$wlv_store_read(
+      compact$store,
+      runtime$wlv_resource_ref("chain/observed", scalar)
+    ),
+    22
+  )
+  compact_catalog <- runtime$wlv_store_catalog(compact$store)
+  expect_setequal(
+    compact_catalog$producer,
+    c("consume.value", "replace.value")
+  )
+  expect_identical(
+    compact_catalog$predecessor[compact_catalog$producer == "replace.value"],
+    "chain/value@create.value"
+  )
+  terminal_ids <- runtime$wlv_runtime_locator_ids(plan$terminals)
+  compact_ids <- vapply(seq_len(nrow(compact_catalog)), function(index) {
+    runtime$wlv_runtime_locator_id(
+      compact_catalog$key[[index]],
+      if (nzchar(compact_catalog$partition[[index]])) {
+        compact_catalog$partition[[index]]
+      } else {
+        NULL
+      },
+      compact_catalog$producer[[index]]
+    )
+  }, character(1L))
+  expect_setequal(compact_ids, terminal_ids)
+  expect_error(
+    runtime$wlv_store_read(compact$store, created),
+    "is not available",
+    class = "wlv_store_error"
+  )
+
+  selected_catalog <- runtime$wlv_store_catalog(selected$store)
+  expect_identical(selected_catalog$producer, "consume.value")
+  expect_identical(
+    runtime$wlv_store_read(
+      selected$store,
+      runtime$wlv_resource_ref("chain/observed", scalar)
+    ),
+    22
+  )
+  expect_error(
+    runtime$wlv_store_read(selected$store, replaced),
+    "is not available",
+    class = "wlv_store_error"
+  )
+
+  history_catalog <- runtime$wlv_store_catalog(history$store)
+  expect_setequal(
+    history_catalog$producer,
+    c("consume.value", "create.value", "replace.value")
+  )
+  expect_identical(compact$trace, history$trace)
+  expect_identical(compact$trace, selected$trace)
+})
+
+test_that("runner rejects an altered fork of its preflighted store", {
+  runtime <- module_runtime_environment
+  scalar <- wlv_test_scalar_contract()
+  seed <- runtime$wlv_resource_ref(
+    "identity/value",
+    scalar,
+    producer = ".seed"
+  )
+  copier <- runtime$wlv_module_spec(
+    "identity_copy",
+    checkpoint = 1L,
+    requires = list(value = seed),
+    provides = list(value = wlv_test_output("identity/result", scalar)),
+    run = function(ctx) {
+      runtime$wlv_module_result(list(value = ctx$input("value")))
+    }
+  )
+  registry <- runtime$wlv_module_registry(list(copier))
+  store <- runtime$wlv_new_resource_store(list(
+    runtime$wlv_seed_resource("identity/value", 1, scalar)
+  ))
+  plan <- runtime$wlv_compile_module_plan(
+    registry,
+    list(runtime$wlv_module_instance("identity.copy", "identity_copy")),
+    store
+  )
+  altered <- runtime$wlv_runtime_fork_store(store)
+  locator_id <- runtime$wlv_runtime_locator_id(
+    "identity/value",
+    NULL,
+    ".seed"
+  )
+  altered$entries[[locator_id]]$value <- 99
+  runtime$wlv_seal_resource_store(altered)
+
+  expect_identical(
+    runtime$wlv_store_catalog(altered),
+    runtime$wlv_store_catalog(store)
+  )
+  expect_false(identical(altered$identity_token, store$identity_token))
+  expect_error(
+    runtime$wlv_run_module_plan(plan, altered),
+    "identity",
+    class = "wlv_runner_error"
   )
 })
 

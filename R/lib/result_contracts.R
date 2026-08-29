@@ -4193,7 +4193,8 @@ wlv_validate_staged_results <- function(
     aggregation_registry,
     expected_io_artifacts,
     at_stage = NULL,
-    reader = read_fst_array) {
+    reader = read_fst_array,
+    runtime_snapshot_receipt = NULL) {
   if (!is.function(reader)) {
     stop("`reader` must be an array reader.", call. = FALSE)
   }
@@ -4227,12 +4228,6 @@ wlv_validate_staged_results <- function(
     wlv_native_io_partition,
     character(1L)
   )
-  wlv_runtime_snapshot_read(
-    staging,
-    method = method,
-    source = runtime$source,
-    partitions = runtime_partitions
-  )
   expected_artifacts <- wlv_expected_staged_result_artifacts(
     expected_metadata,
     expected_io_artifacts
@@ -4243,6 +4238,26 @@ wlv_validate_staged_results <- function(
     require_scientific_checks = FALSE
   )
   pre_validation_artifacts <- wlv_capture_validated_run_artifacts(staging)
+  snapshot_bindings <- NULL
+  if (is.null(runtime_snapshot_receipt)) {
+    wlv_runtime_snapshot_read(
+      staging,
+      method = method,
+      source = runtime$source,
+      partitions = runtime_partitions
+    )
+  } else {
+    snapshot_bindings <- wlv_runtime_snapshot_receipt_assert(
+      runtime_snapshot_receipt,
+      method = method,
+      source = runtime$source,
+      partitions = runtime_partitions,
+      artifacts = pre_validation_artifacts,
+      staging = staging
+    )
+  }
+  rm(runtime_snapshot_receipt)
+  invisible(gc(full = FALSE))
 
   solutions <- expected_metadata$csv[["_method_solutions.csv"]]
   sea_sectors <- reader(file.path(staging, "sea_sectors.fst"))
@@ -4255,6 +4270,25 @@ wlv_validate_staged_results <- function(
   )
   sea_countries <- reader(file.path(staging, "sea_countries.fst"))
   wlv_validate_sea_countries_contract(runtime, sea_countries, "post_roundtrip")
+  if (!is.null(snapshot_bindings)) {
+    wlv_runtime_snapshot_validate_materialized_panel(
+      snapshot_bindings,
+      "sea_sectors",
+      sea_sectors
+    )
+    wlv_runtime_snapshot_validate_materialized_panel(
+      snapshot_bindings,
+      "sea_countries",
+      sea_countries
+    )
+  }
+  snapshot_io_bindings <- if (is.null(snapshot_bindings)) {
+    NULL
+  } else {
+    wlv_runtime_snapshot_io_binding_expectations(snapshot_bindings)
+  }
+  rm(snapshot_bindings)
+  invisible(gc(full = TRUE))
   m_countries <- reader(file.path(staging, "m_countries.fst"))
   wlv_validate_m_countries_contract(runtime, m_countries, "post_roundtrip")
   unit_contract_path <- file.path(staging, "_unit_contract.csv")
@@ -4316,6 +4350,13 @@ wlv_validate_staged_results <- function(
       io_value,
       checkpoint = "post_roundtrip"
     )
+    if (!is.null(snapshot_io_bindings)) {
+      wlv_runtime_snapshot_validate_materialized_io(
+        snapshot_io_bindings,
+        wlv_native_io_partition(path),
+        io_value
+      )
+    }
     scientific_check_parts[[length(scientific_check_parts) + 1L]] <-
       wlv_scientific_validate_io_array(
         method = method,
@@ -4329,6 +4370,7 @@ wlv_validate_staged_results <- function(
     rm(io_value)
     gc()
   }
+  rm(snapshot_io_bindings)
   persisted_runtime <- wlv_new_contract_runtime(
     method = runtime$method,
     source = runtime$source,

@@ -646,6 +646,25 @@ wlv_runtime_new_entry <- function(
   )
 }
 
+wlv_runtime_new_store_identity <- function() {
+  token <- new.env(parent = emptyenv())
+  class(token) <- "wlv_store_identity"
+  lockEnvironment(token, bindings = TRUE)
+  token
+}
+
+wlv_runtime_store_identity_assert <- function(store, error_class) {
+  token <- store$identity_token
+  if (!inherits(token, "wlv_store_identity") || !is.environment(token) ||
+      !environmentIsLocked(token)) {
+    wlv_runtime_abort(
+      "The resource store has no valid identity token.",
+      error_class
+    )
+  }
+  invisible(token)
+}
+
 wlv_runtime_validate_value_type <- function(value, value_type) {
   switch(
     value_type,
@@ -748,6 +767,7 @@ wlv_new_resource_store <- function(seeds = list(), seal = TRUE) {
   }
   seal <- wlv_runtime_scalar_logical(seal, "seal")
   store <- new.env(parent = emptyenv())
+  store$identity_token <- wlv_runtime_new_store_identity()
   store$entries <- list()
   store$sealed <- FALSE
   class(store) <- "wlv_resource_store"
@@ -842,7 +862,9 @@ wlv_runtime_fork_store <- function(store) {
   if (!inherits(store, "wlv_resource_store") || !is.environment(store)) {
     wlv_runtime_abort("`store` must be a resource store.", "wlv_store_error")
   }
+  wlv_runtime_store_identity_assert(store, "wlv_store_error")
   fork <- new.env(parent = emptyenv())
+  fork$identity_token <- wlv_runtime_new_store_identity()
   fork$entries <- store$entries
   fork$sealed <- FALSE
   class(fork) <- "wlv_resource_store"
@@ -2109,6 +2131,115 @@ wlv_runtime_topological_order <- function(ids, edges) {
   order
 }
 
+wlv_runtime_terminal_catalog <- function(terminals) {
+  if (!length(terminals)) {
+    return(data.frame(
+      locator_id = character(),
+      key = character(),
+      partition = character(),
+      producer = character(),
+      role = character(),
+      semantic_state = logical(),
+      stringsAsFactors = FALSE
+    ))
+  }
+  rows <- lapply(terminals, function(entry) {
+    data.frame(
+      locator_id = wlv_runtime_locator_id(
+        entry$key,
+        entry$partition,
+        entry$producer
+      ),
+      key = entry$key,
+      partition = if (is.null(entry$partition)) "" else entry$partition,
+      producer = entry$producer,
+      role = entry$contract$role,
+      semantic_state = entry$contract$semantic_state,
+      stringsAsFactors = FALSE
+    )
+  })
+  result <- do.call(rbind, rows)
+  rownames(result) <- NULL
+  result[order(result$locator_id, method = "radix"), , drop = FALSE]
+}
+
+wlv_runtime_liveness_schedule <- function(entries, modules, order) {
+  locator_ids <- names(entries)
+  produced_at <- stats::setNames(integer(length(locator_ids)), locator_ids)
+  last_use <- stats::setNames(rep(NA_integer_, length(locator_ids)), locator_ids)
+  locator_lookup <- new.env(
+    hash = TRUE,
+    parent = emptyenv(),
+    size = max(29L, length(locator_ids))
+  )
+  for (index in seq_along(locator_ids)) {
+    locator_lookup[[locator_ids[[index]]]] <- as.integer(index)
+  }
+
+  for (sequence in seq_along(order)) {
+    module <- modules[[order[[sequence]]]]
+    for (output in module$provides) {
+      ref <- output$ref
+      locator_id <- wlv_runtime_locator_id(
+        ref$key,
+        ref$partition,
+        module$instance_id
+      )
+      locator_index <- locator_lookup[[locator_id]]
+      if (is.null(locator_index)) {
+        wlv_runtime_abort(
+          sprintf("Liveness schedule lacks output `%s`.", locator_id),
+          "wlv_preflight_error"
+        )
+      }
+      produced_at[[locator_index]] <- as.integer(sequence)
+    }
+    used <- wlv_runtime_module_live_locator_ids(module)
+    if (length(used)) {
+      used_indices <- vapply(used, function(locator_id) {
+        locator_index <- locator_lookup[[locator_id]]
+        if (is.null(locator_index)) NA_integer_ else locator_index
+      }, integer(1L))
+      unknown <- which(is.na(used_indices))
+      if (length(unknown)) {
+        wlv_runtime_abort(
+          sprintf(
+            "Liveness schedule lacks locator `%s`.",
+            used[[unknown[[1L]]]]
+          ),
+          "wlv_preflight_error"
+        )
+      }
+      last_use[used_indices] <- as.integer(sequence)
+    }
+  }
+
+  release_at <- produced_at
+  consumed <- !is.na(last_use)
+  release_at[consumed] <- pmax(
+    produced_at[consumed],
+    last_use[consumed]
+  )
+  release_initial <- locator_ids[release_at == 0L]
+  release_after <- vector("list", length(order))
+  positive <- release_at > 0L
+  if (any(positive)) {
+    groups <- split(locator_ids[positive], release_at[positive])
+    for (sequence in names(groups)) {
+      release_after[[as.integer(sequence)]] <- unname(groups[[sequence]])
+    }
+  }
+  structure(
+    list(
+      produced_at = produced_at,
+      last_use = last_use,
+      release_initial = unname(release_initial),
+      release_after = release_after
+    ),
+    class = "wlv_liveness_schedule"
+  )
+}
+
 wlv_compile_module_plan <- function(
     registry,
     instances,
@@ -2133,6 +2264,7 @@ wlv_compile_module_plan <- function(
       "wlv_preflight_error"
     )
   }
+  wlv_runtime_store_identity_assert(store, "wlv_preflight_error")
   partitions <- sort(
     wlv_runtime_validate_names(partitions, "partitions"),
     method = "radix"
@@ -2303,15 +2435,19 @@ wlv_compile_module_plan <- function(
     }
   }
   order <- wlv_runtime_topological_order(ids, edges)
+  terminal_catalog <- wlv_runtime_terminal_catalog(terminals)
+  liveness <- wlv_runtime_liveness_schedule(entries, resolved, order)
   plan <- new.env(parent = emptyenv())
   plan$operation <- operation
   plan$partitions <- partitions
   plan$modules <- resolved
   plan$order <- order
   plan$edges <- edges
-  plan$base_store <- store
+  plan$base_store_token <- store$identity_token
   plan$base_catalog <- wlv_store_catalog(store)
   plan$terminals <- lapply(terminals, wlv_runtime_entry_locator)
+  plan$terminal_catalog <- terminal_catalog
+  plan$liveness <- liveness
   class(plan) <- "wlv_module_plan"
   lockEnvironment(plan, bindings = TRUE)
   plan
@@ -2597,7 +2733,99 @@ wlv_runtime_prepare_module_outputs <- function(store, module, result) {
   prepared
 }
 
-wlv_run_module_plan <- function(plan, store, services = list()) {
+wlv_runtime_locator_ids <- function(locators) {
+  if (!length(locators)) {
+    return(character())
+  }
+  unname(vapply(
+    locators,
+    function(locator) {
+      wlv_runtime_locator_id(
+        locator$key,
+        locator$partition,
+        locator$producer
+      )
+    },
+    character(1L)
+  ))
+}
+
+wlv_runtime_module_live_locator_ids <- function(module) {
+  input_ids <- unlist(
+    lapply(module$input_locators, wlv_runtime_locator_ids),
+    use.names = FALSE
+  )
+  predecessors <- Filter(
+    Negate(is.null),
+    lapply(module$provides, `[[`, "predecessor")
+  )
+  predecessor_ids <- if (length(predecessors)) {
+    vapply(predecessors, function(predecessor) {
+      wlv_runtime_locator_id(
+        predecessor$key,
+        predecessor$partition,
+        predecessor$producer
+      )
+    }, character(1L))
+  } else {
+    character()
+  }
+  unique(c(input_ids, unname(predecessor_ids)))
+}
+
+wlv_runtime_retained_locator_ids <- function(plan, retain_locator_ids) {
+  terminal_ids <- plan$terminal_catalog$locator_id
+  if (is.null(retain_locator_ids)) {
+    return(terminal_ids)
+  }
+  if (!is.character(retain_locator_ids) || anyNA(retain_locator_ids) ||
+      any(!nzchar(retain_locator_ids)) || anyDuplicated(retain_locator_ids)) {
+    wlv_runtime_abort(
+      "`retain_locator_ids` must be a character vector of unique terminal locator IDs.",
+      "wlv_runner_error"
+    )
+  }
+  unknown <- setdiff(retain_locator_ids, terminal_ids)
+  if (length(unknown)) {
+    wlv_runtime_abort(
+      sprintf(
+        "Retained locator `%s` is not a terminal of the compiled plan.",
+        unknown[[1L]]
+      ),
+      "wlv_runner_error"
+    )
+  }
+  unname(retain_locator_ids)
+}
+
+wlv_runtime_release_entries <- function(entries, release_ids, retained_lookup) {
+  if (!length(entries) || !length(release_ids)) {
+    return(list(entries = entries, pruned = FALSE))
+  }
+  retained <- vapply(release_ids, function(locator_id) {
+    exists(locator_id, envir = retained_lookup, inherits = FALSE)
+  }, logical(1L))
+  release_ids <- release_ids[!retained]
+  if (!length(release_ids)) {
+    return(list(entries = entries, pruned = FALSE))
+  }
+  previous_length <- length(entries)
+  entries[release_ids] <- NULL
+  list(
+    entries = entries,
+    pruned = length(entries) < previous_length
+  )
+}
+
+# A compact store is a final execution product: generations not selected for
+# retention may have been removed. Use `retain_history = TRUE` when the returned
+# store must remain a reusable input to a later module-plan compilation.
+wlv_run_module_plan <- function(
+    plan,
+    store,
+    services = list(),
+    retain_history = FALSE,
+    retain_locator_ids = NULL) {
   if (!inherits(plan, "wlv_module_plan") || !is.environment(plan) ||
       !environmentIsLocked(plan)) {
     wlv_runtime_abort("`plan` must be a compiled module plan.", "wlv_runner_error")
@@ -2606,10 +2834,11 @@ wlv_run_module_plan <- function(plan, store, services = list()) {
       !environmentIsLocked(store) || !isTRUE(store$sealed)) {
     wlv_runtime_abort("`store` must be a sealed resource store.", "wlv_runner_error")
   }
-  if (!identical(store, plan$base_store) ||
+  wlv_runtime_store_identity_assert(store, "wlv_runner_error")
+  if (!identical(store$identity_token, plan$base_store_token) ||
       !identical(wlv_store_catalog(store), plan$base_catalog)) {
     wlv_runtime_abort(
-      "The resource store no longer matches the plan's preflight snapshot.",
+      "The resource store identity or catalog no longer matches the plan's preflight snapshot.",
       "wlv_runner_error"
     )
   }
@@ -2618,6 +2847,22 @@ wlv_run_module_plan <- function(plan, store, services = list()) {
       anyDuplicated(names(services))
   ))) {
     wlv_runtime_abort("`services` must be a uniquely named list.", "wlv_runner_error")
+  }
+  retain_history <- wlv_runtime_scalar_logical(
+    retain_history,
+    "retain_history"
+  )
+  retained_locator_ids <- wlv_runtime_retained_locator_ids(
+    plan,
+    retain_locator_ids
+  )
+  retained_lookup <- new.env(
+    hash = TRUE,
+    parent = emptyenv(),
+    size = max(29L, length(retained_locator_ids))
+  )
+  for (locator_id in retained_locator_ids) {
+    retained_lookup[[locator_id]] <- TRUE
   }
   required_services <- unique(unlist(lapply(
     plan$modules,
@@ -2636,8 +2881,21 @@ wlv_run_module_plan <- function(plan, store, services = list()) {
   }
 
   working <- wlv_runtime_fork_store(store)
+  rm(store)
+  pruned_since_gc <- FALSE
+  if (!retain_history) {
+    released <- wlv_runtime_release_entries(
+      working$entries,
+      plan$liveness$release_initial,
+      retained_lookup
+    )
+    working$entries <- released$entries
+    pruned_since_gc <- released$pruned
+    rm(released)
+  }
   trace_rows <- list()
-  for (id in plan$order) {
+  for (sequence in seq_along(plan$order)) {
+    id <- plan$order[[sequence]]
     module <- plan$modules[[id]]
     inputs <- wlv_runtime_module_inputs(working, module)
     module_services <- wlv_runtime_module_services(
@@ -2681,6 +2939,16 @@ wlv_run_module_plan <- function(plan, store, services = list()) {
     for (locator_id in names(prepared)) {
       next_entries[[locator_id]] <- prepared[[locator_id]]
     }
+    pruned <- FALSE
+    if (!retain_history) {
+      released <- wlv_runtime_release_entries(
+        next_entries,
+        plan$liveness$release_after[[sequence]],
+        retained_lookup
+      )
+      next_entries <- released$entries
+      pruned <- released$pruned
+    }
     working$entries <- next_entries
     trace_rows[[length(trace_rows) + 1L]] <- data.frame(
       sequence = length(trace_rows) + 1L,
@@ -2692,6 +2960,22 @@ wlv_run_module_plan <- function(plan, store, services = list()) {
       output_count = length(prepared),
       stringsAsFactors = FALSE
     )
+    pruned_since_gc <- pruned_since_gc || pruned
+    rm(inputs, module_services, context, prepared, next_entries)
+    if (exists("result", inherits = FALSE)) {
+      rm(result)
+    }
+    if (exists("released", inherits = FALSE)) {
+      rm(released)
+    }
+    checkpoint_boundary <- sequence < length(plan$order) && !identical(
+      module$checkpoint_rank,
+      plan$modules[[plan$order[[sequence + 1L]]]]$checkpoint_rank
+    )
+    if (checkpoint_boundary && pruned_since_gc) {
+      invisible(gc(full = FALSE))
+      pruned_since_gc <- FALSE
+    }
   }
   wlv_seal_resource_store(working)
   trace <- if (length(trace_rows)) {
@@ -2708,6 +2992,8 @@ wlv_run_module_plan <- function(plan, store, services = list()) {
       stringsAsFactors = FALSE
     )
   }
+  rm(trace_rows)
+  invisible(gc(full = FALSE))
   result <- new.env(parent = emptyenv())
   result$store <- working
   result$trace <- trace

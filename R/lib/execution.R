@@ -2436,6 +2436,54 @@ wlv_native_panel_metadata <- function(parameters, metadata) {
   )
 }
 
+wlv_native_result_locator_ids <- function(module_plan) {
+  if (!inherits(module_plan, "wlv_module_plan") ||
+      !is.environment(module_plan) || !environmentIsLocked(module_plan)) {
+    stop(
+      "Native result retention requires a locked compiled module plan.",
+      call. = FALSE
+    )
+  }
+  catalog <- module_plan$terminal_catalog
+  required <- c("locator_id", "key", "role")
+  if (!is.data.frame(catalog) || !all(required %in% names(catalog)) ||
+      anyNA(catalog[required]) || any(!nzchar(catalog$locator_id)) ||
+      any(!nzchar(catalog$key)) || any(!nzchar(catalog$role)) ||
+      anyDuplicated(catalog$locator_id)) {
+    stop("The compiled module terminal catalog is invalid.", call. = FALSE)
+  }
+
+  retained_roles <- c("anomaly", "diagnostic", "metadata")
+  retained_keys <- c(
+    "configuration/parameters",
+    "configuration/sectors",
+    "metadata/indicators",
+    "intermediate/lambda",
+    "semantic_state/intermediate/lambda"
+  )
+  retained_prefixes <- c(
+    "artifact/",
+    "semantic_state/artifact/",
+    "io/",
+    "semantic_state/io/",
+    "sea/sector/",
+    "sea/country/",
+    "semantic_state/sea/sector/",
+    "semantic_state/sea/country/"
+  )
+  prefix_match <- Reduce(
+    `|`,
+    lapply(retained_prefixes, function(prefix) {
+      startsWith(catalog$key, prefix)
+    }),
+    init = rep(FALSE, nrow(catalog))
+  )
+  retain <- catalog$role %in% retained_roles |
+    catalog$key %in% retained_keys |
+    prefix_match
+  unname(catalog$locator_id[retain])
+}
+
 wlv_native_role_contributions <- function(run_result, role) {
   if (!inherits(run_result, "wlv_run_result") || !is.environment(run_result)) {
     stop("Native role collection requires a completed module run.", call. = FALSE)
@@ -3500,12 +3548,14 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         partitions = run_data$partitions,
         compatibility = compatibility
       )
+      runtime_input_store <- built$store
       parent_snapshot <- built$parent_snapshot
       parent_imports <- built$parent_imports
+      rm(built)
       module_plan <- wlv_compile_module_plan(
         registry = plan$native_registry,
         instances = run_data$native_instances,
-        store = built$store,
+        store = runtime_input_store,
         operation = plan$mode,
         partitions = run_data$partitions
       )
@@ -3516,13 +3566,29 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
           plan$at_stage
         )
       }
+      retained_locator_ids <- wlv_native_result_locator_ids(module_plan)
+      run_scope <- environment()
+      take_input_store <- function() {
+        if (!exists("runtime_input_store", envir = run_scope, inherits = FALSE)) {
+          stop("The native runtime input store was already consumed.", call. = FALSE)
+        }
+        value <- get(
+          "runtime_input_store",
+          envir = run_scope,
+          inherits = FALSE
+        )
+        rm(list = "runtime_input_store", envir = run_scope)
+        value
+      }
       module_result <- wlv_run_module_plan(
         module_plan,
-        built$store,
+        take_input_store(),
         services = list(
           year_apply = wlv_native_year_apply_service(cluster)
-        )
+        ),
+        retain_locator_ids = retained_locator_ids
       )
+      rm(take_input_store, run_scope, retained_locator_ids)
       wlv_native_hydrate_validation_runtime(
         contract_runtime,
         module_result
@@ -3596,19 +3662,32 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         )
       }
       runtime_store <- module_result$store
-      rm(module_result, module_plan, built)
-      snapshot <- if (identical(plan$mode, "recalculate")) {
+      rm(module_result, module_plan)
+      snapshot_capture <- if (identical(plan$mode, "recalculate")) {
         if (is.null(parent_snapshot)) {
           stop(
             "Recalculation lost its authenticated parent runtime snapshot.",
             call. = FALSE
           )
         }
-        parent_snapshot
+        wlv_runtime_snapshot_capture_update_panel(
+          parent_snapshot,
+          runtime_store,
+          parent_imports = parent_imports,
+          compatibility = compatibility,
+          validate_parent = FALSE
+        )
       } else {
-        NULL
+        wlv_runtime_snapshot_capture(
+          store = runtime_store,
+          method = method,
+          source = method_record$source[[1L]],
+          partitions = run_data$partitions,
+          compatibility = compatibility
+        )
       }
-      rm(parent_snapshot)
+      rm(parent_snapshot, runtime_store)
+      invisible(gc(full = TRUE))
       wlv_native_write_arrays(
         plan,
         runtime_data,
@@ -3632,29 +3711,41 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         c("sea_sectors.fst", "sea_countries.fst")
       )
       names(panel_artifact_paths) <- c("sea_sectors", "sea_countries")
-      if (identical(plan$mode, "calculate")) {
-        snapshot <- wlv_runtime_snapshot_create(
-          store = runtime_store,
-          method = method,
-          source = method_record$source[[1L]],
-          partitions = run_data$partitions,
+      snapshot <- if (identical(plan$mode, "calculate")) {
+        wlv_runtime_snapshot_finalize(
+          snapshot_capture,
           io_artifacts = io_artifact_paths,
           panel_artifacts = panel_artifact_paths,
-          compatibility = compatibility
+          validate_snapshot = FALSE,
+          validate_bound = FALSE
         )
       } else {
-        snapshot <- wlv_runtime_snapshot_update_panel(
-          snapshot,
-          runtime_store,
+        wlv_runtime_snapshot_finalize(
+          snapshot_capture,
           panel_artifacts = panel_artifact_paths,
-          parent_imports = parent_imports,
-          compatibility = compatibility
+          validate_snapshot = FALSE,
+          validate_bound = FALSE
         )
       }
-      rm(runtime_store)
-      invisible(gc(full = FALSE))
-      wlv_runtime_snapshot_write(snapshot, staging)
+      rm(snapshot_capture)
+      snapshot_receipt <- wlv_runtime_snapshot_write(
+        snapshot,
+        staging,
+        validate_snapshot = FALSE,
+        authenticate_bound_files = FALSE,
+        return_receipt = TRUE,
+        defer_verification = TRUE
+      )
       rm(snapshot)
+      invisible(gc(full = TRUE))
+      snapshot_receipt <- wlv_runtime_snapshot_verify_write(
+        snapshot_receipt,
+        staging,
+        authenticate_bound_files = FALSE
+      )
+      snapshot_receipt_owner <- new.env(parent = emptyenv())
+      snapshot_receipt_owner$receipt <- snapshot_receipt
+      rm(snapshot_receipt)
       rm(parent_imports)
       invisible(gc(full = TRUE))
       for (name in names(diagnostics)) {
@@ -3717,8 +3808,24 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         } else {
           NULL
         },
-        reader = read_fst_array
+        reader = read_fst_array,
+        runtime_snapshot_receipt = (function(owner) {
+          if (!exists("receipt", envir = owner, inherits = FALSE)) {
+            stop("Runtime snapshot receipt ownership was already transferred.",
+              call. = FALSE
+            )
+          }
+          value <- get("receipt", envir = owner, inherits = FALSE)
+          rm("receipt", envir = owner)
+          value
+        })(snapshot_receipt_owner)
       )
+      if (exists("receipt", envir = snapshot_receipt_owner, inherits = FALSE)) {
+        stop("Runtime snapshot receipt ownership was not transferred.",
+          call. = FALSE
+        )
+      }
+      rm(snapshot_receipt_owner)
       validated_artifacts <- attr(
         scientific_checks,
         "wlv_validated_run_artifacts",
