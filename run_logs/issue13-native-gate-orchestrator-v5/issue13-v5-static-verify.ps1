@@ -555,7 +555,7 @@ $bootstrapSourceSha256 = @{
   'issue13-v5-capture-clean-stage5-evidence.ps1' =
     'AD714DCA487749FD405D4A40D69A7AE1BD42973C480257F7E0B11CEE45CEE6B6'
   'issue13-v5-coordinator-lib.ps1' =
-    '5AE7C70F7EAF8176339A1A358D84500344FDA0AC1EF996BAB81D22D95520B0F1'
+    '0E9773ABBD70561AB303F7E96EE4664708E6E02938E2042A71DEB53E8960BEAF'
   'issue13-v5-coordinator.ps1' =
     '57A284A2600AAC37B5879BA44EB6B4AB1953AB00590D4EA6720524195E0EBF28'
   'issue13-v5-materialize-harness.ps1' =
@@ -2324,7 +2324,7 @@ $issue13ExpectedAstSurfaces = @{
   }
   'issue13-v5-coordinator-lib.ps1' = @{
     command_count = 1197
-    command_sha256 = '6A705A30EC8B6214CE10D1F71EFF59C0BFA5BDA6C50B6482130C359532BA617A'
+    command_sha256 = 'EB50A5988E947561F85899E33D4E82D913F5C1E58A8E5F6514A115AD10BC1270'
     redirection_count = 16
     redirection_sha256 = 'A27C1F1A1A78A655A820FF3FB0CF52CDB0B3A4DF14EE3A8B21EADCFCD395E8EE'
   }
@@ -2371,8 +2371,8 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = '7F4027149DBBCCC5E186586FA06D6058EF6E3821AC51098E7521EBC767D5FE2D'
   }
   'issue13-v5-static-verify.ps1' = @{
-    command_count = 900
-    command_sha256 = '3C0BB13D8A83F6B3D8B7EAD4207B9333C8EE549E9248B537ED2430E1CCB7A75A'
+    command_count = 930
+    command_sha256 = 'A0F4875DE754C32255EF6AE92DA7BBB1F1B22CF59E6A8E2455B5E0DFE69CFF62'
     redirection_count = 0
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
@@ -2382,7 +2382,7 @@ $issue13ExpectedControllerSourceSha256 = @{
   'issue13-v5-baseline-smoke.ps1' = 'B5250828544C45CC03E1CC0D6626E60DCBA0EE47D70D5199D94AA7693E75D111'
   'issue13-v5-capture-clean-bridge-evidence.ps1' = '23DC872D2697788268C0102BABA2B972B1D2AEB533419F9C3A5A1141BCCF317D'
   'issue13-v5-capture-clean-stage5-evidence.ps1' = 'AD714DCA487749FD405D4A40D69A7AE1BD42973C480257F7E0B11CEE45CEE6B6'
-  'issue13-v5-coordinator-lib.ps1' = '5AE7C70F7EAF8176339A1A358D84500344FDA0AC1EF996BAB81D22D95520B0F1'
+  'issue13-v5-coordinator-lib.ps1' = '0E9773ABBD70561AB303F7E96EE4664708E6E02938E2042A71DEB53E8960BEAF'
   'issue13-v5-coordinator.ps1' = '57A284A2600AAC37B5879BA44EB6B4AB1953AB00590D4EA6720524195E0EBF28'
   'issue13-v5-materialize-harness.ps1' = '32BA0F9DC5C17A1F3EEFDAEF9AEFBCCC1D4370B0A0C16DF9072C8C002770A8D6'
   'issue13-v5-new-config.ps1' = '67D42899B85F2E175560ADE23F981EB64124C606232B350D9B1380098D2329E6'
@@ -2390,7 +2390,7 @@ $issue13ExpectedControllerSourceSha256 = @{
   'issue13-v5-oracle-effect-lib.ps1' = 'F49425C3A1AF813ABBEF1F515240C570316E08143BC26E50DE34BDB0C3877CC4'
   'issue13-v5-oracle-effect-validate.ps1' = '11912422CEB54A45A791E49E11688F974AB45A4CC0F2FB89145D90176AAB0140'
   'issue13-v5-render-report.ps1' = '756ACAB7E8BFC6CF7E0A7235B0634E24F4D805A4F30D060291260A62726B710A'
-    'issue13-v5-static-verify.ps1' = '2F77DE66F3F812D25F2547FF43DAE9B9FC9AE645B5CC1B41B9844796C521BE16'
+    'issue13-v5-static-verify.ps1' = 'AA48EC5E7FBA6CD96AD34FB3C97ED11393B70DA6F7E5D0C69BAABFBB0C1F609C'
 }
 $issue13ExpectedDotSourceSignatures = @{
   'issue13-v5-attest-delivery.ps1' = @(
@@ -9928,6 +9928,248 @@ function ConvertTo-Issue13V5StaticMutantAst(
     throw "Static Oracle-validation mutant did not parse: $Label"
   }
   $mutantAst
+}
+function Get-Issue13V5StaticWhereObjectCommands(
+  [Management.Automation.Language.ScriptBlockAst]$Ast
+) {
+  @($Ast.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.CommandAst] -and
+      (Get-Issue13V5PowerShellCommandLeaf ($node.GetCommandName())) -ieq
+        'Where-Object'
+  }, $true))
+}
+function Test-Issue13V5WhereObjectBindingAst(
+  [Management.Automation.Language.ScriptBlockAst]$Ast
+) {
+  $comparisonOperators = [Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::OrdinalIgnoreCase)
+  foreach ($operator in @(
+      'eq', 'ceq', 'ne', 'cne', 'gt', 'cgt', 'ge', 'cge', 'lt', 'clt',
+      'le', 'cle', 'like', 'clike', 'notlike', 'cnotlike', 'match',
+      'cmatch', 'notmatch', 'cnotmatch', 'contains', 'ccontains',
+      'notcontains', 'cnotcontains', 'in', 'cin', 'notin', 'cnotin',
+      'is', 'isnot')) {
+    $null = $comparisonOperators.Add($operator)
+  }
+  foreach ($command in @(Get-Issue13V5StaticWhereObjectCommands $Ast)) {
+    $elements = @($command.CommandElements)
+    if ($elements.Count -eq 2 -and
+        $elements[1] -is
+          [Management.Automation.Language.ScriptBlockExpressionAst]) {
+      continue
+    }
+    if ($elements.Count -eq 2 -and
+        $elements[1] -is
+          [Management.Automation.Language.StringConstantExpressionAst]) {
+      continue
+    }
+    if ($elements.Count -eq 4 -and
+        $elements[1] -is
+          [Management.Automation.Language.StringConstantExpressionAst] -and
+        $elements[2] -is
+          [Management.Automation.Language.CommandParameterAst] -and
+        $comparisonOperators.Contains(
+          [string]$elements[2].ParameterName) -and
+        $elements[3] -isnot
+          [Management.Automation.Language.CommandParameterAst]) {
+      continue
+    }
+    return $false
+  }
+  $true
+}
+function Get-Issue13V5OracleToolSelectorAssignments(
+  [Management.Automation.Language.ScriptBlockAst]$Ast
+) {
+  $definitions = @(Get-Issue13V5StaticTopLevelFunctions `
+    $Ast 'Assert-Issue13V5OracleEffectBindings')
+  if ($definitions.Count -ne 1 -or
+      $definitions[0].Name -cne 'Assert-Issue13V5OracleEffectBindings') {
+    return [object[]]@()
+  }
+  $specWrites = @(Get-Issue13V5VariableWriteAsts `
+    $definitions[0] '$specTool')
+  $schemaWrites = @(Get-Issue13V5VariableWriteAsts `
+    $definitions[0] '$schemaTool')
+  if ($specWrites.Count -ne 1 -or $schemaWrites.Count -ne 1) {
+    return [object[]]@()
+  }
+  [object[]]@($specWrites[0], $schemaWrites[0])
+}
+function Test-Issue13V5OracleToolSelectorsAst(
+  [Management.Automation.Language.ScriptBlockAst]$Ast
+) {
+  $assignments = @(Get-Issue13V5OracleToolSelectorAssignments $Ast)
+  $variables = @('$specTool', '$schemaTool')
+  $names = @(
+    'issue13-v5-oracle-effect-spec.json',
+    'issue13-v5-oracle-effect-proof.schema.json'
+  )
+  if ($assignments.Count -ne 2) { return $false }
+  for ($index = 0; $index -lt $assignments.Count; $index++) {
+    $assignment = $assignments[$index]
+    $commands = @($assignment.Right.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.CommandAst]
+    }, $true))
+    $whereCommands = @($commands | Where-Object {
+      (Get-Issue13V5PowerShellCommandLeaf ($_.GetCommandName())) -ieq
+        'Where-Object'
+    })
+    $expectedRight = '@($expectedTools|Where-Object{[string]$_.name-ceq''' +
+      $names[$index] + '''})'
+    if ($assignment.Left.Extent.Text -cne $variables[$index] -or
+        $commands.Count -ne 1 -or $whereCommands.Count -ne 1 -or
+        $whereCommands[0].CommandElements.Count -ne 2 -or
+        $whereCommands[0].CommandElements[1] -isnot
+          [Management.Automation.Language.ScriptBlockExpressionAst] -or
+        [regex]::Replace(
+          [string]$assignment.Right.Extent.Text, '[\s`]', '') -cne
+            $expectedRight) {
+      return $false
+    }
+  }
+  $true
+}
+
+$whereObjectComparisonCount = 0L
+$whereObjectUnaryCount = 0L
+foreach ($bootstrapName in @($bootstrapSourceAsts.Keys | Sort-Object)) {
+  $bootstrapAst = $bootstrapSourceAsts[$bootstrapName]
+  if (-not (Test-Issue13V5WhereObjectBindingAst $bootstrapAst)) {
+    throw "Where-Object binding is incomplete: $bootstrapName"
+  }
+  foreach ($whereCommand in @(
+      Get-Issue13V5StaticWhereObjectCommands $bootstrapAst)) {
+    $elements = @($whereCommand.CommandElements)
+    if ($elements.Count -eq 4) {
+      $whereObjectComparisonCount++
+    } elseif ($elements.Count -eq 2 -and
+        $elements[1] -is
+          [Management.Automation.Language.StringConstantExpressionAst]) {
+      $whereObjectUnaryCount++
+    }
+  }
+}
+if ($whereObjectComparisonCount -ne 20L -or
+    $whereObjectUnaryCount -ne 3L) {
+  throw 'Where-Object simplified binding inventory changed.'
+}
+
+$whereObjectPositiveAst = ConvertTo-Issue13V5StaticMutantAst (
+  "@() | Where-Object status -ceq 'passed'`n" +
+    "@() | Where-Object present`n" +
+    '@() | Where-Object { $_.present }') 'where-object-positive-controls'
+if (-not (Test-Issue13V5WhereObjectBindingAst $whereObjectPositiveAst)) {
+  throw 'Where-Object binding guard rejected valid positive controls.'
+}
+$whereObjectIncompleteAst = ConvertTo-Issue13V5StaticMutantAst (
+  "@() | Where-Object status -ceq`n'passed'") `
+  'where-object-missing-value'
+if (Test-Issue13V5WhereObjectBindingAst $whereObjectIncompleteAst) {
+  throw 'Where-Object binding guard accepted a missing-value mutant.'
+}
+
+$whereObjectLibraryText = [string]$libraryAst.Extent.Text
+if (-not (Test-Issue13V5OracleToolSelectorsAst $libraryAst)) {
+  throw 'Oracle-effect spec/schema selectors are not exact and executable.'
+}
+$oracleToolAssignments = @(
+  Get-Issue13V5OracleToolSelectorAssignments $libraryAst)
+$oracleToolSelectorScriptText =
+  'param([object[]]$expectedTools)' + "`n" +
+  [string]$oracleToolAssignments[0].Extent.Text + "`n" +
+  [string]$oracleToolAssignments[1].Extent.Text + "`n" + @'
+[pscustomobject][ordered]@{
+  spec_count = [int]@($specTool).Count
+  spec_name = [string]$specTool[0].name
+  schema_count = [int]@($schemaTool).Count
+  schema_name = [string]$schemaTool[0].name
+}
+'@
+$oracleToolSelectorScript = [scriptblock]::Create(
+  $oracleToolSelectorScriptText)
+$oracleToolFixtures = [object[]]@(
+  [pscustomobject]@{ name = 'issue13-v5-oracle-effect-spec.json' },
+  [pscustomobject]@{ name = 'ISSUE13-V5-ORACLE-EFFECT-SPEC.JSON' },
+  [pscustomobject]@{
+    name = 'issue13-v5-oracle-effect-proof.schema.json'
+  },
+  [pscustomobject]@{
+    name = 'ISSUE13-V5-ORACLE-EFFECT-PROOF.SCHEMA.JSON'
+  }
+)
+$oracleToolSelectorResult = $oracleToolSelectorScript.InvokeReturnAsIs(
+  [object[]]@(, $oracleToolFixtures))
+if ($null -eq $oracleToolSelectorResult -or
+    [int]$oracleToolSelectorResult.spec_count -ne 1 -or
+    [string]$oracleToolSelectorResult.spec_name -cne
+      'issue13-v5-oracle-effect-spec.json' -or
+    [int]$oracleToolSelectorResult.schema_count -ne 1 -or
+    [string]$oracleToolSelectorResult.schema_name -cne
+      'issue13-v5-oracle-effect-proof.schema.json') {
+  throw 'Oracle-effect selector production extents failed case-exact execution.'
+}
+
+$oracleToolNames = @(
+  'issue13-v5-oracle-effect-spec.json',
+  'issue13-v5-oracle-effect-proof.schema.json'
+)
+for ($index = 0; $index -lt $oracleToolAssignments.Count; $index++) {
+  $assignment = $oracleToolAssignments[$index]
+  $whereCommand = @($assignment.Right.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.CommandAst] -and
+      (Get-Issue13V5PowerShellCommandLeaf ($node.GetCommandName())) -ieq
+        'Where-Object'
+  }, $true))[0]
+  $brokenSelector = "Where-Object name -ceq`n      '" +
+    $oracleToolNames[$index] + "'"
+  $brokenText = Set-Issue13V5StaticAstExtentText `
+    $whereObjectLibraryText $whereCommand $brokenSelector
+  $brokenAst = ConvertTo-Issue13V5StaticMutantAst `
+    $brokenText ("oracle-tool-selector-missing-value-$index")
+  if ((Test-Issue13V5WhereObjectBindingAst $brokenAst) -or
+      (Test-Issue13V5OracleToolSelectorsAst $brokenAst)) {
+    throw 'Oracle-effect selector guards accepted a missing-value mutant.'
+  }
+  $selectorMutants = @(
+    $whereCommand.Extent.Text.Replace(
+      '[string]$_.name', '[string]$_.path'),
+    $whereCommand.Extent.Text.Replace('-ceq', '-eq'),
+    $whereCommand.Extent.Text.Replace(
+      $oracleToolNames[$index], $oracleToolNames[$index] + '.mutant')
+  )
+  foreach ($selectorMutant in $selectorMutants) {
+    $mutantText = Set-Issue13V5StaticAstExtentText `
+      $whereObjectLibraryText $whereCommand $selectorMutant
+    $mutantAst = ConvertTo-Issue13V5StaticMutantAst `
+      $mutantText ("oracle-tool-selector-shape-$index")
+    if (Test-Issue13V5OracleToolSelectorsAst $mutantAst) {
+      throw 'Oracle-effect selector guard accepted a shape mutant.'
+    }
+  }
+}
+
+$baselineSmokeAst = $bootstrapSourceAsts['issue13-v5-baseline-smoke.ps1']
+$baselineSimplifiedWhere = @(Get-Issue13V5StaticWhereObjectCommands `
+  $baselineSmokeAst | Where-Object {
+    $_.CommandElements.Count -eq 4 -and
+      [string]$_.CommandElements[1].Extent.Text -ceq 'status' -and
+      [string]$_.CommandElements[2].Extent.Text -ceq '-ceq' -and
+      [string]$_.CommandElements[3].Extent.Text -ceq "'passed'"
+  })
+if ($baselineSimplifiedWhere.Count -ne 1) {
+  throw 'Cannot locate the real simplified Where-Object positive control.'
+}
+$baselineWhereMutantText = Set-Issue13V5StaticAstExtentText `
+  ([string]$bootstrapSourceTexts['issue13-v5-baseline-smoke.ps1']) `
+  $baselineSimplifiedWhere[0] "Where-Object status -ceq`n'passed'"
+$baselineWhereMutantAst = ConvertTo-Issue13V5StaticMutantAst `
+  $baselineWhereMutantText 'real-where-object-missing-value'
+if (Test-Issue13V5WhereObjectBindingAst $baselineWhereMutantAst) {
+  throw 'Where-Object binding guard accepted a real-source missing-value mutant.'
 }
 function Test-Issue13V5ExternalInMemoryCommandRecordAst(
   [Management.Automation.Language.ScriptBlockAst]$Ast

@@ -3312,10 +3312,12 @@ function Assert-Issue13V5OracleEffectBindings([object]$Config) {
       }
     }
   }
-  $specTool = @($expectedTools | Where-Object name -ceq
-      'issue13-v5-oracle-effect-spec.json')
-  $schemaTool = @($expectedTools | Where-Object name -ceq
-      'issue13-v5-oracle-effect-proof.schema.json')
+  $specTool = @($expectedTools | Where-Object {
+      [string]$_.name -ceq 'issue13-v5-oracle-effect-spec.json'
+    })
+  $schemaTool = @($expectedTools | Where-Object {
+      [string]$_.name -ceq 'issue13-v5-oracle-effect-proof.schema.json'
+    })
   if ($specTool.Count -ne 1 -or $schemaTool.Count -ne 1) {
     throw 'Oracle-effect spec/schema tooling is ambiguous.'
   }

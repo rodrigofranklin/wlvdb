@@ -206,13 +206,13 @@ $toolRoot = Join-Path $repo 'run_logs\issue13-native-gate-orchestrator-v5'
 $pwsh = 'C:\Users\rodri\.cache\codex-runtimes\codex-primary-runtime\dependencies\native\powershell\pwsh.exe'
 $strictRoot = 'D:\Trabalho\Code\wlvdb-issue13-v5-cc2-smoke-003'
 $oracleRoot = 'D:\Trabalho\Code\wlvdb-issue13-v5-compat-smoke-003'
-$runtimeRoot = 'D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal-rerun-013'
+$runtimeRoot = 'D:\Trabalho\Code\wlvdb-issue13-evidence-runtime-v5-terminal-rerun-014'
 $rscript = 'C:\Users\rodri\AppData\Local\Programs\R\R-4.6.1\bin\x64\Rscript.exe'
 $rLibrary = 'D:\Trabalho\Code\wlvdb\renv\library\windows\R-4.6\x86_64-w64-mingw32'
 $candidateCommit = '<commit Git de 40 hex que materializou o runtime terminal>'
-$comparisonRoot = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-primary-terminal-rerun-013'
-$replayRoot = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-replay-terminal-rerun-013'
-$proof = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-proof-terminal-rerun-013.json'
+$comparisonRoot = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-primary-terminal-rerun-014'
+$replayRoot = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-replay-terminal-rerun-014'
+$proof = 'D:\Trabalho\Code\wlvdb-issue13-oracle-effect-proof-terminal-rerun-014.json'
 
 & $pwsh -NoLogo -NoProfile -NonInteractive -File `
   (Join-Path $toolRoot 'issue13-v5-oracle-effect-generate.ps1') `
