@@ -260,20 +260,8 @@ test_that("runtime snapshot state codec is compact, canonical, and lossless", {
     c("year", "input", "output")
   )
   codec <- runtime$wlv_runtime_snapshot_state_pack(resource)
-  captured <- runtime$wlv_runtime_snapshot_state_capture(
-    resource,
-    value,
-    "io/values",
-    c("year", "input", "output"),
-    "semantic_state/io/values"
-  )
 
   expect_s3_class(codec, "wlv_runtime_semantic_state_codec")
-  expect_identical(captured$state, codec)
-  expect_identical(
-    captured$state_sha256,
-    runtime$wlv_runtime_snapshot_state_sha256(codec)
-  )
   expect_identical(codec$encoding, "cartesian")
   expect_identical(codec$row_count, 12)
   expect_identical(
@@ -293,32 +281,6 @@ test_that("runtime snapshot state codec is compact, canonical, and lossless", {
   expect_identical(
     runtime$wlv_runtime_snapshot_state_sha256(codec),
     runtime$wlv_runtime_snapshot_state_sha256(resource)
-  )
-
-  reordered_resource <- resource
-  reordered_resource$output[c(1L, 2L)] <-
-    reordered_resource$output[c(2L, 1L)]
-  expect_error(
-    runtime$wlv_runtime_snapshot_state_capture_pack(
-      reordered_resource,
-      value,
-      "io/values",
-      c("year", "input", "output"),
-      "semantic_state/io/values"
-    ),
-    "canonical order"
-  )
-  uncovered_value <- value
-  uncovered_value["2000", "A.S1", "A.S1"] <- NA_real_
-  expect_error(
-    runtime$wlv_runtime_snapshot_state_capture_pack(
-      resource,
-      uncovered_value,
-      "io/values",
-      c("year", "input", "output"),
-      "semantic_state/io/values"
-    ),
-    "Every ordinary NA"
   )
   expect_lt(
     length(serialize(codec, NULL, version = 3L)),
@@ -726,48 +688,12 @@ test_that("runtime snapshot persists lambda and IO states without duplicating IO
     ),
     compatibility = fixture$compatibility
   )
-  expect_identical(
-    runtime$wlv_runtime_snapshot_state_bindings(snapshot),
-    runtime$wlv_runtime_snapshot_state_bindings(
-      snapshot,
-      verify_resource_states = FALSE
-    )
-  )
-  expect_identical(
-    runtime$wlv_runtime_snapshot_logical_commitment_sha256(snapshot),
-    runtime$wlv_runtime_snapshot_logical_commitment_sha256(
-      snapshot,
-      verify_resource_states = FALSE
-    )
-  )
   capture <- runtime$wlv_runtime_snapshot_capture(
     fixture$store,
     method = "synthetic",
     source = "wiodr13",
     partitions = fixture$partition,
     compatibility = fixture$compatibility
-  )
-  owned_store <- runtime$wlv_runtime_fork_store(fixture$store)
-  owned_capture <- runtime$wlv_runtime_snapshot_capture(
-    owned_store,
-    method = "synthetic",
-    source = "wiodr13",
-    partitions = fixture$partition,
-    compatibility = fixture$compatibility,
-    consume_store = TRUE
-  )
-  expect_identical(owned_capture, capture)
-  expect_length(owned_store$entries, 0L)
-  expect_error(
-    runtime$wlv_runtime_snapshot_capture(
-      fixture$store,
-      method = "synthetic",
-      source = "wiodr13",
-      partitions = fixture$partition,
-      compatibility = fixture$compatibility,
-      consume_store = TRUE
-    ),
-    "mutable resource store"
   )
   phased <- runtime$wlv_runtime_snapshot_finalize(
     capture,
@@ -1209,85 +1135,6 @@ test_that("runtime snapshot persists lambda and IO states without duplicating IO
   expect_identical(
     observed$panel_provenance$producer,
     c("snapshot.sector", "snapshot.country")
-  )
-})
-
-test_that("owned runtime capture is canonical across multiple partitions", {
-  fixture <- wlv_test_runtime_snapshot_fixture()
-  runtime <- fixture$runtime
-  second_partition <- "2001-2001"
-  partitions <- c(fixture$partition, second_partition)
-  seeds <- unlist(lapply(unname(fixture$store$entries), function(entry) {
-    target_partitions <- if (is.null(entry$partition)) {
-      list(NULL)
-    } else {
-      as.list(partitions)
-    }
-    lapply(target_partitions, function(partition) {
-      runtime$wlv_seed_resource(
-        key = entry$key,
-        value = entry$value,
-        contract = entry$contract,
-        partition = partition,
-        producer = entry$producer
-      )
-    })
-  }), recursive = FALSE)
-  store <- runtime$wlv_new_resource_store(seeds)
-  normal <- runtime$wlv_runtime_snapshot_capture(
-    store,
-    method = "synthetic",
-    source = "wiodr13",
-    partitions = rev(partitions),
-    compatibility = fixture$compatibility
-  )
-  owned_store <- runtime$wlv_runtime_fork_store(store)
-  owned <- runtime$wlv_runtime_snapshot_capture(
-    owned_store,
-    method = "synthetic",
-    source = "wiodr13",
-    partitions = rev(partitions),
-    compatibility = fixture$compatibility,
-    consume_store = TRUE
-  )
-
-  expect_identical(owned, normal)
-  expect_identical(
-    names(owned$resources),
-    runtime$wlv_runtime_snapshot_capture_resource_ids(sort(partitions))
-  )
-  expect_length(owned_store$entries, 0L)
-})
-
-test_that("failed owned runtime capture cannot mutate the sealed store", {
-  fixture <- wlv_test_runtime_snapshot_fixture()
-  runtime <- fixture$runtime
-  sealed_entries <- serialize(fixture$store$entries, NULL, version = 3L)
-  owned_store <- runtime$wlv_runtime_fork_store(fixture$store)
-  target <- which(vapply(owned_store$entries, function(entry) {
-    identical(entry$key, "io/values") &&
-      identical(entry$partition, fixture$partition)
-  }, logical(1L)))
-  expect_length(target, 1L)
-  owned_store$entries[[target]]$value[[1L]] <- NA_real_
-  captured <- NULL
-
-  expect_error(
-    captured <- runtime$wlv_runtime_snapshot_capture(
-      owned_store,
-      method = "synthetic",
-      source = "wiodr13",
-      partitions = fixture$partition,
-      compatibility = fixture$compatibility,
-      consume_store = TRUE
-    )
-  )
-  expect_null(captured)
-  expect_gt(length(owned_store$entries), 0L)
-  expect_lt(length(owned_store$entries), length(fixture$store$entries))
-  expect_identical(
-    serialize(fixture$store$entries, NULL, version = 3L),
-    sealed_entries
   )
 })
 

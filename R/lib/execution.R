@@ -3290,9 +3290,8 @@ wlv_native_select_io_years <- function(m_io, years) {
   m_io[years, , , , drop = FALSE]
 }
 
-wlv_native_write_arrays <- function(
+wlv_native_write_panel_arrays <- function(
     plan,
-    run_data,
     artifacts,
     staging) {
   write_fst_array(
@@ -3311,16 +3310,32 @@ wlv_native_write_arrays <- function(
       file.path(staging, "m_countries.fst"),
       drop_axis_names = TRUE
     )
-    for (source_path in run_data$source_io) {
-      years <- wlv_native_metadata_years(source_path)
-      selected <- wlv_native_select_io_years(artifacts$m_io, years)
-      write_fst_array(
-        selected,
-        file.path(staging, basename(source_path)),
-        drop_axis_names = TRUE
-      )
-      rm(selected)
-    }
+  }
+  invisible(NULL)
+}
+
+wlv_native_write_io_arrays <- function(run_data, m_io, staging) {
+  for (source_path in run_data$source_io) {
+    years <- wlv_native_metadata_years(source_path)
+    selected <- wlv_native_select_io_years(m_io, years)
+    write_fst_array(
+      selected,
+      file.path(staging, basename(source_path)),
+      drop_axis_names = TRUE
+    )
+    rm(selected)
+  }
+  invisible(NULL)
+}
+
+wlv_native_write_arrays <- function(
+    plan,
+    run_data,
+    artifacts,
+    staging) {
+  wlv_native_write_panel_arrays(plan, artifacts, staging)
+  if (identical(plan$mode, "calculate")) {
+    wlv_native_write_io_arrays(run_data, artifacts$m_io, staging)
   }
   invisible(NULL)
 }
@@ -3661,12 +3676,36 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
           source = method_record$source[[1L]]
         )
       }
-      # Snapshot capture owns this mutable fork.  The module result can then be
-      # released before capture, and captured terminal generations can be
-      # discarded progressively without mutating the sealed runner result.
-      runtime_store <- wlv_runtime_fork_store(module_result$store)
+      runtime_store <- if (identical(plan$mode, "calculate")) {
+        wlv_runtime_fork_store(module_result$store)
+      } else {
+        module_result$store
+      }
+      if (identical(plan$mode, "calculate")) {
+        released <- wlv_runtime_snapshot_capture_store_release(
+          runtime_store,
+          "artifact/m_io",
+          NULL
+        )
+        if (!identical(released, 2L)) {
+          stop(
+            "Owned snapshot fork did not release artifact/m_io completely.",
+            call. = FALSE
+          )
+        }
+        rm(released)
+      }
       rm(module_result, module_plan)
       invisible(gc(full = TRUE))
+      if (identical(plan$mode, "calculate")) {
+        wlv_native_write_io_arrays(
+          runtime_data,
+          arrays$m_io,
+          staging
+        )
+        arrays$m_io <- NULL
+        invisible(gc(full = TRUE))
+      }
       snapshot_capture <- if (identical(plan$mode, "recalculate")) {
         if (is.null(parent_snapshot)) {
           stop(
@@ -3679,8 +3718,7 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
           runtime_store,
           parent_imports = parent_imports,
           compatibility = compatibility,
-          validate_parent = FALSE,
-          consume_store = TRUE
+          validate_parent = FALSE
         )
       } else {
         wlv_runtime_snapshot_capture(
@@ -3688,15 +3726,13 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
           method = method,
           source = method_record$source[[1L]],
           partitions = run_data$partitions,
-          compatibility = compatibility,
-          consume_store = TRUE
+          compatibility = compatibility
         )
       }
       rm(parent_snapshot, runtime_store)
       invisible(gc(full = TRUE))
-      wlv_native_write_arrays(
+      wlv_native_write_panel_arrays(
         plan,
-        runtime_data,
         arrays,
         staging
       )
