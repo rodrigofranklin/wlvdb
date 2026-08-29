@@ -402,6 +402,14 @@ wlv_semantic_state_validate <- function(
   if (!setequal(names(attributes(resource)), allowed_attributes)) {
     wlv_semantic_abort("Semantic-state metadata attributes are not canonical.")
   }
+  expected_row_names <- if (nrow(resource)) {
+    c(NA_integer_, -nrow(resource))
+  } else {
+    integer()
+  }
+  if (!identical(.row_names_info(resource, type = 0L), expected_row_names)) {
+    wlv_semantic_abort("Semantic-state row names are not canonical.")
+  }
   observed_target <- attr(resource, "target_key", exact = TRUE)
   observed_axes <- attr(resource, "axes", exact = TRUE)
   observed_version <- attr(resource, "version", exact = TRUE)
@@ -701,6 +709,10 @@ wlv_semantic_capture_value_state <- function(
   target_key <- wlv_semantic_assert_stateful_key(target_key)
   axes <- wlv_semantic_unique_names(axes, "axes", allow_empty = FALSE)
   wlv_semantic_assert_value(value, axes)
+  is_source <- target_key %in% c("source/sea", "source/io")
+  if (!is.null(source_rule) && !is_source) {
+    wlv_semantic_abort("Source-state rules can only be used for source resources.")
+  }
   candidate <- states
   if (is.null(candidate)) {
     candidate <- attr(value, "wlv_state", exact = TRUE)
@@ -750,10 +762,6 @@ wlv_semantic_capture_value_state <- function(
     value,
     axes
   )
-  is_source <- target_key %in% c("source/sea", "source/io")
-  if (!is.null(source_rule) && !is_source) {
-    wlv_semantic_abort("Source-state rules can only be used for source resources.")
-  }
   if (is.null(candidate) && is_source) {
     candidate <- wlv_semantic_source_state_array(
       value,

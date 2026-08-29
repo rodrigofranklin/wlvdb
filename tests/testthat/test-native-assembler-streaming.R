@@ -141,6 +141,26 @@ test_that("matrix assembler preserves buffered semantics while streaming resourc
   expect_s3_class(result, "wlv_module_result")
   expect_identical(result$outputs$m_io, expected_io)
   expect_identical(result$outputs$m_countries, expected_countries)
+  expanded_io_state <- runtime$wlv_semantic_state_expand(
+    result$outputs$semantic_state__m_io,
+    result$outputs$m_io
+  )
+  expected_io_state <- runtime$wlv_semantic_state_array(
+    expected_io,
+    names(dimnames(expected_io))
+  )
+  expected_io_state[is.na(expected_io)] <- "source_missing"
+  expect_identical(expanded_io_state, expected_io_state)
+  expanded_country_state <- runtime$wlv_semantic_state_expand(
+    result$outputs$semantic_state__m_countries,
+    result$outputs$m_countries
+  )
+  expected_country_state <- runtime$wlv_semantic_state_array(
+    expected_countries,
+    names(dimnames(expected_countries))
+  )
+  expected_country_state[is.na(expected_countries)] <- "source_missing"
+  expect_identical(expanded_country_state, expected_country_state)
 
   incomplete <- module_inputs
   incomplete[["io.values"]] <- list(
@@ -159,6 +179,23 @@ test_that("matrix assembler preserves buffered semantics while streaming resourc
 
 test_that("partition collector reuses a canonical single partition", {
   runtime <- wlv_test_load_runtime()
+  registry <- runtime$wlv_module_registry(list(
+    runtime$wlv_native_matrix_assembler_spec()
+  ))
+  resolved <- runtime$wlv_runtime_resolve_instance(
+    registry,
+    runtime$wlv_module_instance(
+      "assembler.matrices.test",
+      "assembler.matrices",
+      args = list(
+        io_resources = list("values"),
+        country_resources = list("exports_values")
+      )
+    ),
+    operation = "calculate",
+    partitions = "period"
+  )
+  expect_identical(resolved$semantic_input_mode, "explicit")
   value <- array(
     as.double(seq_len(12L)),
     dim = c(3L, 2L, 2L),

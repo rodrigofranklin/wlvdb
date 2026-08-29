@@ -168,6 +168,7 @@ test_that("state validation is fail-closed for values, coverage and metadata", {
   )
 
   unordered <- resource[c(3L, 2L, 1L), , drop = FALSE]
+  row.names(unordered) <- NULL
   expect_error(
     semantic$wlv_semantic_state_validate(unordered),
     "canonical order"
@@ -195,6 +196,13 @@ test_that("state validation is fail-closed for values, coverage and metadata", {
   expect_error(
     semantic$wlv_semantic_state_validate(extra_attribute),
     "metadata attributes"
+  )
+
+  custom_row_names <- resource
+  row.names(custom_row_names) <- paste0("custom-", seq_len(nrow(resource)))
+  expect_error(
+    semantic$wlv_semantic_state_validate(custom_row_names),
+    "row names are not canonical"
   )
 
   nan_value <- value
@@ -291,6 +299,16 @@ test_that("capture validates canonical sparse state without dense hydration", {
       states = wrong_target
     ),
     "target_key"
+  )
+  expect_error(
+    semantic$wlv_semantic_capture_value_state(
+      value,
+      "sea/sector/test.indicator",
+      c("year", "country"),
+      states = resource,
+      source_rule = list(default = "source_missing", structural = NULL)
+    ),
+    "Source-state rules can only be used for source resources"
   )
 })
 
