@@ -2323,8 +2323,8 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
   'issue13-v5-coordinator-lib.ps1' = @{
-    command_count = 1198
-    command_sha256 = 'C8A6E79753C458A86DB63F523C60FF4680CA974BD65A112CC8A6DBD33ED1B8D1'
+    command_count = 1197
+    command_sha256 = '6A705A30EC8B6214CE10D1F71EFF59C0BFA5BDA6C50B6482130C359532BA617A'
     redirection_count = 16
     redirection_sha256 = 'A27C1F1A1A78A655A820FF3FB0CF52CDB0B3A4DF14EE3A8B21EADCFCD395E8EE'
   }
@@ -2371,8 +2371,8 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = '7F4027149DBBCCC5E186586FA06D6058EF6E3821AC51098E7521EBC767D5FE2D'
   }
   'issue13-v5-static-verify.ps1' = @{
-    command_count = 821
-    command_sha256 = 'CDA1D5801EAC7CEDE6EDBD2B06875B55FC6609A4A761E9A095E8ACB7C7977A8B'
+    command_count = 900
+    command_sha256 = '3C0BB13D8A83F6B3D8B7EAD4207B9333C8EE549E9248B537ED2430E1CCB7A75A'
     redirection_count = 0
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
@@ -2382,15 +2382,15 @@ $issue13ExpectedControllerSourceSha256 = @{
   'issue13-v5-baseline-smoke.ps1' = 'B5250828544C45CC03E1CC0D6626E60DCBA0EE47D70D5199D94AA7693E75D111'
   'issue13-v5-capture-clean-bridge-evidence.ps1' = '23DC872D2697788268C0102BABA2B972B1D2AEB533419F9C3A5A1141BCCF317D'
   'issue13-v5-capture-clean-stage5-evidence.ps1' = 'AD714DCA487749FD405D4A40D69A7AE1BD42973C480257F7E0B11CEE45CEE6B6'
-  'issue13-v5-coordinator-lib.ps1' = '97E4E69DA7B4E679501A70C097469DE0DAE6E70FF67F6EC753FBBB740C844380'
+  'issue13-v5-coordinator-lib.ps1' = '5AE7C70F7EAF8176339A1A358D84500344FDA0AC1EF996BAB81D22D95520B0F1'
   'issue13-v5-coordinator.ps1' = '57A284A2600AAC37B5879BA44EB6B4AB1953AB00590D4EA6720524195E0EBF28'
   'issue13-v5-materialize-harness.ps1' = '32BA0F9DC5C17A1F3EEFDAEF9AEFBCCC1D4370B0A0C16DF9072C8C002770A8D6'
-  'issue13-v5-new-config.ps1' = '75FF45DF91A03728E1E1C74EFCC41C5FDF1219113C31B88C106EE312A6EFCC06'
+  'issue13-v5-new-config.ps1' = '67D42899B85F2E175560ADE23F981EB64124C606232B350D9B1380098D2329E6'
   'issue13-v5-oracle-effect-generate.ps1' = '6C1E26154794A253974B7E51C5D15B054AE2D31E09736BF19B624F56EA3C30F9'
   'issue13-v5-oracle-effect-lib.ps1' = 'F49425C3A1AF813ABBEF1F515240C570316E08143BC26E50DE34BDB0C3877CC4'
   'issue13-v5-oracle-effect-validate.ps1' = '11912422CEB54A45A791E49E11688F974AB45A4CC0F2FB89145D90176AAB0140'
   'issue13-v5-render-report.ps1' = '756ACAB7E8BFC6CF7E0A7235B0634E24F4D805A4F30D060291260A62726B710A'
-    'issue13-v5-static-verify.ps1' = '719134DBB7ED14E2EC2A89556243EE99FE92432A17EB88A51A36E27A07AD8EDE'
+    'issue13-v5-static-verify.ps1' = '013BA92884075DF55318DE8BE782C5029E290354F529E76264B21656CB3F7BF5'
 }
 $issue13ExpectedDotSourceSignatures = @{
   'issue13-v5-attest-delivery.ps1' = @(
@@ -3521,11 +3521,75 @@ $boundedTypeSpoofExecution = Invoke-Issue13V5PwshTransient `
     })
 $expectedBoundedTypeSpoofOutput =
   'TYPE_SPOOF_REJECTED:The bounded stream capture type was preloaded.'
+$boundedTypeSpoofRecord = $boundedTypeSpoofExecution.command_record
+$null = Assert-Issue13V5ExactPropertyNames $boundedTypeSpoofRecord @(
+  'schema', 'label', 'executable', 'arguments', 'environment_set',
+  'environment_cleared', 'working_directory', 'started_at_utc',
+  'finished_at_utc', 'timeout_seconds', 'timed_out', 'exit_code',
+  'expected_exit_codes', 'stdout_path', 'stdout_sha256', 'stderr_path',
+  'stderr_sha256'
+) 'Transient in-memory command record self-test'
+$expectedBoundedTypeSpoofArguments = @(
+  '-NoLogo', '-NoProfile', '-NonInteractive',
+  '-EncodedCommand', $boundedTypeSpoofEncoded
+)
+$boundedTypeSpoofStdoutPath = [IO.Path]::GetFullPath(
+  [string]$boundedTypeSpoofRecord.stdout_path)
+$boundedTypeSpoofStderrPath = [IO.Path]::GetFullPath(
+  [string]$boundedTypeSpoofRecord.stderr_path)
+$boundedTypeSpoofCommandsRoot = [IO.Path]::GetDirectoryName(
+  $boundedTypeSpoofStdoutPath)
+$boundedTypeSpoofTransientRoot = [IO.Path]::GetDirectoryName(
+  $boundedTypeSpoofCommandsRoot)
+$boundedTypeSpoofTemporaryBase = [IO.Path]::GetFullPath(
+  [IO.Path]::GetTempPath()).TrimEnd('\')
 if ([int]$boundedTypeSpoofExecution.exit_code -ne 0 -or
     [string]$boundedTypeSpoofExecution.stdout.Trim() -cne
       $expectedBoundedTypeSpoofOutput -or
     -not [string]::IsNullOrWhiteSpace(
-      [string]$boundedTypeSpoofExecution.stderr)) {
+      [string]$boundedTypeSpoofExecution.stderr) -or
+    [string]$boundedTypeSpoofRecord.schema -cne
+      'wlv-issue13-v5-command/1' -or
+    [string]$boundedTypeSpoofRecord.label -cne
+      'bounded-stream-type-preload-selftest' -or
+    -not [string]::Equals(
+      (ConvertTo-Issue13V5Path ([string]$boundedTypeSpoofRecord.executable)),
+      (ConvertTo-Issue13V5Path ([string]$script:Issue13V5PwshLogicalPath)),
+      [StringComparison]::OrdinalIgnoreCase) -or
+    @($boundedTypeSpoofRecord.arguments).Count -ne
+      $expectedBoundedTypeSpoofArguments.Count -or
+    [string]::Join("`n", @($boundedTypeSpoofRecord.arguments)) -cne
+      [string]::Join("`n", $expectedBoundedTypeSpoofArguments) -or
+    -not [string]::Equals(
+      (ConvertTo-Issue13V5Path (
+        [string]$boundedTypeSpoofRecord.working_directory)),
+      (ConvertTo-Issue13V5Path $RepositoryRoot),
+      [StringComparison]::OrdinalIgnoreCase) -or
+    [long]$boundedTypeSpoofRecord.timeout_seconds -ne 120L -or
+    -not (Test-Issue13V5ExactBoolean `
+      $boundedTypeSpoofRecord.timed_out $false) -or
+    [long]$boundedTypeSpoofRecord.exit_code -ne 0L -or
+    @($boundedTypeSpoofRecord.expected_exit_codes).Count -ne 1 -or
+    [long]@($boundedTypeSpoofRecord.expected_exit_codes)[0] -ne 0L -or
+    [string]$boundedTypeSpoofRecord.stdout_sha256 -cne
+      (Get-Issue13V5TextSha256 ([string]$boundedTypeSpoofExecution.stdout)) -or
+    [string]$boundedTypeSpoofRecord.stderr_sha256 -cne
+      (Get-Issue13V5TextSha256 ([string]$boundedTypeSpoofExecution.stderr)) -or
+    -not [string]::Equals(
+      [IO.Path]::GetDirectoryName($boundedTypeSpoofStderrPath),
+      $boundedTypeSpoofCommandsRoot,
+      [StringComparison]::OrdinalIgnoreCase) -or
+    [IO.Path]::GetFileName($boundedTypeSpoofCommandsRoot) -cne 'commands' -or
+    [IO.Path]::GetFileName($boundedTypeSpoofTransientRoot) -cnotmatch
+      '^issue13-v5-pwsh-[0-9a-f]{32}$' -or
+    -not [string]::Equals(
+      [IO.Path]::GetDirectoryName($boundedTypeSpoofTransientRoot),
+      $boundedTypeSpoofTemporaryBase,
+      [StringComparison]::OrdinalIgnoreCase) -or
+    [IO.File]::Exists($boundedTypeSpoofStdoutPath) -or
+    [IO.File]::Exists($boundedTypeSpoofStderrPath) -or
+    [IO.Directory]::Exists($boundedTypeSpoofTransientRoot) -or
+    [IO.File]::Exists($boundedTypeSpoofTransientRoot)) {
   throw 'A preloaded bounded stream type was not rejected dynamically.'
 }
 $preexistingOutputLimitRProcesses = [object[]]@(
@@ -9799,6 +9863,523 @@ if ($pathContainedDefinitions.Count -ne 1 -or
 $tokens = @()
 $errors = @()
 $newConfigAst = $bootstrapSourceAsts['issue13-v5-new-config.ps1']
+function Get-Issue13V5StaticHashtableFromExpression(
+  [Management.Automation.Language.Ast]$Expression
+) {
+  $node = $Expression
+  if ($node -is [Management.Automation.Language.PipelineAst]) {
+    $elements = @($node.PipelineElements)
+    if ($elements.Count -ne 1) { return $null }
+    $node = $elements[0]
+  }
+  if ($node -is [Management.Automation.Language.CommandExpressionAst]) {
+    $node = $node.Expression
+  }
+  while ($node -is [Management.Automation.Language.ConvertExpressionAst]) {
+    $node = $node.Child
+  }
+  if ($node -isnot [Management.Automation.Language.HashtableAst]) {
+    return $null
+  }
+  $node
+}
+function Get-Issue13V5StaticHashtableSignature(
+  [Management.Automation.Language.HashtableAst]$Hashtable
+) {
+  if ($null -eq $Hashtable) { return [string[]]@() }
+  $signature = @()
+  foreach ($pair in @($Hashtable.KeyValuePairs)) {
+    if ($pair.Item1 -isnot
+        [Management.Automation.Language.StringConstantExpressionAst]) {
+      return [string[]]@()
+    }
+    $signature += [string]$pair.Item1.Value + '|' +
+      [regex]::Replace([string]$pair.Item2.Extent.Text, '[\s`]', '')
+  }
+  [string[]]$signature
+}
+function Set-Issue13V5StaticAstExtentText(
+  [string]$Text,
+  [Management.Automation.Language.Ast]$Target,
+  [string]$Replacement
+) {
+  if ($Target.Extent.StartOffset -lt 0 -or
+      $Target.Extent.EndOffset -gt $Text.Length -or
+      $Target.Extent.EndOffset -le $Target.Extent.StartOffset -or
+      $Text.Substring(
+        $Target.Extent.StartOffset,
+        $Target.Extent.EndOffset - $Target.Extent.StartOffset) -cne
+          $Target.Extent.Text -or
+      $Replacement -ceq $Target.Extent.Text) {
+    throw 'Static AST mutant target is invalid or unchanged.'
+  }
+  $Text.Substring(0, $Target.Extent.StartOffset) + $Replacement +
+    $Text.Substring($Target.Extent.EndOffset)
+}
+function ConvertTo-Issue13V5StaticMutantAst(
+  [string]$Text,
+  [string]$Label
+) {
+  $mutantTokens = $null
+  $mutantErrors = $null
+  $mutantAst = [Management.Automation.Language.Parser]::ParseInput(
+    $Text, [ref]$mutantTokens, [ref]$mutantErrors)
+  if ($mutantErrors.Count -ne 0) {
+    throw "Static Oracle-validation mutant did not parse: $Label"
+  }
+  $mutantAst
+}
+function Test-Issue13V5ExternalInMemoryCommandRecordAst(
+  [Management.Automation.Language.ScriptBlockAst]$Ast
+) {
+  $definitions = @(Get-Issue13V5StaticTopLevelFunctions `
+    $Ast 'Invoke-Issue13V5External')
+  if ($definitions.Count -ne 1 -or
+      $definitions[0].Name -cne 'Invoke-Issue13V5External') {
+    return $false
+  }
+  $definition = $definitions[0]
+  $statements = @($definition.Body.EndBlock.Statements)
+  if ($statements.Count -eq 0) { return $false }
+  $returnStatement = $statements[$statements.Count - 1]
+  $returnHashtable = Get-Issue13V5StaticHashtableFromExpression `
+    $returnStatement
+  $actual = Get-Issue13V5StaticHashtableSignature $returnHashtable
+  $expected = @(
+    'exit_code|$exitCode',
+    'stdout|$stdoutText',
+    'stderr|$stderrText',
+    'record_path|$recordPath',
+    'command_record|[pscustomobject]$record'
+  )
+  if ($null -eq $returnHashtable -or
+      -not $returnStatement.Extent.Text.StartsWith(
+        '[pscustomobject]@{', [StringComparison]::Ordinal) -or
+      [string]::Join("`n", $actual) -cne
+        [string]::Join("`n", $expected)) {
+    return $false
+  }
+  $recordWrites = @(Get-Issue13V5VariableWriteAsts $definition '$record')
+  $recordPathWrites = @(Get-Issue13V5VariableWriteAsts `
+    $definition '$recordPath')
+  $writeCalls = @($definition.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.CommandAst] -and
+      (Get-Issue13V5PowerShellCommandLeaf ($node.GetCommandName())) -ieq
+        'Write-Issue13V5Json'
+  }, $true))
+  if ($recordWrites.Count -ne 1 -or
+      $recordWrites[0].Left.Extent.Text -cne '$record' -or
+      $recordPathWrites.Count -ne 1 -or
+      $recordPathWrites[0].Left.Extent.Text -cne '$recordPath' -or
+      $writeCalls.Count -ne 1 -or
+      [string]::Join('|', @($writeCalls[0].CommandElements |
+          ForEach-Object { $_.Extent.Text })) -cne
+        'Write-Issue13V5Json|$record|$recordPath' -or
+      $writeCalls[0].Extent.EndOffset -ge $returnStatement.Extent.StartOffset) {
+    return $false
+  }
+  $true
+}
+function Test-Issue13V5PwshTransientCommandRecordAst(
+  [Management.Automation.Language.ScriptBlockAst]$Ast
+) {
+  $definitions = @(Get-Issue13V5StaticTopLevelFunctions `
+    $Ast 'Invoke-Issue13V5PwshTransient')
+  if ($definitions.Count -ne 1 -or
+      $definitions[0].Name -cne 'Invoke-Issue13V5PwshTransient') {
+    return $false
+  }
+  $definition = $definitions[0]
+  $executionRootWrites = @($definition.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+      $node.Left.Extent.Text -ceq '$execution'
+  }, $true))
+  $resultWrites = @($definition.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+      $node.Left.Extent.Text -ceq '$execution.result'
+  }, $true))
+  $recordWrites = @($definition.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+      $node.Left.Extent.Text -ceq '$execution.command_record'
+  }, $true))
+  $actionWrites = @($definition.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+      $node.Left.Extent.Text -ceq '$action'
+  }, $true))
+  $externalCalls = @($definition.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.CommandAst] -and
+      (Get-Issue13V5PowerShellCommandLeaf ($node.GetCommandName())) -ieq
+        'Invoke-Issue13V5PwshExternal'
+  }, $true))
+  $readJsonCalls = @($definition.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.CommandAst] -and
+      (Get-Issue13V5PowerShellCommandLeaf ($node.GetCommandName())) -ieq
+        'Read-Issue13V5Json'
+  }, $true))
+  $recordPathMembers = @($definition.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.MemberExpressionAst] -and
+      [string]$node.Member.Value -ieq 'record_path'
+  }, $true))
+  $cleanupCalls = @($definition.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.CommandAst] -and
+      (Get-Issue13V5PowerShellCommandLeaf ($node.GetCommandName())) -ieq
+        'Invoke-Issue13V5WithCleanup'
+  }, $true))
+  if ($executionRootWrites.Count -ne 1 -or
+      $resultWrites.Count -ne 1 -or $recordWrites.Count -ne 1 -or
+      $actionWrites.Count -ne 1 -or $externalCalls.Count -ne 1 -or
+      $readJsonCalls.Count -ne 0 -or $recordPathMembers.Count -ne 0 -or
+      $cleanupCalls.Count -ne 1) {
+    return $false
+  }
+  $executionHashtable = Get-Issue13V5StaticHashtableFromExpression `
+    $executionRootWrites[0].Right
+  $executionSignature = Get-Issue13V5StaticHashtableSignature `
+    $executionHashtable
+  if ($null -eq $executionHashtable -or
+      [string]::Join("`n", $executionSignature) -cne
+        "result|`$null`ncommand_record|`$null" -or
+      $executionRootWrites[0].Operator -ne
+        [Management.Automation.Language.TokenKind]::Equals -or
+      (Get-Issue13V5AstAncestorChain `
+        $executionRootWrites[0] $definition) -cne
+          'AssignmentStatementAst>NamedBlockAst>ScriptBlockAst' -or
+      [regex]::Replace(
+        $resultWrites[0].Right.Extent.Text, '[\s`]', '') -cne
+          'Invoke-Issue13V5PwshExternal$temporaryConfig$Arguments$Label' +
+          '$TimeoutSeconds$ExpectedExitCodes$WorkingDirectory$Environment' -or
+      [regex]::Replace(
+        $recordWrites[0].Right.Extent.Text, '[\s`]', '') -cne
+          '$execution.result.command_record' -or
+      -not [object]::ReferenceEquals(
+        $externalCalls[0].Parent.Parent, $resultWrites[0])) {
+    return $false
+  }
+  $actionRight = $actionWrites[0].Right
+  if ($resultWrites[0].Extent.StartOffset -le $actionRight.Extent.StartOffset -or
+      $recordWrites[0].Extent.EndOffset -ge $actionRight.Extent.EndOffset -or
+      $externalCalls[0].Extent.EndOffset -ge $recordWrites[0].Extent.StartOffset -or
+      $recordWrites[0].Extent.EndOffset -ge $cleanupCalls[0].Extent.StartOffset -or
+      [string]::Join('|', @($cleanupCalls[0].CommandElements |
+          ForEach-Object { $_.Extent.Text })) -cne
+        ('Invoke-Issue13V5WithCleanup|$action|$cleanup|' +
+          '"Transient sealed pwsh lifecycle failed: $Label"') -or
+      (Get-Issue13V5AstAncestorChain `
+        $cleanupCalls[0] $definition) -cne
+          'CommandAst>PipelineAst>NamedBlockAst>ScriptBlockAst') {
+    return $false
+  }
+  $statements = @($definition.Body.EndBlock.Statements)
+  if ($statements.Count -eq 0) { return $false }
+  $returnStatement = $statements[$statements.Count - 1]
+  $returnHashtable = Get-Issue13V5StaticHashtableFromExpression `
+    $returnStatement
+  $returnSignature = Get-Issue13V5StaticHashtableSignature $returnHashtable
+  if ($null -eq $returnHashtable -or
+      -not $returnStatement.Extent.Text.StartsWith(
+        '[pscustomobject][ordered]@{', [StringComparison]::Ordinal) -or
+      [string]::Join("`n", $returnSignature) -cne
+        [string]::Join("`n", @(
+          'exit_code|[int]$execution.result.exit_code',
+          'stdout|[string]$execution.result.stdout',
+          'stderr|[string]$execution.result.stderr',
+          'command_record|$execution.command_record'
+        )) -or
+      $cleanupCalls[0].Extent.EndOffset -ge
+        $returnStatement.Extent.StartOffset) {
+    return $false
+  }
+  $true
+}
+function Test-Issue13V5OracleValidatorTransientAst(
+  [Management.Automation.Language.ScriptBlockAst]$Ast
+) {
+  $definitions = @(Get-Issue13V5StaticTopLevelFunctions `
+    $Ast 'Invoke-Issue13V5OracleEffectValidation')
+  if ($definitions.Count -ne 1 -or
+      $definitions[0].Name -cne 'Invoke-Issue13V5OracleEffectValidation') {
+    return $false
+  }
+  $definition = $definitions[0]
+  $transientCalls = @($definition.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.CommandAst] -and
+      (Get-Issue13V5PowerShellCommandLeaf ($node.GetCommandName())) -ieq
+        'Invoke-Issue13V5PwshTransient'
+  }, $true))
+  $externalCalls = @($definition.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.CommandAst] -and
+      (Get-Issue13V5PowerShellCommandLeaf ($node.GetCommandName())) -ieq
+        'Invoke-Issue13V5PwshExternal'
+  }, $true))
+  $readJsonCalls = @($definition.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.CommandAst] -and
+      (Get-Issue13V5PowerShellCommandLeaf ($node.GetCommandName())) -ieq
+        'Read-Issue13V5Json'
+  }, $true))
+  $validationWrites = @(Get-Issue13V5VariableWriteAsts `
+    $definition '$validationExecution')
+  $recordWrites = @(Get-Issue13V5VariableWriteAsts `
+    $definition '$commandRecord')
+  if ($transientCalls.Count -ne 1 -or $externalCalls.Count -ne 0 -or
+      $readJsonCalls.Count -ne 0 -or $validationWrites.Count -ne 1 -or
+      $recordWrites.Count -ne 1 -or
+      $validationWrites[0].Left.Extent.Text -cne '$validationExecution' -or
+      $recordWrites[0].Left.Extent.Text -cne '$commandRecord' -or
+      $recordWrites[0].Right.Extent.Text -cne
+        '$validationExecution.command_record' -or
+      -not [object]::ReferenceEquals(
+        $transientCalls[0].Parent.Parent, $validationWrites[0])) {
+    return $false
+  }
+  $callSignature = [string]::Join('|', @(
+    $transientCalls[0].CommandElements | ForEach-Object { $_.Extent.Text }))
+  if ($transientCalls[0].GetCommandName() -cne
+        'Invoke-Issue13V5PwshTransient' -or
+      $callSignature -cne [string]::Join('|', @(
+        'Invoke-Issue13V5PwshTransient', '-Arguments', '$arguments',
+        '-Label', "'oracle-effect-validation'", '-TimeoutSeconds', '1800',
+        '-ExpectedExitCodes', '@(0)', '-WorkingDirectory',
+        '([string]$Config.repository_root)', '-RscriptPath',
+        '([string]$Config.rscript)'
+      )) -or
+      (Get-Issue13V5AstAncestorChain `
+        $transientCalls[0] $definition) -cne
+          ('CommandAst>PipelineAst>AssignmentStatementAst>' +
+            'NamedBlockAst>ScriptBlockAst') -or
+      $validationWrites[0].Extent.EndOffset -ge
+        $recordWrites[0].Extent.StartOffset -or
+      $definition.Extent.Text.Contains('$Config.control_root') -or
+      $definition.Extent.Text.Contains('$validationExecution.record_path')) {
+    return $false
+  }
+  $true
+}
+function Test-Issue13V5OracleValidationConfigAst(
+  [Management.Automation.Language.ScriptBlockAst]$Ast
+) {
+  $configWrites = @(Get-Issue13V5VariableWriteAsts `
+    $Ast '$oracleValidationConfig')
+  $validationCalls = @($Ast.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.CommandAst] -and
+      (Get-Issue13V5PowerShellCommandLeaf ($node.GetCommandName())) -ieq
+        'Invoke-Issue13V5OracleEffectValidation'
+  }, $true))
+  $initialWrites = @(Get-Issue13V5VariableWriteAsts `
+    $Ast '$oracleInitialValidation')
+  $freshCalls = @($Ast.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.CommandAst] -and
+      (Get-Issue13V5PowerShellCommandLeaf ($node.GetCommandName())) -ieq
+        'Assert-Issue13V5FreshRoot'
+  }, $true))
+  if ($configWrites.Count -ne 1 -or $validationCalls.Count -ne 1 -or
+      $initialWrites.Count -ne 1 -or $freshCalls.Count -ne 3 -or
+      $configWrites[0].Left.Extent.Text -cne '$oracleValidationConfig' -or
+      $initialWrites[0].Left.Extent.Text -cne '$oracleInitialValidation' -or
+      -not [object]::ReferenceEquals(
+        $validationCalls[0].Parent.Parent, $initialWrites[0])) {
+    return $false
+  }
+  $configHashtable = Get-Issue13V5StaticHashtableFromExpression `
+    $configWrites[0].Right
+  $actual = Get-Issue13V5StaticHashtableSignature $configHashtable
+  $expected = @(
+    'repository_root|$repository',
+    'candidate_commit|$CandidateCommit',
+    'baseline_commit|$baselineCommit',
+    'baseline_runtime_commit|$BaselineRuntimeCommit',
+    'harness_runtime_root|$harnessRuntime',
+    'harness_manifest_path|$harnessManifestPath',
+    'harness_manifest_sha256|Get-Issue13V5NewConfigSha256$harnessManifestPath',
+    'rscript|$rscriptFull',
+    'r_library|$library',
+    'strict_baseline_smoke|$strictSmokeBinding',
+    'compatibility_baseline_smoke|[pscustomobject]@{path=$compatibilitySmokePath}',
+    ('baseline_overlay|[pscustomobject]@{path=$overlayPatch' +
+      'sha256=Get-Issue13V5NewConfigSha256$overlayPatch}'),
+    'oracle_effect|[pscustomobject]$oracleEffect'
+  )
+  $firstFreshOffset = [int](@($freshCalls | ForEach-Object {
+      $_.Extent.StartOffset
+    } | Measure-Object -Minimum)[0].Minimum)
+  if ($null -eq $configHashtable -or
+      [string]::Join("`n", $actual) -cne
+        [string]::Join("`n", $expected) -or
+      (Get-Issue13V5AstAncestorChain $configWrites[0] $Ast) -cne
+        'AssignmentStatementAst>NamedBlockAst' -or
+      [string]::Join('|', @($validationCalls[0].CommandElements |
+          ForEach-Object { $_.Extent.Text })) -cne
+        'Invoke-Issue13V5OracleEffectValidation|$oracleValidationConfig' -or
+      (Get-Issue13V5AstAncestorChain $validationCalls[0] $Ast) -cne
+        'CommandAst>PipelineAst>AssignmentStatementAst>NamedBlockAst' -or
+      $configWrites[0].Extent.EndOffset -ge
+        $validationCalls[0].Extent.StartOffset -or
+      $validationCalls[0].Extent.EndOffset -ge $firstFreshOffset) {
+    return $false
+  }
+  $true
+}
+if (-not (Test-Issue13V5ExternalInMemoryCommandRecordAst $libraryAst) -or
+    -not (Test-Issue13V5PwshTransientCommandRecordAst $libraryAst) -or
+    -not (Test-Issue13V5OracleValidatorTransientAst $libraryAst) -or
+    -not (Test-Issue13V5OracleValidationConfigAst $newConfigAst)) {
+  throw 'Oracle-effect validation is not isolated through an in-memory transient command record.'
+}
+
+$externalDefinition = @(Get-Issue13V5StaticTopLevelFunctions `
+  $libraryAst 'Invoke-Issue13V5External')[0]
+$externalReturnStatement = @(
+  $externalDefinition.Body.EndBlock.Statements)[-1]
+$externalReturnHashtable = Get-Issue13V5StaticHashtableFromExpression `
+  $externalReturnStatement
+$externalCommandRecordPair = @($externalReturnHashtable.KeyValuePairs |
+  Where-Object { [string]$_.Item1.Value -ceq 'command_record' })[0]
+$externalMemoryMutant = Set-Issue13V5StaticAstExtentText `
+  $libraryText $externalCommandRecordPair.Item2 '$recordPath'
+
+$validatorDefinition = @(Get-Issue13V5StaticTopLevelFunctions `
+  $libraryAst 'Invoke-Issue13V5OracleEffectValidation')[0]
+$validatorTransientCall = @($validatorDefinition.FindAll({
+  param($node)
+  $node -is [Management.Automation.Language.CommandAst] -and
+    (Get-Issue13V5PowerShellCommandLeaf ($node.GetCommandName())) -ieq
+      'Invoke-Issue13V5PwshTransient'
+}, $true))[0]
+$validatorTransientCallText = [string]$validatorTransientCall.Extent.Text
+$validatorExternalCallText = $validatorTransientCallText.Replace(
+  'Invoke-Issue13V5PwshTransient', 'Invoke-Issue13V5PwshExternal')
+$validatorExternalMutant = Set-Issue13V5StaticAstExtentText `
+  $libraryText $validatorTransientCall $validatorExternalCallText
+$validatorNoRscriptCallText = [regex]::Replace(
+  $validatorTransientCallText,
+  '(?m)\r?\n\s*-RscriptPath\s+\(\[string\]\$Config\.rscript\)$', '')
+$validatorNoRscriptMutant = Set-Issue13V5StaticAstExtentText `
+  $libraryText $validatorTransientCall $validatorNoRscriptCallText
+$validatorRecordWrite = @(Get-Issue13V5VariableWriteAsts `
+  $validatorDefinition '$commandRecord')[0]
+$validatorRecordPathMutant = Set-Issue13V5StaticAstExtentText `
+  $libraryText $validatorRecordWrite.Right '$validationExecution.record_path'
+
+$transientDefinition = @(Get-Issue13V5StaticTopLevelFunctions `
+  $libraryAst 'Invoke-Issue13V5PwshTransient')[0]
+$transientExecutionWrite = @($transientDefinition.FindAll({
+  param($node)
+  $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+    $node.Left.Extent.Text -ceq '$execution'
+}, $true))[0]
+$transientExecutionText = $transientExecutionWrite.Extent.Text.Replace(
+  'command_record = $null', 'cached_record = $null')
+$transientNoSlotMutant = Set-Issue13V5StaticAstExtentText `
+  $libraryText $transientExecutionWrite $transientExecutionText
+$transientRecordWrite = @($transientDefinition.FindAll({
+  param($node)
+  $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+    $node.Left.Extent.Text -ceq '$execution.command_record'
+}, $true))[0]
+$transientRecordPathMutant = Set-Issue13V5StaticAstExtentText `
+  $libraryText $transientRecordWrite.Right '$execution.result.record_path'
+$transientReadJsonMutant = Set-Issue13V5StaticAstExtentText `
+  $libraryText $transientRecordWrite.Right `
+    'Read-Issue13V5Json ([string]$execution.result.record_path)'
+$transientCleanupCall = @($transientDefinition.FindAll({
+  param($node)
+  $node -is [Management.Automation.Language.CommandAst] -and
+    (Get-Issue13V5PowerShellCommandLeaf ($node.GetCommandName())) -ieq
+      'Invoke-Issue13V5WithCleanup'
+}, $true))[0]
+$transientCleanupStatement = $transientCleanupCall.Parent
+$transientMovedText = Set-Issue13V5StaticAstExtentText `
+  $libraryText $transientRecordWrite ''
+$transientCleanupTextAfterRemoval = [string]$transientCleanupStatement.Extent.Text
+$transientMovedText = $transientMovedText.Replace(
+  $transientCleanupTextAfterRemoval,
+  $transientCleanupTextAfterRemoval + "`n" +
+    [string]$transientRecordWrite.Extent.Text)
+$transientReturnStatement = @(
+  $transientDefinition.Body.EndBlock.Statements)[-1]
+$transientReturnHashtable = Get-Issue13V5StaticHashtableFromExpression `
+  $transientReturnStatement
+$transientReturnRecordPair = @($transientReturnHashtable.KeyValuePairs |
+  Where-Object { [string]$_.Item1.Value -ceq 'command_record' })[0]
+$transientReturnPathMutant = Set-Issue13V5StaticAstExtentText `
+  $libraryText $transientReturnRecordPair.Item2 '$execution.result.record_path'
+
+$libraryOracleValidationMutants = [ordered]@{
+  external_returns_path = $externalMemoryMutant
+  validator_uses_non_transient_executor = $validatorExternalMutant
+  validator_omits_rscript_binding = $validatorNoRscriptMutant
+  validator_reads_ephemeral_path = $validatorRecordPathMutant
+  transient_omits_memory_slot = $transientNoSlotMutant
+  transient_propagates_record_path = $transientRecordPathMutant
+  transient_rereads_json = $transientReadJsonMutant
+  transient_captures_after_cleanup = $transientMovedText
+  transient_returns_record_path = $transientReturnPathMutant
+}
+foreach ($mutantName in $libraryOracleValidationMutants.Keys) {
+  $mutantText = [string]$libraryOracleValidationMutants[$mutantName]
+  if ($mutantText -ceq $libraryText) {
+    throw "Oracle-validation library mutant was a no-op: $mutantName"
+  }
+  $mutantAst = ConvertTo-Issue13V5StaticMutantAst `
+    $mutantText $mutantName
+  if ((Test-Issue13V5ExternalInMemoryCommandRecordAst $mutantAst) -and
+      (Test-Issue13V5PwshTransientCommandRecordAst $mutantAst) -and
+      (Test-Issue13V5OracleValidatorTransientAst $mutantAst)) {
+    throw "Oracle-validation library guard accepted mutant: $mutantName"
+  }
+}
+
+$validationConfigWrite = @(Get-Issue13V5VariableWriteAsts `
+  $newConfigAst '$oracleValidationConfig')[0]
+$validationConfigText = [string]$validationConfigWrite.Extent.Text
+$configWithoutHarnessText = [regex]::Replace(
+  $validationConfigText,
+  '(?m)^\s*harness_runtime_root\s*=\s*\$harnessRuntime\r?\n', '')
+$configWithoutHarnessMutant = Set-Issue13V5StaticAstExtentText `
+  $newConfigText $validationConfigWrite $configWithoutHarnessText
+$configWrongHarnessText = $validationConfigText.Replace(
+  'harness_runtime_root = $harnessRuntime',
+  'harness_runtime_root = $harness')
+$configWrongHarnessMutant = Set-Issue13V5StaticAstExtentText `
+  $newConfigText $validationConfigWrite $configWrongHarnessText
+$configWithControlText = $validationConfigText.Replace(
+  'harness_runtime_root = $harnessRuntime',
+  "harness_runtime_root = `$harnessRuntime`n  control_root = `$ControlRoot")
+$configWithControlMutant = Set-Issue13V5StaticAstExtentText `
+  $newConfigText $validationConfigWrite $configWithControlText
+$configDeadBranchMutant = Set-Issue13V5StaticAstExtentText `
+  $newConfigText $validationConfigWrite `
+    ("if (`$false) {`n" + $validationConfigText + "`n}")
+$newConfigOracleValidationMutants = [ordered]@{
+  missing_harness_runtime_root = $configWithoutHarnessMutant
+  noncanonical_harness_runtime_root = $configWrongHarnessMutant
+  final_control_root_used_for_initial_validation = $configWithControlMutant
+  validation_config_in_dead_branch = $configDeadBranchMutant
+}
+foreach ($mutantName in $newConfigOracleValidationMutants.Keys) {
+  $mutantText = [string]$newConfigOracleValidationMutants[$mutantName]
+  if ($mutantText -ceq $newConfigText) {
+    throw "Oracle-validation config mutant was a no-op: $mutantName"
+  }
+  $mutantAst = ConvertTo-Issue13V5StaticMutantAst `
+    $mutantText $mutantName
+  if (Test-Issue13V5OracleValidationConfigAst $mutantAst) {
+    throw "Oracle-validation config guard accepted mutant: $mutantName"
+  }
+}
 $newConfigDisjointCalls = @($newConfigAst.FindAll({
   param($node)
   $node -is [Management.Automation.Language.CommandAst] -and

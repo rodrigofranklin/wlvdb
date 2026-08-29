@@ -3734,12 +3734,15 @@ function Invoke-Issue13V5OracleEffectValidation([object]$Config) {
     '-ReplayRoot', [string]$oracle.comparisons.replay.root,
     '-ProofPath', [string]$oracle.proof.path
   )
-  $validationExecution = Invoke-Issue13V5PwshExternal `
-    $Config $arguments 'oracle-effect-validation' 1800 @(0) `
-    ([string]$Config.repository_root)
+  $validationExecution = Invoke-Issue13V5PwshTransient `
+    -Arguments $arguments `
+    -Label 'oracle-effect-validation' `
+    -TimeoutSeconds 1800 `
+    -ExpectedExitCodes @(0) `
+    -WorkingDirectory ([string]$Config.repository_root) `
+    -RscriptPath ([string]$Config.rscript)
   $outputText = [string]$validationExecution.stdout
-  $commandRecord = Read-Issue13V5Json `
-    ([string]$validationExecution.record_path)
+  $commandRecord = $validationExecution.command_record
   try {
     $result = $outputText | ConvertFrom-Json -DateKind String
   } catch {
@@ -6901,6 +6904,7 @@ function Invoke-Issue13V5External(
     stdout = $stdoutText
     stderr = $stderrText
     record_path = $recordPath
+    command_record = [pscustomobject]$record
   }
 }
 
@@ -7047,7 +7051,10 @@ function Invoke-Issue13V5PwshTransient(
     ([string]$temporaryBaseIdentity.physical_path).TrimEnd('\') +
       '\' + $temporaryLeaf
   $temporaryState = [pscustomobject]@{ root_identity = $null }
-  $execution = [pscustomobject]@{ result = $null }
+  $execution = [pscustomobject]@{
+    result = $null
+    command_record = $null
+  }
   $action = {
     $null = [IO.Directory]::CreateDirectory($temporaryRoot)
     Assert-Issue13V5NoReparseAncestors `
@@ -7071,6 +7078,7 @@ function Invoke-Issue13V5PwshTransient(
     $execution.result = Invoke-Issue13V5PwshExternal $temporaryConfig `
       $Arguments $Label $TimeoutSeconds $ExpectedExitCodes `
       $WorkingDirectory $Environment
+    $execution.command_record = $execution.result.command_record
   }
   $cleanup = {
     if (-not [IO.Directory]::Exists($temporaryRoot)) {
@@ -7132,6 +7140,7 @@ function Invoke-Issue13V5PwshTransient(
     exit_code = [int]$execution.result.exit_code
     stdout = [string]$execution.result.stdout
     stderr = [string]$execution.result.stderr
+    command_record = $execution.command_record
   }
 }
 

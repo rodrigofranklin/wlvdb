@@ -935,6 +935,7 @@ $oracleValidationConfig = [pscustomobject]@{
   candidate_commit = $CandidateCommit
   baseline_commit = $baselineCommit
   baseline_runtime_commit = $BaselineRuntimeCommit
+  harness_runtime_root = $harnessRuntime
   harness_manifest_path = $harnessManifestPath
   harness_manifest_sha256 =
     Get-Issue13V5NewConfigSha256 $harnessManifestPath
