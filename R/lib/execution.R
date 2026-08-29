@@ -3661,7 +3661,10 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
           source = method_record$source[[1L]]
         )
       }
-      runtime_store <- module_result$store
+      # Snapshot capture owns this mutable fork.  The module result can then be
+      # released before capture, and captured terminal generations can be
+      # discarded progressively without mutating the sealed runner result.
+      runtime_store <- wlv_runtime_fork_store(module_result$store)
       rm(module_result, module_plan)
       invisible(gc(full = TRUE))
       snapshot_capture <- if (identical(plan$mode, "recalculate")) {
@@ -3676,7 +3679,8 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
           runtime_store,
           parent_imports = parent_imports,
           compatibility = compatibility,
-          validate_parent = FALSE
+          validate_parent = FALSE,
+          consume_store = TRUE
         )
       } else {
         wlv_runtime_snapshot_capture(
@@ -3684,7 +3688,8 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
           method = method,
           source = method_record$source[[1L]],
           partitions = run_data$partitions,
-          compatibility = compatibility
+          compatibility = compatibility,
+          consume_store = TRUE
         )
       }
       rm(parent_snapshot, runtime_store)
