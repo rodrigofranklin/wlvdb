@@ -497,9 +497,6 @@ wlv_runtime_snapshot_array_sha256 <- function(value) {
     attributes(chunk) <- NULL
     hashes[[index]] <- wlv_runtime_snapshot_numeric_chunk_sha256(chunk)
     rm(chunk)
-    if (index %% 8L == 0L) {
-      invisible(gc(full = FALSE))
-    }
   }
   wlv_runtime_snapshot_array_sha256_from_chunks(
     dim(value),
@@ -542,9 +539,6 @@ wlv_runtime_snapshot_second_axis_slice_sha256 <- function(
     attributes(chunk) <- NULL
     hashes[[index]] <- wlv_runtime_snapshot_numeric_chunk_sha256(chunk)
     rm(positions, indices, chunk)
-    if (index %% 8L == 0L) {
-      invisible(gc(full = FALSE))
-    }
   }
   wlv_runtime_snapshot_array_sha256_from_chunks(
     slice_dimensions,
@@ -595,16 +589,11 @@ wlv_runtime_snapshot_state_axis_labels <- function(
   chunk_rows <- as.integer(chunk_rows)
   labels <- character()
   if (length(value)) {
-    chunk_index <- 0L
     for (start in seq.int(1L, length(value), by = chunk_rows)) {
-      chunk_index <- chunk_index + 1L
       end <- min(length(value), start + chunk_rows - 1L)
       current <- enc2utf8(value[start:end])
       labels <- unique(c(labels, current))
       rm(current)
-      if (chunk_index %% 16L == 0L) {
-        invisible(gc(full = FALSE))
-      }
     }
   }
   sort(labels, method = "radix")
@@ -620,15 +609,10 @@ wlv_runtime_snapshot_state_uniform_value <- function(
   }
   chunk_rows <- as.integer(chunk_rows)
   candidate <- value[[1L]]
-  chunk_index <- 0L
   for (start in seq.int(1L, length(value), by = chunk_rows)) {
-    chunk_index <- chunk_index + 1L
     end <- min(length(value), start + chunk_rows - 1L)
     if (any(value[start:end] != candidate)) {
       return(NULL)
-    }
-    if (chunk_index %% 16L == 0L) {
-      invisible(gc(full = FALSE))
     }
   }
   enc2utf8(candidate)
@@ -795,9 +779,6 @@ wlv_runtime_snapshot_state_cartesian_pack <- function(
         serialize(state_values, NULL, version = 3L)
       )
       rm(state_values)
-    }
-    if (chunk_index %% 16L == 0L) {
-      invisible(gc(full = FALSE))
     }
   }
   wlv_runtime_snapshot_state_codec_validate(
@@ -997,9 +978,7 @@ wlv_runtime_snapshot_state_codec_validate <- function(
     chunk_values <- 2^20
     total <- length(target_value)
     if (total) {
-      coverage_chunk_index <- 0L
       for (start in seq.int(1, total, by = chunk_values)) {
-        coverage_chunk_index <- coverage_chunk_index + 1L
         end <- min(total, start + chunk_values - 1)
         current <- target_value[start:end]
         ordinary_na <- which(is.na(current) & !is.nan(current))
@@ -1019,9 +998,6 @@ wlv_runtime_snapshot_state_codec_validate <- function(
           rm(positions, covered, coordinate)
         }
         rm(current, ordinary_na)
-        if (coverage_chunk_index %% 8L == 0L) {
-          invisible(gc(full = FALSE))
-        }
       }
     }
   }
@@ -1822,7 +1798,7 @@ wlv_runtime_snapshot_capture <- function(
     wlv_runtime_snapshot_capture_store_retain(store, requests)
     invisible(gc(full = TRUE))
     # Release value-only terminals first, then capture populated semantic
-    # states from largest to smallest.  The final snapshot is reordered below,
+    # states from largest to smallest. The final snapshot is reordered below,
     # so this memory-aware traversal cannot affect its logical bytes.
     request_order <- order(
       requests$state_rows > 0,
@@ -1859,15 +1835,16 @@ wlv_runtime_snapshot_capture <- function(
       integer()
     }
     large_state <- request$state_rows[[1L]] >= 2^20
-    remaining_large <- length(remaining) && any(
+    remaining_large <- length(remaining) > 0L && any(
       requests$state_rows[remaining] >= 2^20
     )
     last_value_only <- !large_state && remaining_large && !any(
       requests$state_rows[remaining] == 0
     )
-    invisible(gc(full = isTRUE(consume_store) && (
-      (large_state && remaining_large) || last_value_only
-    )))
+    if (!isTRUE(consume_store) ||
+        (large_state && remaining_large) || last_value_only) {
+      invisible(gc(full = TRUE))
+    }
   }
   resources <- resources[canonical_ids]
   if (isTRUE(consume_store)) {
@@ -3190,9 +3167,6 @@ wlv_runtime_snapshot_state_commitment_sha256 <- function(value) {
         serialize(current, NULL, version = 3L)
       )
       rm(source, current)
-      if (chunk_index %% 16L == 0L) {
-        invisible(gc(full = FALSE))
-      }
     }
   }
   wlv_runtime_snapshot_state_commitment_from_chunks(codec, chunks)
