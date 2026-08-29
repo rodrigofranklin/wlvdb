@@ -248,6 +248,112 @@ test_that("capture reads only a local runtime and strips transient attributes", 
   )
 })
 
+test_that("capture validates canonical sparse state without dense hydration", {
+  semantic <- semantic_resource_environment
+  value <- wlv_semantic_test_value()
+  states <- wlv_semantic_test_states(value)
+  resource <- semantic$wlv_semantic_state_encode(
+    value,
+    states,
+    "sea/sector/test.indicator",
+    c("year", "country")
+  )
+
+  bundle <- semantic$wlv_semantic_capture_value_state(
+    value,
+    "sea/sector/test.indicator",
+    c("year", "country"),
+    states = resource
+  )
+  expect_identical(bundle$value, value)
+  expect_identical(bundle$state, resource)
+  if (isTRUE(capabilities("profmem"))) {
+    expect_identical(tracemem(bundle$value), tracemem(value))
+    expect_identical(tracemem(bundle$state), tracemem(resource))
+    untracemem(bundle$value)
+    untracemem(value)
+    untracemem(bundle$state)
+    untracemem(resource)
+  }
+
+  changed <- bundle$value
+  changed[[1L]] <- 99
+  expect_false(identical(changed, value))
+  expect_identical(value, wlv_semantic_test_value())
+
+  wrong_target <- resource
+  attr(wrong_target, "target_key") <- "sea/country/test.indicator"
+  expect_error(
+    semantic$wlv_semantic_capture_value_state(
+      value,
+      "sea/sector/test.indicator",
+      c("year", "country"),
+      states = wrong_target
+    ),
+    "target_key"
+  )
+})
+
+test_that("explicit semantic-input runtime validates without retaining dense states", {
+  semantic <- semantic_resource_environment
+  value <- wlv_semantic_test_value()
+  state <- semantic$wlv_semantic_state_encode(
+    value,
+    wlv_semantic_test_states(value),
+    "sea/sector/test.indicator",
+    c("year", "country")
+  )
+  value_contract <- semantic$wlv_resource_contract(
+    axes = c("year", "country"),
+    value_type = "array",
+    unit = "test_unit_v1",
+    missingness = "typed_v1",
+    semantic_state = TRUE
+  )
+  state_contract <- semantic$wlv_resource_contract(
+    value_type = "data.frame",
+    unit = "semantic_state:test_unit_v1",
+    missingness = "semantic_state_v1",
+    role = "semantic_state"
+  )
+  module <- list(
+    module_id = "test.explicit",
+    instance_id = "test.explicit",
+    partition = NULL,
+    requires = list(
+      value = semantic$wlv_resource_ref(
+        "sea/sector/test.indicator",
+        value_contract
+      ),
+      state = semantic$wlv_resource_ref(
+        "semantic_state/sea/sector/test.indicator",
+        state_contract
+      )
+    ),
+    provides = list()
+  )
+  local_runtime <- semantic$wlv_semantic_module_runtime(
+    list(value = value, state = state),
+    module,
+    semantic_input_mode = "explicit"
+  )
+
+  expect_identical(local_runtime$semantic_input_mode, "explicit")
+  expect_length(local_runtime$semantic_states, 0L)
+  expect_identical(ls(local_runtime$states, all.names = TRUE), character())
+
+  invalid_state <- state
+  invalid_state$country[[1L]] <- "UNKNOWN"
+  expect_error(
+    semantic$wlv_semantic_module_runtime(
+      list(value = value, state = invalid_state),
+      module,
+      semantic_input_mode = "explicit"
+    ),
+    "unknown coordinates"
+  )
+})
+
 test_that("source rules distinguish source missingness and structural IO cells", {
   semantic <- semantic_resource_environment
   sea <- array(

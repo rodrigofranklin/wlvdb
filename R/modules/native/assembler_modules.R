@@ -31,6 +31,12 @@ wlv_native_collect_partitioned_resource <- function(
       stop(sprintf("Assembler labels disagree for `%s`.", label), call. = FALSE)
     }
   }
+  if (
+    length(partitions) == 1L &&
+      identical(dimnames(partitions[[1L]])[[1L]], expected_years)
+  ) {
+    return(partitions[[1L]])
+  }
   dimensions <- c(length(expected_years), vapply(trailing_dimnames, length, integer(1L)))
   result <- array(
     NA_real_,
@@ -52,6 +58,14 @@ wlv_native_collect_partitioned_state <- function(
     states,
     values,
     combined_value) {
+  if (
+    length(states) == 1L && length(values) == 1L &&
+      identical(dim(values[[1L]]), dim(combined_value)) &&
+      identical(dimnames(values[[1L]]), dimnames(combined_value))
+  ) {
+    wlv_semantic_state_validate(states[[1L]], value = combined_value)
+    return(states[[1L]])
+  }
   state <- wlv_semantic_state_merge(
     resources = states,
     values = values,
@@ -154,11 +168,14 @@ wlv_native_matrix_assembler_spec <- function() {
       c("year", "variable", "origin", "destination")
     )
   ),
+  semantic_input_mode = "explicit",
   run = function(ctx) {
     lists <- ctx$input("lists")
     io_resources <- unlist(ctx$arg("io_resources"), use.names = FALSE)
     country_resources <- unlist(ctx$arg("country_resources"), use.names = FALSE)
-    first_io <- ctx$input(paste0("io.", io_resources[[1L]]))[[1L]]
+    io_trailing_dimnames <- dimnames(
+      ctx$input(paste0("io.", io_resources[[1L]]))[[1L]]
+    )[-1L]
     m_io <- array(
       NA_real_,
       dim = c(
@@ -180,7 +197,7 @@ wlv_native_matrix_assembler_spec <- function() {
       combined <- wlv_native_collect_partitioned_resource(
         values,
         lists$years,
-        dimnames(first_io)[-1L],
+        io_trailing_dimnames,
         paste0("io/", resource)
       )
       m_io[, index, , ] <- combined
@@ -189,10 +206,13 @@ wlv_native_matrix_assembler_spec <- function() {
         values,
         combined
       )
+      rm(values, combined)
+      invisible(gc(full = FALSE))
     }
-    first_country <- ctx$input(
+    invisible(gc(full = TRUE))
+    country_trailing_dimnames <- dimnames(ctx$input(
       paste0("country.", country_resources[[1L]])
-    )[[1L]]
+    )[[1L]])[-1L]
     m_countries <- array(
       NA_real_,
       dim = c(
@@ -214,7 +234,7 @@ wlv_native_matrix_assembler_spec <- function() {
       combined <- wlv_native_collect_partitioned_resource(
         values,
         lists$years,
-        dimnames(first_country)[-1L],
+        country_trailing_dimnames,
         paste0("country_matrix/", resource)
       )
       m_countries[, index, , ] <- combined
@@ -224,6 +244,7 @@ wlv_native_matrix_assembler_spec <- function() {
           values,
           combined
         )
+      rm(values, combined)
     }
     m_io_state <- wlv_native_lift_semantic_states(
       io_states,

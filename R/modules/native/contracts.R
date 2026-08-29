@@ -585,8 +585,19 @@ wlv_native_module_spec <- function(
     provides = list(),
     services = character(),
     run,
-    anomaly_bindings = list()) {
+    anomaly_bindings = list(),
+    semantic_input_mode = c("hydrated", "explicit")) {
   scope <- match.arg(scope)
+  semantic_input_mode <- match.arg(semantic_input_mode)
+  if (
+    identical(semantic_input_mode, "explicit") &&
+      "contract_runtime" %in% services
+  ) {
+    stop(
+      "Explicit semantic-input modules cannot consume `contract_runtime`.",
+      call. = FALSE
+    )
+  }
   original_requires <- requires
   original_provides <- provides
   original_anomaly_bindings <- anomaly_bindings
@@ -647,7 +658,7 @@ wlv_native_module_spec <- function(
     result <- original_run(ctx)
     ctx$service("module_contract")(result)
   }
-  wlv_module_spec(
+  spec <- wlv_module_spec(
     id = id,
     scope = scope,
     checkpoint = checkpoint,
@@ -662,6 +673,8 @@ wlv_native_module_spec <- function(
     )),
     run = wrapped_run
   )
+  attr(spec, "wlv_semantic_input_mode") <- semantic_input_mode
+  spec
 }
 
 wlv_native_run_ref <- function(

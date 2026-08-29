@@ -1750,6 +1750,24 @@ wlv_runtime_resolve_instance <- function(registry, instance, operation, partitio
       "wlv_preflight_error"
     )
   }
+  semantic_input_mode <- attr(
+    spec,
+    "wlv_semantic_input_mode",
+    exact = TRUE
+  )
+  if (is.null(semantic_input_mode)) {
+    semantic_input_mode <- "hydrated"
+  }
+  if (
+    !is.character(semantic_input_mode) || length(semantic_input_mode) != 1L ||
+      is.na(semantic_input_mode) ||
+      !semantic_input_mode %in% c("hydrated", "explicit")
+  ) {
+    wlv_runtime_abort(
+      sprintf("Module `%s` has an invalid semantic input mode.", spec$id),
+      "wlv_preflight_error"
+    )
+  }
   list(
     node_id = wlv_runtime_node_id(instance$instance_id, instance$partition),
     instance_id = instance$instance_id,
@@ -1760,6 +1778,7 @@ wlv_runtime_resolve_instance <- function(registry, instance, operation, partitio
     requires = requires,
     provides = provides,
     services = spec$services,
+    semantic_input_mode = semantic_input_mode,
     checkpoint = spec$checkpoint,
     scope = spec$scope,
     run = spec$run
@@ -2610,7 +2629,11 @@ wlv_runtime_module_services <- function(module, inputs, store, services) {
       "wlv_runner_error"
     )
   }
-  runtime <- wlv_semantic_module_runtime(inputs, module)
+  runtime <- wlv_semantic_module_runtime(
+    inputs,
+    module,
+    semantic_input_mode = module$semantic_input_mode
+  )
   result$contract_runtime <- runtime
   result$module_contract <- local({
     resolved_module <- module

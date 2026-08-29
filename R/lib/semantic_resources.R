@@ -713,7 +713,37 @@ wlv_semantic_capture_value_state <- function(
     )
   }
   if (inherits(candidate, "wlv_semantic_state")) {
-    candidate <- wlv_semantic_state_expand(candidate, value)
+    wlv_semantic_state_validate(
+      candidate,
+      value = value,
+      target_key = target_key,
+      axes = axes,
+      state_key = wlv_semantic_state_key(target_key)
+    )
+    clean_value <- value
+    transient_attributes <- c(
+      "wlv_state",
+      "wlv_actions",
+      "wlv_aggregation_state"
+    )
+    present <- vapply(transient_attributes, function(attribute) {
+      !is.null(attr(clean_value, attribute, exact = TRUE))
+    }, logical(1L))
+    if (any(present)) {
+      for (attribute in transient_attributes[present]) {
+        attr(clean_value, attribute) <- NULL
+      }
+    }
+    if (wlv_semantic_contains_reference(clean_value)) {
+      wlv_semantic_abort("Captured values cannot contain mutable references.")
+    }
+    # Canonical base values and sparse states contain no mutable references.
+    # Publishing their existing R objects is an ownership transfer protected by
+    # copy-on-write, and avoids serializing multi-gigabyte assembler outputs.
+    return(structure(
+      list(value = clean_value, state = candidate),
+      class = "wlv_value_state_bundle"
+    ))
   }
   candidate <- wlv_semantic_align_runtime_state(
     candidate,
@@ -986,7 +1016,11 @@ wlv_semantic_module_id <- function(module) {
   if (!length(candidates)) "unknown.module" else candidates[[1L]]
 }
 
-wlv_semantic_module_runtime <- function(inputs, module) {
+wlv_semantic_module_runtime <- function(
+    inputs,
+    module,
+    semantic_input_mode = c("hydrated", "explicit")) {
+  semantic_input_mode <- match.arg(semantic_input_mode)
   parts <- wlv_semantic_module_parts(module)
   if (
     !is.list(inputs) || (length(inputs) && (
@@ -1048,16 +1082,38 @@ wlv_semantic_module_runtime <- function(inputs, module) {
           sprintf("Collected state input `%s` does not match its values.", state_alias)
         )
       }
-      hydrated[[target_key]] <- Map(
-        wlv_semantic_state_expand,
-        state_value,
-        target_value
-      )
+      if (identical(semantic_input_mode, "explicit")) {
+        invisible(Map(function(state, value) {
+          wlv_semantic_state_validate(
+            state,
+            value = value,
+            target_key = target_key,
+            axes = target_ref$contract$axes,
+            state_key = state_ref$key
+          )
+        }, state_value, target_value))
+      } else {
+        hydrated[[target_key]] <- Map(
+          wlv_semantic_state_expand,
+          state_value,
+          target_value
+        )
+      }
     } else {
-      hydrated[[target_key]] <- wlv_semantic_state_expand(
-        state_value,
-        target_value
-      )
+      if (identical(semantic_input_mode, "explicit")) {
+        wlv_semantic_state_validate(
+          state_value,
+          value = target_value,
+          target_key = target_key,
+          axes = target_ref$contract$axes,
+          state_key = state_ref$key
+        )
+      } else {
+        hydrated[[target_key]] <- wlv_semantic_state_expand(
+          state_value,
+          target_value
+        )
+      }
     }
   }
   control_key_map <- c(
@@ -1109,6 +1165,7 @@ wlv_semantic_module_runtime <- function(inputs, module) {
     as.character(module$instance_id)
   }
   runtime$partition <- module$partition
+  runtime$semantic_input_mode <- semantic_input_mode
   runtime$input_aliases <- sort(names(inputs), method = "radix")
   runtime$semantic_states <- wlv_semantic_detach(hydrated)
   runtime$states <- new.env(parent = emptyenv())
@@ -1373,6 +1430,16 @@ wlv_semantic_finalize_module_result <- function(
     )
     axes <- target_ref$contract$axes
     explicit_state <- finalized[[state_alias]]
+    if (
+      identical(module$semantic_input_mode, "explicit") &&
+        is.null(explicit_state)
+    ) {
+      wlv_semantic_abort(sprintf(
+        "Explicit semantic-input module `%s` omitted state output `%s`.",
+        wlv_semantic_module_id(module),
+        state_alias
+      ))
+    }
     state_candidate <- explicit_state
     if (is.null(state_candidate)) {
       explicit_runtime_state <- attr(

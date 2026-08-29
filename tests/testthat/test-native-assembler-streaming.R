@@ -1,5 +1,13 @@
 test_that("matrix assembler preserves buffered semantics while streaming resources", {
   runtime <- wlv_test_load_runtime()
+  expect_identical(
+    attr(
+      runtime$wlv_native_matrix_assembler_spec(),
+      "wlv_semantic_input_mode",
+      exact = TRUE
+    ),
+    "explicit"
+  )
   years <- c("2000", "2001", "2002")
   inputs <- c("I2", "I1")
   outputs <- c("O1", "O2")
@@ -147,4 +155,62 @@ test_that("matrix assembler preserves buffered semantics while streaming resourc
     runtime$wlv_native_matrix_assembler_spec()$run(make_context(incomplete)),
     "Assembler coverage for `io/values` is not exact .*missing=2001"
   )
+})
+
+test_that("partition collector reuses a canonical single partition", {
+  runtime <- wlv_test_load_runtime()
+  value <- array(
+    as.double(seq_len(12L)),
+    dim = c(3L, 2L, 2L),
+    dimnames = list(
+      year = c("2000", "2001", "2002"),
+      input = c("I1", "I2"),
+      output = c("O1", "O2")
+    )
+  )
+
+  observed <- runtime$wlv_native_collect_partitioned_resource(
+    list(period = value),
+    dimnames(value)$year,
+    dimnames(value)[-1L],
+    "io/values"
+  )
+  expect_identical(observed, value)
+  if (isTRUE(capabilities("profmem"))) {
+    expect_identical(tracemem(observed), tracemem(value))
+    untracemem(observed)
+    untracemem(value)
+  }
+  dense_state <- runtime$wlv_semantic_state_array(
+    value,
+    names(dimnames(value))
+  )
+  state <- runtime$wlv_semantic_state_encode(
+    value,
+    dense_state,
+    "io/values",
+    names(dimnames(value))
+  )
+  observed_state <- runtime$wlv_native_collect_partitioned_state(
+    list(period = state),
+    list(period = value),
+    value
+  )
+  expect_identical(observed_state, state)
+  if (isTRUE(capabilities("profmem"))) {
+    expect_identical(tracemem(observed_state), tracemem(state))
+    untracemem(observed_state)
+    untracemem(state)
+  }
+
+  reversed <- value[c("2002", "2001", "2000"), , , drop = FALSE]
+  reordered <- runtime$wlv_native_collect_partitioned_resource(
+    list(period = reversed),
+    dimnames(value)$year,
+    dimnames(value)[-1L],
+    "io/values"
+  )
+  expect_identical(as.vector(reordered), as.vector(value))
+  expect_identical(unname(dim(reordered)), dim(value))
+  expect_identical(dimnames(reordered), dimnames(value))
 })
