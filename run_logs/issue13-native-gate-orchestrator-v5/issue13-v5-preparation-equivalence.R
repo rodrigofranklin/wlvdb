@@ -79,6 +79,13 @@ wlv13_v5p_table_sha256 <- function(value) {
   )))
 }
 
+wlv13_v5p_file_sha256 <- function(path) {
+  if (!exists("wlv13_sha256_file", mode = "function", inherits = TRUE)) {
+    stop("The pinned file SHA-256 helper is unavailable.", call. = FALSE)
+  }
+  wlv13_sha256_file(path)
+}
+
 wlv13_v5p_exact_table <- function(left, right) {
   is.data.frame(left) && is.data.frame(right) && identical(left, right)
 }
@@ -167,7 +174,7 @@ wlv13_v5p_validate_manifest <- function(value) {
 wlv13_v5p_manifest <- function(path) {
   path <- normalizePath(path, winslash = "/", mustWork = TRUE)
   key <- path
-  observed_sha256 <- wlv_gate_sha256(path)
+  observed_sha256 <- wlv13_v5p_file_sha256(path)
   if (exists(key, envir = wlv13_v5p_manifest_cache, inherits = FALSE)) {
     cached <- get(key, envir = wlv13_v5p_manifest_cache, inherits = FALSE)
     if (!identical(cached$sha256, observed_sha256)) {
@@ -203,7 +210,7 @@ wlv13_v5p_artifact_profile <- function(profile, arm, artifact) {
 wlv13_v5p_compare_artifact <- function(path, actual, expected, label) {
   actual <- wlv13_v5p_normalize_table(actual, label)
   expected_table <- wlv13_v5p_decode_table(expected$table, label)
-  file_sha256 <- wlv_gate_sha256(path)
+  file_sha256 <- wlv13_v5p_file_sha256(path)
   table_sha256 <- wlv13_v5p_table_sha256(actual)
   exact <- wlv13_v5p_exact_table(actual, expected_table)
   list(
@@ -268,7 +275,7 @@ wlv13_v5p_compare_source <- function(baseline_root, candidate_root, source,
   unit_passed <- isTRUE(unit$baseline$passed) && isTRUE(unit$candidate$passed)
   manifest_passed <- isTRUE(manifest_tables$baseline$passed) &&
     isTRUE(manifest_tables$candidate$passed)
-  profile_sha256 <- wlv_gate_sha256(manifest_path)
+  profile_sha256 <- wlv13_v5p_file_sha256(manifest_path)
   list(
     passed = unit_passed && manifest_passed,
     profile_sha256 = profile_sha256,

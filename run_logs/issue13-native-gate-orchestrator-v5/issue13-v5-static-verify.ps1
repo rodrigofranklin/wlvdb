@@ -2390,7 +2390,7 @@ $issue13ExpectedControllerSourceSha256 = @{
   'issue13-v5-oracle-effect-lib.ps1' = 'D341AF78AA0607F8F5ACBC9D051ADDF130E0E3617DB351F3B21314D240C415E9'
   'issue13-v5-oracle-effect-validate.ps1' = '11912422CEB54A45A791E49E11688F974AB45A4CC0F2FB89145D90176AAB0140'
   'issue13-v5-render-report.ps1' = '756ACAB7E8BFC6CF7E0A7235B0634E24F4D805A4F30D060291260A62726B710A'
-    'issue13-v5-static-verify.ps1' = '8F075955DDF3932589131BBC8233B8910904957F9E7D0B7BE8238BE72A747E7F'
+    'issue13-v5-static-verify.ps1' = '8B969EC4CBF0A72EC54B9CAFBB0E13E7BD6C194C35D1AB3B51DCFF17B48C5008'
 }
 $issue13ExpectedDotSourceSignatures = @{
   'issue13-v5-attest-delivery.ps1' = @(
@@ -8407,6 +8407,9 @@ if (-not $preparationBuildText.Contains('no field, row, wildcard, tolerance or r
       'sealed-exhaustive-unit-contract-equivalence') -or
     -not $preparationEquivalenceText.Contains(
       'sealed-exhaustive-source-manifest-equivalence') -or
+    -not $preparationEquivalenceText.Contains(
+      'wlv13_v5p_file_sha256 <- function') -or
+    $preparationEquivalenceText.Contains('wlv_gate_sha256') -or
     -not $preparationEquivalenceText.Contains('wlv13_v5p_selftest <- function') -or
     [string]$preparationEquivalence.schema -cne
       'wlv-issue13-preparation-equivalence/1' -or
