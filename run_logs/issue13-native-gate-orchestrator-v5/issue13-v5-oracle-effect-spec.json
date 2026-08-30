@@ -147,8 +147,8 @@
     "sealed_inventory": {
       "status": "sealed",
       "file_count": 47,
-      "total_bytes": 2582487,
-      "inventory_sha256": "f60f98bd57069d74fa9f10e8abfdfe25cf684176bfd2e37f544bd7f8bdc83b45"
+      "total_bytes": 2615877,
+      "inventory_sha256": "d45b066fd47cec3cddc0a54098633274ab5b3f7cf448d68297f51b7c6d0cf1ee"
     },
     "required_controller_files": [
       "README.md",

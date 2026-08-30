@@ -8285,9 +8285,9 @@ $commitETerminalSeal =
     [long]$oracleSpec.terminal_comparison_runtime.sealed_inventory.file_count -eq
       47L -and
     [long]$oracleSpec.terminal_comparison_runtime.sealed_inventory.total_bytes -eq
-      2582487L -and
+      2615877L -and
     [string]$oracleSpec.terminal_comparison_runtime.sealed_inventory.inventory_sha256 -ceq
-      'f60f98bd57069d74fa9f10e8abfdfe25cf684176bfd2e37f544bd7f8bdc83b45'
+      'd45b066fd47cec3cddc0a54098633274ab5b3f7cf448d68297f51b7c6d0cf1ee'
 if (-not $commitETerminalSeal) {
   throw 'Commit E static verifier accepts only the exact terminal output seal.'
 }
@@ -8541,9 +8541,9 @@ if ([string]$oracleSpec.schema -cne 'wlv-issue13-v5-oracle-effect-spec/2' -or
     [string]$oracleTerminal.sealed_inventory.status -cne
       'sealed' -or
     [long]$oracleTerminal.sealed_inventory.file_count -ne 47L -or
-    [long]$oracleTerminal.sealed_inventory.total_bytes -ne 2582487L -or
+    [long]$oracleTerminal.sealed_inventory.total_bytes -ne 2615877L -or
     [string]$oracleTerminal.sealed_inventory.inventory_sha256 -cne
-      'f60f98bd57069d74fa9f10e8abfdfe25cf684176bfd2e37f544bd7f8bdc83b45' -or
+      'd45b066fd47cec3cddc0a54098633274ab5b3f7cf448d68297f51b7c6d0cf1ee' -or
     [string]::Join("`n", @(
       $oracleTerminal.required_controller_files)) -cne
       [string]::Join("`n", $expectedControllerFiles) -or
@@ -11914,9 +11914,9 @@ $harnessBinding = Assert-Issue13V5HarnessBinding $staticConfig
 $manifest = $harnessBinding.manifest
 $inventory = $harnessBinding.inventory
 $expectedHarnessFileCount = 47L
-$expectedHarnessTotalBytes = 2582487L
+$expectedHarnessTotalBytes = 2615877L
 $expectedHarnessInventorySha256 =
-  'f60f98bd57069d74fa9f10e8abfdfe25cf684176bfd2e37f544bd7f8bdc83b45'
+  'd45b066fd47cec3cddc0a54098633274ab5b3f7cf448d68297f51b7c6d0cf1ee'
 if ($inventory.file_count -ne $expectedHarnessFileCount -or
     $inventory.total_bytes -ne $expectedHarnessTotalBytes -or
     $inventory.inventory_sha256 -cne $expectedHarnessInventorySha256 -or
