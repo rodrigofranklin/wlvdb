@@ -39,7 +39,7 @@ if (!identical(
 candidate_commit <- wlv_gate_git_commit(candidate_root)
 if (!identical(
     candidate_commit,
-    "a70cef8ef7ec19b329dd60cc2a10f49bf0c9533b"
+    "468a2c8a9f8c2754fd8667e8b85b5d1f104e59fb"
 )) {
   stop("Metadata equivalence requires its exact derivation commit.",
     call. = FALSE
@@ -132,9 +132,9 @@ for (loaded in list(baseline, candidate)) {
     )
   }
 }
-candidate_runtime_generation <- as.character(
+candidate_runtime_generation <- unname(unclass(as.character(
   candidate$runtime$.wlv_runtime_compatibility_generation()
-)
+)))
 if (!is.character(candidate_runtime_generation) ||
     length(candidate_runtime_generation) != 1L ||
     !grepl("^[0-9a-f]{64}$", candidate_runtime_generation)) {

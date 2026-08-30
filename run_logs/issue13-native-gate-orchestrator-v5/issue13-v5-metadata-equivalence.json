@@ -1,8 +1,8 @@
 {
   "schema": "wlv-issue13-metadata-equivalence/1",
   "baseline_commit": "cc2c86189a06676bcb9f0e05e08033d710a92509",
-  "candidate_commit_at_derivation": "a70cef8ef7ec19b329dd60cc2a10f49bf0c9533b",
-  "candidate_runtime_generation_sha256": "64aa6f2155f84d6b587dc7691a7c55ad1fb7a32d9e49d473d71cada07f65eea3",
+  "candidate_commit_at_derivation": "468a2c8a9f8c2754fd8667e8b85b5d1f104e59fb",
+  "candidate_runtime_generation_sha256": "cd951ae691b2e75760dfb3c3adfaded5e2406a96f607f52cbb98c4290d689ad5",
   "derivation": "Exact engine-reconstructed sidecars paired by method and artifact; no category, wildcard, tolerance or row-order projection.",
   "methods": [
     "wiodr13",

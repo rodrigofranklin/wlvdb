@@ -8466,7 +8466,12 @@ foreach ($required in @(
     "'issue13-v5-preparation-equivalence.json'",
     'sys.source(file.path(script_dir, "issue13-v5-diagnostics-override.R")',
     'metadata_assertions <- wlv13_v5_metadata_selftest()',
-    'identical(metadata_assertions, 626L)',
+    'identical(metadata_assertions, 645L)',
+    'sealed-source-provenance-by-arm',
+    'omitted-source-provenance-proof',
+    'forged-source-provenance-additional-inputs',
+    'omitted-strict-source-provenance',
+    'failed-strict-source-provenance',
     'wlv13_v5d_selftest()', 'identical(diagnostic_assertions, 226L)',
     'wlv13_v5p_selftest(file.path(',
     'identical(preparation_assertions, 173L)',
@@ -11810,10 +11815,37 @@ foreach ($required in @(
     'context$input_binding_sha256',
     'input_binding_valid',
     'identical(wlv13_git_commit(project_root), expected_commit)',
-    'isTRUE(wlv13_git_runtime_clean(project_root))'
+    'isTRUE(wlv13_git_runtime_clean(project_root))',
+    'wlv13_v5_runtime_snapshot_interface <- function',
+    'wlv-runtime-resources/1.1.0',
+    'c("snapshot", "root", "validate_snapshot")',
+    'validate_snapshot = TRUE',
+    'wlv13_v5_source_provenance_expected <- function',
+    'wlv_validate_method_source_manifest',
+    'wlv_publication_source_input_inventory',
+    'sealed-source-provenance-by-arm',
+    'runtime-snapshot-authenticator-default',
+    'source-provenance-json-key-order',
+    'source-additional-input-path',
+    'source-additional-input-hash'
   )) {
   if (-not $compareText.Contains($required)) {
     throw "V5 compare override lacks structural runtime binding: $required"
+  }
+}
+
+$aggregateHardeningText = [IO.File]::ReadAllText(
+  (Join-Path $root 'issue13-v5-aggregate-hardening.R'),
+  [Text.UTF8Encoding]::new($false, $true))
+foreach ($required in @(
+    'wlv13_v5_source_provenance_architecture_proof <- function',
+    'source_provenance_key <- "file:_source_provenance.csv"',
+    'sealed-source-provenance-by-arm',
+    'required_shared_projection <- setdiff(projected_keys, architecture_keys)',
+    'Cross-engine source provenance proof is incomplete or misbound.'
+  )) {
+  if (-not $aggregateHardeningText.Contains($required)) {
+    throw "V5 aggregate hardening lacks source-provenance closure: $required"
   }
 }
 
@@ -11986,7 +12018,11 @@ foreach ($required in @(
     'issue13-v5-compatibility-baseline-override.R',
     'output-v5-policy-reject',
     'V5 aggregate accepted a synthetic unbound baseline profile.',
-    'identical(metadata_assertions, 626L)',
+    'identical(metadata_assertions, 645L)',
+    'omitted-source-provenance-proof',
+    'forged-source-provenance-additional-inputs',
+    'omitted-strict-source-provenance',
+    'failed-strict-source-provenance',
     'identical(diagnostic_assertions, 226L)',
     'identical(preparation_assertions, 173L)'
   )) {

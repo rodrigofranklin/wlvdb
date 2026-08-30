@@ -142,12 +142,101 @@ wlv13_v5_oracle_artifact_delta <- function(artifact) {
   result
 }
 
+wlv13_v5_source_provenance_architecture_proof <- function(
+    artifact,
+    identity,
+    candidate_manifest_sha256,
+    baseline_manifest_sha256) {
+  key <- "file:_source_provenance.csv"
+  if (!is.list(artifact)) {
+    stop("Cross-engine source provenance proof is missing.", call. = FALSE)
+  }
+  source_by_method <- c(
+    wiodr13 = "wiodr13",
+    wiodr16 = "wiodr16",
+    alternative_1 = "wiodr13",
+    alternative_2 = "wiodr13",
+    norow_w13 = "wiodr13",
+    ochoa_1 = "wiodr13",
+    ochoa_2 = "wiodr13",
+    petrovic = "wiodr13",
+    wiodr13v09 = "wiodr13",
+    wiodr16v09 = "wiodr16",
+    zerodep_1 = "wiodr13",
+    zerodep_2 = "wiodr16"
+  )
+  expected_source <- unname(source_by_method[[identity$method]])
+  hash_fields <- c(
+    "candidate_run_manifest_sha256", "baseline_run_manifest_sha256",
+    "candidate_source_manifest_sha256", "baseline_source_manifest_sha256",
+    "preparation_profile_sha256", "candidate_additional_inputs_sha256",
+    "baseline_additional_inputs_sha256"
+  )
+  hashes_valid <- all(vapply(hash_fields, function(name) {
+    value <- artifact[[name]]
+    is.character(value) && length(value) == 1L && !is.na(value) &&
+      grepl("^[0-9a-f]{64}$", value)
+  }, logical(1L)))
+  count_fields <- c(
+    "candidate_additional_input_count", "baseline_additional_input_count"
+  )
+  counts_valid <- all(vapply(count_fields, function(name) {
+    value <- artifact[[name]]
+    is.numeric(value) && length(value) == 1L && !is.na(value) &&
+      is.finite(value) && value >= 0 && value == floor(value)
+  }, logical(1L)))
+  counts_equal <- counts_valid && identical(
+    as.numeric(artifact$candidate_additional_input_count),
+    as.numeric(artifact$baseline_additional_input_count)
+  )
+  valid <- identical(artifact$key, key) &&
+    identical(artifact$type, "csv") && isTRUE(artifact$passed) &&
+    isTRUE(artifact$role_match) &&
+    identical(artifact$candidate_path, "_source_provenance.csv") &&
+    identical(artifact$baseline_path, "_source_provenance.csv") &&
+    identical(
+      artifact$comparison_mode,
+      "sealed-source-provenance-by-arm"
+    ) &&
+    identical(artifact$method, identity$method) &&
+    is.character(expected_source) && length(expected_source) == 1L &&
+    identical(artifact$source, expected_source) &&
+    isTRUE(artifact$candidate_schema_valid) &&
+    isTRUE(artifact$baseline_schema_valid) &&
+    isTRUE(artifact$candidate_exact) &&
+    isTRUE(artifact$baseline_exact) &&
+    isTRUE(artifact$preparation_profile_exact) &&
+    isTRUE(artifact$additional_inputs_exact) &&
+    identical(
+      artifact$candidate_additional_inputs_sha256,
+      artifact$baseline_additional_inputs_sha256
+    ) &&
+    identical(artifact$raw_semantic_equal, FALSE) &&
+    isTRUE(artifact$architecture_difference) && hashes_valid && counts_equal &&
+    identical(
+      artifact$candidate_run_manifest_sha256,
+      candidate_manifest_sha256
+    ) &&
+    identical(
+      artifact$baseline_run_manifest_sha256,
+      baseline_manifest_sha256
+    )
+  if (!valid) {
+    stop("Cross-engine source provenance proof is incomplete or misbound.",
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
 wlv13_v5_oracle_architecture_proof <- function(report, inventory_sha256,
                                                 identity) {
   architecture_keys <- c(
     "file:_nonfinite_resolution_diagnostics.csv",
     "file:_runtime_resources.rds"
   )
+  source_provenance_key <- "file:_source_provenance.csv"
+  required_architecture_keys <- c(architecture_keys, source_provenance_key)
   if (!is.list(report) || !isTRUE(report$passed) ||
       !identical(report$status, "passed") ||
       !identical(report$comparison_mode, "cross_engine_run_v3") ||
@@ -189,6 +278,7 @@ wlv13_v5_oracle_architecture_proof <- function(report, inventory_sha256,
     "file:_method_matrices.csv",
     "file:_method_solutions.csv",
     "file:_scientific_checks.csv",
+    "file:_source_provenance.csv",
     "file:_unit_contract.csv",
     architecture_keys
   )
@@ -201,7 +291,7 @@ wlv13_v5_oracle_architecture_proof <- function(report, inventory_sha256,
   if (anyDuplicated(reported_architecture) ||
       !identical(reported_architecture, derived_architecture) ||
       length(setdiff(reported_architecture, architecture_universe)) ||
-      length(setdiff(architecture_keys, reported_architecture))) {
+      length(setdiff(required_architecture_keys, reported_architecture))) {
     stop("Cross-engine architecture differences are not closed or derived.",
       call. = FALSE
     )
@@ -225,6 +315,21 @@ wlv13_v5_oracle_architecture_proof <- function(report, inventory_sha256,
       )
     }
   }
+  source_provenance <- report$artifacts[[match(source_provenance_key, keys)]]
+  wlv13_v5_source_provenance_architecture_proof(
+    source_provenance,
+    identity,
+    wlv13_scalar_text(
+      report$candidate$manifest_sha256,
+      "source provenance candidate run manifest sha256",
+      "^[0-9a-f]{64}$"
+    ),
+    wlv13_scalar_text(
+      report$baseline$manifest_sha256,
+      "source provenance baseline run manifest sha256",
+      "^[0-9a-f]{64}$"
+    )
+  )
   reported_architecture
 }
 
@@ -239,6 +344,7 @@ wlv13_v5_oracle_delta_projection <- function(report,
     "file:_method_matrices.csv",
     "file:_method_solutions.csv",
     "file:_scientific_checks.csv",
+    "file:_source_provenance.csv",
     "file:_unit_contract.csv",
     "file:_nonfinite_resolution_diagnostics.csv",
     "file:_runtime_resources.rds"
@@ -366,6 +472,32 @@ wlv13_v5_oracle_delta_projection <- function(report,
     )
   )
   architecture_keys <- names(architecture_spec)
+  required_shared_projection <- setdiff(projected_keys, architecture_keys)
+  if (length(setdiff(required_shared_projection, artifact_keys))) {
+    stop("Recalculation oracle lacks a projected shared architecture artifact.",
+      call. = FALSE
+    )
+  }
+  source_provenance_key <- "file:_source_provenance.csv"
+  if (source_provenance_key %in% required_shared_projection) {
+    source_provenance <- report$artifacts[[match(
+      source_provenance_key, artifact_keys
+    )]]
+    if (!identical(source_provenance$type, "csv") ||
+        !isTRUE(source_provenance$passed) ||
+        !isTRUE(source_provenance$role_match) ||
+        !identical(
+          source_provenance$candidate_path,
+          "_source_provenance.csv"
+        ) || !identical(
+          source_provenance$baseline_path,
+          "_source_provenance.csv"
+        )) {
+      stop("Recalculation changed authenticated source provenance.",
+        call. = FALSE
+      )
+    }
+  }
   present_architecture <- intersect(artifact_keys, architecture_keys)
   if (identical(arm, "baseline") && length(present_architecture)) {
     stop("Baseline oracle unexpectedly contains candidate-only artifacts.",

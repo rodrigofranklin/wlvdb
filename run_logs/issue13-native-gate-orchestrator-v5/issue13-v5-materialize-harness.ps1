@@ -2159,6 +2159,7 @@ $selftestComparisonEnvelopeReplacement = @'
     architecture_differences = if (parity_run) {
       as.list(c(
         "file:_scientific_checks.csv",
+        "file:_source_provenance.csv",
         "file:_nonfinite_resolution_diagnostics.csv",
         "file:_runtime_resources.rds"
       ))
@@ -2212,15 +2213,57 @@ $selftestArchitectureReplacement = @'
       )
     ))
     if (parity_run) {
-      artifacts <- c(artifacts, list(list(
-        key = "file:_scientific_checks.csv",
-        type = "csv",
-        passed = TRUE,
-        role_match = TRUE,
-        candidate_path = "_scientific_checks.csv",
-        baseline_path = "_scientific_checks.csv",
-        architecture_difference = TRUE
-      )))
+      artifacts <- c(artifacts, list(
+        list(
+          key = "file:_scientific_checks.csv",
+          type = "csv",
+          passed = TRUE,
+          role_match = TRUE,
+          candidate_path = "_scientific_checks.csv",
+          baseline_path = "_scientific_checks.csv",
+          architecture_difference = TRUE
+        ),
+        list(
+          key = "file:_source_provenance.csv",
+          type = "csv",
+          passed = TRUE,
+          role_match = TRUE,
+          candidate_path = "_source_provenance.csv",
+          baseline_path = "_source_provenance.csv",
+          comparison_mode = "sealed-source-provenance-by-arm",
+          method = left$method,
+          source = if (left$method %in% c(
+              "wiodr16", "wiodr16v09", "zerodep_2"
+            )) "wiodr16" else "wiodr13",
+          candidate_schema_valid = TRUE,
+          baseline_schema_valid = TRUE,
+          candidate_exact = TRUE,
+          baseline_exact = TRUE,
+          candidate_run_manifest_sha256 = left$manifest_sha256,
+          baseline_run_manifest_sha256 = right$manifest_sha256,
+          candidate_source_manifest_sha256 = wlv13_sha256_text(paste0(
+            "candidate-source-manifest|", left$method
+          )),
+          baseline_source_manifest_sha256 = wlv13_sha256_text(paste0(
+            "baseline-source-manifest|", right$method
+          )),
+          preparation_profile_sha256 = wlv13_sha256_text(
+            "sealed-preparation-equivalence-profile"
+          ),
+          preparation_profile_exact = TRUE,
+          candidate_additional_inputs_sha256 = wlv13_sha256_text(
+            "shared-additional-source-inputs"
+          ),
+          baseline_additional_inputs_sha256 = wlv13_sha256_text(
+            "shared-additional-source-inputs"
+          ),
+          additional_inputs_exact = TRUE,
+          candidate_additional_input_count = 30L,
+          baseline_additional_input_count = 30L,
+          raw_semantic_equal = FALSE,
+          architecture_difference = TRUE
+        )
+      ))
     }
   }
   projected_failure <- id %in% c(
@@ -2228,22 +2271,33 @@ $selftestArchitectureReplacement = @'
     "oracle/candidate/recalculate/alternative_2/stage1/full"
   )
   if (startsWith(id, "oracle/")) {
-    artifacts <- c(artifacts, list(list(
-      key = "file:_scientific_checks.csv",
-      type = "csv",
-      passed = !projected_failure,
-      role_match = TRUE,
-      candidate_path = "_scientific_checks.csv",
-      baseline_path = "_scientific_checks.csv",
-      architecture_difference = FALSE,
-      difference_sha256 = if (projected_failure) {
-        wlv13_sha256_text(paste0(
-          "authenticated-projected-strict-delta|", id
-        ))
-      } else {
-        NULL
-      }
-    )))
+    artifacts <- c(artifacts, list(
+      list(
+        key = "file:_scientific_checks.csv",
+        type = "csv",
+        passed = !projected_failure,
+        role_match = TRUE,
+        candidate_path = "_scientific_checks.csv",
+        baseline_path = "_scientific_checks.csv",
+        architecture_difference = FALSE,
+        difference_sha256 = if (projected_failure) {
+          wlv13_sha256_text(paste0(
+            "authenticated-projected-strict-delta|", id
+          ))
+        } else {
+          NULL
+        }
+      ),
+      list(
+        key = "file:_source_provenance.csv",
+        type = "csv",
+        passed = TRUE,
+        role_match = TRUE,
+        candidate_path = "_source_provenance.csv",
+        baseline_path = "_source_provenance.csv",
+        architecture_difference = FALSE
+      )
+    ))
   }
   raw_passed <- passed && all(vapply(artifacts, function(artifact) {
     isTRUE(artifact$passed)
@@ -2387,6 +2441,89 @@ run_negative_aggregate(
   category = "oracle"
 )
 
+source_provenance_restore <- NULL
+run_negative_aggregate(
+  "omitted-source-provenance-proof",
+  mutate = function() {
+    source_provenance_restore <<- replace_scenario(
+      architecture_path,
+      function(value) {
+        key <- "file:_source_provenance.csv"
+        keys <- vapply(value$artifacts, `[[`, character(1L), "key")
+        value$artifacts <- value$artifacts[keys != key]
+        value$artifact_count <- length(value$artifacts)
+        value$architecture_differences <- Filter(
+          function(item) !identical(item, key),
+          value$architecture_differences
+        )
+        value
+      }
+    )
+  },
+  restore = function() source_provenance_restore(),
+  category = "oracle"
+)
+
+source_inputs_restore <- NULL
+run_negative_aggregate(
+  "forged-source-provenance-additional-inputs",
+  mutate = function() {
+    source_inputs_restore <<- replace_scenario(
+      architecture_path,
+      function(value) {
+        keys <- vapply(value$artifacts, `[[`, character(1L), "key")
+        index <- match("file:_source_provenance.csv", keys)
+        value$artifacts[[index]]$candidate_additional_inputs_sha256 <-
+          wlv13_sha256_text("mutated-additional-source-inputs")
+        value
+      }
+    )
+  },
+  restore = function() source_inputs_restore(),
+  category = "oracle"
+)
+
+strict_source_restore <- NULL
+run_negative_aggregate(
+  "omitted-strict-source-provenance",
+  mutate = function() {
+    strict_source_restore <<- replace_scenario(
+      oracle_path,
+      function(value) {
+        key <- "file:_source_provenance.csv"
+        keys <- vapply(value$artifacts, `[[`, character(1L), "key")
+        value$artifacts <- value$artifacts[keys != key]
+        value$artifact_count <- length(value$artifacts)
+        value
+      }
+    )
+  },
+  restore = function() strict_source_restore(),
+  category = "oracle"
+)
+
+failed_strict_source_restore <- NULL
+run_negative_aggregate(
+  "failed-strict-source-provenance",
+  mutate = function() {
+    failed_strict_source_restore <<- replace_scenario(
+      oracle_path,
+      function(value) {
+        keys <- vapply(value$artifacts, `[[`, character(1L), "key")
+        index <- match("file:_source_provenance.csv", keys)
+        value$artifacts[[index]]$passed <- FALSE
+        value$artifacts[[index]]$difference_sha256 <-
+          wlv13_sha256_text("mutated-strict-source-provenance")
+        value$passed <- FALSE
+        value$status <- "failed"
+        value
+      }
+    )
+  },
+  restore = function() failed_strict_source_restore(),
+  category = "oracle"
+)
+
 unknown_architecture_restore <- NULL
 run_negative_aggregate(
   "unregistered-architecture-projection",
@@ -2503,7 +2640,7 @@ sys.source(file.path(script_dir, "issue13-v5-preparation-equivalence.R"),
   envir = environment()
 )
 metadata_assertions <- wlv13_v5_metadata_selftest()
-assert(identical(metadata_assertions, 626L),
+assert(identical(metadata_assertions, 645L),
   "V5 exhaustive metadata mutation coverage is incomplete."
 )
 diagnostic_assertions <- wlv13_v5d_selftest()
@@ -2743,6 +2880,9 @@ Their scientific arrays remain bitwise comparable. Source-generation and
 aggregation-routing metadata must match exhaustive arm-specific tables sealed
 in the controller; no source-contract field is dropped. FST-sidecar format
 differences are accepted only after their payloads and internal hashes pass.
+The shared `_source_provenance.csv` is authenticated independently in each arm;
+its additional-input inventory must remain exactly identical across engines and
+must remain unchanged in every recalculation.
 '@
 Set-Issue13V5Utf8Text $readme $readmeValue
 
