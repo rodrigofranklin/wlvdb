@@ -107,7 +107,7 @@ A prova armazena o commit esperado, o hash do manifest, os três inventários e
 o inventário físico completo instalado.
 
 O fixture terminal está marcado `status = "sealed"` e fixa a tripla física
-`47 / 2615877 / d45b066f…d0cf1ee`, derivada de uma staging write-once. Gerador e
+`47 / 2616118 / c1b91a00…b194426`, derivada de uma staging write-once. Gerador e
 validador recusam produzir ou adotar proof se status, contagem, bytes ou hash
 divergirem desse selo.
 

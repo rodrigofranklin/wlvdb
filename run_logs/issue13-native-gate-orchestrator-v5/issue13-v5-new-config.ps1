@@ -467,9 +467,9 @@ $strictSmokeSha256 =
 $strictSmokeHarnessSha256 =
   'a17a187621cdd4aff6f24efd6bf43ffbf9336de0a19189dfc7f5a82758a92c23'
 $expectedHarnessFileCount = 47L
-$expectedHarnessTotalBytes = 2615877L
+$expectedHarnessTotalBytes = 2616118L
 $expectedHarnessInventorySha256 =
-  'd45b066fd47cec3cddc0a54098633274ab5b3f7cf448d68297f51b7c6d0cf1ee'
+  'c1b91a0073f044e8d721d60e25f941f8cb04ac86e3479fd95610b9c7cb194426'
 $methods = @(
   'wiodr13', 'wiodr16', 'alternative_1', 'alternative_2', 'norow_w13',
   'ochoa_1', 'ochoa_2', 'petrovic', 'wiodr13v09', 'wiodr16v09',

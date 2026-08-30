@@ -3924,7 +3924,7 @@ function Get-Issue13OracleEffectInputContext {
     'oracle-effect proof schema'
   $spec = Read-Issue13OracleEffectJson $specResolved 'oracle-effect spec'
   Assert-Issue13OracleEffect ((Get-Issue13OracleEffectSha256 $specResolved) -ceq `
-      'd355b382fb6561258aabbc3135feb95817322d6e2ab10afac42c9f43d12246ac') `
+      '9e8252ecc1a09afc176c43ac7ec408120113971d384a60adbdff67e1d64b5a1a') `
     'oracle-effect spec bytes differ from the closed terminal manifest.'
   Assert-Issue13OracleEffect ((Get-Issue13OracleEffectSha256 $schemaResolved) -ceq `
       [string]$spec.proof_schema_sha256) `
