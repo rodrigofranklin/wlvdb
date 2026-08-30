@@ -1958,6 +1958,10 @@ wlv_runtime_snapshot_capture_begin <- function(
     stop("Runtime snapshot resource requests are not canonical.", call. = FALSE)
   }
   wlv_runtime_snapshot_capture_store_retain(store, requests)
+  # Retention drops the assembled m_io artifact and every unrelated terminal
+  # from the owned fork. Reclaim those large values before hashing any retained
+  # resource so capture and publication do not overlap their memory footprints.
+  invisible(gc(full = TRUE))
   zero_order <- which(requests$state_rows == 0)
   zero_order <- zero_order[order(
     requests$include_value[zero_order],

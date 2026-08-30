@@ -376,6 +376,195 @@ wlv_contract_register_states <- function(runtime, artifact, indicator, states) {
   invisible(states)
 }
 
+wlv_contract_is_compact_semantic_state <- function(resource) {
+  inherits(resource, "wlv_runtime_semantic_state_codec")
+}
+
+wlv_contract_compact_semantic_state <- function(
+    resource,
+    target_key,
+    axes) {
+  codec <- wlv_runtime_snapshot_state_pack_validated(resource)
+  wlv_runtime_snapshot_state_codec_validate(
+    codec,
+    target_key = target_key,
+    axes = axes,
+    state_key = wlv_semantic_state_key(target_key)
+  )
+  codec
+}
+
+wlv_contract_empty_compact_semantic_state <- function(target_key, axes) {
+  columns <- stats::setNames(
+    rep(list(character()), length(axes) + 1L),
+    c(axes, "state")
+  )
+  resource <- wlv_semantic_new_state_resource(
+    as.data.frame(columns, stringsAsFactors = FALSE),
+    target_key,
+    axes
+  )
+  wlv_contract_compact_semantic_state(resource, target_key, axes)
+}
+
+wlv_contract_compact_semantic_state_filter <- function(resource, labels) {
+  if (!wlv_contract_is_compact_semantic_state(resource) ||
+      !is.list(labels) || is.null(names(labels)) || anyNA(names(labels)) ||
+      any(!nzchar(names(labels))) || anyDuplicated(names(labels)) ||
+      any(!names(labels) %in% resource$axes) ||
+      any(!vapply(labels, is.character, logical(1L))) ||
+      any(vapply(labels, anyNA, logical(1L)))) {
+    stop("Compact contract-state selection is invalid.", call. = FALSE)
+  }
+  wlv_runtime_snapshot_state_codec_validate(resource)
+  if (identical(resource$encoding, "rows")) {
+    rows <- resource$rows
+    selected <- rep(TRUE, nrow(rows))
+    for (axis in names(labels)) {
+      selected <- selected & rows[[axis]] %in% labels[[axis]]
+    }
+    rows <- rows[selected, c(resource$axes, "state"), drop = FALSE]
+    row.names(rows) <- NULL
+    rows <- wlv_semantic_new_state_resource(
+      rows,
+      resource$target_key,
+      resource$axes
+    )
+    return(wlv_contract_compact_semantic_state(
+      rows,
+      resource$target_key,
+      resource$axes
+    ))
+  }
+  selectors <- resource$selectors
+  for (axis in names(labels)) {
+    selectors[[axis]] <- selectors[[axis]][
+      selectors[[axis]] %in% labels[[axis]]
+    ]
+  }
+  if (any(!vapply(selectors, length, integer(1L)))) {
+    return(wlv_contract_empty_compact_semantic_state(
+      resource$target_key,
+      resource$axes
+    ))
+  }
+  result <- wlv_runtime_snapshot_new_state_codec(
+    encoding = "cartesian",
+    target_key = resource$target_key,
+    axes = resource$axes,
+    state_version = resource$state_version,
+    row_count = prod(vapply(selectors, length, double(1L))),
+    selectors = selectors,
+    state = resource$state
+  )
+  wlv_runtime_snapshot_state_codec_validate(result)
+  result
+}
+
+wlv_contract_compact_semantic_state_subset <- function(resource, value) {
+  axes <- resource$axes
+  labels <- dimnames(value)
+  label_axes <- names(labels)
+  if (is.null(labels) || length(labels) != length(axes) ||
+      (!is.null(label_axes) && !identical(label_axes, axes)) ||
+      any(vapply(labels, is.null, logical(1L)))) {
+    stop(
+      "Registered missingness state labels do not match the result array.",
+      call. = FALSE
+    )
+  }
+  names(labels) <- axes
+  wlv_contract_compact_semantic_state_filter(resource, labels)
+}
+
+wlv_contract_semantic_state_position_states <- function(
+    resource,
+    value,
+    positions) {
+  if (!is.numeric(positions) || anyNA(positions) ||
+      any(positions < 1) || any(positions > length(value)) ||
+      any(positions != floor(positions))) {
+    stop("Contract-state positions are invalid.", call. = FALSE)
+  }
+  if (!length(positions) || is.null(resource)) {
+    return(rep(NA_character_, length(positions)))
+  }
+  rows <- if (wlv_contract_is_compact_semantic_state(resource) &&
+      identical(resource$encoding, "rows")) {
+    resource$rows
+  } else if (!wlv_contract_is_compact_semantic_state(resource)) {
+    resource
+  } else {
+    NULL
+  }
+  if (!is.null(rows)) {
+    state_positions <- wlv_semantic_state_linear_indices(rows, value)
+    matched <- match(positions, state_positions)
+    result <- rep(NA_character_, length(positions))
+    present <- !is.na(matched)
+    result[present] <- rows$state[matched[present]]
+    return(result)
+  }
+  wlv_runtime_snapshot_state_codec_validate(resource)
+  labels <- dimnames(value)
+  label_axes <- names(labels)
+  if (is.null(labels) ||
+      (!is.null(label_axes) && !identical(label_axes, resource$axes))) {
+    stop(
+      "Registered missingness state labels do not match the result array.",
+      call. = FALSE
+    )
+  }
+  names(labels) <- resource$axes
+  dimensions <- dim(value)
+  strides <- c(1, cumprod(as.double(dimensions)))[seq_along(dimensions)]
+  selector_positions <- lapply(seq_along(resource$axes), function(index) {
+    matched <- match(resource$selectors[[index]], labels[[index]])
+    if (anyNA(matched)) {
+      stop(
+        "Registered missingness states reference unavailable labels.",
+        call. = FALSE
+      )
+    }
+    matched
+  })
+  offsets <- as.double(positions) - 1
+  covered <- rep(TRUE, length(positions))
+  for (index in seq_along(resource$axes)) {
+    coordinates <- (offsets %/% strides[[index]]) %% dimensions[[index]] + 1
+    covered <- covered & coordinates %in% selector_positions[[index]]
+  }
+  result <- rep(NA_character_, length(positions))
+  result[covered] <- resource$state
+  result
+}
+
+wlv_contract_semantic_state_has_invalid_structural <- function(
+    resource,
+    input_labels) {
+  if (is.null(resource)) {
+    return(FALSE)
+  }
+  rows <- if (wlv_contract_is_compact_semantic_state(resource) &&
+      identical(resource$encoding, "rows")) {
+    resource$rows
+  } else if (!wlv_contract_is_compact_semantic_state(resource)) {
+    resource
+  } else {
+    NULL
+  }
+  if (!is.null(rows)) {
+    structural <- rows$variable %in% wlv_m_io_structural_missing_indicators() &
+      !rows$output %in% input_labels
+    return(any(structural & rows$state != "not_applicable"))
+  }
+  wlv_runtime_snapshot_state_codec_validate(resource)
+  has_structural <- any(
+    resource$selectors$variable %in% wlv_m_io_structural_missing_indicators()
+  ) && any(!resource$selectors$output %in% input_labels)
+  has_structural && !identical(resource$state, "not_applicable")
+}
+
 wlv_contract_register_semantic_states <- function(
     runtime,
     artifact,
@@ -387,13 +576,29 @@ wlv_contract_register_semantic_states <- function(
   }
   target_key <- paste0("artifact/", artifact)
   axes <- names(dimnames(value))
-  wlv_semantic_state_validate(
+  compact <- wlv_runtime_snapshot_state_cartesian_pack(
     resource,
-    value = value,
     target_key = target_key,
     axes = axes,
-    state_key = wlv_semantic_state_key(target_key)
+    state_key = wlv_semantic_state_key(target_key),
+    target_value = value,
+    return_commitment = FALSE
   )
+  if (is.null(compact)) {
+    wlv_semantic_state_validate(
+      resource,
+      value = value,
+      target_key = target_key,
+      axes = axes,
+      state_key = wlv_semantic_state_key(target_key)
+    )
+    compact <- wlv_contract_compact_semantic_state(
+      resource,
+      target_key,
+      axes
+    )
+  }
+  resource <- compact
   semantic_states <- runtime$semantic_states
   if (is.null(semantic_states)) {
     semantic_states <- stats::setNames(vector("list", 0L), character())
@@ -403,9 +608,9 @@ wlv_contract_register_semantic_states <- function(
       anyDuplicated(names(semantic_states))) {
     stop("Contract runtime sparse states are not canonical.", call. = FALSE)
   }
-  # The sealed runner store and the validation runtime only read this canonical
-  # data frame. Sharing it preserves copy-on-write and avoids duplicating a
-  # potentially large sparse IO state table.
+  # The validation runtime only needs membership and state lookups. Keep the
+  # canonical compact codec instead of retaining the assembler's potentially
+  # enormous Cartesian coordinate table.
   semantic_states[[target_key]] <- resource
   runtime$semantic_states <- semantic_states
   invisible(resource)
@@ -426,8 +631,20 @@ wlv_contract_semantic_states <- function(runtime, artifact) {
   if (is.null(resource)) {
     return(NULL)
   }
-  if (!is.data.frame(resource) || !inherits(resource, "wlv_semantic_state") ||
-      !identical(attr(resource, "target_key", exact = TRUE), target_key)) {
+  valid <- if (wlv_contract_is_compact_semantic_state(resource)) {
+    tryCatch({
+      wlv_runtime_snapshot_state_codec_validate(
+        resource,
+        target_key = target_key,
+        state_key = wlv_semantic_state_key(target_key)
+      )
+      TRUE
+    }, error = function(error) FALSE)
+  } else {
+    is.data.frame(resource) && inherits(resource, "wlv_semantic_state") &&
+      identical(attr(resource, "target_key", exact = TRUE), target_key)
+  }
+  if (!isTRUE(valid)) {
     stop("Contract runtime sparse state binding is invalid.", call. = FALSE)
   }
   resource
@@ -455,6 +672,9 @@ wlv_contract_semantic_state_subset <- function(runtime, artifact, value) {
   resource <- wlv_contract_semantic_states(runtime, artifact)
   if (is.null(resource)) {
     return(NULL)
+  }
+  if (wlv_contract_is_compact_semantic_state(resource)) {
+    return(wlv_contract_compact_semantic_state_subset(resource, value))
   }
   axes <- attr(resource, "axes", exact = TRUE)
   labels <- dimnames(value)
@@ -487,6 +707,21 @@ wlv_contract_semantic_state_slice <- function(
   resource <- wlv_contract_semantic_state_subset(runtime, artifact, value)
   if (is.null(resource)) {
     return(NULL)
+  }
+  if (wlv_contract_is_compact_semantic_state(resource)) {
+    axes <- resource$axes
+    labels <- dimnames(value)
+    if (length(axes) < 2L || !identical(labels[[2L]], indicator)) {
+      stop(
+        "Registered missingness state labels do not match the result slice.",
+        call. = FALSE
+      )
+    }
+    selected <- wlv_contract_compact_semantic_state_filter(
+      resource,
+      stats::setNames(list(indicator), axes[[2L]])
+    )
+    return(wlv_runtime_snapshot_state_unpack(selected))
   }
   axes <- attr(resource, "axes", exact = TRUE)
   labels <- dimnames(value)
@@ -2107,6 +2342,65 @@ wlv_m_io_nonfinite_positions <- function(value, chunk_values = 2^20) {
   as.integer(unlist(positions[seq_len(index)], use.names = FALSE))
 }
 
+wlv_validate_m_io_contract_compact_chunks <- function(
+    value,
+    semantic,
+    chunk_values = 2^20) {
+  if (!wlv_can_validate_m_io_contract_sparse(value) ||
+      !(is.null(semantic) || (
+        wlv_contract_is_compact_semantic_state(semantic) &&
+          identical(semantic$encoding, "cartesian")
+      )) || !is.numeric(chunk_values) || length(chunk_values) != 1L ||
+      is.na(chunk_values) || !is.finite(chunk_values) || chunk_values < 1L ||
+      chunk_values > .Machine$integer.max) {
+    stop("Compact m_io validation received invalid inputs.", call. = FALSE)
+  }
+  chunk_values <- as.integer(chunk_values)
+  dimensions <- dim(value)
+  labels <- dimnames(value)
+  indicators <- labels[[2L]]
+  special_indicators <- wlv_m_io_structural_missing_indicators()
+  year_count <- dimensions[[1L]]
+  indicator_count <- dimensions[[2L]]
+  input_count <- dimensions[[3L]]
+  total <- length(value)
+  if (!total) {
+    return(TRUE)
+  }
+  for (start in seq.int(1L, total, by = chunk_values)) {
+    end <- min(total, start + chunk_values - 1L)
+    current <- value[start:end]
+    local_positions <- which(!is.finite(current))
+    if (!length(local_positions)) {
+      next
+    }
+    observed <- current[local_positions]
+    if (any(is.nan(observed) | is.infinite(observed))) {
+      return(FALSE)
+    }
+    positions <- as.double(start) + local_positions - 1
+    offsets <- positions - 1
+    indicator_indices <- (offsets %/% year_count) %% indicator_count + 1
+    output_indices <-
+      offsets %/% (year_count * indicator_count * input_count) + 1
+    allowed <- indicators[indicator_indices] %in% special_indicators &
+      !labels[[4L]][output_indices] %in% labels[[3L]]
+    unresolved <- !allowed
+    if (!is.null(semantic) && any(unresolved)) {
+      registered <- wlv_contract_semantic_state_position_states(
+        semantic,
+        value,
+        positions[unresolved]
+      )
+      allowed[unresolved] <- !is.na(registered)
+    }
+    if (any(!allowed)) {
+      return(FALSE)
+    }
+  }
+  TRUE
+}
+
 wlv_validate_m_io_contract_sparse <- function(
     runtime,
     value,
@@ -2122,13 +2416,11 @@ wlv_validate_m_io_contract_sparse <- function(
     return(wlv_validate_m_io_contract_detailed(runtime, value, checkpoint))
   }
   semantic <- wlv_contract_semantic_state_subset(runtime, "m_io", value)
-  if (!is.null(semantic)) {
-    structural_registered <-
-      semantic$variable %in% wlv_m_io_structural_missing_indicators() &
-      !semantic$output %in% labels[[3L]]
-    if (any(structural_registered & semantic$state != "not_applicable")) {
-      return(wlv_validate_m_io_contract_detailed(runtime, value, checkpoint))
-    }
+  if (wlv_contract_semantic_state_has_invalid_structural(
+        semantic,
+        labels[[3L]]
+      )) {
+    return(wlv_validate_m_io_contract_detailed(runtime, value, checkpoint))
   }
   if (length(indicators)) {
     wlv_contract_context_for(
@@ -2140,21 +2432,26 @@ wlv_validate_m_io_contract_sparse <- function(
       axes = c(year = 1L, sector = 3L, output = 4L)
     )
   }
+  compact_scan <- is.null(semantic) || (
+    wlv_contract_is_compact_semantic_state(semantic) &&
+      identical(semantic$encoding, "cartesian")
+  )
+  if (compact_scan) {
+    if (!wlv_validate_m_io_contract_compact_chunks(value, semantic)) {
+      return(wlv_validate_m_io_contract_detailed(runtime, value, checkpoint))
+    }
+    return(invisible(value))
+  }
   nonfinite_positions <- wlv_m_io_nonfinite_positions(value)
   if (!length(nonfinite_positions)) {
     return(invisible(value))
   }
 
-  semantic_positions <- if (is.null(semantic) || !nrow(semantic)) {
-    integer()
-  } else {
-    wlv_semantic_state_linear_indices(semantic, value)
-  }
-  semantic_matches <- if (length(semantic_positions)) {
-    match(nonfinite_positions, semantic_positions)
-  } else {
-    rep(NA_integer_, length(nonfinite_positions))
-  }
+  semantic_states <- wlv_contract_semantic_state_position_states(
+    semantic,
+    value,
+    nonfinite_positions
+  )
 
   offsets <- nonfinite_positions - 1
   year_count <- dimensions[[1L]]
@@ -2183,7 +2480,7 @@ wlv_validate_m_io_contract_sparse <- function(
     ) {
       allowed_missing <- !labels[[4L]][selected_outputs] %in% labels[[3L]]
     }
-    registered <- semantic_matches[selected]
+    registered <- semantic_states[selected]
     allowed_missing <- allowed_missing | !is.na(registered)
     unexpected_missing <- ordinary_missing & !allowed_missing
     if (any(invalid_numeric) || any(unexpected_missing)) {

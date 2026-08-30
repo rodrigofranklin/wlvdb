@@ -3638,6 +3638,59 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         wlv_native_indicator_metadata_contract()
       )
 
+      diagnostics <- wlv_native_csv_diagnostics(
+        module_result,
+        method = method,
+        source = method_record$source[[1L]],
+        expected_years = wlv_native_metadata_years(runtime_data$source_sea)
+      )
+      native_trace <- module_result$trace
+      if (identical(plan$mode, "recalculate")) {
+        diagnostics <- wlv_native_merge_recalculation_diagnostics(
+          run_data = runtime_data,
+          current = diagnostics,
+          module_plan = module_plan,
+          method = method,
+          source = method_record$source[[1L]]
+        )
+      }
+      runtime_store <- if (identical(plan$mode, "calculate")) {
+        wlv_runtime_fork_store(module_result$store)
+      } else {
+        module_result$store
+      }
+      rm(module_result, module_plan)
+      invisible(gc(full = TRUE))
+      snapshot_capture <- if (identical(plan$mode, "calculate")) {
+        wlv_runtime_snapshot_capture(
+          store = runtime_store,
+          method = method,
+          source = method_record$source[[1L]],
+          partitions = run_data$partitions,
+          compatibility = compatibility,
+          consume_store = TRUE
+        )
+      } else {
+        NULL
+      }
+      if (identical(plan$mode, "recalculate")) {
+        if (is.null(parent_snapshot)) {
+          stop(
+            "Recalculation lost its authenticated parent runtime snapshot.",
+            call. = FALSE
+          )
+        }
+        snapshot_capture <- wlv_runtime_snapshot_capture_update_panel(
+          parent_snapshot,
+          runtime_store,
+          parent_imports = parent_imports,
+          compatibility = compatibility,
+          validate_parent = FALSE
+        )
+      }
+      rm(parent_snapshot, runtime_store)
+      invisible(gc(full = TRUE))
+
       wlv_validate_sea_stage(
         contract_runtime,
         arrays$sea_sectors,
@@ -3663,40 +3716,6 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         )
       }
 
-      diagnostics <- wlv_native_csv_diagnostics(
-        module_result,
-        method = method,
-        source = method_record$source[[1L]],
-        expected_years = wlv_native_metadata_years(runtime_data$source_sea)
-      )
-      native_trace <- module_result$trace
-      if (identical(plan$mode, "recalculate")) {
-        diagnostics <- wlv_native_merge_recalculation_diagnostics(
-          run_data = runtime_data,
-          current = diagnostics,
-          module_plan = module_plan,
-          method = method,
-          source = method_record$source[[1L]]
-        )
-      }
-      runtime_store <- if (identical(plan$mode, "calculate")) {
-        wlv_runtime_fork_store(module_result$store)
-      } else {
-        module_result$store
-      }
-      rm(module_result, module_plan)
-      snapshot_preparation <- if (identical(plan$mode, "calculate")) {
-        wlv_runtime_snapshot_capture_begin(
-          store = runtime_store,
-          method = method,
-          source = method_record$source[[1L]],
-          partitions = run_data$partitions,
-          compatibility = compatibility
-        )
-      } else {
-        NULL
-      }
-      invisible(gc(full = TRUE))
       if (identical(plan$mode, "calculate")) {
         wlv_native_write_io_arrays(
           runtime_data,
@@ -3706,28 +3725,6 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         arrays$m_io <- NULL
         invisible(gc(full = TRUE))
       }
-      snapshot_capture <- if (identical(plan$mode, "recalculate")) {
-        if (is.null(parent_snapshot)) {
-          stop(
-            "Recalculation lost its authenticated parent runtime snapshot.",
-            call. = FALSE
-          )
-        }
-        wlv_runtime_snapshot_capture_update_panel(
-          parent_snapshot,
-          runtime_store,
-          parent_imports = parent_imports,
-          compatibility = compatibility,
-          validate_parent = FALSE
-        )
-      } else {
-        wlv_runtime_snapshot_capture_finish(
-          snapshot_preparation,
-          runtime_store
-        )
-      }
-      rm(parent_snapshot, runtime_store, snapshot_preparation)
-      invisible(gc(full = TRUE))
       wlv_native_write_panel_arrays(
         plan,
         arrays,

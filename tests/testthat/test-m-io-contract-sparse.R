@@ -243,9 +243,16 @@ test_that("hydrated m_io states remain sparse across public and subset shapes", 
   expect_identical(ls(contract_runtime$states, all.names = TRUE), character())
   expect_s3_class(
     contract_runtime$semantic_states[[target_key]],
-    "wlv_semantic_state"
+    "wlv_runtime_semantic_state_codec"
   )
-  expect_identical(nrow(contract_runtime$semantic_states[[target_key]]), 1L)
+  expect_identical(
+    contract_runtime$semantic_states[[target_key]]$encoding,
+    "cartesian"
+  )
+  expect_identical(
+    contract_runtime$semantic_states[[target_key]]$row_count,
+    1
+  )
 
   probe <- new.env(parent = environment(
     runtime$wlv_validate_m_io_contract_sparse
@@ -300,6 +307,115 @@ test_that("hydrated m_io states remain sparse across public and subset shapes", 
   nonfinite <- value
   nonfinite["2001", "transfers_values", "B", "B"] <- NaN
   compare_failure(nonfinite)
+})
+
+test_that("Cartesian m_io state codecs preserve multi-axis validation", {
+  runtime <- wlv_test_load_runtime()
+  contract_runtime <- wlv_test_m_io_contract_runtime(runtime)
+  value <- wlv_test_m_io_contract_value()
+  value[, "values", , c("A", "B")] <- NA_real_
+  states <- array("finite", dim = dim(value), dimnames = dimnames(value))
+  states[, "values", , c("A", "B")] <- "source_missing"
+  state <- runtime$wlv_semantic_state_encode(
+    value,
+    states,
+    "artifact/m_io",
+    names(dimnames(value))
+  )
+
+  codec <- runtime$wlv_contract_register_semantic_states(
+    contract_runtime,
+    "m_io",
+    state,
+    value
+  )
+  expect_s3_class(codec, "wlv_runtime_semantic_state_codec")
+  expect_identical(codec$encoding, "cartesian")
+  expect_identical(codec$row_count, 8)
+  expect_identical(
+    codec$selectors,
+    list(
+      year = c("2000", "2001"),
+      variable = "values",
+      input = c("A", "B"),
+      output = c("A", "B")
+    )
+  )
+  expect_true(runtime$wlv_validate_m_io_contract_compact_chunks(
+    value,
+    codec,
+    chunk_values = 3L
+  ))
+
+  probe <- new.env(parent = environment(
+    runtime$wlv_validate_m_io_contract_sparse
+  ))
+  probe$wlv_validate_m_io_contract_detailed <- function(...) {
+    stop("detailed m_io validation invoked", call. = FALSE)
+  }
+  sparse <- runtime$wlv_validate_m_io_contract_sparse
+  environment(sparse) <- probe
+  expect_identical(sparse(contract_runtime, value), value)
+  first_year <- value["2000", , , , drop = FALSE]
+  expect_identical(sparse(contract_runtime, first_year), first_year)
+
+  unexpected <- value
+  unexpected["2001", "transfers_values", "B", "B"] <- NA_real_
+  expect_false(runtime$wlv_validate_m_io_contract_compact_chunks(
+    unexpected,
+    codec,
+    chunk_values = 3L
+  ))
+  expect_error(
+    sparse(contract_runtime, unexpected),
+    "detailed m_io validation invoked",
+    fixed = TRUE
+  )
+})
+
+test_that("row m_io state codecs retain exact per-position states", {
+  runtime <- wlv_test_load_runtime()
+  contract_runtime <- wlv_test_m_io_contract_runtime(runtime)
+  value <- wlv_test_m_io_contract_value()
+  value["2000", "values", "A", "A"] <- NA_real_
+  value["2001", "values", "B", "B"] <- NA_real_
+  states <- array("finite", dim = dim(value), dimnames = dimnames(value))
+  states["2000", "values", "A", "A"] <- "source_missing"
+  states["2001", "values", "B", "B"] <- "uncomputed"
+  state <- runtime$wlv_semantic_state_encode(
+    value,
+    states,
+    "artifact/m_io",
+    names(dimnames(value))
+  )
+
+  codec <- runtime$wlv_contract_register_semantic_states(
+    contract_runtime,
+    "m_io",
+    state,
+    value
+  )
+  expect_s3_class(codec, "wlv_runtime_semantic_state_codec")
+  expect_identical(codec$encoding, "rows")
+  expect_identical(codec$row_count, 2)
+  expect_identical(
+    runtime$wlv_contract_semantic_state_position_states(
+      codec,
+      value,
+      c(1, 32)
+    ),
+    c("source_missing", "uncomputed")
+  )
+
+  probe <- new.env(parent = environment(
+    runtime$wlv_validate_m_io_contract_sparse
+  ))
+  probe$wlv_validate_m_io_contract_detailed <- function(...) {
+    stop("detailed m_io validation invoked", call. = FALSE)
+  }
+  sparse <- runtime$wlv_validate_m_io_contract_sparse
+  environment(sparse) <- probe
+  expect_identical(sparse(contract_runtime, value), value)
 })
 
 test_that("sparse m_io validation reproduces detailed anomaly order and details", {
