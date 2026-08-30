@@ -297,7 +297,7 @@ wlv_parent_seed_resolution <- function(
     )
   }
   wlv_runtime_validate_resource_value(value, request$contract, request$key)
-  wlv_semantic_state_validate(
+  wlv_semantic_state_resource_validate(
     state,
     value = value,
     target_key = request$key,

@@ -63,7 +63,10 @@ wlv_native_collect_partitioned_state <- function(
       identical(dim(values[[1L]]), dim(combined_value)) &&
       identical(dimnames(values[[1L]]), dimnames(combined_value))
   ) {
-    wlv_semantic_state_validate(states[[1L]], value = combined_value)
+    wlv_semantic_state_resource_validate(
+      states[[1L]],
+      value = combined_value
+    )
     return(states[[1L]])
   }
   state <- wlv_semantic_state_merge(
@@ -75,20 +78,123 @@ wlv_native_collect_partitioned_state <- function(
   state
 }
 
-wlv_native_lift_semantic_states <- function(
+wlv_native_lift_cartesian_semantic_states <- function(
     resources,
     labels,
     inserted_axis,
     target_key,
     target_axes) {
+  source_axes <- target_axes[target_axes != inserted_axis]
+  if (length(source_axes) != length(target_axes) - 1L ||
+      sum(target_axes == inserted_axis) != 1L) {
+    return(NULL)
+  }
+  codecs <- vector("list", length(resources))
+  nonempty <- logical(length(resources))
+  for (index in seq_along(resources)) {
+    resource <- resources[[index]]
+    count <- wlv_semantic_state_resource_row_count(resource)
+    if (!count) {
+      next
+    }
+    codec <- if (inherits(
+          resource,
+          "wlv_runtime_semantic_state_codec"
+        )) {
+      wlv_semantic_state_resource_validate(resource)
+      if (identical(resource$encoding, "cartesian")) resource else NULL
+    } else {
+      wlv_runtime_snapshot_state_cartesian_pack(
+        resource,
+        target_key = wlv_semantic_state_resource_target_key(resource),
+        axes = source_axes,
+        state_key = wlv_semantic_state_key(
+          wlv_semantic_state_resource_target_key(resource)
+        ),
+        return_commitment = FALSE
+      )
+    }
+    if (is.null(codec) || !identical(codec$axes, source_axes)) {
+      return(NULL)
+    }
+    codecs[[index]] <- codec
+    nonempty[[index]] <- TRUE
+  }
+  if (!any(nonempty)) {
+    return(NULL)
+  }
+  active <- codecs[nonempty]
+  first <- active[[1L]]
+  compatible <- vapply(active, function(codec) {
+    identical(codec$axes, first$axes) &&
+      identical(codec$selectors, first$selectors) &&
+      identical(codec$state, first$state)
+  }, logical(1L))
+  if (!all(compatible)) {
+    return(NULL)
+  }
+  inserted_labels <- labels[nonempty]
+  if (!is.character(inserted_labels) || anyNA(inserted_labels) ||
+      any(!nzchar(inserted_labels)) || anyDuplicated(inserted_labels)) {
+    return(NULL)
+  }
+  selectors <- stats::setNames(vector("list", length(target_axes)), target_axes)
+  for (axis in target_axes) {
+    selectors[[axis]] <- if (identical(axis, inserted_axis)) {
+      sort(enc2utf8(inserted_labels), method = "radix")
+    } else {
+      first$selectors[[axis]]
+    }
+  }
+  row_count <- prod(vapply(selectors, length, double(1L)))
+  codec <- wlv_runtime_snapshot_new_state_codec(
+    encoding = "cartesian",
+    target_key = target_key,
+    axes = target_axes,
+    state_version = wlv_semantic_state_version(),
+    row_count = row_count,
+    selectors = selectors,
+    state = first$state
+  )
+  wlv_runtime_snapshot_state_codec_validate(
+    codec,
+    target_key = target_key,
+    axes = target_axes,
+    state_key = wlv_semantic_state_key(target_key)
+  )
+  codec
+}
+
+wlv_native_lift_semantic_states <- function(
+    resources,
+    labels,
+    inserted_axis,
+    target_key,
+    target_axes,
+    prefer_compact = FALSE) {
   if (!is.list(resources) || length(resources) != length(labels)) {
     stop("Assembler semantic-state resources do not match their labels.",
       call. = FALSE
     )
   }
+  if (isTRUE(prefer_compact)) {
+    compact <- wlv_native_lift_cartesian_semantic_states(
+      resources,
+      labels,
+      inserted_axis,
+      target_key,
+      target_axes
+    )
+    if (!is.null(compact)) {
+      return(compact)
+    }
+  }
   rows <- lapply(seq_along(resources), function(index) {
     resource <- resources[[index]]
-    wlv_semantic_state_validate(resource)
+    wlv_semantic_state_resource_validate(resource)
+    if (inherits(resource, "wlv_runtime_semantic_state_codec")) {
+      resource <- wlv_runtime_snapshot_state_unpack(resource)
+    }
     source_axes <- attr(resource, "axes", exact = TRUE)
     source <- wlv_semantic_plain_data_frame(
       resource,
@@ -251,7 +357,8 @@ wlv_native_matrix_assembler_spec <- function() {
       io_resources,
       "variable",
       "artifact/m_io",
-      c("year", "variable", "input", "output")
+      c("year", "variable", "input", "output"),
+      prefer_compact = TRUE
     )
     m_countries_state <- wlv_native_lift_semantic_states(
       country_states,

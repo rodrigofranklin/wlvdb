@@ -576,14 +576,25 @@ wlv_contract_register_semantic_states <- function(
   }
   target_key <- paste0("artifact/", artifact)
   axes <- names(dimnames(value))
-  compact <- wlv_runtime_snapshot_state_cartesian_pack(
-    resource,
-    target_key = target_key,
-    axes = axes,
-    state_key = wlv_semantic_state_key(target_key),
-    target_value = value,
-    return_commitment = FALSE
-  )
+  compact <- if (wlv_runtime_snapshot_is_state_codec(resource)) {
+    wlv_runtime_snapshot_state_codec_validate(
+      resource,
+      target_key = target_key,
+      axes = axes,
+      state_key = wlv_semantic_state_key(target_key),
+      target_value = value
+    )
+    resource
+  } else {
+    wlv_runtime_snapshot_state_cartesian_pack(
+      resource,
+      target_key = target_key,
+      axes = axes,
+      state_key = wlv_semantic_state_key(target_key),
+      target_value = value,
+      return_commitment = FALSE
+    )
+  }
   if (is.null(compact)) {
     wlv_semantic_state_validate(
       resource,

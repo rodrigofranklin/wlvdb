@@ -370,7 +370,7 @@ wlv_native_preflight_validate_semantic_seed_pairs <- function(seeds) {
   for (index in seq_along(values)) {
     value_seed <- values[[index]]
     state_seed <- by_locator[[expected[[index]]]]
-    wlv_semantic_state_validate(
+    wlv_semantic_state_resource_validate(
       state_seed$value,
       value = value_seed$value,
       target_key = value_seed$key,

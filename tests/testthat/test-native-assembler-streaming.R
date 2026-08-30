@@ -251,3 +251,222 @@ test_that("partition collector reuses a canonical single partition", {
   expect_identical(unname(dim(reordered)), dim(value))
   expect_identical(dimnames(reordered), dimnames(value))
 })
+
+test_that("structural IO derivation publishes a first-class Cartesian codec", {
+  runtime <- wlv_test_load_runtime()
+  partition <- "2000-2001"
+  axes <- c("year", "input", "output")
+  source <- array(
+    1,
+    dim = c(2L, 2L, 3L),
+    dimnames = list(
+      year = c("2000", "2001"),
+      input = c("AAA.S1", "BBB.S1"),
+      output = c("AAA.S1", "BBB.S1", "FD")
+    )
+  )
+  source_seeds <- runtime$wlv_native_stateful_seed_pair(
+    runtime$wlv_seed_resource(
+      "source/io",
+      source,
+      runtime$wlv_native_source_io_contract(),
+      partition = partition
+    )
+  )
+  expect_s3_class(source_seeds[[2L]]$value, "wlv_semantic_state")
+  expect_identical(nrow(source_seeds[[2L]]$value), 0L)
+  structural_source <- source
+  structural_source[, , "FD"] <- NA_real_
+  structural_state <- runtime$wlv_semantic_capture_value_state(
+    structural_source,
+    "source/io",
+    axes
+  )$state
+  expect_s3_class(
+    structural_state,
+    "wlv_runtime_semantic_state_codec"
+  )
+  expect_identical(structural_state$state, "not_applicable")
+  expect_identical(structural_state$row_count, 4)
+  mixed_source <- structural_source
+  mixed_source["2000", "AAA.S1", "AAA.S1"] <- NA_real_
+  mixed_state <- runtime$wlv_semantic_capture_value_state(
+    mixed_source,
+    "source/io",
+    axes
+  )$state
+  expect_s3_class(mixed_state, "wlv_semantic_state")
+  expect_setequal(
+    unique(mixed_state$state),
+    c("source_missing", "not_applicable")
+  )
+  controls <- list(
+    runtime$wlv_seed_resource(
+      "request/method",
+      "wiodr13",
+      runtime$wlv_native_control_contract("character")
+    ),
+    runtime$wlv_seed_resource(
+      "request/source",
+      "wiodr13",
+      runtime$wlv_native_control_contract("character")
+    ),
+    runtime$wlv_seed_resource(
+      "configuration/missingness_policy",
+      list(id = "test"),
+      runtime$wlv_native_control_contract("list")
+    ),
+    runtime$wlv_seed_resource(
+      "configuration/scientific_profile",
+      list(id = "test"),
+      runtime$wlv_native_control_contract("list")
+    )
+  )
+  make_spec <- function(id, unresolved = FALSE) {
+    runtime$wlv_native_module_spec(
+      id = id,
+      scope = "io_period",
+      checkpoint = 3L,
+      operations = "calculate",
+      requires = runtime$wlv_native_source_io_ref(),
+      provides = runtime$wlv_native_io_output("k_composition"),
+      run = local({
+        add_unresolved <- unresolved
+        function(ctx) {
+          value <- ctx$input("source_io")
+          value[, , "FD"] <- NA_real_
+          if (add_unresolved) {
+            value["2000", "AAA.S1", "AAA.S1"] <- NA_real_
+          }
+          runtime$wlv_module_result(outputs = list(value = value))
+        }
+      })
+    )
+  }
+  execute <- function(spec) {
+    store <- runtime$wlv_new_resource_store(c(source_seeds, controls))
+    instance <- runtime$wlv_module_instance(
+      spec$id,
+      spec$id,
+      partition = partition
+    )
+    plan <- runtime$wlv_compile_module_plan(
+      runtime$wlv_module_registry(list(spec)),
+      list(instance),
+      store,
+      partitions = partition
+    )
+    runtime$wlv_run_module_plan(plan, store)
+  }
+
+  result <- execute(make_spec("test.structural.codec"))
+  contract <- runtime$wlv_native_io_contract("k_composition")
+  value <- runtime$wlv_store_read(
+    result$store,
+    runtime$wlv_resource_ref(
+      "io/k_composition",
+      contract,
+      producer = "test.structural.codec",
+      partition = partition
+    )
+  )
+  state <- runtime$wlv_store_read(
+    result$store,
+    runtime$wlv_resource_ref(
+      "semantic_state/io/k_composition",
+      runtime$wlv_native_semantic_state_contract(contract),
+      producer = "test.structural.codec",
+      partition = partition
+    )
+  )
+  expect_s3_class(state, "wlv_runtime_semantic_state_codec")
+  expect_identical(state$encoding, "cartesian")
+  expect_identical(state$row_count, 4)
+  expect_identical(
+    state$selectors,
+    list(
+      year = c("2000", "2001"),
+      input = c("AAA.S1", "BBB.S1"),
+      output = "FD"
+    )
+  )
+  expect_identical(state$state, "not_applicable")
+  expect_invisible(runtime$wlv_semantic_state_resource_validate(
+    state,
+    value,
+    "io/k_composition",
+    axes,
+    "semantic_state/io/k_composition"
+  ))
+  expanded <- runtime$wlv_semantic_state_expand(state, value)
+  expect_true(all(expanded[, , "FD"] == "not_applicable"))
+  expect_true(all(expanded[, , c("AAA.S1", "BBB.S1")] == "finite"))
+
+  expect_error(
+    execute(make_spec("test.structural.unresolved", unresolved = TRUE)),
+    "Declared input states do not cover 1 missing output cells"
+  )
+})
+
+test_that("matrix state lifting combines codecs and preserves row fallback", {
+  runtime <- wlv_test_load_runtime()
+  axes <- c("year", "input", "output")
+  selectors <- list(
+    year = c("2000", "2001"),
+    input = c("AAA.S1", "BBB.S1"),
+    output = "FD"
+  )
+  codec <- function(key, state = "not_applicable") {
+    runtime$wlv_runtime_snapshot_new_state_codec(
+      encoding = "cartesian",
+      target_key = key,
+      axes = axes,
+      state_version = runtime$wlv_semantic_state_version(),
+      row_count = 4,
+      selectors = selectors,
+      state = state
+    )
+  }
+  labels <- c(
+    "k_composition", "k_depreciation", "values",
+    "transfers_values", "consumption_basket"
+  )
+  resources <- list(
+    codec("io/k_composition"),
+    codec("io/k_depreciation"),
+    runtime$wlv_semantic_empty_state("io/values", axes),
+    runtime$wlv_semantic_empty_state("io/transfers_values", axes),
+    codec("io/consumption_basket")
+  )
+  lifted <- runtime$wlv_native_lift_semantic_states(
+    resources,
+    labels,
+    "variable",
+    "artifact/m_io",
+    c("year", "variable", "input", "output"),
+    prefer_compact = TRUE
+  )
+  expect_s3_class(lifted, "wlv_runtime_semantic_state_codec")
+  expect_identical(lifted$row_count, 12)
+  expect_identical(
+    lifted$selectors$variable,
+    c("consumption_basket", "k_composition", "k_depreciation")
+  )
+
+  mixed <- resources
+  mixed[[2L]] <- codec("io/k_depreciation", "source_missing")
+  fallback <- runtime$wlv_native_lift_semantic_states(
+    mixed,
+    labels,
+    "variable",
+    "artifact/m_io",
+    c("year", "variable", "input", "output"),
+    prefer_compact = TRUE
+  )
+  expect_s3_class(fallback, "wlv_semantic_state")
+  expect_identical(nrow(fallback), 12L)
+  expect_setequal(
+    unique(fallback$state),
+    c("not_applicable", "source_missing")
+  )
+})

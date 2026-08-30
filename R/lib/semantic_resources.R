@@ -456,6 +456,102 @@ wlv_semantic_state_validate <- function(
   invisible(resource)
 }
 
+wlv_semantic_is_state_resource <- function(value) {
+  inherits(value, "wlv_semantic_state") ||
+    inherits(value, "wlv_runtime_semantic_state_codec")
+}
+
+wlv_semantic_state_resource_validate <- function(
+    resource,
+    value = NULL,
+    target_key = NULL,
+    axes = NULL,
+    state_key = NULL) {
+  if (inherits(resource, "wlv_runtime_semantic_state_codec")) {
+    if (!exists(
+          "wlv_runtime_snapshot_state_codec_validate",
+          mode = "function",
+          inherits = TRUE
+        )) {
+      wlv_semantic_abort("Runtime semantic-state codecs are unavailable.")
+    }
+    wlv_runtime_snapshot_state_codec_validate(
+      resource,
+      target_key = target_key,
+      axes = axes,
+      state_key = state_key,
+      target_value = value
+    )
+    return(invisible(resource))
+  }
+  wlv_semantic_state_validate(
+    resource,
+    value = value,
+    target_key = target_key,
+    axes = axes,
+    state_key = state_key
+  )
+}
+
+wlv_semantic_state_resource_target_key <- function(resource) {
+  if (inherits(resource, "wlv_runtime_semantic_state_codec")) {
+    wlv_semantic_state_resource_validate(resource)
+    return(resource$target_key)
+  }
+  wlv_semantic_state_validate(resource)
+  attr(resource, "target_key", exact = TRUE)
+}
+
+wlv_semantic_state_resource_axes <- function(resource) {
+  if (inherits(resource, "wlv_runtime_semantic_state_codec")) {
+    wlv_semantic_state_resource_validate(resource)
+    return(resource$axes)
+  }
+  wlv_semantic_state_validate(resource)
+  attr(resource, "axes", exact = TRUE)
+}
+
+wlv_semantic_state_resource_row_count <- function(resource) {
+  if (inherits(resource, "wlv_runtime_semantic_state_codec")) {
+    wlv_semantic_state_resource_validate(resource)
+    return(resource$row_count)
+  }
+  wlv_semantic_state_validate(resource)
+  as.double(nrow(resource))
+}
+
+wlv_semantic_state_codec_expand <- function(resource, value) {
+  wlv_semantic_state_resource_validate(resource, value = value)
+  axes <- resource$axes
+  if (identical(resource$encoding, "rows")) {
+    return(wlv_semantic_state_expand(resource$rows, value))
+  }
+  result <- wlv_semantic_state_array(value, axes)
+  dimensions <- dim(value)
+  labels <- dimnames(value)
+  strides <- c(1, cumprod(as.double(dimensions)))[seq_along(dimensions)]
+  selector_positions <- lapply(seq_along(axes), function(index) {
+    match(resource$selectors[[index]], labels[[index]])
+  })
+  chunk_values <- 2^20
+  total <- length(value)
+  for (start in seq.int(1, total, by = chunk_values)) {
+    end <- min(total, start + chunk_values - 1)
+    offsets <- seq.int(as.double(start) - 1, as.double(end) - 1)
+    covered <- rep(TRUE, length(offsets))
+    for (index in seq_along(axes)) {
+      coordinate <- (offsets %/% strides[[index]]) %% dimensions[[index]] + 1
+      covered <- covered & coordinate %in% selector_positions[[index]]
+    }
+    if (any(covered)) {
+      current <- result[start:end]
+      current[covered] <- resource$state
+      result[start:end] <- current
+    }
+  }
+  result
+}
+
 wlv_semantic_state_encode <- function(value, states, target_key, axes) {
   target_key <- wlv_semantic_assert_stateful_key(target_key)
   axes <- wlv_semantic_unique_names(axes, "axes", allow_empty = FALSE)
@@ -494,6 +590,9 @@ wlv_semantic_state_encode <- function(value, states, target_key, axes) {
 }
 
 wlv_semantic_state_expand <- function(resource, value) {
+  if (inherits(resource, "wlv_runtime_semantic_state_codec")) {
+    return(wlv_semantic_state_codec_expand(resource, value))
+  }
   wlv_semantic_state_validate(resource, value = value)
   axes <- attr(resource, "axes", exact = TRUE)
   result <- wlv_semantic_state_array(value, axes)
@@ -664,6 +763,152 @@ wlv_semantic_source_state_array <- function(
   states
 }
 
+wlv_semantic_new_cartesian_state_codec <- function(
+    target_key,
+    axes,
+    selected,
+    state,
+    row_count) {
+  if (!exists(
+        "wlv_runtime_snapshot_new_state_codec",
+        mode = "function",
+        inherits = TRUE
+      ) || !exists(
+        "wlv_runtime_snapshot_state_codec_validate",
+        mode = "function",
+        inherits = TRUE
+      )) {
+    return(NULL)
+  }
+  target_key <- wlv_semantic_assert_stateful_key(target_key)
+  axes <- wlv_semantic_unique_names(axes, "axes", allow_empty = FALSE)
+  if (!is.list(selected) || !identical(names(selected), axes) ||
+      any(!vapply(selected, is.character, logical(1L))) ||
+      !is.character(state) || length(state) != 1L || is.na(state) ||
+      !state %in% wlv_semantic_sparse_states() ||
+      !is.numeric(row_count) || length(row_count) != 1L ||
+      is.na(row_count) || !is.finite(row_count) || row_count < 1) {
+    return(NULL)
+  }
+  selectors <- lapply(selected, function(labels) {
+    sort(unique(enc2utf8(labels)), method = "radix")
+  })
+  names(selectors) <- axes
+  expected <- prod(vapply(selectors, length, double(1L)))
+  if (!is.finite(expected) || !identical(as.double(row_count), expected)) {
+    return(NULL)
+  }
+  result <- wlv_runtime_snapshot_new_state_codec(
+    encoding = "cartesian",
+    target_key = target_key,
+    axes = axes,
+    state_version = wlv_semantic_state_version(),
+    row_count = as.double(row_count),
+    selectors = selectors,
+    state = state
+  )
+  wlv_runtime_snapshot_state_codec_validate(
+    result,
+    target_key = target_key,
+    axes = axes,
+    state_key = wlv_semantic_state_key(target_key)
+  )
+  result
+}
+
+wlv_semantic_source_io_state_resource <- function(
+    value,
+    target_key,
+    axes,
+    source_rule = NULL,
+    chunk_values = 2^20) {
+  if (!identical(target_key, "source/io") ||
+      !all(c("input", "output") %in% axes) ||
+      !is.numeric(chunk_values) || length(chunk_values) != 1L ||
+      is.na(chunk_values) || !is.finite(chunk_values) || chunk_values < 1L) {
+    return(NULL)
+  }
+  rule <- if (is.null(source_rule)) {
+    wlv_semantic_source_rule(target_key)
+  } else if (is.character(source_rule) && length(source_rule) == 1L &&
+      !is.na(source_rule) && source_rule %in% wlv_semantic_sparse_states()) {
+    list(default = source_rule, structural = NULL)
+  } else {
+    source_rule
+  }
+  if (!is.list(rule) || !identical(names(rule), c("default", "structural")) ||
+      !is.character(rule$default) || length(rule$default) != 1L ||
+      is.na(rule$default) || !rule$default %in% wlv_semantic_sparse_states() ||
+      !is.character(rule$structural) || length(rule$structural) != 1L ||
+      is.na(rule$structural) ||
+      !rule$structural %in% wlv_semantic_sparse_states()) {
+    return(NULL)
+  }
+  dimensions <- dim(value)
+  labels <- dimnames(value)
+  input_axis <- match("input", axes)
+  output_axis <- match("output", axes)
+  strides <- c(1, cumprod(as.double(dimensions)))[seq_along(dimensions)]
+  selected_indices <- stats::setNames(
+    lapply(dimensions, function(size) rep(FALSE, size)),
+    axes
+  )
+  observed_state <- NULL
+  row_count <- 0
+  chunk_values <- as.integer(chunk_values)
+  if (length(value)) {
+    for (start in seq.int(1, length(value), by = chunk_values)) {
+      end <- min(length(value), start + chunk_values - 1)
+      current <- value[start:end]
+      ordinary <- which(is.na(current) & !is.nan(current))
+      if (!length(ordinary)) {
+        next
+      }
+      offsets <- as.double(start) + ordinary - 2
+      output_coordinates <- as.integer(
+        (offsets %/% strides[[output_axis]]) %% dimensions[[output_axis]] + 1
+      )
+      structural <- !labels[[output_axis]][output_coordinates] %in%
+        labels[[input_axis]]
+      current_states <- ifelse(
+        structural,
+        rule$structural,
+        rule$default
+      )
+      unique_states <- unique(current_states)
+      if (length(unique_states) != 1L ||
+          (!is.null(observed_state) && !identical(
+            observed_state,
+            unique_states[[1L]]
+          ))) {
+        return(NULL)
+      }
+      observed_state <- unique_states[[1L]]
+      for (index in seq_along(axes)) {
+        coordinates <- as.integer(
+          (offsets %/% strides[[index]]) %% dimensions[[index]] + 1
+        )
+        selected_indices[[index]][unique(coordinates)] <- TRUE
+      }
+      row_count <- row_count + length(ordinary)
+    }
+  }
+  if (!row_count) {
+    return(wlv_semantic_empty_state(target_key, axes))
+  }
+  selected <- lapply(seq_along(axes), function(index) {
+    labels[[index]][selected_indices[[index]]]
+  })
+  names(selected) <- axes
+  wlv_semantic_new_cartesian_state_codec(
+    target_key,
+    axes,
+    selected,
+    observed_state,
+    row_count
+  )
+}
+
 wlv_semantic_align_runtime_state <- function(states, value, axes) {
   if (!is.character(states) || is.null(dim(states))) {
     return(states)
@@ -724,8 +969,16 @@ wlv_semantic_capture_value_state <- function(
       runtime_state_key
     )
   }
-  if (inherits(candidate, "wlv_semantic_state")) {
-    wlv_semantic_state_validate(
+  if (is.null(candidate) && identical(target_key, "source/io")) {
+    candidate <- wlv_semantic_source_io_state_resource(
+      value,
+      target_key,
+      axes,
+      source_rule
+    )
+  }
+  if (wlv_semantic_is_state_resource(candidate)) {
+    wlv_semantic_state_resource_validate(
       candidate,
       value = value,
       target_key = target_key,
@@ -816,10 +1069,10 @@ wlv_semantic_hydrate_states <- function(resources, values) {
   ) {
     wlv_semantic_abort("Hydration requires uniquely named resource and value lists.")
   }
-  lapply(resources, wlv_semantic_state_validate)
+  lapply(resources, wlv_semantic_state_resource_validate)
   target_keys <- unname(vapply(
     resources,
-    function(resource) attr(resource, "target_key", exact = TRUE),
+    wlv_semantic_state_resource_target_key,
     character(1L)
   ))
   expected_resource_names <- unname(vapply(
@@ -929,10 +1182,19 @@ wlv_semantic_state_merge <- function(
     values <- values[partitions]
   }
   for (partition in partitions) {
-    wlv_semantic_state_validate(
+    wlv_semantic_state_resource_validate(
       resources[[partition]],
       value = if (is.null(values)) NULL else values[[partition]]
     )
+    if (inherits(
+          resources[[partition]],
+          "wlv_runtime_semantic_state_codec"
+        )) {
+      resources[[partition]] <- wlv_runtime_snapshot_state_unpack(
+        resources[[partition]],
+        target_value = if (is.null(values)) NULL else values[[partition]]
+      )
+    }
   }
   target_key <- attr(resources[[1L]], "target_key", exact = TRUE)
   axes <- attr(resources[[1L]], "axes", exact = TRUE)
@@ -1080,7 +1342,8 @@ wlv_semantic_module_runtime <- function(
         sprintf("State input `%s` and its target must be jointly available.", state_alias)
       )
     }
-    if (is.list(state_value) && !inherits(state_value, "wlv_semantic_state")) {
+    if (is.list(state_value) &&
+        !wlv_semantic_is_state_resource(state_value)) {
       if (
         !is.list(target_value) || is.null(names(state_value)) ||
           is.null(names(target_value)) ||
@@ -1092,7 +1355,7 @@ wlv_semantic_module_runtime <- function(
       }
       if (identical(semantic_input_mode, "explicit")) {
         invisible(Map(function(state, value) {
-          wlv_semantic_state_validate(
+          wlv_semantic_state_resource_validate(
             state,
             value = value,
             target_key = target_key,
@@ -1109,7 +1372,7 @@ wlv_semantic_module_runtime <- function(
       }
     } else {
       if (identical(semantic_input_mode, "explicit")) {
-        wlv_semantic_state_validate(
+        wlv_semantic_state_resource_validate(
           state_value,
           value = target_value,
           target_key = target_key,
@@ -1229,6 +1492,198 @@ wlv_semantic_materialize_output <- function(module, alias, value, store) {
   wlv_runtime_apply_patch(base, value, ref$contract, label)
 }
 
+wlv_semantic_ordinary_na_count <- function(value, chunk_values = 2^20) {
+  if (!is.numeric(value) || !is.numeric(chunk_values) ||
+      length(chunk_values) != 1L || is.na(chunk_values) ||
+      !is.finite(chunk_values) || chunk_values < 1L) {
+    wlv_semantic_abort("Ordinary-NA counting received invalid inputs.")
+  }
+  total <- length(value)
+  if (!total) {
+    return(0)
+  }
+  count <- 0
+  chunk_values <- as.integer(chunk_values)
+  for (start in seq.int(1, total, by = chunk_values)) {
+    end <- min(total, start + chunk_values - 1L)
+    current <- value[start:end]
+    count <- count + sum(is.na(current) & !is.nan(current))
+  }
+  as.double(count)
+}
+
+wlv_semantic_retarget_cartesian_state <- function(
+    resource,
+    source_value,
+    target_value,
+    target_key,
+    axes) {
+  if (!exists(
+        "wlv_runtime_snapshot_state_cartesian_pack",
+        mode = "function",
+        inherits = TRUE
+      )) {
+    return(NULL)
+  }
+  codec <- if (inherits(resource, "wlv_runtime_semantic_state_codec")) {
+    tryCatch({
+      wlv_semantic_state_resource_validate(resource, value = source_value)
+      if (identical(resource$encoding, "cartesian")) resource else NULL
+    }, error = function(error) NULL)
+  } else {
+    tryCatch(
+      wlv_runtime_snapshot_state_cartesian_pack(
+        resource,
+        target_key = wlv_semantic_state_resource_target_key(resource),
+        axes = axes,
+        state_key = wlv_semantic_state_key(
+          wlv_semantic_state_resource_target_key(resource)
+        ),
+        target_value = source_value,
+        return_commitment = FALSE
+      ),
+      error = function(error) NULL
+    )
+  }
+  if (is.null(codec) || !identical(codec$axes, axes) ||
+      !identical(
+        wlv_semantic_ordinary_na_count(target_value),
+        codec$row_count
+      )) {
+    return(NULL)
+  }
+  retargeted <- wlv_runtime_snapshot_new_state_codec(
+    encoding = "cartesian",
+    target_key = target_key,
+    axes = axes,
+    state_version = codec$state_version,
+    row_count = codec$row_count,
+    selectors = codec$selectors,
+    state = codec$state
+  )
+  valid <- tryCatch({
+    wlv_semantic_state_resource_validate(
+      retargeted,
+      value = target_value,
+      target_key = target_key,
+      axes = axes,
+      state_key = wlv_semantic_state_key(target_key)
+    )
+    TRUE
+  }, error = function(error) FALSE)
+  if (isTRUE(valid)) retargeted else NULL
+}
+
+wlv_semantic_io_structural_state_codec <- function(
+    target_value,
+    target_key,
+    axes,
+    chunk_values = 2^20) {
+  if (!startsWith(target_key, "io/") ||
+      !all(c("input", "output") %in% axes) ||
+      !is.numeric(chunk_values) || length(chunk_values) != 1L ||
+      is.na(chunk_values) || !is.finite(chunk_values) || chunk_values < 1L) {
+    return(NULL)
+  }
+  dimensions <- dim(target_value)
+  labels <- dimnames(target_value)
+  if (is.null(dimensions) || length(dimensions) != length(axes) ||
+      is.null(labels) || !identical(names(labels), axes)) {
+    return(NULL)
+  }
+  input_axis <- match("input", axes)
+  output_axis <- match("output", axes)
+  strides <- c(1, cumprod(as.double(dimensions)))[seq_along(dimensions)]
+  selected_indices <- stats::setNames(
+    lapply(dimensions, function(size) rep(FALSE, size)),
+    axes
+  )
+  row_count <- 0
+  total <- length(target_value)
+  chunk_values <- as.integer(chunk_values)
+  if (total) {
+    for (start in seq.int(1, total, by = chunk_values)) {
+      end <- min(total, start + chunk_values - 1L)
+      current <- target_value[start:end]
+      ordinary <- which(is.na(current) & !is.nan(current))
+      if (!length(ordinary)) {
+        next
+      }
+      offsets <- as.double(start) + ordinary - 2
+      input_coordinates <- as.integer(
+        (offsets %/% strides[[input_axis]]) %% dimensions[[input_axis]] + 1
+      )
+      output_coordinates <- as.integer(
+        (offsets %/% strides[[output_axis]]) %% dimensions[[output_axis]] + 1
+      )
+      input_labels <- labels[[input_axis]][input_coordinates]
+      output_labels <- labels[[output_axis]][output_coordinates]
+      structural <- !output_labels %in% labels[[input_axis]]
+      if (target_key %in% c("io/k_composition", "io/k_depreciation")) {
+        structural <- structural |
+          sub("[.].*$", "", input_labels) !=
+            sub("[.].*$", "", output_labels)
+      }
+      if (any(!structural)) {
+        return(NULL)
+      }
+      for (index in seq_along(axes)) {
+        coordinates <- as.integer(
+          (offsets %/% strides[[index]]) %% dimensions[[index]] + 1
+        )
+        selected_indices[[index]][unique(coordinates)] <- TRUE
+      }
+      row_count <- row_count + length(ordinary)
+    }
+  }
+  if (!row_count) {
+    return(wlv_semantic_empty_state(target_key, axes))
+  }
+  selected <- lapply(seq_along(axes), function(index) {
+    labels[[index]][selected_indices[[index]]]
+  })
+  names(selected) <- axes
+  wlv_semantic_new_cartesian_state_codec(
+    target_key,
+    axes,
+    selected,
+    "not_applicable",
+    row_count
+  )
+}
+
+wlv_semantic_derive_conformable_input_state_compact <- function(
+    candidates,
+    target_value,
+    target_key,
+    axes) {
+  if (!length(candidates) || !startsWith(target_key, "io/")) {
+    return(NULL)
+  }
+  counts <- vapply(candidates, function(candidate) {
+    wlv_semantic_state_resource_row_count(candidate$state)
+  }, double(1L))
+  nonempty <- which(counts > 0)
+  if (!length(nonempty)) {
+    return(wlv_semantic_io_structural_state_codec(
+      target_value,
+      target_key,
+      axes
+    ))
+  }
+  if (length(nonempty) == 1L) {
+    candidate <- candidates[[nonempty[[1L]]]]
+    return(wlv_semantic_retarget_cartesian_state(
+      candidate$state,
+      candidate$value,
+      target_value,
+      target_key,
+      axes
+    ))
+  }
+  NULL
+}
+
 wlv_semantic_derive_conformable_input_state <- function(
     module,
     inputs,
@@ -1239,7 +1694,7 @@ wlv_semantic_derive_conformable_input_state <- function(
   keys <- vapply(refs, function(ref) ref$key, character(1L))
   roles <- vapply(refs, wlv_semantic_ref_role, character(1L))
   state_aliases <- names(refs)[roles == "semantic_state"]
-  candidates <- list()
+  candidate_resources <- list()
   for (state_alias in state_aliases) {
     state_ref <- refs[[state_alias]]
     input_target_key <- wlv_semantic_state_target_key(state_ref$key)
@@ -1252,7 +1707,7 @@ wlv_semantic_derive_conformable_input_state <- function(
     input_value <- inputs[[value_alias[[1L]]]]
     input_state <- inputs[[state_alias]]
     if (is.list(input_value) || is.list(input_state) &&
-        !inherits(input_state, "wlv_semantic_state")) {
+        !wlv_semantic_is_state_resource(input_state)) {
       next
     }
     if (
@@ -1261,15 +1716,27 @@ wlv_semantic_derive_conformable_input_state <- function(
     ) {
       next
     }
-    candidates[[state_alias]] <- wlv_semantic_state_expand(
-      input_state,
-      input_value
+    candidate_resources[[state_alias]] <- list(
+      state = input_state,
+      value = input_value
     )
   }
-  if (!length(candidates)) {
+  if (!length(candidate_resources)) {
     return(NULL)
   }
   axes <- names(dimnames(target_value))
+  compact <- wlv_semantic_derive_conformable_input_state_compact(
+    candidate_resources,
+    target_value,
+    target_key,
+    axes
+  )
+  if (!is.null(compact)) {
+    return(compact)
+  }
+  candidates <- lapply(candidate_resources, function(candidate) {
+    wlv_semantic_state_expand(candidate$state, candidate$value)
+  })
   derived <- wlv_semantic_state_array(target_value, axes)
   missing_positions <- which(is.na(target_value) & !is.nan(target_value))
   for (position in missing_positions) {

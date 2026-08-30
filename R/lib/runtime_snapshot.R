@@ -797,6 +797,19 @@ wlv_runtime_snapshot_state_capture <- function(
     target_key,
     axes,
     state_key) {
+  if (wlv_runtime_snapshot_is_state_codec(value)) {
+    wlv_runtime_snapshot_state_codec_validate(
+      value,
+      target_key = target_key,
+      axes = axes,
+      state_key = state_key,
+      target_value = target_value
+    )
+    return(list(
+      state = value,
+      state_sha256 = wlv_runtime_snapshot_state_sha256(value)
+    ))
+  }
   captured <- wlv_runtime_snapshot_state_cartesian_pack(
     value,
     target_key = target_key,
@@ -1624,7 +1637,11 @@ wlv_runtime_snapshot_capture_requests <- function(store, partitions) {
         key = key,
         partition = partition,
         include_value = identical(key, "intermediate/lambda"),
-        state_rows = as.double(NROW(state$value)),
+        state_rows = if (wlv_runtime_snapshot_is_state_codec(state$value)) {
+          state$value$row_count
+        } else {
+          as.double(NROW(state$value))
+        },
         stringsAsFactors = FALSE
       )
     }))
@@ -2097,7 +2114,6 @@ wlv_runtime_snapshot_capture <- function(
       partitions,
       compatibility
     )
-    invisible(gc(full = TRUE))
     return(wlv_runtime_snapshot_capture_finish(preparation, store))
   }
   inputs <- wlv_runtime_snapshot_capture_inputs(

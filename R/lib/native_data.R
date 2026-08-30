@@ -388,7 +388,7 @@ wlv_native_validate_seed_semantic_pairs <- function(seeds) {
         call. = FALSE
       )
     }
-    wlv_semantic_state_validate(
+    wlv_semantic_state_resource_validate(
       state_seed$value,
       value = value_seed$value,
       target_key = value_seed$key,

@@ -689,7 +689,25 @@ wlv_runtime_validate_resource_value <- function(value, contract, label) {
       "wlv_result_error"
     )
   }
-  if (!wlv_runtime_validate_value_type(value, contract$value_type)) {
+  semantic_codec <- identical(contract$role, "semantic_state") &&
+    inherits(value, "wlv_runtime_semantic_state_codec")
+  if (semantic_codec) {
+    tryCatch(
+      wlv_runtime_snapshot_state_codec_validate(value),
+      error = function(error) {
+        wlv_runtime_abort(
+          sprintf(
+            "Resource `%s` has an invalid semantic-state codec: %s",
+            label,
+            conditionMessage(error)
+          ),
+          "wlv_result_error"
+        )
+      }
+    )
+  }
+  if (!semantic_codec &&
+      !wlv_runtime_validate_value_type(value, contract$value_type)) {
     wlv_runtime_abort(
       sprintf(
         "Resource `%s` does not satisfy value type `%s`.",
