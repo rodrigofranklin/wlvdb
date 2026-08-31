@@ -549,19 +549,19 @@ $bootstrapSourceSha256 = @{
   'issue13-v5-attest-delivery.ps1' =
     '2E1A9D527AB98C3EFCF296DB56E59FCE34461C9A7A0A979044EC70E2B54B981D'
   'issue13-v5-baseline-smoke.ps1' =
-    '95F947622CE5E11960163DC48D819106C7292068C99D75272B1F5327C57A7DB0'
+    '8E354F28CA504663F42A92071C26D8DCB105D332F3FCE958A572E82BCF43AF53'
   'issue13-v5-capture-clean-bridge-evidence.ps1' =
     '23DC872D2697788268C0102BABA2B972B1D2AEB533419F9C3A5A1141BCCF317D'
   'issue13-v5-capture-clean-stage5-evidence.ps1' =
     'AD714DCA487749FD405D4A40D69A7AE1BD42973C480257F7E0B11CEE45CEE6B6'
   'issue13-v5-coordinator-lib.ps1' =
-    '85AEDDCD41D98879D6C3203536BF8D4ABA4D6D0A8CAAE873C5D348CACD9E78CA'
+    'D065B9C2BD05A2579C2FA068955A9B2B3CE8C104861CC47E10AA3528FA60C9D9'
   'issue13-v5-coordinator.ps1' =
     '57A284A2600AAC37B5879BA44EB6B4AB1953AB00590D4EA6720524195E0EBF28'
   'issue13-v5-materialize-harness.ps1' =
-    '1486452CE3BD726D2DE9C3AE534B677447D75398AE5CC7A806F9C900CDB66787'
+    '43A9B16E06D04BCD1F7A4328FE839D7238466D7B27A5AF33C6D1B6C869888257'
   'issue13-v5-new-config.ps1' =
-    '6BB1BDD2235DB2CBE8C7284E91CE1F4A5B3E40F4DE8D574DD1CA4C911B0029C7'
+    '7BBA044839C358C78B7931D036632C6F983786937D2C200A5C8FF22A3400BA7D'
   'issue13-v5-oracle-effect-generate.ps1' =
     '6C1E26154794A253974B7E51C5D15B054AE2D31E09736BF19B624F56EA3C30F9'
   'issue13-v5-oracle-effect-lib.ps1' =
@@ -2335,10 +2335,10 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = '085831E9BDB8C3100B84B1D27450520F0DCA253440E9644501B931C9273D75D7'
   }
   'issue13-v5-materialize-harness.ps1' = @{
-    command_count = 253
-    command_sha256 = '591C255AC8391AF3C3D407AA1EC5C3C55C4856BE212C92EDCEFD36EBD3CFA40F'
-    redirection_count = 4
-    redirection_sha256 = '5FE6646416132F2444D3AC9C63EBDF8DCEAE6E18DC5242C675574BC026FF9352'
+    command_count = 258
+    command_sha256 = '74477CDBF578952C1FE888CDE4E83646225F26EA27C881D319FCCE54C0062CF4'
+    redirection_count = 7
+    redirection_sha256 = '5EABEF36BDB46691AB94F636918DCE16DEF6206D129233DBA4EA445ED3B5FE94'
   }
   'issue13-v5-new-config.ps1' = @{
     command_count = 161
@@ -2379,18 +2379,18 @@ $issue13ExpectedAstSurfaces = @{
 }
 $issue13ExpectedControllerSourceSha256 = @{
   'issue13-v5-attest-delivery.ps1' = '2E1A9D527AB98C3EFCF296DB56E59FCE34461C9A7A0A979044EC70E2B54B981D'
-  'issue13-v5-baseline-smoke.ps1' = '95F947622CE5E11960163DC48D819106C7292068C99D75272B1F5327C57A7DB0'
+  'issue13-v5-baseline-smoke.ps1' = '8E354F28CA504663F42A92071C26D8DCB105D332F3FCE958A572E82BCF43AF53'
   'issue13-v5-capture-clean-bridge-evidence.ps1' = '23DC872D2697788268C0102BABA2B972B1D2AEB533419F9C3A5A1141BCCF317D'
   'issue13-v5-capture-clean-stage5-evidence.ps1' = 'AD714DCA487749FD405D4A40D69A7AE1BD42973C480257F7E0B11CEE45CEE6B6'
-  'issue13-v5-coordinator-lib.ps1' = '85AEDDCD41D98879D6C3203536BF8D4ABA4D6D0A8CAAE873C5D348CACD9E78CA'
+  'issue13-v5-coordinator-lib.ps1' = 'D065B9C2BD05A2579C2FA068955A9B2B3CE8C104861CC47E10AA3528FA60C9D9'
   'issue13-v5-coordinator.ps1' = '57A284A2600AAC37B5879BA44EB6B4AB1953AB00590D4EA6720524195E0EBF28'
-  'issue13-v5-materialize-harness.ps1' = '1486452CE3BD726D2DE9C3AE534B677447D75398AE5CC7A806F9C900CDB66787'
-  'issue13-v5-new-config.ps1' = '6BB1BDD2235DB2CBE8C7284E91CE1F4A5B3E40F4DE8D574DD1CA4C911B0029C7'
+  'issue13-v5-materialize-harness.ps1' = '43A9B16E06D04BCD1F7A4328FE839D7238466D7B27A5AF33C6D1B6C869888257'
+  'issue13-v5-new-config.ps1' = '7BBA044839C358C78B7931D036632C6F983786937D2C200A5C8FF22A3400BA7D'
   'issue13-v5-oracle-effect-generate.ps1' = '6C1E26154794A253974B7E51C5D15B054AE2D31E09736BF19B624F56EA3C30F9'
   'issue13-v5-oracle-effect-lib.ps1' = 'CEB731165AAA53635779A1467166F9955824821868D6DB9B47E07BD3C18DBD38'
   'issue13-v5-oracle-effect-validate.ps1' = '11912422CEB54A45A791E49E11688F974AB45A4CC0F2FB89145D90176AAB0140'
   'issue13-v5-render-report.ps1' = '756ACAB7E8BFC6CF7E0A7235B0634E24F4D805A4F30D060291260A62726B710A'
-    'issue13-v5-static-verify.ps1' = '8C4B6157F2501B383B0BB24DB8C1AF43376FEE5C4D5860F46685A55973469C1C'
+    'issue13-v5-static-verify.ps1' = 'DE518B7BF2C3A46BC52BD7635F3F62FC2FFBACFB5C925109CA19F5397DE105FB'
 }
 $issue13ExpectedDotSourceSignatures = @{
   'issue13-v5-attest-delivery.ps1' = @(
@@ -8287,7 +8287,7 @@ $commitETerminalSeal =
     [long]$oracleSpec.terminal_comparison_runtime.sealed_inventory.total_bytes -eq
       2616118L -and
     [string]$oracleSpec.terminal_comparison_runtime.sealed_inventory.inventory_sha256 -ceq
-      'c1b91a0073f044e8d721d60e25f941f8cb04ac86e3479fd95610b9c7cb194426'
+      'ae4e4d562d1d84e45774a6037739310b7857db691caf6fffc04b79582434b3e3'
 if (-not $commitETerminalSeal) {
   throw 'Commit E static verifier accepts only the exact terminal output seal.'
 }
@@ -8546,7 +8546,7 @@ if ([string]$oracleSpec.schema -cne 'wlv-issue13-v5-oracle-effect-spec/2' -or
     [long]$oracleTerminal.sealed_inventory.file_count -ne 47L -or
     [long]$oracleTerminal.sealed_inventory.total_bytes -ne 2616118L -or
     [string]$oracleTerminal.sealed_inventory.inventory_sha256 -cne
-      'c1b91a0073f044e8d721d60e25f941f8cb04ac86e3479fd95610b9c7cb194426' -or
+      'ae4e4d562d1d84e45774a6037739310b7857db691caf6fffc04b79582434b3e3' -or
     [string]::Join("`n", @(
       $oracleTerminal.required_controller_files)) -cne
       [string]::Join("`n", $expectedControllerFiles) -or
@@ -11919,7 +11919,7 @@ $inventory = $harnessBinding.inventory
 $expectedHarnessFileCount = 47L
 $expectedHarnessTotalBytes = 2616118L
 $expectedHarnessInventorySha256 =
-  'c1b91a0073f044e8d721d60e25f941f8cb04ac86e3479fd95610b9c7cb194426'
+  'ae4e4d562d1d84e45774a6037739310b7857db691caf6fffc04b79582434b3e3'
 if ($inventory.file_count -ne $expectedHarnessFileCount -or
     $inventory.total_bytes -ne $expectedHarnessTotalBytes -or
     $inventory.inventory_sha256 -cne $expectedHarnessInventorySha256 -or

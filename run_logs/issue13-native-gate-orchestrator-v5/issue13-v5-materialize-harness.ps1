@@ -488,7 +488,7 @@ $sourceToolingFiles = @(
 $expectedOutputFileCount = 47L
 $expectedOutputTotalBytes = 2616118L
 $expectedOutputInventory =
-  'c1b91a0073f044e8d721d60e25f941f8cb04ac86e3479fd95610b9c7cb194426'
+  'ae4e4d562d1d84e45774a6037739310b7857db691caf6fffc04b79582434b3e3'
 $controllerFiles = @(
   'README.md',
   'issue13-v5-aggregate-hardening.R',
@@ -1185,6 +1185,37 @@ $trackedStatus = @(Invoke-Issue13V5SealedGit `
 if ($LASTEXITCODE -ne 0 -or $head -cne $CandidateCommit -or
     $trackedStatus.Count -ne 0) {
   throw 'V5 materialization requires the pinned candidate HEAD and tracked-clean tree.'
+}
+$metadataPath = Join-Path $PSScriptRoot 'issue13-v5-metadata-equivalence.json'
+$metadata = [IO.File]::ReadAllText($metadataPath, $utf8) |
+  ConvertFrom-Json -DateKind String
+$metadataDerivationCommit =
+  [string]$metadata.candidate_commit_at_derivation
+$metadataRuntimeGeneration =
+  [string]$metadata.candidate_runtime_generation_sha256
+if ([string]$metadata.schema -cne 'wlv-issue13-metadata-equivalence/1' -or
+    [string]$metadata.baseline_commit -cne $baselineCommit -or
+    -not [regex]::IsMatch($metadataDerivationCommit, '^[0-9a-f]{40}$') -or
+    -not [regex]::IsMatch($metadataRuntimeGeneration, '^[0-9a-f]{64}$')) {
+  throw 'V5 metadata equivalence has an invalid derivation binding.'
+}
+$resolvedMetadataCommit = (Invoke-Issue13V5SealedGit `
+  -C $repository rev-parse ($metadataDerivationCommit + '^{commit}') `
+  2>$null).Trim()
+if ($LASTEXITCODE -ne 0 -or
+    $resolvedMetadataCommit -cne $metadataDerivationCommit) {
+  throw 'V5 metadata derivation commit is not available as a Git commit.'
+}
+$null = Invoke-Issue13V5SealedGit -C $repository merge-base `
+  '--is-ancestor' $metadataDerivationCommit $CandidateCommit 2>$null
+if ($LASTEXITCODE -ne 0) {
+  throw 'V5 metadata derivation is not an ancestor of the candidate.'
+}
+$metadataInputChanges = @(Invoke-Issue13V5SealedGit -C $repository diff `
+  '--name-only' $metadataDerivationCommit $CandidateCommit '--' `
+  'R' 'catalog' 'config' 'contracts/units' 'methods' 'parameters' 2>$null)
+if ($LASTEXITCODE -ne 0 -or $metadataInputChanges.Count -ne 0) {
+  throw 'V5 metadata derivation is stale for the candidate runtime inputs.'
 }
 $controllerPins = @(Get-Issue13V5ControllerPins $repository $CandidateCommit)
 if ($controllerPins.Count -ne $controllerFiles.Count) {
