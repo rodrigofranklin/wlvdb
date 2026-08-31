@@ -7,6 +7,20 @@ test_that("public native calculation and recalculation publish immutable runs", 
   on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
   runtime <- fixture$runtime
   parent_seed_roots <- character()
+  contract_report_reads <- character()
+  original_read_contract_report <- runtime$wlv_read_contract_report
+  assign(
+    "wlv_read_contract_report",
+    function(path) {
+      contract_report_reads <<- c(contract_report_reads, normalizePath(
+        path,
+        winslash = "/",
+        mustWork = TRUE
+      ))
+      original_read_contract_report(path)
+    },
+    envir = runtime
+  )
   original_build_store <- runtime$wlv_native_build_store
   assign(
     "wlv_native_build_store",
@@ -70,6 +84,71 @@ test_that("public native calculation and recalculation publish immutable runs", 
   ) %in% trace_ids(calculate)))
   calculation_diagnostic_hashes <-
     wlv_native_public_e2e_diagnostic_hashes(fixture)
+  parent_run_dir <- wlv_native_public_e2e_current_run(fixture)$path
+  full_verification_roots <- character()
+  original_verify_run_manifest <- runtime$wlv_verify_run_manifest
+  assign(
+    "wlv_verify_run_manifest",
+    function(manifest, run_root, ...) {
+      full_verification_roots <<- c(
+        full_verification_roots,
+        normalizePath(run_root, winslash = "/", mustWork = TRUE)
+      )
+      original_verify_run_manifest(manifest, run_root, ...)
+    },
+    envir = runtime
+  )
+  scientific_receipts <- list()
+  parent_scientific_report_reads <- integer()
+  active_receipt_rejected <- FALSE
+  original_assert_scientific_receipt <-
+    runtime$wlv_native_assert_parent_scientific_receipt
+  assign(
+    "wlv_native_assert_parent_scientific_receipt",
+    function(receipt, ...) {
+      scientific_receipts[[length(scientific_receipts) + 1L]] <<- receipt
+      if (!active_receipt_rejected) {
+        forged <- new.env(parent = emptyenv())
+        for (name in ls(receipt, all.names = TRUE)) {
+          local({
+            binding_name <- name
+            binding_value <- receipt[[binding_name]]
+            makeActiveBinding(
+              binding_name,
+              function(value) {
+                if (!missing(value)) stop("read only", call. = FALSE)
+                binding_value
+              },
+              forged
+            )
+          })
+        }
+        lockEnvironment(forged, bindings = TRUE)
+        expect_error(
+          original_assert_scientific_receipt(forged, ...),
+          "invalid schema"
+        )
+        active_receipt_rejected <<- TRUE
+      }
+      original_assert_scientific_receipt(receipt, ...)
+    },
+    envir = runtime
+  )
+  original_validate_parent_scientific <-
+    runtime$wlv_native_validate_parent_scientific_profile
+  assign(
+    "wlv_native_validate_parent_scientific_profile",
+    function(...) {
+      before <- length(contract_report_reads)
+      value <- original_validate_parent_scientific(...)
+      parent_scientific_report_reads <<- c(
+        parent_scientific_report_reads,
+        length(contract_report_reads) - before
+      )
+      value
+    },
+    envir = runtime
+  )
 
   stage1 <- run_public(function() runtime$recalc_wlv(
     methods = fixture$method,
@@ -84,6 +163,27 @@ test_that("public native calculation and recalculation publish immutable runs", 
     "indicator.value.m.mv"
   ) %in% trace_ids(stage1)))
   expect_false("matrix.synthetic" %in% trace_ids(stage1))
+  parent_contract_report_reads <- contract_report_reads[
+    grepl("/results/.staging/.staging-native_test-", contract_report_reads,
+      fixed = TRUE
+    )
+  ]
+  expect_true(length(parent_contract_report_reads) >= 1L)
+  expect_true(all(basename(parent_contract_report_reads) == "_anomalies.csv"))
+  expect_identical(parent_scientific_report_reads, 1L)
+  expect_false(parent_run_dir %in% full_verification_roots)
+  expect_true(any(grepl(
+    "/results/.staging/.staging-native_test-",
+    full_verification_roots,
+    fixed = TRUE
+  )))
+  expect_length(scientific_receipts, 1L)
+  expect_true(active_receipt_rejected)
+  expect_true(environmentIsLocked(scientific_receipts[[1L]]))
+  expect_error(
+    assign("schema", "forged", envir = scientific_receipts[[1L]]),
+    "locked binding"
+  )
   expect_length(parent_seed_roots, 1L)
   expect_match(
     basename(parent_seed_roots[[1L]]),
@@ -294,6 +394,62 @@ test_that("public native calculation and recalculation publish immutable runs", 
   paths <- runtime$wlv_publication_paths(fixture$root)
   expect_false(dir.exists(file.path(paths$results, ".lock-results")))
   expect_length(list.files(paths$staging, all.files = TRUE, no.. = TRUE), 0L)
+})
+
+test_that("parent scientific receipt closes the authenticated read window", {
+  skip_if_not_installed("fst")
+  skip_if_not_installed("jsonlite")
+  skip_if_not_installed("openssl")
+
+  fixture <- wlv_make_native_public_e2e_fixture()
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  suppressMessages(runtime$get_wlv(
+    methods = fixture$method,
+    workers = 1L,
+    channel = fixture$channel,
+    allow_experimental = TRUE
+  ))
+  markers_before <- runtime$wlv_list_channel_markers(
+    fixture$root,
+    fixture$channel
+  )
+  original_read_contract_report <- runtime$wlv_read_contract_report
+  injected <- FALSE
+  assign(
+    "wlv_read_contract_report",
+    function(path) {
+      records <- original_read_contract_report(path)
+      normalized <- normalizePath(path, winslash = "/", mustWork = TRUE)
+      if (!injected && identical(basename(normalized), "_anomalies.csv") &&
+          grepl("/results/.staging/.staging-native_test-", normalized,
+            fixed = TRUE
+          )) {
+        connection <- file(path, open = "ab")
+        on.exit(close(connection), add = TRUE)
+        writeBin(charToRaw("\n# authenticated-read-window mutation\n"), connection)
+        injected <<- TRUE
+      }
+      records
+    },
+    envir = runtime
+  )
+
+  expect_error(
+    runtime$recalc_wlv(
+      methods = fixture$method,
+      at_stage = 1L,
+      workers = 1L,
+      channel = fixture$channel,
+      allow_experimental = TRUE
+    ),
+    "mismatch for parent scientific artifact"
+  )
+  expect_true(injected)
+  expect_identical(
+    runtime$wlv_list_channel_markers(fixture$root, fixture$channel),
+    markers_before
+  )
 })
 
 test_that("method sector drift rejects a parent before any resource import", {

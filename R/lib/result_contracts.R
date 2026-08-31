@@ -3910,22 +3910,11 @@ wlv_write_contract_report <- function(runtime, path) {
   invisible(path)
 }
 
-wlv_read_contract_report <- function(path) {
-  if (!file.exists(path)) {
-    stop(sprintf("Contract report does not exist: %s.", path), call. = FALSE)
+wlv_validate_contract_report_records <- function(records) {
+  if (!is.data.frame(records) ||
+      !all(vapply(records, is.character, logical(1L)))) {
+    stop("Contract report records must be a character data frame.", call. = FALSE)
   }
-  encoded <- readLines(path, warn = FALSE, encoding = "UTF-8")
-  if (any(grepl("\ufffd", encoded, fixed = TRUE))) {
-    stop("Contract report contains invalid UTF-8 text.", call. = FALSE)
-  }
-  records <- utils::read.csv2(
-    path,
-    colClasses = "character",
-    stringsAsFactors = FALSE,
-    check.names = FALSE,
-    na.strings = "",
-    fileEncoding = "UTF-8"
-  )
   if (!identical(names(records), wlv_contract_anomaly_columns())) {
     stop("Contract report has an invalid schema.", call. = FALSE)
   }
@@ -3934,13 +3923,42 @@ wlv_read_contract_report <- function(path) {
   records
 }
 
+wlv_read_contract_report <- function(path) {
+  if (!file.exists(path)) {
+    stop(sprintf("Contract report does not exist: %s.", path), call. = FALSE)
+  }
+  encoded <- readLines(path, warn = FALSE, encoding = "UTF-8")
+  if (any(grepl("\ufffd", encoded, fixed = TRUE))) {
+    stop("Contract report contains invalid UTF-8 text.", call. = FALSE)
+  }
+  rm(encoded)
+  invisible(gc(full = FALSE))
+  records <- utils::read.csv2(
+    path,
+    colClasses = "character",
+    stringsAsFactors = FALSE,
+    check.names = FALSE,
+    na.strings = "",
+    fileEncoding = "UTF-8"
+  )
+  wlv_validate_contract_report_records(records)
+}
+
+wlv_load_contract_records <- function(runtime, records) {
+  records <- wlv_validate_contract_report_records(records)
+  if (!nrow(runtime$anomalies)) {
+    runtime$anomalies <- records
+  } else {
+    runtime$anomalies <- wlv_bind_contract_tables(runtime$anomalies, records)
+  }
+  invisible(TRUE)
+}
+
 wlv_load_contract_report <- function(runtime, path) {
   if (!file.exists(path)) {
     return(invisible(FALSE))
   }
-  previous <- wlv_read_contract_report(path)
-  runtime$anomalies <- wlv_bind_contract_tables(runtime$anomalies, previous)
-  invisible(TRUE)
+  wlv_load_contract_records(runtime, wlv_read_contract_report(path))
 }
 
 wlv_contract_state_columns <- function() {

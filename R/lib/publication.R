@@ -192,7 +192,15 @@ wlv_list_channel_markers <- function(root, channel = "stable") {
   sort(markers, method = "radix")
 }
 
-wlv_read_current_release <- function(root, channel = "stable", required = FALSE) {
+wlv_read_current_release_internal <- function(
+    root,
+    channel,
+    required,
+    verify_release) {
+  if (!is.logical(verify_release) || length(verify_release) != 1L ||
+      is.na(verify_release)) {
+    stop("`verify_release` must be one non-missing logical value.", call. = FALSE)
+  }
   paths <- wlv_publication_paths(root)
   markers <- wlv_list_channel_markers(root, channel)
   if (!length(markers)) {
@@ -228,7 +236,8 @@ wlv_read_current_release <- function(root, channel = "stable", required = FALSE)
   verified <- wlv_verify_channel_marker(
     marker,
     publication_root = paths$results,
-    marker_path = marker_path
+    marker_path = marker_path,
+    verify_release = verify_release
   )
   release_path <- verified$release_path
   release <- verified$release
@@ -242,6 +251,31 @@ wlv_read_current_release <- function(root, channel = "stable", required = FALSE)
   )
 }
 
+wlv_read_current_release <- function(root, channel = "stable", required = FALSE) {
+  wlv_read_current_release_internal(
+    root,
+    channel,
+    required,
+    verify_release = TRUE
+  )
+}
+
+wlv_read_current_release_reference <- function(
+    root,
+    channel = "stable",
+    required = FALSE) {
+  # This path authenticates the channel marker and release manifest, but
+  # intentionally leaves run artifacts to the narrower consumer-specific
+  # verification that follows. Public release reads continue to verify every
+  # referenced run through `wlv_read_current_release()` above.
+  wlv_read_current_release_internal(
+    root,
+    channel,
+    required,
+    verify_release = FALSE
+  )
+}
+
 wlv_release_run_record <- function(release, method) {
   records <- release$manifest$runs
   matches <- which(vapply(records, function(record) {
@@ -251,12 +285,8 @@ wlv_release_run_record <- function(release, method) {
   records[[matches]]
 }
 
-wlv_resolve_current_method_run <- function(
-    root,
-    method,
-    channel = "stable") {
+wlv_resolve_method_run_reference <- function(root, method, release) {
   wlv_publication_safe_id(method, "method name")
-  release <- wlv_read_current_release(root, channel = channel, required = FALSE)
   paths <- wlv_publication_paths(root)
   if (!is.null(release)) {
     record <- wlv_release_run_record(release, method)
@@ -268,13 +298,12 @@ wlv_resolve_current_method_run <- function(
       )
     }
     manifest_path <- file.path(paths$results, record$manifest_path)
-    manifest <- wlv_read_run_manifest(manifest_path)
+    manifest <- wlv_read_run_manifest(
+      manifest_path,
+      expected_sha256 = record$manifest_sha256
+    )
     run_root <- dirname(manifest_path)
-    if (!identical(
-      wlv_publication_file_sha256(manifest_path),
-      record$manifest_sha256
-    ) ||
-        !identical(manifest$method, record$method) ||
+    if (!identical(manifest$method, record$method) ||
         !identical(manifest$run_id, record$run_id) ||
         !identical(manifest$result_id, record$result_id)) {
       stop("Current run manifest changed after release verification.", call. = FALSE)
@@ -290,6 +319,32 @@ wlv_resolve_current_method_run <- function(
   }
 
   stop(sprintf("No published results exist for method `%s`.", method), call. = FALSE)
+}
+
+wlv_resolve_current_method_run <- function(
+    root,
+    method,
+    channel = "stable") {
+  wlv_resolve_method_run_reference(
+    root,
+    method,
+    wlv_read_current_release(root, channel = channel, required = FALSE)
+  )
+}
+
+wlv_resolve_current_method_run_reference <- function(
+    root,
+    method,
+    channel = "stable") {
+  wlv_resolve_method_run_reference(
+    root,
+    method,
+    wlv_read_current_release_reference(
+      root,
+      channel = channel,
+      required = FALSE
+    )
+  )
 }
 
 wlv_current_result_dir <- function(
@@ -1009,7 +1064,10 @@ wlv_promote_method_run <- function(
   }
   manifest_path <- file.path(staging, wlv_run_manifest_filename())
   wlv_write_run_manifest(manifest, manifest_path)
-  wlv_verify_run_manifest(manifest, staging, reject_unlisted = TRUE)
+  # `validated_artifacts` is the post-semantic hash snapshot used verbatim by
+  # the manifest. The mandatory full verification after the directory rename
+  # below closes the remaining staging-to-run window before this function
+  # returns an immutable run.
   wlv_assert_plan_publication_inputs_unchanged(plan, method)
   wlv_assert_method_source_inputs_unchanged(plan, method_record, run_data)
 
@@ -1065,13 +1123,39 @@ wlv_promote_method_run <- function(
   run_environment
 }
 
-wlv_read_panel_result_csv <- function(path, columns) {
-  value <- utils::read.csv2(
+wlv_read_panel_result_csv <- function(
     path,
+    columns,
+    expected_sha256 = NULL) {
+  size <- unname(file.info(path)$size)
+  if (is.na(size) || size <= 0 || size > .Machine$integer.max) {
+    stop(sprintf("Panel metadata `%s` has an invalid file size.", path), call. = FALSE)
+  }
+  bytes <- readBin(path, what = "raw", n = as.integer(size))
+  size_after <- unname(file.info(path)$size)
+  if (!identical(length(bytes), as.integer(size)) ||
+      !identical(size, size_after)) {
+    stop(sprintf("Panel metadata `%s` changed while being captured.", path),
+      call. = FALSE
+    )
+  }
+  if (!is.null(expected_sha256) &&
+      !identical(wlv_publication_sha256_raw(bytes), expected_sha256)) {
+    stop(sprintf("Panel metadata `%s` SHA-256 mismatch.", path), call. = FALSE)
+  }
+  decoded <- tryCatch(rawToChar(bytes), error = function(error) NA_character_)
+  if (length(decoded) != 1L || is.na(decoded) ||
+      is.na(iconv(decoded, from = "UTF-8", to = "UTF-8", sub = NA))) {
+    stop(sprintf("Panel metadata `%s` is not valid UTF-8.", path), call. = FALSE)
+  }
+  Encoding(decoded) <- "UTF-8"
+  connection <- textConnection(decoded, open = "r", encoding = "UTF-8")
+  on.exit(close(connection), add = TRUE)
+  value <- utils::read.csv2(
+    connection,
     stringsAsFactors = FALSE,
     check.names = FALSE,
-    na.strings = "NA",
-    fileEncoding = "UTF-8"
+    na.strings = "NA"
   )
   if (!identical(names(value), columns)) {
     stop(sprintf("Panel metadata `%s` has an incompatible schema.", path), call. = FALSE)
@@ -1079,8 +1163,26 @@ wlv_read_panel_result_csv <- function(path, columns) {
   value
 }
 
-wlv_merge_panel_result_tables <- function(paths, key, columns) {
-  tables <- lapply(paths, wlv_read_panel_result_csv, columns = columns)
+wlv_merge_panel_result_tables <- function(
+    paths,
+    key,
+    columns,
+    expected_sha256 = NULL) {
+  if (is.null(expected_sha256)) {
+    expected_sha256 <- rep(list(NULL), length(paths))
+  } else {
+    expected_sha256 <- as.list(expected_sha256)
+  }
+  if (length(expected_sha256) != length(paths)) {
+    stop("Panel metadata paths and hashes must have equal lengths.", call. = FALSE)
+  }
+  tables <- lapply(seq_along(paths), function(index) {
+    wlv_read_panel_result_csv(
+      paths[[index]],
+      columns = columns,
+      expected_sha256 = expected_sha256[[index]]
+    )
+  })
   combined <- do.call(rbind, tables)
   keys <- sort(unique(as.character(combined[[key]])), method = "radix")
   rows <- lapply(keys, function(value) {
@@ -1108,7 +1210,15 @@ wlv_commit_release <- function(plan, run_environments) {
   wlv_assert_plan_publication_inputs_unchanged(plan)
   wlv_assert_run_environments_source_inputs_unchanged(plan, run_environments)
   paths <- wlv_publication_ensure_store(plan$root)
-  current <- wlv_read_current_release(plan$root, plan$channel, required = FALSE)
+  # Only the marker and release manifest are needed to compose the next
+  # release. Runs retained from the current release are authenticated below,
+  # after replacement has been resolved, instead of hashing runs that will be
+  # discarded.
+  current <- wlv_read_current_release_reference(
+    plan$root,
+    plan$channel,
+    required = FALSE
+  )
   prior_runs <- if (is.null(current)) list() else current$manifest$runs
   replaced <- vapply(prior_runs, function(record) {
     record$method %in% plan$method_names
@@ -1119,7 +1229,8 @@ wlv_commit_release <- function(plan, run_environments) {
     wlv_build_release_run_reference(
       publication_root = paths$results,
       method = environment$wlv_run_manifest$method,
-      manifest_path = wlv_publication_relative_path(manifest_path, paths$results)
+      manifest_path = wlv_publication_relative_path(manifest_path, paths$results),
+      verified_run = environment$wlv_run_manifest
     )
   })
   runs <- c(prior_runs, new_runs)
@@ -1145,6 +1256,39 @@ wlv_commit_release <- function(plan, run_environments) {
   run_roots <- vapply(runs, function(record) {
     dirname(file.path(paths$results, record$manifest_path))
   }, character(1L))
+  panel_artifacts <- c("_panel_indicators.csv", "_panel_meta_indicators.csv")
+  panel_hashes <- vector("list", length(runs))
+  for (index in seq_along(runs)) {
+    reference <- runs[[index]]
+    manifest_path <- wlv_publication_resolve_files(
+      paths$results,
+      reference$manifest_path,
+      "release run manifest"
+    )[[1L]]
+    run_manifest <- wlv_read_run_manifest(
+      manifest_path,
+      expected_sha256 = reference$manifest_sha256
+    )
+    if (!identical(run_manifest$method, reference$method) ||
+        !identical(run_manifest$run_id, reference$run_id) ||
+        !identical(run_manifest$result_id, reference$result_id)) {
+      stop(
+        sprintf("Run reference identity mismatch for `%s`.", reference$manifest_path),
+        call. = FALSE
+      )
+    }
+    panel_records <- wlv_run_manifest_artifact_subset(
+      run_manifest,
+      panel_artifacts,
+      label = "release panel-metadata artifact"
+    )
+    panel_hashes[[index]] <- vapply(
+      panel_records,
+      `[[`,
+      character(1L),
+      "sha256"
+    )
+  }
   indicator_paths <- file.path(run_roots, "_panel_indicators.csv")
   metadata_paths <- file.path(run_roots, "_panel_meta_indicators.csv")
   missing <- c(indicator_paths[!file.exists(indicator_paths)], metadata_paths[!file.exists(metadata_paths)])
@@ -1157,12 +1301,14 @@ wlv_commit_release <- function(plan, run_environments) {
   indicators <- wlv_merge_panel_result_tables(
     indicator_paths,
     key = "cod_label",
-    columns = c("cod_label", "label")
+    columns = c("cod_label", "label"),
+    expected_sha256 = vapply(panel_hashes, `[[`, character(1L), 1L)
   )
   metadata <- wlv_merge_panel_result_tables(
     metadata_paths,
     key = "value",
-    columns = c("value", "groups", "type", "reverted")
+    columns = c("value", "groups", "type", "reverted"),
+    expected_sha256 = vapply(panel_hashes, `[[`, character(1L), 2L)
   )
   wlv_write_result_csv(indicators, file.path(staging, "indicators_en.csv"))
   wlv_write_result_csv(metadata, file.path(staging, "meta_indicators.csv"))
@@ -1190,11 +1336,15 @@ wlv_commit_release <- function(plan, run_environments) {
   )
   release_path <- file.path(staging, wlv_release_manifest_filename())
   wlv_write_release_manifest(release, release_path)
+  # At this boundary the release artifacts and every run-reference manifest
+  # must be exact. Run artifacts are verified once more from the installed
+  # release below, immediately before the channel-marker commit point.
   wlv_verify_release_manifest(
     release,
     release_root = staging,
     publication_root = paths$results,
-    reject_unlisted = TRUE
+    reject_unlisted = TRUE,
+    verify_runs = FALSE
   )
   wlv_assert_plan_publication_inputs_unchanged(plan)
   wlv_assert_run_environments_source_inputs_unchanged(plan, run_environments)

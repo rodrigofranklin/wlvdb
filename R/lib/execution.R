@@ -1299,15 +1299,112 @@ wlv_native_validate_selected_stages <- function(stages, sea_vars, at_stage, meth
   invisible(selected)
 }
 
-wlv_native_validate_parent_scientific_profile <- function(
+wlv_native_parent_scientific_receipt <- function(
     plan,
     method_record,
-    result_dir,
-    source_sea) {
+    parent_manifest) {
   method <- method_record$method[[1L]]
   source <- method_record$source[[1L]]
   profile <- plan$scientific_profiles[[method]]
   wlv_assert_scientific_profile(profile, method, source)
+  parent_manifest <- wlv_publication_as_run_manifest(parent_manifest)
+  manifest_paths <- vapply(
+    parent_manifest$artifacts,
+    `[[`,
+    character(1L),
+    "path"
+  )
+  nonfinite_name <- "_nonfinite_resolution_diagnostics.csv"
+  artifact_paths <- c(
+    "_anomalies.csv",
+    if (source %in% c("wiodr13", "wiodr16")) {
+      c("_gfcf_negative_cells.csv", "_gfcf_negative_summary.csv")
+    },
+    "_leontief_diagnostics.csv",
+    if (nonfinite_name %in% manifest_paths) nonfinite_name
+  )
+  artifact_records <- wlv_run_manifest_artifact_subset(
+    parent_manifest,
+    artifact_paths,
+    label = "parent scientific artifact"
+  )
+  receipt <- new.env(parent = emptyenv())
+  receipt$schema <- "wlv-parent-scientific-receipt/1.0.0"
+  receipt$method <- method
+  receipt$source <- source
+  receipt$run_id <- parent_manifest$run_id
+  receipt$result_id <- parent_manifest$result_id
+  receipt$artifacts <- artifact_records
+  lockEnvironment(receipt, bindings = TRUE)
+  receipt
+}
+
+wlv_native_assert_parent_scientific_receipt <- function(
+    receipt,
+    method_record,
+    parent_manifest) {
+  fields <- c(
+    "schema", "method", "source", "run_id", "result_id", "artifacts"
+  )
+  receipt_fields <- if (is.environment(receipt)) {
+    sort(ls(receipt, all.names = TRUE), method = "radix")
+  } else {
+    character()
+  }
+  if (!is.environment(receipt) ||
+      !identical(parent.env(receipt), emptyenv()) ||
+      !environmentIsLocked(receipt) ||
+      !all(vapply(receipt_fields, bindingIsLocked, logical(1L), env = receipt)) ||
+      any(vapply(receipt_fields, bindingIsActive, logical(1L), env = receipt)) ||
+      !identical(receipt_fields, sort(fields, method = "radix")) ||
+      !identical(receipt$schema, "wlv-parent-scientific-receipt/1.0.0")) {
+    stop("Parent scientific receipt has an invalid schema.", call. = FALSE)
+  }
+  parent_manifest <- wlv_publication_as_run_manifest(parent_manifest)
+  method <- method_record$method[[1L]]
+  source <- method_record$source[[1L]]
+  if (!identical(receipt$method, method) ||
+      !identical(receipt$source, source) ||
+      !identical(receipt$run_id, parent_manifest$run_id) ||
+      !identical(receipt$result_id, parent_manifest$result_id)) {
+    stop("Parent scientific receipt identity changed after preflight.", call. = FALSE)
+  }
+  artifact_paths <- vapply(receipt$artifacts, `[[`, character(1L), "path")
+  manifest_paths <- vapply(
+    parent_manifest$artifacts,
+    `[[`,
+    character(1L),
+    "path"
+  )
+  artifact_indexes <- match(artifact_paths, manifest_paths)
+  if (anyNA(artifact_indexes) ||
+      !identical(receipt$artifacts, parent_manifest$artifacts[artifact_indexes])) {
+    stop(
+      "Parent scientific receipt differs from the authenticated run manifest.",
+      call. = FALSE
+    )
+  }
+  receipt
+}
+
+wlv_native_validate_parent_scientific_profile <- function(
+    plan,
+    method_record,
+    result_dir,
+    source_sea,
+    parent_manifest,
+    receipt) {
+  receipt <- wlv_native_assert_parent_scientific_receipt(
+    receipt,
+    method_record,
+    parent_manifest
+  )
+  method <- method_record$method[[1L]]
+  source <- method_record$source[[1L]]
+  profile <- plan$scientific_profiles[[method]]
+  wlv_assert_scientific_profile(profile, method, source)
+  artifact_paths <- vapply(receipt$artifacts, `[[`, character(1L), "path")
+  nonfinite_name <- "_nonfinite_resolution_diagnostics.csv"
   runtime <- wlv_new_contract_runtime(
     method = method,
     source = source,
@@ -1331,9 +1428,8 @@ wlv_native_validate_parent_scientific_profile <- function(
       method = method,
       expected_years = wlv_native_metadata_years(source_sea)
     )
-  nonfinite_name <- "_nonfinite_resolution_diagnostics.csv"
   nonfinite_path <- file.path(result_dir, nonfinite_name)
-  if (file.exists(nonfinite_path)) {
+  if (nonfinite_name %in% artifact_paths) {
     diagnostics[[nonfinite_name]] <-
       wlv_read_nonfinite_resolution_diagnostics(nonfinite_path)
   }
@@ -1347,7 +1443,22 @@ wlv_native_validate_parent_scientific_profile <- function(
     profile,
     method
   )
-  diagnostics
+  if (!identical(artifact_paths, c("_anomalies.csv", names(diagnostics)))) {
+    stop(
+      "Parent scientific diagnostics differ from their manifest inventory.",
+      call. = FALSE
+    )
+  }
+  # The private parent staging was fully authenticated immediately before this
+  # reader. Rechecking the consumed subset closes the read window without
+  # keeping multi-million-row diagnostic payloads alive in the run plan.
+  wlv_verify_run_manifest_artifact_subset(
+    parent_manifest,
+    result_dir,
+    artifact_paths,
+    label = "parent scientific artifact"
+  )
+  list(anomalies = anomalies, diagnostics = diagnostics)
 }
 
 wlv_native_validate_nonfinite_source_coordinates <- function(
@@ -1744,7 +1855,7 @@ wlv_validate_data <- function(
     method_data$source_provenance_input_inventory <- first_input_inventory
 
     if (identical(plan$mode, "recalculate")) {
-      parent_run <- wlv_resolve_current_method_run(
+      parent_run <- wlv_resolve_current_method_run_reference(
         plan$root,
         method,
         channel = plan$channel
@@ -1770,11 +1881,17 @@ wlv_validate_data <- function(
           call. = FALSE
         )
       }
+      provenance_record <- wlv_run_manifest_artifact_subset(
+        parent_run$manifest,
+        wlv_source_provenance_filename(),
+        label = "parent source-provenance artifact"
+      )[[1L]]
       wlv_assert_recalculation_source_provenance(
         result_dir,
         current_manifest = manifest$manifest,
         source = source,
-        additional_paths = euklems_files
+        additional_paths = euklems_files,
+        expected_sha256 = provenance_record$sha256
       )
       required <- file.path(
         result_dir,
@@ -1786,12 +1903,11 @@ wlv_validate_data <- function(
         )
       )
       wlv_require_files(required, sprintf("parent results for method `%s`", method))
-      method_data$parent_scientific_diagnostics <-
-        wlv_native_validate_parent_scientific_profile(
+      method_data$parent_scientific_receipt <-
+        wlv_native_parent_scientific_receipt(
           plan,
           method_record,
-          result_dir,
-          artifacts$socioeconomic
+          parent_run$manifest
         )
 
       if (plan$at_stage <= 4L) {
@@ -3482,6 +3598,7 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
   )
   staging_open <- TRUE
   authenticated_parent_manifest <- NULL
+  parent_scientific <- NULL
   on.exit({
     if (staging_open && dir.exists(staging)) {
       try(wlv_remove_result_staging(staging, results_root), silent = TRUE)
@@ -3510,24 +3627,16 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
     # run directory is not read again during recalculation.
     runtime_data$parent_result_dir <- staging
     runtime_data$parent_manifest <- authenticated_parent_manifest
-    authenticated_parent_diagnostics <-
-      wlv_native_validate_parent_scientific_profile(
-        plan,
-        method_record,
-        staging,
-        runtime_data$source_sea
-      )
-    if (!identical(
-      authenticated_parent_diagnostics,
-      run_data$parent_scientific_diagnostics
-    )) {
-      stop(
-        "Parent scientific diagnostics changed after preflight.",
-        call. = FALSE
-      )
-    }
+    parent_scientific <- wlv_native_validate_parent_scientific_profile(
+      plan,
+      method_record,
+      staging,
+      runtime_data$source_sea,
+      authenticated_parent_manifest,
+      run_data$parent_scientific_receipt
+    )
     runtime_data$parent_scientific_diagnostics <-
-      authenticated_parent_diagnostics
+      parent_scientific$diagnostics
   }
   policy <- wlv_load_run_missingness_policy(plan, method_record)
   compatibility <- wlv_native_runtime_compatibility(
@@ -3547,10 +3656,12 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
     scientific_profile = plan$scientific_profiles[[method]]
   )
   if (identical(plan$mode, "recalculate")) {
-    wlv_load_contract_report(
+    wlv_load_contract_records(
       contract_runtime,
-      file.path(staging, "_anomalies.csv")
+      parent_scientific$anomalies
     )
+    parent_scientific <- NULL
+    invisible(gc(full = FALSE))
   }
 
   run_environment <- tryCatch(

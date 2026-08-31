@@ -622,24 +622,45 @@ wlv_read_source_provenance <- function(path) {
   provenance
 }
 
-wlv_read_result_source_provenance <- function(result_dir) {
+wlv_read_result_source_provenance <- function(
+    result_dir,
+    expected_sha256 = NULL) {
   path <- file.path(result_dir, wlv_source_provenance_filename())
   if (!file.exists(path) || isTRUE(file.info(path)$isdir)) {
     stop(sprintf("Source provenance file is missing: %s.", path), call. = FALSE)
   }
-  bytes <- readBin(path, what = "raw", n = file.info(path)$size)
+  size <- unname(file.info(path)$size)
+  if (is.na(size) || size <= 0 || size > .Machine$integer.max) {
+    stop("Source provenance has an invalid file size.", call. = FALSE)
+  }
+  bytes <- readBin(path, what = "raw", n = as.integer(size))
+  size_after <- unname(file.info(path)$size)
+  if (!identical(length(bytes), as.integer(size)) ||
+      !identical(size, size_after)) {
+    stop("Source provenance changed while it was being captured.", call. = FALSE)
+  }
+  if (!is.null(expected_sha256)) {
+    if (!is.character(expected_sha256) || length(expected_sha256) != 1L ||
+        is.na(expected_sha256) ||
+        !grepl("^[0-9a-f]{64}$", expected_sha256) ||
+        !identical(wlv_source_sha256_raw(bytes), expected_sha256)) {
+      stop("Source provenance SHA-256 mismatch.", call. = FALSE)
+    }
+  }
   decoded <- tryCatch(rawToChar(bytes), error = function(error) NA_character_)
   if (is.na(decoded) || is.na(iconv(decoded, from = "UTF-8", to = "UTF-8", sub = NA))) {
     stop("Source provenance is not valid UTF-8.", call. = FALSE)
   }
+  Encoding(decoded) <- "UTF-8"
+  connection <- textConnection(decoded, open = "r", encoding = "UTF-8")
+  on.exit(close(connection), add = TRUE)
   value <- tryCatch(
     utils::read.csv2(
-      path,
+      connection,
       stringsAsFactors = FALSE,
       colClasses = "character",
       check.names = FALSE,
-      na.strings = character(),
-      fileEncoding = "UTF-8"
+      na.strings = character()
     ),
     error = function(error) {
       stop(
@@ -666,7 +687,8 @@ wlv_assert_recalculation_source_provenance <- function(
     result_dir,
     current_manifest,
     source,
-    additional_paths = character()) {
+    additional_paths = character(),
+    expected_sha256 = NULL) {
   provenance_path <- file.path(result_dir, wlv_source_provenance_filename())
   if (!file.exists(provenance_path)) {
     stop(
@@ -677,7 +699,10 @@ wlv_assert_recalculation_source_provenance <- function(
       call. = FALSE
     )
   }
-  previous <- wlv_read_result_source_provenance(result_dir)
+  previous <- wlv_read_result_source_provenance(
+    result_dir,
+    expected_sha256 = expected_sha256
+  )
   current <- wlv_source_provenance(
     current_manifest,
     source,

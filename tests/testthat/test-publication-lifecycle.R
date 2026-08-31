@@ -387,6 +387,84 @@ test_that("marker installation failure leaves the previous release current", {
   )
 })
 
+test_that("installed release verification blocks post-staging run corruption", {
+  fixture <- wlv_make_native_publication_fixture(mutable = TRUE)
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  plan <- wlv_native_test_release_plan(fixture)
+  first <- wlv_native_test_run_environment(fixture, "run-verified-001")
+  runtime$wlv_commit_release(plan, list(first))
+  current_before <- runtime$wlv_read_current_release(
+    fixture$root,
+    "stable",
+    required = TRUE
+  )
+  markers_before <- runtime$wlv_list_channel_markers(fixture$root, "stable")
+  marker_bytes_before <- readBin(
+    current_before$marker_path,
+    what = "raw",
+    n = file.info(current_before$marker_path)$size
+  )
+
+  second <- wlv_native_test_run_environment(fixture, "run-verified-002")
+  payload <- file.path(second$wlv_run_dir, "payload.txt")
+  original_verify_release <- runtime$wlv_verify_release_manifest
+  verification_modes <- logical()
+  corrupted <- FALSE
+  runtime$wlv_verify_release_manifest <- function(
+      manifest,
+      release_root,
+      publication_root = dirname(release_root),
+      reject_unlisted = TRUE,
+      verify_runs = TRUE) {
+    verification_modes <<- c(verification_modes, verify_runs)
+    value <- original_verify_release(
+      manifest,
+      release_root,
+      publication_root = publication_root,
+      reject_unlisted = reject_unlisted,
+      verify_runs = verify_runs
+    )
+    if (!corrupted && identical(verify_runs, FALSE)) {
+      connection <- file(payload, open = "ab")
+      on.exit(close(connection), add = TRUE)
+      writeBin(charToRaw("post-staging corruption"), connection)
+      corrupted <<- TRUE
+    }
+    value
+  }
+  on.exit({
+    runtime$wlv_verify_release_manifest <- original_verify_release
+  }, add = TRUE)
+
+  expect_error(
+    runtime$wlv_commit_release(plan, list(second)),
+    "mismatch for run artifact"
+  )
+  expect_true(corrupted)
+  expect_identical(verification_modes, c(FALSE, TRUE))
+  runtime$wlv_verify_release_manifest <- original_verify_release
+  current_after <- runtime$wlv_read_current_release(
+    fixture$root,
+    "stable",
+    required = TRUE
+  )
+
+  expect_identical(
+    runtime$wlv_list_channel_markers(fixture$root, "stable"),
+    markers_before
+  )
+  expect_identical(current_after$marker_path, current_before$marker_path)
+  expect_identical(
+    readBin(
+      current_after$marker_path,
+      what = "raw",
+      n = file.info(current_after$marker_path)$size
+    ),
+    marker_bytes_before
+  )
+})
+
 test_that("the channel-marker rename remains the final fallible commit step", {
   fixture <- wlv_make_native_publication_fixture(mutable = TRUE)
   on.exit(wlv_remove_native_fixture(fixture), add = TRUE)

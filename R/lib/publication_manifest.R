@@ -1061,7 +1061,11 @@ wlv_build_run_manifest <- function(
   wlv_validate_run_manifest(manifest)
 }
 
-wlv_publication_read_json <- function(path, validator, label) {
+wlv_publication_read_json <- function(
+    path,
+    validator,
+    label,
+    expected_sha256 = NULL) {
   wlv_publication_require_jsonlite()
   if (
     !is.character(path) ||
@@ -1077,6 +1081,20 @@ wlv_publication_read_json <- function(path, validator, label) {
     stop(sprintf("%s has an invalid file size.", label), call. = FALSE)
   }
   bytes <- readBin(path, what = "raw", n = as.integer(size))
+  size_after <- unname(file.info(path)$size)
+  if (!identical(length(bytes), as.integer(size)) ||
+      !identical(size, size_after)) {
+    stop(sprintf("%s changed while it was being captured.", label), call. = FALSE)
+  }
+  if (!is.null(expected_sha256)) {
+    expected_sha256 <- wlv_publication_validate_sha256(
+      expected_sha256,
+      paste0(label, " expected SHA-256")
+    )
+    if (!identical(wlv_publication_sha256_raw(bytes), expected_sha256)) {
+      stop(sprintf("%s SHA-256 mismatch.", label), call. = FALSE)
+    }
+  }
   if (
     length(bytes) >= 3L &&
     identical(bytes[seq_len(3L)], as.raw(c(0xef, 0xbb, 0xbf)))
@@ -1110,8 +1128,13 @@ wlv_publication_read_json <- function(path, validator, label) {
   validator(value)
 }
 
-wlv_read_run_manifest <- function(path) {
-  wlv_publication_read_json(path, wlv_validate_run_manifest, "Run manifest")
+wlv_read_run_manifest <- function(path, expected_sha256 = NULL) {
+  wlv_publication_read_json(
+    path,
+    wlv_validate_run_manifest,
+    "Run manifest",
+    expected_sha256 = expected_sha256
+  )
 }
 
 wlv_publication_json_text <- function(value) {
@@ -1220,6 +1243,54 @@ wlv_verify_run_manifest <- function(
     label = "run artifact"
   )
   invisible(manifest)
+}
+
+wlv_run_manifest_artifact_subset <- function(
+    manifest,
+    artifact_paths,
+    label = "run artifact") {
+  manifest <- wlv_publication_as_run_manifest(manifest)
+  artifact_paths <- wlv_publication_normalize_relative_paths(
+    artifact_paths,
+    paste0(label, " paths")
+  )
+  if (!length(artifact_paths) || anyDuplicated(artifact_paths)) {
+    stop(sprintf("%s paths must be non-empty and unique.", label), call. = FALSE)
+  }
+  manifest_paths <- vapply(
+    manifest$artifacts,
+    `[[`,
+    character(1L),
+    "path"
+  )
+  indexes <- match(artifact_paths, manifest_paths)
+  if (anyNA(indexes)) {
+    stop(
+      sprintf("Run manifest does not bind every requested %s.", label),
+      call. = FALSE
+    )
+  }
+  manifest$artifacts[indexes]
+}
+
+wlv_verify_run_manifest_artifact_subset <- function(
+    manifest,
+    run_root,
+    artifact_paths,
+    label = "run artifact") {
+  records <- wlv_run_manifest_artifact_subset(
+    manifest,
+    artifact_paths,
+    label = label
+  )
+  wlv_publication_verify_artifacts(
+    records,
+    run_root,
+    excluded_paths = character(),
+    reject_unlisted = FALSE,
+    label = label
+  )
+  invisible(records)
 }
 
 wlv_publication_normalize_run_references <- function(runs) {
@@ -1337,7 +1408,8 @@ wlv_validate_release_manifest <- function(manifest) {
 wlv_build_release_run_reference <- function(
     publication_root,
     method,
-    manifest_path) {
+    manifest_path,
+    verified_run = NULL) {
   method <- wlv_publication_validate_id(method, "method")
   normalized_path <- wlv_publication_normalize_relative_paths(
     manifest_path,
@@ -1357,8 +1429,18 @@ wlv_build_release_run_reference <- function(
     manifest_path,
     "run manifest path"
   )[[1L]]
-  run <- wlv_read_run_manifest(path)
-  wlv_verify_run_manifest(run, dirname(path))
+  manifest_sha256 <- wlv_publication_file_sha256(path)
+  run <- wlv_read_run_manifest(path, expected_sha256 = manifest_sha256)
+  if (is.null(verified_run)) {
+    wlv_verify_run_manifest(run, dirname(path))
+  } else {
+    verified_run <- wlv_publication_as_run_manifest(verified_run)
+    if (!wlv_publication_json_identical(run, verified_run)) {
+      stop("Referenced run differs from its post-promotion verification.",
+        call. = FALSE
+      )
+    }
+  }
   if (!identical(run$method, method)) {
     stop("Referenced run method differs from the release method.", call. = FALSE)
   }
@@ -1367,7 +1449,7 @@ wlv_build_release_run_reference <- function(
     run_id = run$run_id,
     result_id = run$result_id,
     manifest_path = manifest_path,
-    manifest_sha256 = wlv_publication_file_sha256(path)
+    manifest_sha256 = manifest_sha256
   )
 }
 
@@ -1402,11 +1484,12 @@ wlv_build_release_manifest <- function(
   wlv_validate_release_manifest(manifest)
 }
 
-wlv_read_release_manifest <- function(path) {
+wlv_read_release_manifest <- function(path, expected_sha256 = NULL) {
   wlv_publication_read_json(
     path,
     wlv_validate_release_manifest,
-    "Release manifest"
+    "Release manifest",
+    expected_sha256 = expected_sha256
   )
 }
 
@@ -1437,7 +1520,12 @@ wlv_verify_release_manifest <- function(
     manifest,
     release_root,
     publication_root = dirname(release_root),
-    reject_unlisted = TRUE) {
+    reject_unlisted = TRUE,
+    verify_runs = TRUE) {
+  if (!is.logical(verify_runs) || length(verify_runs) != 1L ||
+      is.na(verify_runs)) {
+    stop("`verify_runs` must be one non-missing logical value.", call. = FALSE)
+  }
   manifest <- wlv_publication_as_release_manifest(manifest)
   wlv_publication_verify_artifacts(
     manifest$artifacts,
@@ -1452,15 +1540,13 @@ wlv_verify_release_manifest <- function(
       reference$manifest_path,
       "release run manifests"
     )[[1L]]
-    actual_hash <- wlv_publication_file_sha256(path)
-    if (!identical(actual_hash, reference$manifest_sha256)) {
-      stop(
-        sprintf("Run manifest SHA-256 mismatch for `%s`.", reference$manifest_path),
-        call. = FALSE
-      )
+    run <- wlv_read_run_manifest(
+      path,
+      expected_sha256 = reference$manifest_sha256
+    )
+    if (isTRUE(verify_runs)) {
+      wlv_verify_run_manifest(run, dirname(path))
     }
-    run <- wlv_read_run_manifest(path)
-    wlv_verify_run_manifest(run, dirname(path))
     if (
       !identical(run$method, reference$method) ||
       !identical(run$run_id, reference$run_id) ||
@@ -1565,8 +1651,13 @@ wlv_build_channel_marker <- function(
   wlv_validate_channel_marker(marker)
 }
 
-wlv_read_channel_marker <- function(path) {
-  wlv_publication_read_json(path, wlv_validate_channel_marker, "Channel marker")
+wlv_read_channel_marker <- function(path, expected_sha256 = NULL) {
+  wlv_publication_read_json(
+    path,
+    wlv_validate_channel_marker,
+    "Channel marker",
+    expected_sha256 = expected_sha256
+  )
 }
 
 wlv_write_channel_marker <- function(marker, path) {
@@ -1758,11 +1849,10 @@ wlv_verify_channel_marker <- function(
     marker$release_manifest_path,
     "release manifest path"
   )[[1L]]
-  actual_hash <- wlv_publication_file_sha256(release_path)
-  if (!identical(actual_hash, marker$release_manifest_sha256)) {
-    stop("Release manifest SHA-256 mismatch in channel marker.", call. = FALSE)
-  }
-  release <- wlv_read_release_manifest(release_path)
+  release <- wlv_read_release_manifest(
+    release_path,
+    expected_sha256 = marker$release_manifest_sha256
+  )
   if (
     !identical(release$channel, marker$channel) ||
     !identical(release$sequence, marker$sequence) ||
