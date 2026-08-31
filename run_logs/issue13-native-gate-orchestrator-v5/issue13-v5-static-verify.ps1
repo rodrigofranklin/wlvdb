@@ -565,7 +565,7 @@ $bootstrapSourceSha256 = @{
   'issue13-v5-oracle-effect-generate.ps1' =
     '6C1E26154794A253974B7E51C5D15B054AE2D31E09736BF19B624F56EA3C30F9'
   'issue13-v5-oracle-effect-lib.ps1' =
-    'CEB731165AAA53635779A1467166F9955824821868D6DB9B47E07BD3C18DBD38'
+    '19ADFE31721A003A7E2BE405D9A64B660A62AD79F8B55E800A0A22577E9FDE99'
   'issue13-v5-oracle-effect-validate.ps1' =
     '11912422CEB54A45A791E49E11688F974AB45A4CC0F2FB89145D90176AAB0140'
   'issue13-v5-render-report.ps1' =
@@ -2354,7 +2354,7 @@ $issue13ExpectedAstSurfaces = @{
   }
   'issue13-v5-oracle-effect-lib.ps1' = @{
     command_count = 992
-    command_sha256 = '3BC1EBDE56F1D7AEAD003C9BD4122A836F4553D009A88462F41D487407A07BCB'
+    command_sha256 = 'DED270D33A6855FE2C3D11608277C173E9FF071971FEEF82287C9400718056A9'
     redirection_count = 0
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
@@ -2371,8 +2371,8 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = '7F4027149DBBCCC5E186586FA06D6058EF6E3821AC51098E7521EBC767D5FE2D'
   }
   'issue13-v5-static-verify.ps1' = @{
-    command_count = 931
-    command_sha256 = 'C20113CD42A21E74C2629B8BA53D1E0FADB8AAB0449CD63C014C4798BFB43060'
+    command_count = 933
+    command_sha256 = 'A934EBB2B14A19AA8F49B8DA28540E7BE934709E7BC202D57A7F8044E8823F31'
     redirection_count = 0
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
@@ -2387,10 +2387,10 @@ $issue13ExpectedControllerSourceSha256 = @{
   'issue13-v5-materialize-harness.ps1' = '43A9B16E06D04BCD1F7A4328FE839D7238466D7B27A5AF33C6D1B6C869888257'
   'issue13-v5-new-config.ps1' = '7BBA044839C358C78B7931D036632C6F983786937D2C200A5C8FF22A3400BA7D'
   'issue13-v5-oracle-effect-generate.ps1' = '6C1E26154794A253974B7E51C5D15B054AE2D31E09736BF19B624F56EA3C30F9'
-  'issue13-v5-oracle-effect-lib.ps1' = 'CEB731165AAA53635779A1467166F9955824821868D6DB9B47E07BD3C18DBD38'
+  'issue13-v5-oracle-effect-lib.ps1' = '19ADFE31721A003A7E2BE405D9A64B660A62AD79F8B55E800A0A22577E9FDE99'
   'issue13-v5-oracle-effect-validate.ps1' = '11912422CEB54A45A791E49E11688F974AB45A4CC0F2FB89145D90176AAB0140'
   'issue13-v5-render-report.ps1' = '756ACAB7E8BFC6CF7E0A7235B0634E24F4D805A4F30D060291260A62726B710A'
-    'issue13-v5-static-verify.ps1' = 'DE518B7BF2C3A46BC52BD7635F3F62FC2FFBACFB5C925109CA19F5397DE105FB'
+    'issue13-v5-static-verify.ps1' = '8AF78CD36C822D975CE8910813416318F91BB0980287EF10553B0A5FF37BAC09'
 }
 $issue13ExpectedDotSourceSignatures = @{
   'issue13-v5-attest-delivery.ps1' = @(
@@ -3806,6 +3806,8 @@ if ([int]$artifactPresenceExecution.exit_code -ne 0 -or
   throw 'The executable diagnostic artifact-presence self-test failed.'
 }
 $oracleSpec = Read-Issue13V5Json (
+  Join-Path $root 'issue13-v5-oracle-effect-spec.json')
+$oracleSpecSha256 = Get-Issue13V5Sha256 (
   Join-Path $root 'issue13-v5-oracle-effect-spec.json')
 $oracleSchema = Read-Issue13V5Json (
   Join-Path $root 'issue13-v5-oracle-effect-proof.schema.json')
@@ -8547,6 +8549,8 @@ if ([string]$oracleSpec.schema -cne 'wlv-issue13-v5-oracle-effect-spec/2' -or
     [long]$oracleTerminal.sealed_inventory.total_bytes -ne 2616118L -or
     [string]$oracleTerminal.sealed_inventory.inventory_sha256 -cne
       'ae4e4d562d1d84e45774a6037739310b7857db691caf6fffc04b79582434b3e3' -or
+    -not $oracleLibraryText.Contains(
+      "'" + $oracleSpecSha256.ToLowerInvariant() + "'") -or
     [string]::Join("`n", @(
       $oracleTerminal.required_controller_files)) -cne
       [string]::Join("`n", $expectedControllerFiles) -or
