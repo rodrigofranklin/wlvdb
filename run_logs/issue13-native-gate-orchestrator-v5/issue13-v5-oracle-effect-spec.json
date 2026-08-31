@@ -148,7 +148,7 @@
       "status": "sealed",
       "file_count": 47,
       "total_bytes": 2616118,
-      "inventory_sha256": "ae4e4d562d1d84e45774a6037739310b7857db691caf6fffc04b79582434b3e3"
+      "inventory_sha256": "b74d70b6a3dd263756ddd2fe70f5e9ac16a4d2f3f88c9c3d842e3bd7b75eb1c2"
     },
     "required_controller_files": [
       "README.md",

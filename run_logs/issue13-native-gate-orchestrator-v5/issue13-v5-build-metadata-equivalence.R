@@ -39,7 +39,7 @@ if (!identical(
 candidate_commit <- wlv_gate_git_commit(candidate_root)
 if (!identical(
     candidate_commit,
-    "c2bb5eec512ad6bd02cdfa35aabd227de2922a44"
+    "31f3a6703a2678e774fb1cfbe2ab769b510e755f"
 )) {
   stop("Metadata equivalence requires its exact derivation commit.",
     call. = FALSE
