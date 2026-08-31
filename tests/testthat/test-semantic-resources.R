@@ -372,6 +372,99 @@ test_that("explicit semantic-input runtime validates without retaining dense sta
   )
 })
 
+test_that("hydrated module states use copy-on-write isolation", {
+  semantic <- semantic_resource_environment
+  target_key <- "sea/sector/test.indicator"
+  value <- wlv_semantic_test_value()
+  states <- wlv_semantic_test_states(value)
+  state <- semantic$wlv_semantic_state_encode(
+    value,
+    states,
+    target_key,
+    c("year", "country")
+  )
+  value_contract <- semantic$wlv_resource_contract(
+    axes = c("year", "country"),
+    value_type = "array",
+    semantic_state = TRUE
+  )
+  state_contract <- semantic$wlv_resource_contract(
+    value_type = "data.frame",
+    role = "semantic_state"
+  )
+  module <- list(
+    module_id = "test.copy.on.write",
+    instance_id = "test.copy.on.write",
+    partition = NULL,
+    requires = list(
+      value = semantic$wlv_resource_ref(target_key, value_contract),
+      state = semantic$wlv_resource_ref(
+        semantic$wlv_semantic_state_key(target_key),
+        state_contract
+      )
+    ),
+    provides = list()
+  )
+  local_runtime <- semantic$wlv_semantic_module_runtime(
+    list(value = value, state = state),
+    module
+  )
+  expected <- semantic$wlv_semantic_detach(
+    local_runtime$semantic_states[[target_key]]
+  )
+  input_snapshot <- semantic$wlv_semantic_detach(value)
+  legacy_key <- semantic$wlv_semantic_legacy_runtime_state_key(target_key)
+  expect_identical(
+    get(legacy_key, envir = local_runtime$states, inherits = FALSE),
+    expected
+  )
+
+  semantic_changed <- local_runtime$semantic_states[[target_key]]
+  semantic_changed[[1L]] <- "not_applicable"
+  dimnames(semantic_changed)[[1L]][[1L]] <- "semantic-changed"
+  local_runtime$semantic_states[[target_key]] <- semantic_changed
+  expect_identical(
+    get(legacy_key, envir = local_runtime$states, inherits = FALSE),
+    expected
+  )
+  expect_identical(value, input_snapshot)
+
+  local_runtime$semantic_states[[target_key]] <-
+    semantic$wlv_semantic_detach(expected)
+  registered <- get(legacy_key, envir = local_runtime$states, inherits = FALSE)
+  registered[[1L]] <- "source_missing"
+  dimnames(registered)[[1L]][[1L]] <- "legacy-changed"
+  assign(legacy_key, registered, envir = local_runtime$states)
+  expect_identical(local_runtime$semantic_states[[target_key]], expected)
+  expect_identical(value, input_snapshot)
+
+  returned <- semantic$wlv_semantic_runtime_state(local_runtime, target_key)
+  returned[[1L]] <- "finite"
+  dimnames(returned)[[1L]][[1L]] <- "returned-changed"
+  expect_identical(local_runtime$semantic_states[[target_key]], expected)
+
+  legacy_runtime <- list(
+    semantic_states = stats::setNames(list(), character()),
+    states = local_runtime$states
+  )
+  legacy_expected <- semantic$wlv_semantic_detach(get(
+    legacy_key,
+    envir = local_runtime$states,
+    inherits = FALSE
+  ))
+  legacy <- semantic$wlv_semantic_runtime_state(legacy_runtime, target_key)
+  legacy[[1L]] <- "not_applicable"
+  dimnames(legacy)[[1L]][[1L]] <- "legacy-returned-changed"
+  expect_identical(
+    get(legacy_key, envir = local_runtime$states, inherits = FALSE),
+    legacy_expected
+  )
+  expect_error(
+    semantic$wlv_semantic_share_copy_on_write(list(reference = new.env())),
+    "mutable references"
+  )
+})
+
 test_that("source rules distinguish source missingness and structural IO cells", {
   semantic <- semantic_resource_environment
   sea <- array(

@@ -155,6 +155,16 @@ wlv_semantic_detach <- function(value) {
   unserialize(serialize(value, NULL, version = 3L))
 }
 
+wlv_semantic_share_copy_on_write <- function(value) {
+  if (wlv_semantic_contains_reference(value)) {
+    wlv_semantic_abort("A semantic resource cannot contain mutable references.")
+  }
+  # Base vectors, arrays, data frames, and lists are protected by R's
+  # copy-on-write semantics. Sharing them across one module runtime preserves
+  # isolation without serializing large hydrated state arrays repeatedly.
+  value
+}
+
 wlv_semantic_plain_data_frame <- function(value, columns) {
   result <- as.data.frame(
     stats::setNames(
@@ -1438,14 +1448,14 @@ wlv_semantic_module_runtime <- function(
   runtime$partition <- module$partition
   runtime$semantic_input_mode <- semantic_input_mode
   runtime$input_aliases <- sort(names(inputs), method = "radix")
-  runtime$semantic_states <- wlv_semantic_detach(hydrated)
+  runtime$semantic_states <- wlv_semantic_share_copy_on_write(hydrated)
   runtime$states <- new.env(parent = emptyenv())
   for (target_key in names(hydrated)) {
     legacy_key <- wlv_semantic_legacy_runtime_state_key(target_key)
     if (!is.null(legacy_key) && !is.list(hydrated[[target_key]])) {
       assign(
         legacy_key,
-        wlv_semantic_detach(hydrated[[target_key]]),
+        wlv_semantic_share_copy_on_write(hydrated[[target_key]]),
         envir = runtime$states
       )
     }

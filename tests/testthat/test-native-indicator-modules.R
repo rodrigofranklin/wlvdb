@@ -407,6 +407,119 @@ test_that("indicator scopes and checkpoints expose the explicit cutover", {
   }, logical(1L))))
 })
 
+test_that("stage-4 imports consume exact precomputed group indices", {
+  runtime <- native_indicator_environment
+  output_countries <- c(1, 1, 2, 2, 1, 2)
+  input_sectors <- c(1, 2, 1, 2)
+  import_matrix <- matrix(
+    rep(output_countries, each = 4L),
+    nrow = 4L,
+    ncol = 6L
+  ) + matrix(rep(input_sectors, times = 6L), nrow = 4L) / 1000
+  import_groups <- base::as.factor(import_matrix)
+  import_group_indices <- structure(
+    base::split(
+      base::seq_along(import_groups),
+      import_groups,
+      drop = FALSE
+    ),
+    class = c("wlv_import_group_indices", "list")
+  )
+  values <- c(
+    NA_real_, 2, NaN, 4, 5, Inf, 7, 8, 9, -Inf, 11, 12,
+    13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24
+  )
+
+  expect_identical(
+    runtime$wlv_native_sum_import_groups(values, import_group_indices),
+    base::tapply(values, import_matrix, base::sum, na.rm = TRUE)
+  )
+  integer_values <- base::seq_along(values)
+  expect_identical(
+    runtime$wlv_native_sum_import_groups(
+      integer_values,
+      import_group_indices
+    ),
+    base::tapply(integer_values, import_matrix, base::sum, na.rm = TRUE)
+  )
+  shaped <- array(rep(values, times = 2L), dim = c(2L, 4L, 6L))
+  expect_identical(
+    base::apply(
+      shaped,
+      1L,
+      runtime$wlv_native_sum_import_groups,
+      import_group_indices
+    ),
+    base::apply(
+      shaped,
+      1L,
+      base::tapply,
+      import_matrix,
+      base::sum,
+      na.rm = TRUE
+    )
+  )
+  nums <- list(
+    input = 4L,
+    output = 6L,
+    countries = 2L,
+    sectors = 2L,
+    countries_sectors = 4L,
+    demands = 1L
+  )
+  expect_silent(runtime$wlv_native_import_group_indices_assert(
+    import_group_indices,
+    nums
+  ))
+  expect_error(
+    runtime$wlv_native_import_group_indices_assert(
+      unclass(import_group_indices),
+      nums
+    ),
+    "canonical import-group indices"
+  )
+  duplicated <- import_group_indices
+  duplicated[[1L]][[1L]] <- duplicated[[1L]][[2L]]
+  expect_error(
+    runtime$wlv_native_import_group_indices_assert(duplicated, nums),
+    "canonical import-group indices"
+  )
+  out_of_range <- import_group_indices
+  out_of_range[[1L]][[1L]] <- nums$input * nums$output + 1L
+  expect_error(
+    runtime$wlv_native_import_group_indices_assert(out_of_range, nums),
+    "canonical import-group indices"
+  )
+  permuted <- import_group_indices[c(2L, 1L, 3L, 4L)]
+  expect_error(
+    runtime$wlv_native_import_group_indices_assert(permuted, nums),
+    "canonical import-group indices"
+  )
+  crossed <- import_group_indices
+  temporary <- crossed[[1L]][[2L]]
+  crossed[[1L]][[2L]] <- crossed[[2L]][[2L]]
+  crossed[[2L]][[2L]] <- temporary
+  expect_false(is.unsorted(crossed[[1L]], strictly = TRUE))
+  expect_false(is.unsorted(crossed[[2L]], strictly = TRUE))
+  expect_error(
+    runtime$wlv_native_import_group_indices_assert(crossed, nums),
+    "canonical import-group indices"
+  )
+
+  specs <- list(
+    runtime$wlv_indicator_imports_s_mv_spec(),
+    runtime$wlv_indicator_imports_s_us_spec(),
+    runtime$wlv_indicator_trade_transfers_s_mv_spec(),
+    runtime$wlv_indicator_trade_transfers_p_s_mv_spec()
+  )
+  for (spec in specs) {
+    ref <- spec$requires(list())[["import_group_indices"]]
+    expect_identical(ref$key, "dimensions/import_group_indices")
+    expect_identical(ref$contract$value_type, "list")
+    expect_identical(ref$contract$role, "control")
+  }
+})
+
 test_that("stage-4 collector preserves values and enforces exact year coverage", {
   e <- native_indicator_environment
   lists <- list(

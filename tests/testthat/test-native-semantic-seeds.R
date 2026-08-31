@@ -293,6 +293,16 @@ test_that("preflight seeds expose controls and canonical semantic pairs", {
     unname(vapply(contracts[controls], `[[`, character(1L), "role")),
     rep("control", length(controls))
   )
+  expect_identical(
+    contracts[["dimensions/import_group_indices"]]$value_type,
+    "list"
+  )
+  expect_type(
+    runtime$wlv_native_dummy_value(
+      contracts[["dimensions/import_group_indices"]]
+    ),
+    "list"
+  )
   for (key in c("source/sea", "source/io")) {
     state_key <- runtime$wlv_semantic_state_key(key)
     expect_true(state_key %in% names(contracts))

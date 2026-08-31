@@ -415,6 +415,7 @@ wlv_native_preflight_seed_contracts <- function(
     "dimensions/rows" = run_contract("data.frame"),
     "dimensions/columns" = run_contract("data.frame"),
     "dimensions/io_filters" = wlv_native_filters_contract(),
+    "dimensions/import_group_indices" = wlv_native_control_contract("list"),
     "labels/countries" = run_contract("data.frame"),
     "labels/demands" = run_contract("data.frame"),
     "source/sea" = wlv_native_source_sea_contract(),

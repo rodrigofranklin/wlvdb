@@ -1,5 +1,65 @@
 # Native common indicator modules -----------------------------------------
 
+wlv_native_import_group_indices_assert <- function(indices, nums) {
+  group_lengths <- lengths(indices)
+  expected_count <- nums$input * nums$output
+  expected_names <- base::as.character(
+    rep(seq_len(nums$countries), each = nums$sectors) +
+      rep(seq_len(nums$sectors), times = nums$countries) / 1000
+  )
+  canonical <- inherits(indices, "wlv_import_group_indices") &&
+    length(indices) == nums$input &&
+    identical(names(indices), expected_names) &&
+    all(group_lengths > 0L) &&
+    all(base::vapply(indices, is.integer, logical(1L))) &&
+    sum(group_lengths) == expected_count
+  if (canonical) {
+    flat <- base::unlist(indices, recursive = FALSE, use.names = FALSE)
+    canonical <- length(flat) == expected_count && !anyNA(flat) &&
+      min(flat) == 1L && max(flat) == expected_count &&
+      all(base::tabulate(flat, nbins = expected_count) == 1L) &&
+      all(!base::vapply(
+        indices,
+        is.unsorted,
+        logical(1L),
+        strictly = TRUE
+      ))
+  }
+  if (canonical) {
+    canonical <- all(base::vapply(seq_along(indices), function(group) {
+      index <- indices[[group]]
+      input_row <- ((index - 1L) %% nums$input) + 1L
+      output_column <- ((index - 1L) %/% nums$input) + 1L
+      input_sector <- ((input_row - 1L) %% nums$sectors) + 1L
+      output_country <- ifelse(
+        output_column <= nums$countries_sectors,
+        ((output_column - 1L) %/% nums$sectors) + 1L,
+        ((output_column - nums$countries_sectors - 1L) %/% nums$demands) + 1L
+      )
+      expected_group <-
+        ((output_country - 1L) * nums$sectors) + input_sector
+      all(expected_group == group)
+    }, logical(1L)))
+  }
+  if (!canonical) {
+    stop("Import aggregation requires canonical import-group indices.",
+      call. = FALSE
+    )
+  }
+  invisible(indices)
+}
+
+wlv_native_sum_import_groups <- function(value, indices) {
+  base::array(
+    base::unlist(base::lapply(
+      indices,
+      function(index) base::sum(value[index], na.rm = TRUE)
+    ), recursive = FALSE, use.names = FALSE),
+    dim = length(indices),
+    dimnames = list(names(indices))
+  )
+}
+
 wlv_native_complex_multiplier_spec <- function(id, indicator, employee = FALSE) {
   label <- if (employee) " (employees only)" else ""
   metadata <- wlv_native_indicator_metadata_row(
@@ -274,6 +334,11 @@ wlv_native_stage4_import_spec <- function(id, resource, metadata, source = FALSE
         "dimensions/io_filters",
         wlv_native_filters_contract(),
         producer = wlv_runtime_seed_producer()
+      )),
+      list(import_group_indices = wlv_resource_ref(
+        "dimensions/import_group_indices",
+        wlv_native_control_contract("list"),
+        producer = wlv_runtime_seed_producer()
       ))
     ),
     services = "year_apply",
@@ -283,15 +348,15 @@ wlv_native_stage4_import_spec <- function(id, resource, metadata, source = FALSE
       lists <- wlv_native_partition_lists(matrix_value, ctx$input("lists"))
       nums <- ctx$input("nums")
       filters <- ctx$input("filters")
+      import_group_indices <- ctx$input("import_group_indices")
+      wlv_native_import_group_indices_assert(import_group_indices, nums)
       year_count <- dim(matrix_value)[[1L]]
       value <- matrix_value * rep(filters["trade", , ], each = year_count)
       value <- ctx$service("year_apply")(
         array(value, dim = c(year_count, nums$input, nums$output)),
         1L,
-        tapply,
-        filters["imports", , ],
-        sum,
-        na.rm = TRUE
+        wlv_native_sum_import_groups,
+        import_group_indices
       )
       value <- aperm(value, c(2L, 1L))
       value <- wlv_native_sector_array(value, lists)
@@ -337,6 +402,11 @@ wlv_native_stage4_trade_transfer_spec <- function(id, productive, metadata) {
         wlv_native_filters_contract(),
         producer = wlv_runtime_seed_producer()
       )),
+      list(import_group_indices = wlv_resource_ref(
+        "dimensions/import_group_indices",
+        wlv_native_control_contract("list"),
+        producer = wlv_runtime_seed_producer()
+      )),
       wlv_native_run_ref("dimensions/lists", "lists", "list"),
       wlv_native_run_ref("dimensions/nums", "nums", "list")
     ),
@@ -348,6 +418,8 @@ wlv_native_stage4_trade_transfer_spec <- function(id, productive, metadata) {
         transfers <- ctx$input("transfers")
         filters <- ctx$input("filters")
         nums <- ctx$input("nums")
+        import_group_indices <- ctx$input("import_group_indices")
+        wlv_native_import_group_indices_assert(import_group_indices, nums)
         lists <- wlv_native_partition_lists(transfers, ctx$input("lists"))
         year_count <- dim(transfers)[[1L]]
         if (productive_only) {
@@ -361,10 +433,8 @@ wlv_native_stage4_trade_transfer_spec <- function(id, productive, metadata) {
         imports <- ctx$service("year_apply")(
           shaped,
           1L,
-          tapply,
-          filters["imports", , ],
-          sum,
-          na.rm = TRUE
+          wlv_native_sum_import_groups,
+          import_group_indices
         )
         value <- aperm(exports - imports, c(2L, 1L))
         value <- wlv_native_sector_array(value, lists)

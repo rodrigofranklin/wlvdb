@@ -60,6 +60,50 @@ wlv_native_method_parameters <- function(root, method) {
   list(parameters = parameters, sectors = sectors)
 }
 
+wlv_native_import_group_indices_validate <- function(indices, import_groups) {
+  group_codes <- if (is.factor(import_groups)) {
+    base::as.integer(import_groups)
+  } else {
+    integer()
+  }
+  canonical <- is.list(indices) && !is.data.frame(indices) &&
+    is.factor(import_groups) && !anyNA(import_groups) &&
+    identical(names(indices), levels(import_groups)) &&
+    length(indices) == length(levels(import_groups)) &&
+    sum(lengths(indices)) == length(import_groups)
+  if (canonical) {
+    canonical <- all(base::vapply(seq_along(indices), function(group) {
+      index <- indices[[group]]
+      is.integer(index) && length(index) > 0L && !anyNA(index) &&
+        all(index >= 1L & index <= length(import_groups)) &&
+        !is.unsorted(index, strictly = TRUE) &&
+        all(group_codes[index] == group)
+    }, logical(1L)))
+  }
+  if (!canonical) {
+    stop("Import-group indices are not an exact canonical partition.",
+      call. = FALSE
+    )
+  }
+  invisible(indices)
+}
+
+wlv_native_import_group_indices <- function(filters) {
+  if (!is.array(filters) || length(dim(filters)) != 3L ||
+      is.null(dimnames(filters)) ||
+      !"imports" %in% dimnames(filters)[[1L]]) {
+    stop("Import-group indices require canonical IO filters.", call. = FALSE)
+  }
+  import_groups <- base::as.factor(filters["imports", , ])
+  indices <- base::split(
+    base::seq_along(import_groups),
+    import_groups,
+    drop = FALSE
+  )
+  wlv_native_import_group_indices_validate(indices, import_groups)
+  structure(indices, class = c("wlv_import_group_indices", "list"))
+}
+
 wlv_native_dimensions <- function(source_sea, sectors, normalized_dir) {
   if (!is.array(source_sea) || length(dim(source_sea)) != 4L ||
       is.null(dimnames(source_sea)) ||
@@ -113,6 +157,7 @@ wlv_native_dimensions <- function(source_sea, sectors, normalized_dir) {
   nums$input <- length(lists$input)
   nums$output <- length(lists$output)
   filters <- wlv_native_io_filters(lists, nums, rows, columns)
+  import_group_indices <- wlv_native_import_group_indices(filters)
   list(
     lists = lists,
     nums = nums,
@@ -120,7 +165,8 @@ wlv_native_dimensions <- function(source_sea, sectors, normalized_dir) {
     columns = columns,
     countries = countries,
     demands = demands,
-    io_filters = filters
+    io_filters = filters,
+    import_group_indices = import_group_indices
   )
 }
 
@@ -526,6 +572,11 @@ wlv_native_base_seeds <- function(
       "dimensions/io_filters",
       dimensions$io_filters,
       wlv_native_filters_contract()
+    ),
+    wlv_seed_resource(
+      "dimensions/import_group_indices",
+      dimensions$import_group_indices,
+      wlv_native_control_contract("list")
     ),
     wlv_seed_resource(
       "labels/countries",
