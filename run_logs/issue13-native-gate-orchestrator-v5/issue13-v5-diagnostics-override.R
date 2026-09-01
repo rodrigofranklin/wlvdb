@@ -53,6 +53,16 @@ wlv13_v5d_stage5_profile_columns <- c(
   "derivation_sha256"
 )
 
+wlv13_v5d_evidence_binding_fields <- c(
+  "at_stage", "candidate_reference_anomalies_sha256",
+  "candidate_reference_request_sha256",
+  "baseline_reference_anomalies_sha256",
+  "baseline_reference_request_sha256",
+  "baseline_target_anomalies_sha256",
+  "baseline_target_request_sha256", "reference_stage5_sha256",
+  "profile_id", "derivation_sha256"
+)
+
 wlv13_v5d_bridge_schema <- "issue13-v5-diagnostic-module-bridge/1"
 
 wlv13_v5d_methods <- c(
@@ -743,9 +753,22 @@ wlv13_v5d_parent_context <- function(child_context, child_execution) {
   anomaly_record <- inventory$records[
     inventory$records$path == "_anomalies.csv", , drop = FALSE
   ]
+  nonfinite_path <- file.path(
+    parent_root, "_nonfinite_resolution_diagnostics.csv"
+  )
+  nonfinite_record <- inventory$records[
+    inventory$records$path == "_nonfinite_resolution_diagnostics.csv",
+    , drop = FALSE
+  ]
+  nonfinite_present <- file.exists(nonfinite_path)
+  nonfinite_valid <- nrow(nonfinite_record) <= 1L &&
+    identical(nrow(nonfinite_record) == 1L, nonfinite_present) &&
+    (!nonfinite_present || identical(
+      nonfinite_record$sha256[[1L]], wlv13_sha256_file(nonfinite_path)
+    ))
   valid <- identical(inventory$manifest_path,
       normalizePath(manifest_path, winslash = "/", mustWork = TRUE)) &&
-    nrow(anomaly_record) == 1L &&
+    nrow(anomaly_record) == 1L && nonfinite_valid &&
     identical(anomaly_record$sha256[[1L]], wlv13_sha256_file(anomalies_path)) &&
     identical(manifest$run_id, parent_id) &&
     identical(manifest$method, child_context$method) &&
@@ -805,7 +828,15 @@ wlv13_v5d_parent_context <- function(child_context, child_execution) {
     anomalies_path = normalizePath(
       anomalies_path, winslash = "/", mustWork = TRUE
     ),
-    anomalies_sha256 = wlv13_sha256_file(anomalies_path)
+    anomalies_sha256 = wlv13_sha256_file(anomalies_path),
+    nonfinite_path = if (nonfinite_present) normalizePath(
+      nonfinite_path, winslash = "/", mustWork = TRUE
+    ) else NULL,
+    nonfinite_sha256 = if (nonfinite_present) {
+      wlv13_sha256_file(nonfinite_path)
+    } else {
+      ""
+    }
   )
 }
 
@@ -1676,6 +1707,32 @@ wlv13_v5d_parent_stage5_binding <- function(
   baseline_stage <- wlv13_v5d_validate_anomaly_shape(
     baseline, "Baseline parent anomalies"
   )
+  candidate_resolution <- if (profile$expected_count > 0L) {
+    if (is.null(candidate_parent$nonfinite_path)) {
+      stop("Candidate parent non-finite diagnostics are missing.",
+        call. = FALSE
+      )
+    }
+    wlv13_v5d_validate_nonfinite_value(
+      wlv13_read_csv_semantic(candidate_parent$nonfinite_path),
+      profile$method, profile, candidate
+    )
+  } else {
+    list(
+      passed = is.null(candidate_parent$nonfinite_path) &&
+        !any(candidate$policy_id == profile$id),
+      resolution_mask = rep(FALSE, nrow(candidate))
+    )
+  }
+  candidate_keep <- if (identical(
+      profile$action, "replace_nan_with_zero"
+    )) {
+    rep(TRUE, nrow(candidate))
+  } else {
+    !candidate_resolution$resolution_mask
+  }
+  candidate_core <- candidate[candidate_keep, , drop = FALSE]
+  candidate_stage <- candidate_stage[candidate_keep]
   baseline_resolution <- wlv13_v5d_bridge_baseline_nonfinite(
     baseline, profile
   )
@@ -1693,7 +1750,7 @@ wlv13_v5d_parent_stage5_binding <- function(
     policy$value, profile, bridges, "calculate"
   )
   candidate_modules <- wlv13_v5d_normalize_baseline_anomaly_modules(
-    candidate, profile, bridges, "recalculate"
+    candidate_core, profile, bridges, "recalculate"
   )
   selected_bridges <- bridges[
     bridges$method == profile$method &
@@ -1703,27 +1760,44 @@ wlv13_v5d_parent_stage5_binding <- function(
     candidate_modules$target_generation_rows == sum(as.integer(
       selected_bridges$expected_candidate_evidence_rows
     ))
-  candidate_keys <- wlv13_v5d_raw_row_keys(
-    candidate[candidate_stage >= 5L, , drop = FALSE]
+  candidate_stage5_keys <- wlv13_v5d_raw_row_keys(
+    candidate_core[candidate_stage >= 5L, , drop = FALSE]
   )
-  baseline_keys <- wlv13_v5d_raw_row_keys(
+  baseline_stage5_keys <- wlv13_v5d_raw_row_keys(
     modules$value[baseline_stage >= 5L, , drop = FALSE]
   )
-  candidate_counts <- wlv13_v5d_stage5_counts(candidate_keys)
-  baseline_counts <- wlv13_v5d_stage5_counts(baseline_keys)
-  difference <- wlv13_v5d_stage5_difference(
+  candidate_lower_keys <- wlv13_v5d_raw_row_keys(
+    candidate_core[candidate_stage < 5L, , drop = FALSE]
+  )
+  baseline_lower_keys <- wlv13_v5d_raw_row_keys(
+    modules$value[baseline_stage < 5L, , drop = FALSE]
+  )
+  candidate_counts <- wlv13_v5d_stage5_counts(candidate_stage5_keys)
+  baseline_counts <- wlv13_v5d_stage5_counts(baseline_stage5_keys)
+  stage5_difference <- wlv13_v5d_stage5_difference(
     candidate_counts, baseline_counts
   )
+  candidate_lower <- wlv13_v5d_stage5_counts(candidate_lower_keys)
+  baseline_lower <- wlv13_v5d_stage5_counts(baseline_lower_keys)
+  lower_difference <- wlv13_v5d_stage5_difference(
+    candidate_lower, baseline_lower
+  )
   list(
-    passed = baseline_resolution$passed &&
+    passed = candidate_resolution$passed && baseline_resolution$passed &&
       owner_contract_valid && modules$coverage_complete &&
       candidate_generation_valid &&
       modules$target_generation_rows == 0L &&
-      difference$same_keys && difference$exact,
+      candidate_lower$rows > 0L && baseline_lower$rows > 0L &&
+      lower_difference$same_keys && lower_difference$exact &&
+      stage5_difference$same_keys && stage5_difference$exact,
     reference_sha256 = candidate_counts$sha256,
     candidate_rows = candidate_counts$rows,
     baseline_rows = baseline_counts$rows,
-    difference_sha256 = difference$sha256
+    difference_sha256 = stage5_difference$sha256,
+    lower_reference_rows = candidate_lower$rows,
+    lower_reference_sha256 = candidate_lower$sha256,
+    lower_baseline_rows = baseline_lower$rows,
+    lower_difference_sha256 = lower_difference$sha256
   )
 }
 
@@ -1941,10 +2015,16 @@ wlv13_v5d_select_stage5_profile <- function(profiles, execution) {
     , drop = FALSE
   ]
   if (!nrow(selected)) {
-    return(list(found = FALSE, binding_valid = TRUE, authorization = NULL))
+    return(list(
+      found = FALSE, binding_valid = TRUE, authorization = NULL,
+      evidence_binding = NULL
+    ))
   }
   if (nrow(selected) != 1L) {
-    return(list(found = TRUE, binding_valid = FALSE, authorization = NULL))
+    return(list(
+      found = TRUE, binding_valid = FALSE, authorization = NULL,
+      evidence_binding = NULL
+    ))
   }
   binding_valid <-
     identical(selected$scenario_id[[1L]], execution$scenario_id) &&
@@ -1977,20 +2057,32 @@ wlv13_v5d_select_stage5_profile <- function(profiles, execution) {
         selected$evidence_baseline_reference_request_sha256[[1L]],
       profile_id = selected$profile_id[[1L]],
       derivation_sha256 = selected$derivation_sha256[[1L]]
+    ),
+    evidence_binding = list(
+      at_stage = selected$at_stage[[1L]],
+      candidate_reference_anomalies_sha256 =
+        selected$evidence_candidate_reference_anomalies_sha256[[1L]],
+      candidate_reference_request_sha256 =
+        selected$evidence_candidate_reference_request_sha256[[1L]],
+      baseline_reference_anomalies_sha256 =
+        selected$evidence_baseline_reference_anomalies_sha256[[1L]],
+      baseline_reference_request_sha256 =
+        selected$evidence_baseline_reference_request_sha256[[1L]],
+      baseline_target_anomalies_sha256 =
+        selected$evidence_baseline_target_anomalies_sha256[[1L]],
+      baseline_target_request_sha256 =
+        selected$evidence_baseline_target_request_sha256[[1L]],
+      reference_stage5_sha256 = selected$reference_stage5_sha256[[1L]],
+      profile_id = selected$profile_id[[1L]],
+      derivation_sha256 = selected$derivation_sha256[[1L]]
     )
   )
 }
 
 wlv13_v5d_current_parent_binding <- function(
-    candidate_parent, baseline_parent, parent_stage5, authorization) {
-  required_authorization <- c(
-    "candidate_rows", "candidate_sha256", "baseline_rows",
-    "baseline_sha256", "difference_key_count", "difference_sha256",
-    "reference_sha256", "candidate_reference_request_sha256",
-    "baseline_reference_request_sha256", "profile_id",
-    "derivation_sha256"
-  )
-  parent_valid <- function(value, reference_request_sha256) {
+    candidate_parent, baseline_parent, parent_stage5, evidence_binding) {
+  parent_valid <- function(
+      value, reference_request_sha256, reference_anomalies_sha256) {
     is.list(value) && is.list(value$context) && is.list(value$execution) &&
       identical(value$execution$mode, "calculate") &&
       identical(value$execution$at_stage, "") &&
@@ -2000,20 +2092,33 @@ wlv13_v5d_current_parent_binding <- function(
         value$context$observed_commit) &&
       is.character(value$anomalies_sha256) &&
       length(value$anomalies_sha256) == 1L &&
-      grepl("^[0-9a-f]{64}$", value$anomalies_sha256)
+      identical(value$anomalies_sha256, reference_anomalies_sha256)
   }
-  is.list(authorization) &&
-    identical(sort(names(authorization), method = "radix"),
-      sort(required_authorization, method = "radix")) &&
-    parent_valid(candidate_parent,
-      authorization$candidate_reference_request_sha256) &&
-    parent_valid(baseline_parent,
-      authorization$baseline_reference_request_sha256) &&
+  is.list(evidence_binding) &&
+    identical(sort(names(evidence_binding), method = "radix"),
+      sort(wlv13_v5d_evidence_binding_fields, method = "radix")) &&
+    parent_valid(
+      candidate_parent,
+      evidence_binding$candidate_reference_request_sha256,
+      evidence_binding$candidate_reference_anomalies_sha256
+    ) &&
+    parent_valid(
+      baseline_parent,
+      evidence_binding$baseline_reference_request_sha256,
+      evidence_binding$baseline_reference_anomalies_sha256
+    ) &&
     identical(candidate_parent$execution$method,
       baseline_parent$execution$method) &&
     is.list(parent_stage5) && isTRUE(parent_stage5$passed) &&
     identical(parent_stage5$reference_sha256,
-      authorization$reference_sha256)
+      evidence_binding$reference_stage5_sha256) &&
+    grepl("^[1-5]$", evidence_binding$at_stage) &&
+    grepl("^[0-9a-f]{64}$",
+      evidence_binding$baseline_target_anomalies_sha256) &&
+    grepl("^[0-9a-f]{64}$",
+      evidence_binding$baseline_target_request_sha256) &&
+    grepl("^stage5-[0-9a-f]{24}$", evidence_binding$profile_id) &&
+    grepl("^[0-9a-f]{64}$", evidence_binding$derivation_sha256)
 }
 
 # Builds one controller-reviewable profile from pre-existing evidence only.
@@ -2247,6 +2352,86 @@ wlv13_v5d_stage5_multiplicity <- function(
   )
 }
 
+wlv13_v5d_lower_multiplicity <- function(
+    candidate_keys, baseline_keys, parent_lower_rows = NA_integer_,
+    parent_lower_sha256 = "", baseline_artifact_sha256 = "",
+    evidence_binding = NULL) {
+  candidate <- wlv13_v5d_stage5_counts(candidate_keys)
+  baseline <- wlv13_v5d_stage5_counts(baseline_keys)
+  difference <- wlv13_v5d_stage5_difference(candidate, baseline)
+  nonempty <- candidate$rows > 0L && baseline$rows > 0L
+  default_exact <- is.null(evidence_binding) && nonempty &&
+    difference$same_keys && difference$exact
+  binding_shape_valid <- is.list(evidence_binding) &&
+    identical(sort(names(evidence_binding), method = "radix"),
+      sort(wlv13_v5d_evidence_binding_fields, method = "radix")) &&
+    grepl("^[1-5]$", evidence_binding$at_stage) &&
+    all(vapply(c(
+      "candidate_reference_anomalies_sha256",
+      "candidate_reference_request_sha256",
+      "baseline_reference_anomalies_sha256",
+      "baseline_reference_request_sha256",
+      "baseline_target_anomalies_sha256",
+      "baseline_target_request_sha256", "reference_stage5_sha256",
+      "derivation_sha256"
+    ), function(field) {
+      grepl("^[0-9a-f]{64}$", evidence_binding[[field]])
+    }, logical(1L))) &&
+    grepl("^stage5-[0-9a-f]{24}$", evidence_binding$profile_id)
+  target_binding_valid <- binding_shape_valid &&
+    identical(
+      baseline_artifact_sha256,
+      evidence_binding$baseline_target_anomalies_sha256
+    )
+  parent_binding_valid <- binding_shape_valid &&
+    is.numeric(parent_lower_rows) && length(parent_lower_rows) == 1L &&
+    !is.na(parent_lower_rows) && parent_lower_rows > 0L &&
+    is.character(parent_lower_sha256) &&
+    length(parent_lower_sha256) == 1L &&
+    grepl("^[0-9a-f]{64}$", parent_lower_sha256) &&
+    identical(candidate$rows, as.integer(parent_lower_rows)) &&
+    identical(candidate$sha256, parent_lower_sha256)
+  bound_common <- nonempty && target_binding_valid &&
+    parent_binding_valid && difference$same_keys &&
+    difference$structurally_valid
+  bound_exact <- bound_common && difference$exact
+  bound_legacy <- bound_common &&
+    identical(evidence_binding$at_stage, "1") &&
+    !difference$exact && difference$key_count > 0L
+  passed <- default_exact || bound_exact || bound_legacy
+  list(
+    passed = passed,
+    difference_exact = difference$same_keys && difference$exact,
+    profile = if (default_exact) {
+      "exact-generation"
+    } else if (bound_exact) {
+      "sealed-exact-generation"
+    } else if (bound_legacy) {
+      "sealed-exact-legacy-generation"
+    } else if (!difference$same_keys) {
+      "key-mismatch"
+    } else if (!is.null(evidence_binding)) {
+      "sealed-profile-mismatch"
+    } else {
+      "unauthorized-generation-difference"
+    },
+    ratio = difference$ratios,
+    difference_key_count = difference$key_count,
+    difference_sha256 = difference$sha256,
+    candidate_rows = candidate$rows,
+    candidate_sha256 = candidate$sha256,
+    baseline_rows = baseline$rows,
+    baseline_sha256 = baseline$sha256,
+    target_binding_valid = target_binding_valid,
+    parent_binding_valid = parent_binding_valid,
+    profile_id = if (passed && !is.null(evidence_binding)) {
+      evidence_binding$profile_id
+    } else {
+      ""
+    }
+  )
+}
+
 wlv13_v5d_validate_anomaly_shape <- function(value, label) {
   required <- c(
     "artifact", "indicator", "checkpoint", "stage", "module",
@@ -2380,10 +2565,6 @@ wlv13_cross_engine_compare_anomalies <- function(
     , drop = FALSE
   ]
   baseline_stage5 <- baseline_core[baseline_stage >= 5L, , drop = FALSE]
-  lower_equal <- identical(
-    wlv13_table_row_keys(candidate_lower),
-    wlv13_table_row_keys(baseline_lower)
-  )
   stage5_profiles <- wlv13_v5d_read_stage5_profiles()
   profile_declared <- any(
     stage5_profiles$method == method &
@@ -2413,11 +2594,27 @@ wlv13_cross_engine_compare_anomalies <- function(
   parent_profile_binding_valid <- if (profile_declared) {
     wlv13_v5d_current_parent_binding(
       candidate_parent, baseline_parent, parent_stage5,
-      stage5_selection$authorization
+      stage5_selection$evidence_binding
     )
   } else {
     isTRUE(parent_stage5$passed)
   }
+  lower_multiplicity <- wlv13_v5d_lower_multiplicity(
+    wlv13_v5d_raw_row_keys(candidate_lower),
+    wlv13_v5d_raw_row_keys(baseline_lower),
+    parent_lower_rows = if (!is.null(
+        parent_stage5$lower_reference_rows
+      )) parent_stage5$lower_reference_rows else NA_integer_,
+    parent_lower_sha256 = if (!is.null(
+        parent_stage5$lower_reference_sha256
+      )) parent_stage5$lower_reference_sha256 else "",
+    baseline_artifact_sha256 = right$sha256,
+    evidence_binding = if (stage5_selection$found) {
+      stage5_selection$evidence_binding
+    } else {
+      NULL
+    }
+  )
   multiplicity <- wlv13_v5d_stage5_multiplicity(
     wlv13_v5d_raw_row_keys(candidate_stage5),
     wlv13_v5d_raw_row_keys(baseline_stage5),
@@ -2434,7 +2631,7 @@ wlv13_cross_engine_compare_anomalies <- function(
     candidate_module_generation_valid &&
     baseline_module_generation_valid && owner_contract_valid &&
     policy_generation_valid &&
-    lower_equal && multiplicity$passed
+    lower_multiplicity$passed && multiplicity$passed
   list(
     summary = list(
       passed = valid,
@@ -2454,7 +2651,22 @@ wlv13_cross_engine_compare_anomalies <- function(
       baseline_nonfinite_binding_sha256 =
         baseline_resolution$binding_sha256,
       normalized_core_rows = nrow(candidate_core),
-      lower_stage_multiset_equal = lower_equal,
+      lower_stage_multiset_equal = lower_multiplicity$difference_exact,
+      lower_stage_multiplicity_valid = lower_multiplicity$passed,
+      lower_stage_multiplicity_profile = lower_multiplicity$profile,
+      lower_stage_multiplicity_ratio = as.list(lower_multiplicity$ratio),
+      lower_stage_difference_key_count =
+        lower_multiplicity$difference_key_count,
+      lower_stage_difference_sha256 = lower_multiplicity$difference_sha256,
+      lower_stage_candidate_rows = lower_multiplicity$candidate_rows,
+      lower_stage_candidate_fingerprint = lower_multiplicity$candidate_sha256,
+      lower_stage_baseline_rows = lower_multiplicity$baseline_rows,
+      lower_stage_baseline_fingerprint = lower_multiplicity$baseline_sha256,
+      lower_stage_parent_binding_valid =
+        lower_multiplicity$parent_binding_valid,
+      lower_stage_target_artifact_binding_valid =
+        lower_multiplicity$target_binding_valid,
+      lower_stage_profile_id = lower_multiplicity$profile_id,
       stage5_same_semantic_rows = multiplicity$profile != "key-mismatch",
       stage5_multiplicity_valid = multiplicity$passed,
       stage5_multiplicity_profile = multiplicity$profile,
@@ -3089,10 +3301,10 @@ wlv13_v5d_selftest <- function() {
     exact_stage5, doubled_stage5, mutated_stage5_authorization
   )$passed, "stage5 altered sealed difference hash")
   fixture_execution <- list(
-    method = "fixture", mode = "recalculate", at_stage = "4",
+    method = "fixture", mode = "recalculate", at_stage = "1",
     sea_vars_sha256 = paste(rep("c", 64L), collapse = ""), workers = 1L,
     request_sha256 = paste(rep("d", 64L), collapse = ""),
-    scenario_id = "recalculate/stage-4/all/workers-1",
+    scenario_id = "recalculate/stage-1/all/workers-1",
     run_id = "run-fixture-baseline-target"
   )
   fixture_stage5_profile <- as.data.frame(stats::setNames(
@@ -3222,13 +3434,15 @@ wlv13_v5d_selftest <- function() {
   )
   fixture_parent_stage5 <- list(
     passed = TRUE,
-    reference_sha256 = stage5_authorization$reference_sha256
+    reference_sha256 = stage5_authorization$reference_sha256,
+    lower_reference_rows = length(exact_stage5),
+    lower_reference_sha256 = candidate_stage5_profile$sha256
   )
   expect_true(selected_stage5_profile$found &&
       selected_stage5_profile$binding_valid &&
       wlv13_v5d_current_parent_binding(
         fixture_candidate_parent, fixture_baseline_parent,
-        fixture_parent_stage5, selected_stage5_profile$authorization
+        fixture_parent_stage5, selected_stage5_profile$evidence_binding
       ),
     "stage5 sealed request selection with distinct current parent IDs"
   )
@@ -3250,20 +3464,123 @@ wlv13_v5d_selftest <- function() {
   mutated_parent_stage5$reference_sha256 <- paste(rep("5", 64L), collapse = "")
   expect_false(wlv13_v5d_current_parent_binding(
     fixture_candidate_parent, fixture_baseline_parent,
-    mutated_parent_stage5, selected_stage5_profile$authorization
+    mutated_parent_stage5, selected_stage5_profile$evidence_binding
   ), "stage5 current parent fingerprint mutation")
   mutated_parent <- fixture_candidate_parent
   mutated_parent$execution$request_sha256 <- paste(rep("6", 64L), collapse = "")
   expect_false(wlv13_v5d_current_parent_binding(
     mutated_parent, fixture_baseline_parent,
-    fixture_parent_stage5, selected_stage5_profile$authorization
+    fixture_parent_stage5, selected_stage5_profile$evidence_binding
   ), "stage5 current parent request mutation")
   mutated_parent <- fixture_baseline_parent
   mutated_parent$context$observed_commit <- paste(rep("7", 40L), collapse = "")
   expect_false(wlv13_v5d_current_parent_binding(
     fixture_candidate_parent, mutated_parent,
-    fixture_parent_stage5, selected_stage5_profile$authorization
+    fixture_parent_stage5, selected_stage5_profile$evidence_binding
   ), "stage5 current parent commit mutation")
+  mutated_parent <- fixture_candidate_parent
+  mutated_parent$anomalies_sha256 <- paste(rep("8", 64L), collapse = "")
+  expect_false(wlv13_v5d_current_parent_binding(
+    mutated_parent, fixture_baseline_parent,
+    fixture_parent_stage5, selected_stage5_profile$evidence_binding
+  ), "stage5 current candidate-parent artifact mutation")
+  mutated_parent <- fixture_baseline_parent
+  mutated_parent$anomalies_sha256 <- paste(rep("8", 64L), collapse = "")
+  expect_false(wlv13_v5d_current_parent_binding(
+    fixture_candidate_parent, mutated_parent,
+    fixture_parent_stage5, selected_stage5_profile$evidence_binding
+  ), "stage5 current baseline-parent artifact mutation")
+
+  exact_lower <- c("lower-a", "lower-b")
+  doubled_lower <- c(exact_lower, exact_lower)
+  lower_parent <- wlv13_v5d_stage5_counts(exact_lower)
+  lower_binding <- selected_stage5_profile$evidence_binding
+  lower_target_sha256 <- lower_binding$baseline_target_anomalies_sha256
+  exact_lower_result <- wlv13_v5d_lower_multiplicity(
+    exact_lower, exact_lower
+  )
+  expect_true(
+    exact_lower_result$passed && exact_lower_result$difference_exact,
+    "lower-stage exact generation without profile"
+  )
+  expect_false(wlv13_v5d_lower_multiplicity(
+    exact_lower, doubled_lower
+  )$passed, "lower-stage unauthorized doubled generation")
+  sealed_lower_result <- wlv13_v5d_lower_multiplicity(
+    exact_lower, doubled_lower, lower_parent$rows, lower_parent$sha256,
+    lower_target_sha256, lower_binding
+  )
+  expect_true(
+    sealed_lower_result$passed &&
+      !sealed_lower_result$difference_exact &&
+      identical(
+        sealed_lower_result$profile,
+        "sealed-exact-legacy-generation"
+      ),
+    "lower-stage sealed legacy generation"
+  )
+  expect_true(wlv13_v5d_lower_multiplicity(
+    exact_lower, exact_lower, lower_parent$rows, lower_parent$sha256,
+    lower_target_sha256, lower_binding
+  )$passed, "lower-stage sealed exact generation")
+  stage4_lower_binding <- lower_binding
+  stage4_lower_binding$at_stage <- "4"
+  expect_true(wlv13_v5d_lower_multiplicity(
+    exact_lower, exact_lower, lower_parent$rows, lower_parent$sha256,
+    lower_target_sha256, stage4_lower_binding
+  )$passed, "lower-stage exact stage-four generation")
+  expect_false(wlv13_v5d_lower_multiplicity(
+    exact_lower, doubled_lower, lower_parent$rows, lower_parent$sha256,
+    lower_target_sha256, stage4_lower_binding
+  )$passed, "lower-stage doubled stage-four generation")
+  stage5_lower_binding <- lower_binding
+  stage5_lower_binding$at_stage <- "5"
+  expect_false(wlv13_v5d_lower_multiplicity(
+    exact_lower, doubled_lower, lower_parent$rows, lower_parent$sha256,
+    lower_target_sha256, stage5_lower_binding
+  )$passed, "lower-stage doubled stage-five generation")
+  expect_false(wlv13_v5d_lower_multiplicity(
+    exact_lower, doubled_lower, lower_parent$rows, lower_parent$sha256,
+    paste(rep("9", 64L), collapse = ""), lower_binding
+  )$passed, "lower-stage target artifact mutation")
+  expect_false(wlv13_v5d_lower_multiplicity(
+    exact_lower, doubled_lower, lower_parent$rows + 1L,
+    lower_parent$sha256, lower_target_sha256, lower_binding
+  )$passed, "lower-stage parent row mutation")
+  expect_false(wlv13_v5d_lower_multiplicity(
+    exact_lower, doubled_lower, lower_parent$rows,
+    paste(rep("9", 64L), collapse = ""),
+    lower_target_sha256, lower_binding
+  )$passed, "lower-stage parent fingerprint mutation")
+  expect_false(wlv13_v5d_lower_multiplicity(
+    doubled_lower, c(doubled_lower, doubled_lower), lower_parent$rows,
+    lower_parent$sha256, lower_target_sha256, lower_binding
+  )$passed, "lower-stage candidate drift with admissible ratio")
+  expect_false(wlv13_v5d_lower_multiplicity(
+    exact_lower, c(exact_lower, exact_lower, exact_lower),
+    lower_parent$rows, lower_parent$sha256,
+    lower_target_sha256, lower_binding
+  )$passed, "lower-stage tripled generation")
+  expect_false(wlv13_v5d_lower_multiplicity(
+    exact_lower, c(doubled_lower, "lower-extra"), lower_parent$rows,
+    lower_parent$sha256, lower_target_sha256, lower_binding
+  )$passed, "lower-stage key mutation")
+  expect_false(wlv13_v5d_lower_multiplicity(
+    character(), character(), 0L, wlv13_v5d_sha256_text(""),
+    lower_target_sha256, lower_binding
+  )$passed, "lower-stage empty evidence")
+  incomplete_lower_binding <- lower_binding
+  incomplete_lower_binding$profile_id <- NULL
+  expect_false(wlv13_v5d_lower_multiplicity(
+    exact_lower, doubled_lower, lower_parent$rows, lower_parent$sha256,
+    lower_target_sha256, incomplete_lower_binding
+  )$passed, "lower-stage incomplete evidence binding")
+  extended_lower_binding <- lower_binding
+  extended_lower_binding$unexpected <- "forged"
+  expect_false(wlv13_v5d_lower_multiplicity(
+    exact_lower, doubled_lower, lower_parent$rows, lower_parent$sha256,
+    lower_target_sha256, extended_lower_binding
+  )$passed, "lower-stage excess evidence binding")
   mutated_profile <- fixture_stage5_profile
   mutated_profile$evidence_candidate_reference_run_id <-
     "run-forged-historical-reference"

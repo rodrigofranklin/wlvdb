@@ -486,9 +486,9 @@ $sourceToolingFiles = @(
   'issue13-runtime-loader-selftest.R'
 )
 $expectedOutputFileCount = 47L
-$expectedOutputTotalBytes = 2616118L
+$expectedOutputTotalBytes = 2629957L
 $expectedOutputInventory =
-  'b74d70b6a3dd263756ddd2fe70f5e9ac16a4d2f3f88c9c3d842e3bd7b75eb1c2'
+  'ee02c9c38fbd2fd6c1cac8f950ef43fa2b9ec23d6da67a93ccc3e6423b6d590c'
 $controllerFiles = @(
   'README.md',
   'issue13-v5-aggregate-hardening.R',
@@ -2675,7 +2675,7 @@ assert(identical(metadata_assertions, 645L),
   "V5 exhaustive metadata mutation coverage is incomplete."
 )
 diagnostic_assertions <- wlv13_v5d_selftest()
-assert(identical(diagnostic_assertions, 226L),
+assert(identical(diagnostic_assertions, 244L),
   "V5 exhaustive diagnostic mutation coverage is incomplete."
 )
 preparation_assertions <- wlv13_v5p_selftest(file.path(
