@@ -739,21 +739,6 @@ function Assert-Issue13V5BaselineSmokeSourceInventory(
   }
 }
 
-function Assert-Issue13V5BaselineSmokeNoConcurrentR {
-  $processes = @(Get-CimInstance Win32_Process -ErrorAction Stop |
-    Where-Object { $_.Name -in @(
-      'R.exe', 'Rscript.exe', 'Rterm.exe', 'Rgui.exe', 'Rcmd.exe', 'Rfe.exe'
-    ) })
-  foreach ($process in $processes) {
-    if ([int]$process.ProcessId -ne 30272 -or
-        [string]$process.Name -cne 'Rscript.exe' -or
-        [string]$process.CommandLine -cne
-          '"C:\Users\rodri\AppData\Local\Programs\R\R-4.6.1\bin\x64\Rscript.exe" --vanilla run-local-panel.R') {
-      throw "Unexpected R process before baseline smoke: PID $($process.ProcessId)."
-    }
-  }
-}
-
 function Write-Issue13V5BaselineSmokeJson(
   [object]$Value,
   [string]$Path
@@ -932,8 +917,6 @@ $harnessManifestSha256 =
 
 $sourceInventory = Get-Issue13V5SourceInventory $source
 Assert-Issue13V5BaselineSmokeSourceInventory $sourceInventory 'Source origin'
-Assert-Issue13V5BaselineSmokeNoConcurrentR
-
 $null = New-Item -ItemType Directory -Path $smoke
 $null = Assert-Issue13V5NoReparseAncestors $smoke 'Created smoke root'
 $createdSmokePhysical = ConvertTo-Issue13V5BaselineSmokePhysicalPath $smoke `
@@ -981,7 +964,6 @@ $smokeAction = {
     $elapsedSeconds = $null
     $peakRssBytes = $null
     try {
-      Assert-Issue13V5BaselineSmokeNoConcurrentR
       $null = Assert-Issue13V5SmokeHarness $runtimeRoot `
         $harnessManifestPath $repository $harnessManifestSha256
       $null = Invoke-Issue13V5SealedGit `
@@ -1199,7 +1181,6 @@ $null = Invoke-Issue13V5WithCleanup `
   -Cleanup $baselineCleanup `
   -Action $environmentAction
 
-Assert-Issue13V5BaselineSmokeNoConcurrentR
 $null = Assert-Issue13V5BaselineSmokeRscriptSeal `
   $rscriptFull $rscriptIdentity $rscriptSha256
 $null = Assert-Issue13V5SmokeHarness $runtimeRoot `

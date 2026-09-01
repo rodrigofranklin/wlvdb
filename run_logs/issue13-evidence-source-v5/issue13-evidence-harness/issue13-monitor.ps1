@@ -510,11 +510,11 @@ function Invoke-Issue13WithProcessEnvironment(
   [Parameter(Mandatory = $true)][scriptblock]$Action
 ) {
   if ($null -eq $Action) { throw 'Environment action cannot be null.' }
-  $properties = if ($null -eq $Environment) {
-    @()
-  } else {
-    @($Environment.PSObject.Properties)
-  }
+  $properties = @(
+    if ($null -ne $Environment) {
+      $Environment.PSObject.Properties
+    }
+  )
   if ($properties.Count -eq 0) { return (& $Action) }
   $names = @($properties | ForEach-Object { [string]$_.Name })
   $snapshot = @(Get-Issue13ProcessEnvironmentState -Names $names)
@@ -716,7 +716,25 @@ function Active-KnownRecords([object[]]$Table, [hashtable]$KnownByPid) {
 
 function Stop-KnownTree([object[]]$Records) {
   foreach ($record in ($Records | Sort-Object ProcessId -Descending)) {
-    Stop-Process -Id $record.ProcessId -Force -ErrorAction SilentlyContinue
+    $current = Get-Process -Id $record.ProcessId -ErrorAction SilentlyContinue
+    if ($null -eq $current) { continue }
+    try {
+      $handle = $current.SafeHandle
+      if ($handle.IsClosed -or $handle.IsInvalid) { continue }
+      $identity = Get-CimInstance Win32_Process -Filter (
+        'ProcessId=' + [string]$record.ProcessId
+      ) -ErrorAction SilentlyContinue
+      if ($null -eq $identity -or
+          (Convert-CreationDate $identity.CreationDate) -cne
+            [string]$record.Created) {
+        continue
+      }
+      $current.Kill($true)
+    } catch [InvalidOperationException] {
+      continue
+    } finally {
+      $current.Dispose()
+    }
   }
 }
 
@@ -914,45 +932,71 @@ $timedOut = $false
     $totalPrivate = [int64]0
     $totalCpu = 0.0
     $workerCount = 0
+    $sampledProcessCount = 0
     foreach ($record in $active) {
       $current = Get-Process -Id $record.ProcessId -ErrorAction SilentlyContinue
       if ($null -eq $current) { continue }
-      $workingSet = [int64]$current.WorkingSet64
-      $private = [int64]$current.PrivateMemorySize64
-      $cpu = if ($null -eq $current.CPU) { 0.0 } else { [double]$current.CPU }
-      $totalWorkingSet += $workingSet
-      $totalPrivate += $private
-      $totalCpu += $cpu
-      if ($record.ProcessId -ne $rootPid -and
-          $record.Name -match '^(R|Rscript|Rterm)(\.exe)?$') {
-        $workerCount++
+      try {
+        $handle = $current.SafeHandle
+        if ($handle.IsClosed -or $handle.IsInvalid) { continue }
+        $identity = Get-CimInstance Win32_Process -Filter (
+          'ProcessId=' + [string]$record.ProcessId
+        ) -ErrorAction SilentlyContinue
+        if ($null -eq $identity -or
+            (Convert-CreationDate $identity.CreationDate) -cne
+              [string]$record.Created) {
+          continue
+        }
+        $current.Refresh()
+        if ($current.HasExited) { continue }
+        $workingSet = [int64]$current.WorkingSet64
+        $private = [int64]$current.PrivateMemorySize64
+        $cpu = if ($null -eq $current.CPU) {
+          0.0
+        } else {
+          [double]$current.CPU
+        }
+        $totalWorkingSet += $workingSet
+        $totalPrivate += $private
+        $totalCpu += $cpu
+        $sampledProcessCount++
+        if ($record.ProcessId -ne $rootPid -and
+            $record.Name -match '^(R|Rscript|Rterm)(\.exe)?$') {
+          $workerCount++
+        }
+        $key = Process-Key $record.ProcessId $record.Created
+        $entry = $observed[$key]
+        $entry.last_seen_at_utc = $now.ToString('o')
+        if ($workingSet -gt $entry.peak_working_set_bytes) {
+          $entry.peak_working_set_bytes = $workingSet
+        }
+        if ($private -gt $entry.peak_private_bytes) {
+          $entry.peak_private_bytes = $private
+        }
+        if ($cpu -gt $entry.peak_cpu_seconds) {
+          $entry.peak_cpu_seconds = $cpu
+        }
+        $sampleWriter.WriteLine((@(
+            (Csv-Field $now.ToString('o')),
+            $record.ProcessId,
+            $record.ParentProcessId,
+            (Csv-Field $record.Name),
+            (Csv-Field $record.Created),
+            $workingSet,
+            $private,
+            $cpu.ToString('R', [Globalization.CultureInfo]::InvariantCulture)
+          ) -join ','))
+      } catch [InvalidOperationException] {
+        continue
+      } finally {
+        $current.Dispose()
       }
-      $key = Process-Key $record.ProcessId $record.Created
-      $entry = $observed[$key]
-      $entry.last_seen_at_utc = $now.ToString('o')
-      if ($workingSet -gt $entry.peak_working_set_bytes) {
-        $entry.peak_working_set_bytes = $workingSet
-      }
-      if ($private -gt $entry.peak_private_bytes) {
-        $entry.peak_private_bytes = $private
-      }
-      if ($cpu -gt $entry.peak_cpu_seconds) { $entry.peak_cpu_seconds = $cpu }
-      $sampleWriter.WriteLine((@(
-          (Csv-Field $now.ToString('o')),
-          $record.ProcessId,
-          $record.ParentProcessId,
-          (Csv-Field $record.Name),
-          (Csv-Field $record.Created),
-          $workingSet,
-          $private,
-          $cpu.ToString('R', [Globalization.CultureInfo]::InvariantCulture)
-        ) -join ','))
     }
     if ($totalWorkingSet -gt $peakWorkingSet) { $peakWorkingSet = $totalWorkingSet }
     if ($totalPrivate -gt $peakPrivate) { $peakPrivate = $totalPrivate }
     if ($totalCpu -gt $peakCpu) { $peakCpu = $totalCpu }
-    if ($active.Count -gt $maxConcurrentProcesses) {
-      $maxConcurrentProcesses = $active.Count
+    if ($sampledProcessCount -gt $maxConcurrentProcesses) {
+      $maxConcurrentProcesses = $sampledProcessCount
     }
     if ($workerCount -gt $maxConcurrentWorkers) {
       $maxConcurrentWorkers = $workerCount

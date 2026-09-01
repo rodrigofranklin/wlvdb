@@ -600,8 +600,6 @@ $script:Issue13V5CandidateSourceInventorySha256 =
   '22e90e9485d7cee19d1de786c3464106d9a857ad3d85d0c9f2b3d912a0f38026'
 $script:Issue13V5CandidateSourceDirectorySha256 =
   'c75aa417f14cded3c3bb6028effc8acadd64a32e86fddc0f1278079acdb6f114'
-$script:Issue13V5AllowedRCommandSha256 =
-  'cb09e749c6c1d9e1d5b93ea7c1cf4333d9f57f816fcc25967b04adb4e2595fc1'
 $script:Issue13V5OracleEffectFiles = @(
   'issue13-v5-oracle-effect-README.md',
   'issue13-v5-oracle-effect-generate.ps1',
@@ -5836,6 +5834,26 @@ function Get-Issue13V5ExpectedEvidenceIds {
 function Assert-Issue13V5Config([string]$ConfigPath) {
   $path = (Resolve-Path -LiteralPath $ConfigPath).Path
   $config = Read-Issue13V5Json $path
+  $null = Assert-Issue13V5ExactPropertyNames $config @(
+    'schema', 'generation', 'created_at_utc', 'final_evidence_eligible',
+    'reuse_policy', 'repository_root', 'harness_runtime_root', 'harness_root',
+    'harness_manifest_path', 'harness_manifest_sha256', 'worktree_root',
+    'evidence_root', 'control_root', 'source_origin', 'source_inventory',
+    'candidate_source_origin', 'candidate_source_inventory',
+    'source_contract_bindings', 'rscript', 'r_library', 'baseline_commit',
+    'baseline_base_commit', 'baseline_runtime_commit', 'baseline_profile',
+    'baseline_overlay', 'strict_baseline_smoke',
+    'compatibility_baseline_smoke', 'oracle_effect', 'candidate_commit',
+    'candidate_seed_commit', 'baseline_runtime_index',
+    'baseline_runtime_index_sha256', 'methods', 'supplemental_roots', 'matrix',
+    'comparison', 'performance', 'preparation', 'paper0', 'report'
+  ) 'V5 config root'
+  $null = Assert-Issue13V5ExactPropertyNames $config.performance @(
+    'candidate_time_ratio_maximum', 'candidate_rss_baseline_ratio_allowance',
+    'candidate_rss_minimum_allowance_bytes', 'workers2_methods',
+    'require_cluster_closed', 'rss_worker_lifecycle_scope', 'elapsed_scope',
+    'allow_unrelated_r_processes', 'external_load_policy'
+  ) 'V5 performance policy'
   $configuredPaths = @(Get-Issue13V5ConfiguredPaths $config)
   $legacyPaths = @($configuredPaths | Where-Object {
     Test-Issue13V5LegacyPath $_
@@ -6018,6 +6036,14 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
         "wiodr13`nwiodr16" -or
       -not (Test-Issue13V5ExactBoolean `
         $config.performance.require_cluster_closed $true) -or
+      [string]$config.performance.rss_worker_lifecycle_scope -cne
+        'authenticated-root-and-observed-descendants' -or
+      [string]$config.performance.elapsed_scope -cne
+        'monitor-wall-clock-from-prelaunch-through-observed-tree-quiescence' -or
+      -not (Test-Issue13V5ExactBoolean `
+        $config.performance.allow_unrelated_r_processes $true) -or
+      [string]$config.performance.external_load_policy -cne
+        'minimum-free-physical-memory-no-cpu-exclusivity' -or
       [string]::Join("`n", @($config.preparation.sources)) -cne
         "wiodr13`nwiodr16`neuklems" -or
       -not (Test-Issue13V5ExactBoolean `
@@ -6103,12 +6129,6 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
     foreach ($root in $roots) {
       Assert-Issue13V5PathsDisjoint $root $immutable 'V5 output/immutable-root isolation'
     }
-  }
-  if (@($config.allowed_r_processes).Count -ne 1 -or
-      [long]$config.allowed_r_processes[0].pid -ne 30272L -or
-      [string]$config.allowed_r_processes[0].command_line_sha256 -cne
-        $script:Issue13V5AllowedRCommandSha256) {
-    throw 'V5 config does not preserve the sole allowed persistent R PID.'
   }
   $null = Assert-Issue13V5ExactPropertyNames `
     $config.strict_baseline_smoke @(
@@ -6429,37 +6449,7 @@ function Assert-Issue13V5NoTransactionResidue([string]$ProjectRoot) {
   $true
 }
 
-function Get-Issue13V5RProcesses {
-  @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
-    [string]$_.Name -cin @(
-      'R.exe', 'Rscript.exe', 'Rterm.exe', 'Rgui.exe', 'Rcmd.exe', 'Rfe.exe'
-    )
-  })
-}
-
-function Assert-Issue13V5NoConcurrentR([object]$Config) {
-  $allowed = @{}
-  foreach ($record in @($Config.allowed_r_processes)) {
-    $allowed[[int]$record.pid] = [string]$record.command_line_sha256
-  }
-  $unexpected = [Collections.Generic.List[string]]::new()
-  foreach ($process in @(Get-Issue13V5RProcesses)) {
-    $pidValue = [int]$process.ProcessId
-    $hash = Get-Issue13V5TextSha256 ([string]$process.CommandLine)
-    if (-not $allowed.ContainsKey($pidValue) -or
-        [string]$allowed[$pidValue] -cne $hash) {
-      $unexpected.Add("$pidValue/$($process.Name)/$hash")
-    }
-  }
-  if ($unexpected.Count -ne 0) {
-    throw ('Unexpected R processes are active: ' +
-      ($unexpected.ToArray() -join ', '))
-  }
-  $true
-}
-
 function Wait-Issue13V5CoolState(
-  [object]$Config,
   [int]$CoolingSeconds = 20,
   [int64]$RequiredFreeBytes = 4294967296L,
   [int]$TimeoutSeconds = 900
@@ -6467,7 +6457,6 @@ function Wait-Issue13V5CoolState(
   $started = [DateTime]::UtcNow
   $stableSince = $null
   while (([DateTime]::UtcNow - $started).TotalSeconds -lt $TimeoutSeconds) {
-    $null = Assert-Issue13V5NoConcurrentR $Config
     $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
     $free = [int64]$os.FreePhysicalMemory * 1024L
     if ($free -ge $RequiredFreeBytes) {
@@ -7158,7 +7147,6 @@ function Invoke-Issue13V5R(
     throw "$Label requires -ConfirmExecuteR."
   }
   $null = Assert-Issue13V5HarnessBinding $Config
-  $null = Assert-Issue13V5NoConcurrentR $Config
   $rscriptLease = Enter-Issue13V5RscriptExecutableLease `
     ([string]$Config.rscript)
   $execution = [pscustomobject]@{ result = $null }
@@ -7173,7 +7161,6 @@ function Invoke-Issue13V5R(
   $null = Invoke-Issue13V5WithCleanup `
     -Action $action `
     -Cleanup @(
-      { $null = Assert-Issue13V5NoConcurrentR $Config },
       { $null = Assert-Issue13V5HarnessBinding $Config },
       { Exit-Issue13V5RscriptExecutableLease $rscriptLease }
     ) `
@@ -7192,7 +7179,6 @@ function Invoke-Issue13V5Pwsh(
     throw "$Label requires -ConfirmExecuteR."
   }
   $null = Assert-Issue13V5HarnessBinding $Config
-  $null = Assert-Issue13V5NoConcurrentR $Config
   $execution = [pscustomobject]@{ result = $null }
   $action = {
     $environment = New-Issue13V5ClosedREnvironment `
@@ -7205,7 +7191,6 @@ function Invoke-Issue13V5Pwsh(
   $null = Invoke-Issue13V5WithCleanup `
     -Action $action `
     -Cleanup @(
-      { $null = Assert-Issue13V5NoConcurrentR $Config },
       { $null = Assert-Issue13V5HarnessBinding $Config }
     ) `
     -Label $Label

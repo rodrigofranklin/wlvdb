@@ -168,13 +168,17 @@ baseline é exato. Quando o baseline diverge, registra
 
 - inicia processo novo e oculto;
 - identifica PID + CreationDate para evitar reuso de PID;
-- acompanha toda a árvore de processos;
+- acompanha os descendentes observados enquanto a cadeia autenticada permanece
+  identificável por PID + CreationDate;
+- não adota, não amostra nem encerra processos R externos que não descendem da
+  raiz autenticada;
 - amostra RSS/private/CPU em CSV;
-- mede o pico agregado da árvore;
+- mede o máximo de RSS agregado observado nas amostras da raiz autenticada e
+  dos descendentes observados e autenticados;
 - exige zero workers R filhos para `workers=1` e exatamente dois para
   `workers=2`;
-- aguarda o encerramento dos descendentes e mata apenas a árvore conhecida em
-  timeout/cluster pendente;
+- aguarda o encerramento dos descendentes observados e mata apenas a árvore
+  conhecida em timeout/cluster pendente;
 - autentica spec, stdout, stderr e amostras com SHA-256.
 
 `issue13-run-plan.ps1` executa uma coleção de specs já pronta. Para recálculos,
@@ -327,10 +331,11 @@ O monitor também pode ser testado com um `Rscript` que apenas executa
 `Sys.sleep(0.35)`; não é necessário nem permitido usar jobs científicos para
 esse teste.
 
-Para validar somente o parser, a identidade byte a byte dos helpers de ambiente,
-os valores definidos estritamente como strings (inclusive a string vazia), o
-`null` declarado como remoção temporária e a restauração tri-state (`ausente`,
-vazio e valor), sem iniciar R, use
+Para validar, sem iniciar R, o parser, a identidade byte a byte dos helpers de
+ambiente, os valores definidos estritamente como strings (inclusive a string
+vazia), o `null` declarado como remoção temporária, a restauração tri-state
+(`ausente`, vazio e valor), a seleção da árvore observada e o encerramento
+restrito à geração autenticada, use
 `issue13-monitor-selftest.ps1 -SkipSyntheticProcess`.
 
 ## Inventário

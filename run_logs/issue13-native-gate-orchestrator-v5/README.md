@@ -161,7 +161,11 @@ raiz operacional `runtime-v4` não é fonte, fallback nem dependência terminal.
    prova do efeito do oráculo usa o smoke autenticado para o qual suas
    comparações strict foram produzidas; os dois resumos não são
    intercambiáveis.
-8. Nenhum processo R inesperado pode estar ativo.
+8. Processos R não relacionados podem permanecer ativos. Cada cenário atribui
+   RSS somente à raiz autenticada e aos descendentes observados e
+   autenticados; workers e encerramento consideram apenas esses descendentes;
+   o tempo continua sendo de parede e compara baseline/candidato sequencialmente,
+   após uma janela que exige memória física livre suficiente.
 9. `docs/validation/issue-13.md` não pode existir antes de `Report`.
 10. Worktrees, evidência e controle usam raízes novas e distintas. Nenhuma raiz
    V4/V4R2 ou V5 anterior é reutilizada.

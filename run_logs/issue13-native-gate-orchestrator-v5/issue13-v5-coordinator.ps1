@@ -720,7 +720,6 @@ function Prepare-Issue13V5Worktrees(
       $scientificStarted) {
     throw 'PrepareWorktrees is not valid after scientific execution.'
   }
-  $null = Assert-Issue13V5NoConcurrentR $config
   foreach ($record in @($State.worktrees)) {
     if ([string]$record.status -ceq 'completed') {
       $null = Assert-Issue13V5WorktreeSetup $config $record -Deep -Fresh
@@ -786,7 +785,6 @@ function Prepare-Issue13V5Worktrees(
     $record.setup_manifest_sha256 = Get-Issue13V5Sha256 $manifestPath
     $record.status = 'completed'
     Save-Issue13V5State $config $State
-    $null = Assert-Issue13V5NoConcurrentR $config
   }
   $expectedRoots = @($State.worktrees.root | ForEach-Object {
     [IO.Path]::GetFileName([string]$_)
@@ -953,7 +951,7 @@ function Invoke-Issue13V5PreparationArm(
     throw "Planned preparation output already exists: $scenarioId"
   }
   $requiredMemory = Get-Issue13V5RequiredFreeMemory $Phase $Arm
-  $null = Wait-Issue13V5CoolState $Config $CoolingSeconds $requiredMemory
+  $null = Wait-Issue13V5CoolState $CoolingSeconds $requiredMemory
   $null = Invoke-Issue13V5Pwsh $Config @(
     '-NoLogo', '-NoProfile', '-File',
     (Join-Path ([string]$Config.harness_root) `
@@ -1067,7 +1065,7 @@ function Invoke-Issue13V5OrdinaryArm(
   }
   if (-not $evidenceExists) {
     $requiredMemory = Get-Issue13V5RequiredFreeMemory $Phase $Arm
-    $null = Wait-Issue13V5CoolState $Config $CoolingSeconds $requiredMemory
+    $null = Wait-Issue13V5CoolState $CoolingSeconds $requiredMemory
     if ([string]$Phase.kind -ceq 'recalculate') {
       $null = Invoke-Issue13V5Pwsh $Config @(
         '-NoLogo', '-NoProfile', '-File',
@@ -1253,7 +1251,7 @@ function Complete-Issue13V5Pair(
 ) {
   $null = Assert-Issue13V5PhaseEvidenceState $Config $Phase
   $pairRequiredMemory = if ([long]$Phase.workers -eq 2L) { 64GB } else { 40GB }
-  $null = Wait-Issue13V5CoolState $Config $CoolingSeconds `
+  $null = Wait-Issue13V5CoolState $CoolingSeconds `
     ([int64]$pairRequiredMemory)
   $baselineResult = Join-Path $Phase.baseline_evidence 'scenario-result.json'
   $candidateResult = Join-Path $Phase.candidate_evidence 'scenario-result.json'
@@ -1487,7 +1485,7 @@ function Invoke-Issue13V5FaultWorkflowNext(
     if ($existingSeeds.Count -ne 0) {
       throw 'Planned fault seed evidence already exists and is terminal.'
     }
-    $null = Wait-Issue13V5CoolState $Config $CoolingSeconds 40GB
+    $null = Wait-Issue13V5CoolState $CoolingSeconds 40GB
     $null = Invoke-Issue13V5Pwsh $Config @(
       '-NoLogo', '-NoProfile', '-File',
       (Join-Path ([string]$Config.harness_root) 'issue13-run-fault-seeds.ps1'),
@@ -1534,7 +1532,7 @@ function Invoke-Issue13V5FaultWorkflowNext(
         (Test-Path -LiteralPath $finalEvidence)) {
       throw "Planned fault evidence already exists: $($fault.fault_id)"
     }
-    $null = Wait-Issue13V5CoolState $Config $CoolingSeconds 40GB
+    $null = Wait-Issue13V5CoolState $CoolingSeconds 40GB
     $null = Invoke-Issue13V5Pwsh $Config @(
       '-NoLogo', '-NoProfile', '-File',
       (Join-Path ([string]$Config.harness_root) `
@@ -1602,7 +1600,6 @@ function Invoke-Issue13V5RunNext(
   if (-not $ConfirmExecuteR) { throw 'RunNext requires -ConfirmExecuteR.' }
   $config = $Binding.config
   $null = Assert-Issue13V5AllWorktrees $config $State
-  $null = Assert-Issue13V5NoConcurrentR $config
   $phase = Invoke-Issue13V5NextPhase $config $State
   if ($null -ne $phase) { return $phase }
   Invoke-Issue13V5FaultWorkflowNext $config $State
@@ -1637,7 +1634,7 @@ function Invoke-Issue13V5Aggregate(
     throw "Evidence cardinality differs (scenarios=$scenarioCount comparisons=$comparisonCount)."
   }
   $null = Assert-Issue13V5AllWorktrees $config $State -Deep
-  $null = Wait-Issue13V5CoolState $config $CoolingSeconds 40GB
+  $null = Wait-Issue13V5CoolState $CoolingSeconds 40GB
   $output = Join-Path ([string]$config.control_root) 'final-aggregate'
   if (Test-Path -LiteralPath $output) {
     throw 'Planned final aggregate output already exists.'

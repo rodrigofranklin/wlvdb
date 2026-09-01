@@ -2111,7 +2111,6 @@ $issue13CriticalPowerShellNames = @(
   'Get-Issue13V5BaselineSmokeSha256',
   'Get-Issue13V5BaselineSmokeTextSha256',
   'Assert-Issue13V5BaselineSmokeSourceInventory',
-  'Assert-Issue13V5BaselineSmokeNoConcurrentR',
   'Write-Issue13V5BaselineSmokeJson',
   'Invoke-Issue13V5DeliveryGit',
   'Invoke-Issue13V5DeliveryAttestation',
@@ -2199,7 +2198,6 @@ $issue13CriticalDefinitionOwners = @{
     'Get-Issue13V5BaselineSmokeSha256',
     'Get-Issue13V5BaselineSmokeTextSha256',
     'Assert-Issue13V5BaselineSmokeSourceInventory',
-    'Assert-Issue13V5BaselineSmokeNoConcurrentR',
     'Write-Issue13V5BaselineSmokeJson'
   )
   'issue13-v5-coordinator-lib.ps1' = @(
@@ -3592,10 +3590,32 @@ if ([int]$boundedTypeSpoofExecution.exit_code -ne 0 -or
     [IO.File]::Exists($boundedTypeSpoofTransientRoot)) {
   throw 'A preloaded bounded stream type was not rejected dynamically.'
 }
-$preexistingOutputLimitRProcesses = [object[]]@(
-  Get-Process -Name R, Rgui, Rscript, Rterm -ErrorAction SilentlyContinue)
-if ($preexistingOutputLimitRProcesses.Count -ne 0) {
-  throw 'The output-limit self-test requires no preexisting R process.'
+function Get-Issue13V5DirectRChildren {
+  $parent = Get-CimInstance Win32_Process -Filter (
+    'ProcessId=' + [string]$PID
+  ) -ErrorAction Stop
+  if ($null -eq $parent) {
+    throw 'Cannot authenticate the static verifier process generation.'
+  }
+  $parentCreated = ([DateTime]$parent.CreationDate).ToUniversalTime()
+  @(Get-CimInstance Win32_Process -Filter (
+      'ParentProcessId=' + [string]$PID
+    ) -ErrorAction Stop | Where-Object {
+      $childCreated = ([DateTime]$_.CreationDate).ToUniversalTime()
+      $childCreated -gt $parentCreated -and [string]$_.Name -cin @(
+        'R.exe', 'Rscript.exe', 'Rterm.exe', 'Rgui.exe', 'Rcmd.exe', 'Rfe.exe'
+      )
+    })
+}
+$directRChildrenDefinition = @(Get-Issue13V5StaticTopLevelFunctions `
+    $bootstrapStaticAst 'Get-Issue13V5DirectRChildren')
+if ($directRChildrenDefinition.Count -ne 1 -or
+    -not $directRChildrenDefinition[0].Extent.Text.Contains(
+      '$childCreated -gt $parentCreated')) {
+  throw 'The bounded R child check lacks its parent-generation guard.'
+}
+if (@(Get-Issue13V5DirectRChildren).Count -ne 0) {
+  throw 'The static verifier inherited an R child before its bounded self-test.'
 }
 $outputLimitRejected = $false
 $outputLimitMessage = ''
@@ -3616,10 +3636,8 @@ try {
   $outputLimitRejected = $outputLimitMessage.Contains(
     'Bounded process output exceeded its byte limit.')
 }
-$remainingOutputLimitRProcesses = [object[]]@(
-  Get-Process -Name R, Rgui, Rscript, Rterm -ErrorAction SilentlyContinue)
 if (-not $outputLimitRejected -or
-    $remainingOutputLimitRProcesses.Count -ne 0) {
+    @(Get-Issue13V5DirectRChildren).Count -ne 0) {
   throw ('The real output-limit self-test did not fail closed: ' +
     $outputLimitMessage)
 }
@@ -3789,8 +3807,6 @@ $artifactPresenceExecution = Invoke-Issue13V5RscriptBounded `
   -WorkingDirectory $RepositoryRoot `
   -Environment (New-Issue13V5ClosedREnvironment `
     'D:\Trabalho\Code\wlvdb\renv\library\windows\R-4.6\x86_64-w64-mingw32')
-$remainingArtifactPresenceRProcesses = [object[]]@(
-  Get-Process -Name R, Rgui, Rscript, Rterm -ErrorAction SilentlyContinue)
 $expectedArtifactPresenceOutput =
   ('presence_assertions=22 cases=6 mutants=4 consumer_bindings=3 ' +
     'resolver_globals=1 formals=4 dynamic=0 assignments=0 ' +
@@ -3802,7 +3818,7 @@ if ([int]$artifactPresenceExecution.exit_code -ne 0 -or
       $expectedArtifactPresenceOutput -or
     -not [string]::IsNullOrWhiteSpace(
       [string]$artifactPresenceExecution.stderr) -or
-    $remainingArtifactPresenceRProcesses.Count -ne 0) {
+    @(Get-Issue13V5DirectRChildren).Count -ne 0) {
   throw 'The executable diagnostic artifact-presence self-test failed.'
 }
 $oracleSpec = Read-Issue13V5Json (
@@ -4856,14 +4872,52 @@ foreach ($wrapperName in @('Invoke-Issue13V5R', 'Invoke-Issue13V5Pwsh')) {
             (Get-Issue13V5PowerShellCommandLeaf ($node.GetCommandName())) -ieq
               'Assert-Issue13V5HarnessBinding'
         }, $true)).Count -lt 2 -or
-      @($wrapper.FindAll({
-          param($node)
-          $node -is [Management.Automation.Language.CommandAst] -and
-            (Get-Issue13V5PowerShellCommandLeaf ($node.GetCommandName())) -ieq
-              'Assert-Issue13V5NoConcurrentR'
-        }, $true)).Count -lt 2) {
+      $wrapper.Extent.Text.Contains('Assert-Issue13V5NoConcurrentR')) {
     throw "R/Pwsh wrapper lacks its closed environment: $wrapperName"
   }
+}
+$globalRExclusionTokens = @(
+  'Assert-Issue13V5NoConcurrentR',
+  'Get-Issue13V5RProcesses',
+  'allowed_r_processes',
+  'Issue13V5AllowedRCommandSha256',
+  'Unexpected R processes are active',
+  'Unexpected R process before baseline smoke'
+)
+foreach ($globalRExclusionToken in $globalRExclusionTokens) {
+  foreach ($controllerName in @(
+      'issue13-v5-baseline-smoke.ps1',
+      'issue13-v5-coordinator-lib.ps1',
+      'issue13-v5-coordinator.ps1',
+      'issue13-v5-new-config.ps1')) {
+    if ([string]$issue13ControllerPowerShellTexts[$controllerName] -cmatch
+        [regex]::Escape($globalRExclusionToken)) {
+      throw "Global R exclusion remains reachable: $controllerName/$globalRExclusionToken"
+    }
+  }
+}
+if (-not $centralText.Contains(
+      "rss_worker_lifecycle_scope -cne`n        'authenticated-root-and-observed-descendants'") -or
+    -not $centralText.Contains(
+      "elapsed_scope -cne`n        'monitor-wall-clock-from-prelaunch-through-observed-tree-quiescence'") -or
+    -not $centralText.Contains(
+      'allow_unrelated_r_processes $true') -or
+    -not $centralText.Contains(
+      "external_load_policy -cne`n        'minimum-free-physical-memory-no-cpu-exclusivity'") -or
+    -not ([string]$issue13ControllerPowerShellTexts[
+      'issue13-v5-new-config.ps1']).Contains(
+        "rss_worker_lifecycle_scope = 'authenticated-root-and-observed-descendants'") -or
+    -not ([string]$issue13ControllerPowerShellTexts[
+      'issue13-v5-new-config.ps1']).Contains(
+        "elapsed_scope =`n      " +
+        "'monitor-wall-clock-from-prelaunch-through-observed-tree-quiescence'") -or
+    -not ([string]$issue13ControllerPowerShellTexts[
+      'issue13-v5-new-config.ps1']).Contains(
+        'allow_unrelated_r_processes = $true') -or
+    -not ([string]$issue13ControllerPowerShellTexts[
+      'issue13-v5-new-config.ps1']).Contains(
+        "external_load_policy = 'minimum-free-physical-memory-no-cpu-exclusivity'")) {
+  throw 'Process attribution/performance policy is not sealed end-to-end.'
 }
 foreach ($captureName in @(
     'issue13-v5-capture-clean-bridge-evidence.ps1',
@@ -5048,20 +5102,20 @@ $expectedSourceSha256 = [ordered]@{
   'issue13-evidence-harness/issue13-import-fault-inputs.R' = '92CA987DEDAF055582A18C295B7409C2F3A623BB4527405E67029275C01CD13A'
   'issue13-evidence-harness/issue13-lib.R' = '2F698E09A1F78C104C802B8025F1A703CCE0426C5F7A7EF5580DF4AEEFB0490D'
   'issue13-evidence-harness/issue13-matrix.R' = 'D71DD34DC5184F6D12E43CBD24F605ACA53BFF121357600D6283DC1BBC9D87D5'
-  'issue13-evidence-harness/issue13-monitor-selftest.ps1' = '8AACA7D4C518962D94396BCD657675240507795293E5AC64DB22265DBF0934FF'
-  'issue13-evidence-harness/issue13-monitor.ps1' = '564B940E779C604C8B630EBE91D35ADB86C07B8B2EFFCBD788613B0C8042E00E'
+  'issue13-evidence-harness/issue13-monitor-selftest.ps1' = '0F56796CF6D4C870D0371EC87946D079B03E2EA759C88A7633B9645636A65536'
+  'issue13-evidence-harness/issue13-monitor.ps1' = '1C008E3F6078118B18C45A0D58EEDAA775800E62A9E800D62DFE998F1A3081D8'
   'issue13-evidence-harness/issue13-run-fault-seed-record.ps1' = '025146B19A9E6A69F0CC54C741938BDC8FE77615C9CA80DB4AB368953E602491'
   'issue13-evidence-harness/issue13-run-fault-seeds.ps1' = 'A0D3CF98052F252CE7919030F8228DAC344FE9E2B74690FF5746958866DA862D'
   'issue13-evidence-harness/issue13-run-plan.ps1' = '925270836D79B5E7399B75730472AF1D3545B565C0A0679D1FC7D38FF29FA1B8'
   'issue13-evidence-harness/issue13-run-prep-fault-record.ps1' = 'FF21D11CE374937A390B6E0AE7FB58B2A089B8F379D2B3D49D8192F1BD9F5D3D'
-  'issue13-evidence-harness/issue13-run-recalc-bundle.ps1' = 'E239C81AEF7483857A96AF12BD1C41354A65F8F65DF0619D7DB3511E487C6E53'
+  'issue13-evidence-harness/issue13-run-recalc-bundle.ps1' = '0BED9087B833DB1C3ED836FEC02E9BDAB970F49423D57AEE0CBEB40F9FB8C167'
   'issue13-evidence-harness/issue13-scenario.R' = 'BD3F79EB018F4126E290C48376AB4B9C2CBB8A2A750D8C785B4739FDF59CB155'
   'issue13-evidence-harness/issue13-seed-channel.R' = '72D33F157E6AF6EF64B42C8CC052E59FA91885287564636F590A9B9F8B940957'
   'issue13-evidence-harness/issue13-seed-runtime-lib.R' = '283C42374E030A78AB77C94F7260E788575D8D3AB7E637511255D203B1AC01E0'
   'issue13-evidence-harness/issue13-seed-runtime-selftest.R' = '3F7186B75427196BB6504A002F090ADFC218AEF5B03BF3FC58F0E9232E81D1A5'
   'issue13-evidence-harness/issue13-selftest.R' = '88B145C41ABE392B55EFB971A2CBAF8BFE803E354418529B4E1284E101145802'
   'issue13-evidence-harness/issue13-snapshot.R' = '40D91118B5707B3A4824A760C0640C0403C88F5A4F33D597733FE877E43220DA'
-  'issue13-evidence-harness/README.md' = 'CA51D3B1F9F6A2DB39F0ABA2C15518D8038C2987C944BF839E874A29B3C42EB2'
+  'issue13-evidence-harness/README.md' = '3BB5F85CB66B265374B7EDD43D281396E9F9E91FC941B6A08A39A00EF070C08B'
   'issue13-prep-paper-lib.R' = 'F90F418C0EEE3AF14B2795A8CEB1085F936630E8136A3CD0D38E03BDF85B9B26'
   'issue13-preparation-auth-lib.R' = '887F7BACFE7582F026861CDB1023A648BFB6757A652F6F87EEAC49F333674369'
   'issue13-preparation-compare.R' = '20152903D3690811CB387C32E4EB6B47AB549CB76B4EF35D843F04885A0FCE98'
@@ -5476,11 +5530,11 @@ if ($sourceGitDynamicCount -ne 4 -or
 }
 $expectedSourcePowerShellSurfaces = @{
   'issue13-evidence-harness/issue13-monitor-selftest.ps1' = @{
-    command_count = 62; command_sha256 = '126D458BA3853443222B985B700A38B73EED6935910584C1199A5382638EC4AD'
+    command_count = 70; command_sha256 = '3A0A63E97EAF0929FB517B1A0C2DC091A80263BB59FC2D8F7DE8335C3DAB591C'
     redirection_count = 0; redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
   'issue13-evidence-harness/issue13-monitor.ps1' = @{
-    command_count = 95; command_sha256 = '8831CF5D9A4A4FC810FFFDC93DB277A4CEFED4C9BDC8875BE3D11EC1A829EFB2'
+    command_count = 99; command_sha256 = '0B8183FF787D2E65CDE1A97AD41D01E4ECB1DEF0646617D59989493EAA715AED'
     redirection_count = 0; redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
   'issue13-evidence-harness/issue13-run-fault-seed-record.ps1' = @{
@@ -5660,6 +5714,14 @@ if (-not $selftestText.Contains('$monitorDefinition.Extent.Text -cne') -or
     -not $selftestText.Contains('Invoke-Expression $definition.Extent.Text') -or
     -not $selftestText.Contains('present = $true; value = $null') -or
     -not $selftestText.Contains('"truncated`0value"') -or
+    -not $selftestText.Contains('$foreignSibling = [pscustomobject]@{') -or
+    -not $selftestText.Contains(
+      'Monitor adopted an unrelated R process outside the authenticated tree.') -or
+    -not $selftestText.Contains('$observed.Count -ne 1') -or
+    -not $selftestText.Contains('Stop-KnownTree @(') -or
+    -not $selftestText.Contains('$foreignProcess.HasExited') -or
+    -not $selftestText.Contains(
+      'Handle-bound cleanup did not isolate the authenticated process generation.') -or
     @($monitorSelftestAst.FindAll({
         param($node)
         $node -is [Management.Automation.Language.FunctionDefinitionAst]
@@ -5707,6 +5769,7 @@ function Test-Issue13V5StaticMonitorLifecycle(
   $keyText = [string]$definitions['Process-Key'].Extent.Text
   $descendantText = [string]$definitions['Add-Descendants'].Extent.Text
   $activeText = [string]$definitions['Active-KnownRecords'].Extent.Text
+  $stopText = [string]$definitions['Stop-KnownTree'].Extent.Text
   $boundedText = [string]$definitions['Stop-KnownTreeBounded'].Extent.Text
   $stoppedText = [string]$definitions['Assert-KnownTreeStopped'].Extent.Text
   $boundedCalls = @($Ast.FindAll({
@@ -5733,6 +5796,30 @@ function Test-Issue13V5StaticMonitorLifecycle(
         $node.Expression.Extent.Text -ceq '$process' -and
         $node.Member.Extent.Text -ceq 'Dispose'
     }, $true))
+  $currentKillCalls = @($definitions['Stop-KnownTree'].FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.InvokeMemberExpressionAst] -and
+        $node.Expression.Extent.Text -ceq '$current' -and
+        $node.Member.Extent.Text -ceq 'Kill'
+    }, $true))
+  $currentDisposeCalls = @($definitions['Stop-KnownTree'].FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.InvokeMemberExpressionAst] -and
+        $node.Expression.Extent.Text -ceq '$current' -and
+        $node.Member.Extent.Text -ceq 'Dispose'
+    }, $true))
+  $allCurrentDisposeCalls = @($Ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.InvokeMemberExpressionAst] -and
+        $node.Expression.Extent.Text -ceq '$current' -and
+        $node.Member.Extent.Text -ceq 'Dispose'
+    }, $true))
+  $safeHandleAssignments = @([regex]::Matches(
+      $text, [regex]::Escape('$handle = $current.SafeHandle')))
+  $identityComparisons = @([regex]::Matches(
+      $text,
+      [regex]::Escape(
+        '(Convert-CreationDate $identity.CreationDate) -cne')))
   $keyText.Contains(
       "return ([string]`$ProcessId + '|' + `$Created)") -and
     $descendantText.Contains(
@@ -5740,6 +5827,20 @@ function Test-Issue13V5StaticMonitorLifecycle(
     $descendantText.Contains('$childCreated -le $parentCreated') -and
     $activeText.Contains(
       '$KnownByPid[$_.ProcessId] -eq $_.Created') -and
+    $stopText.Contains('$handle = $current.SafeHandle') -and
+    $stopText.Contains('$handle.IsClosed -or $handle.IsInvalid') -and
+    $stopText.Contains('Get-CimInstance Win32_Process -Filter (') -and
+    $stopText.Contains('(Convert-CreationDate $identity.CreationDate) -cne') -and
+    $currentKillCalls.Count -eq 1 -and
+    $currentKillCalls[0].Arguments.Count -eq 1 -and
+    $currentKillCalls[0].Arguments[0].Extent.Text -ceq '$true' -and
+    $currentDisposeCalls.Count -eq 1 -and
+    $allCurrentDisposeCalls.Count -eq 2 -and
+    $safeHandleAssignments.Count -eq 2 -and
+    $identityComparisons.Count -eq 2 -and
+    $text.Contains('$sampledProcessCount++') -and
+    $text.Contains(
+      'if ($sampledProcessCount -gt $maxConcurrentProcesses)') -and
     $boundedText.Contains(
       '$deadline = [DateTime]::UtcNow.AddSeconds(') -and
     $boundedText.Contains('Add-Descendants $table $KnownByPid $Observed') -and
@@ -5756,6 +5857,7 @@ function Test-Issue13V5StaticMonitorLifecycle(
         $_.Arguments.Count -ne 1 -or $_.Arguments[0].Extent.Text -cne '$true'
       }).Count -eq 0 -and
     $disposeCalls.Count -eq 1 -and
+    -not $text.Contains('Stop-Process -Id') -and
     $text.Contains('$cleanupFailures.Add($_.Exception)') -and
     $text.Contains('$failures.Add($lifecycleError.Exception)') -and
     $text.Contains('Monitor process lifecycle cleanup failed.') -and
@@ -5777,6 +5879,14 @@ $monitorLifecycleMutantTexts = @(
   $monitorLifecycleText.Replace(
     '$KnownByPid[$_.ProcessId] -eq $_.Created',
     '$KnownByPid.ContainsKey($_.ProcessId)'),
+  $monitorLifecycleText.Replace(
+    '$handle = $current.SafeHandle', '$handle = $null'),
+  $monitorLifecycleText.Replace(
+    '(Convert-CreationDate $identity.CreationDate) -cne',
+    '(Convert-CreationDate $identity.CreationDate) -ceq'),
+  $monitorLifecycleText.Replace(
+    '$sampledProcessCount++', '$null = $sampledProcessCount'),
+  $monitorLifecycleText.Replace('$current.Kill($true)', 'Stop-Process -Id $record.ProcessId'),
   $monitorLifecycleText.Replace(
     '$failures.Add($lifecycleError.Exception)', '$null = $lifecycleError'))
 foreach ($monitorLifecycleMutantText in $monitorLifecycleMutantTexts) {
@@ -9021,8 +9131,6 @@ foreach ($rendererFinalWriteMutant in $rendererFinalWriteMutants) {
 
 $smokeText = [string]$bootstrapSourceTexts['issue13-v5-baseline-smoke.ps1']
 foreach ($required in @(
-    "'R.exe'", "'Rscript.exe'", "'Rterm.exe'", "'Rgui.exe'",
-    "'Rcmd.exe'", "'Rfe.exe'",
     "throw 'The V5 baseline smoke is Windows-only.'",
     'VolumeNameGuid',
     'DriveTarget',
@@ -9434,8 +9542,7 @@ foreach ($smokeRscriptMutantText in $smokeRscriptMutants) {
 
 $libraryText = [string]$bootstrapSourceTexts['issue13-v5-coordinator-lib.ps1']
 foreach ($required in @(
-    "'R.exe'", "'Rscript.exe'", "'Rterm.exe'", "'Rgui.exe'",
-    "'Rcmd.exe'", "'Rfe.exe'", 'Assert-Issue13V5ReportBinding',
+    'Assert-Issue13V5ReportBinding',
     'Worktree/evidence/control isolation', '$Process.Kill($true)',
     'New-Issue13V5ClosedREnvironment',
     '$ProcessStartInfo.Environment.Remove($name)',

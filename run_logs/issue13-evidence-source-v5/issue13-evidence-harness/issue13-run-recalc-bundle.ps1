@@ -509,11 +509,11 @@ function Invoke-Issue13WithProcessEnvironmentRecalc(
   [Parameter(Mandatory = $true)][scriptblock]$Action
 ) {
   if ($null -eq $Action) { throw 'Environment action cannot be null.' }
-  $properties = if ($null -eq $Environment) {
-    @()
-  } else {
-    @($Environment.PSObject.Properties)
-  }
+  $properties = @(
+    if ($null -ne $Environment) {
+      $Environment.PSObject.Properties
+    }
+  )
   if ($properties.Count -eq 0) { return (& $Action) }
   $names = @($properties | ForEach-Object { [string]$_.Name })
   $snapshot = @(Get-Issue13ProcessEnvironmentStateRecalc -Names $names)

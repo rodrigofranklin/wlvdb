@@ -643,7 +643,9 @@ try {
   Set-Issue13ProcessEnvironmentState -States $externalState
 }
 
-$wantedFunctions = @('Process-Key', 'Add-Descendants')
+$wantedFunctions = @(
+  'Process-Key', 'Convert-CreationDate', 'Add-Descendants', 'Stop-KnownTree'
+)
 foreach ($name in $wantedFunctions) {
   $definition = Get-Issue13TopLevelFunction $monitorAst $name 'Monitor'
   Invoke-Expression $definition.Extent.Text
@@ -682,6 +684,69 @@ Add-Descendants @($rootRecord, $laterChild) $known $observed
 if (-not $known.ContainsKey(50001) -or
     [string]$known[50001] -cne $childLater) {
   throw 'Monitor rejected a valid authenticated parent/child generation.'
+}
+$foreignSibling = [pscustomobject]@{
+  ProcessId = 60001; ParentProcessId = 1; Name = 'Rscript.exe'
+  Created = $childLater
+}
+$known = @{ 41700 = $parentCurrent }
+$observed = @{}
+Add-Descendants @($rootRecord, $laterChild, $foreignSibling) $known $observed
+if (-not $known.ContainsKey(50001) -or $known.ContainsKey(60001) -or
+    $observed.Count -ne 1 -or
+    @($observed.Values | Where-Object { [long]$_.pid -eq 50001L }).Count -ne 1 -or
+    @($observed.Values | Where-Object { [long]$_.pid -eq 60001L }).Count -ne 0) {
+  throw 'Monitor adopted an unrelated R process outside the authenticated tree.'
+}
+$ownedProcess = [Diagnostics.Process]::new()
+$foreignProcess = [Diagnostics.Process]::new()
+foreach ($testProcess in @($ownedProcess, $foreignProcess)) {
+  $startInfo = [Diagnostics.ProcessStartInfo]::new()
+  $startInfo.FileName = [Environment]::ProcessPath
+  $startInfo.UseShellExecute = $false
+  $startInfo.CreateNoWindow = $true
+  foreach ($argument in @(
+      '-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
+      '[Threading.Thread]::Sleep(30000)')) {
+    $startInfo.ArgumentList.Add($argument)
+  }
+  $testProcess.StartInfo = $startInfo
+}
+try {
+  if (-not $ownedProcess.Start() -or -not $foreignProcess.Start()) {
+    throw 'Monitor ownership self-test could not start its process fixtures.'
+  }
+  $ownedIdentity = Get-CimInstance Win32_Process -Filter (
+    'ProcessId=' + [string]$ownedProcess.Id
+  ) -ErrorAction Stop
+  $foreignIdentity = Get-CimInstance Win32_Process -Filter (
+    'ProcessId=' + [string]$foreignProcess.Id
+  ) -ErrorAction Stop
+  Stop-KnownTree @(
+    [pscustomobject]@{
+      ProcessId = [int]$ownedProcess.Id
+      Created = Convert-CreationDate $ownedIdentity.CreationDate
+    },
+    [pscustomobject]@{
+      ProcessId = [int]$foreignProcess.Id
+      Created = $parentOld
+    }
+  )
+  if (-not $ownedProcess.WaitForExit(5000) -or $foreignProcess.HasExited -or
+      (Convert-CreationDate $foreignIdentity.CreationDate) -ceq $parentOld) {
+    throw 'Handle-bound cleanup did not isolate the authenticated process generation.'
+  }
+} finally {
+  foreach ($testProcess in @($ownedProcess, $foreignProcess)) {
+    try {
+      if (-not $testProcess.HasExited) {
+        $testProcess.Kill($true)
+        $null = $testProcess.WaitForExit(5000)
+      }
+    } finally {
+      $testProcess.Dispose()
+    }
+  }
 }
 }
 if ($SkipSyntheticProcess) {

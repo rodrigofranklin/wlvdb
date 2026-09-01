@@ -1041,13 +1041,6 @@ $methodRoots = @($methods | ForEach-Object {
   }
 })
 
-$persistentCommand =
-  '"C:\Users\rodri\AppData\Local\Programs\R\R-4.6.1\bin\x64\Rscript.exe" --vanilla run-local-panel.R'
-$persistentHashBytes = [Text.Encoding]::UTF8.GetBytes($persistentCommand)
-$persistentHash = [Convert]::ToHexString(
-  [Security.Cryptography.SHA256]::HashData($persistentHashBytes)
-).ToLowerInvariant()
-
 $sourceContractBindings = @(
   [ordered]@{
     arm = 'baseline'; source = 'wiodr13'
@@ -1244,6 +1237,11 @@ $config = [ordered]@{
     candidate_rss_minimum_allowance_bytes = 536870912L
     workers2_methods = @('wiodr13', 'wiodr16')
     require_cluster_closed = $true
+    rss_worker_lifecycle_scope = 'authenticated-root-and-observed-descendants'
+    elapsed_scope =
+      'monitor-wall-clock-from-prelaunch-through-observed-tree-quiescence'
+    allow_unrelated_r_processes = $true
+    external_load_policy = 'minimum-free-physical-memory-no-cpu-exclusivity'
   }
   preparation = [ordered]@{
     sources = @('wiodr13', 'wiodr16', 'euklems')
@@ -1267,10 +1265,6 @@ $config = [ordered]@{
       'preparation_results', 'paper0_results'
     )
   }
-  allowed_r_processes = @([ordered]@{
-    pid = 30272
-    command_line_sha256 = $persistentHash
-  })
 }
 
 $outputParent = Split-Path -Parent $outputFull
