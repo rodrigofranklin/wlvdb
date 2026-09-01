@@ -901,7 +901,10 @@ wlv_native_public_e2e_bitwise_identical <- function(left, right) {
 wlv_native_public_e2e_diagnostic_hashes <- function(fixture) {
   runtime <- fixture$runtime
   run <- wlv_native_public_e2e_current_run(fixture)
-  names <- runtime$wlv_native_published_diagnostic_ids()
+  names <- c(
+    runtime$wlv_native_published_diagnostic_ids(),
+    "_scientific_checks.csv"
+  )
   paths <- file.path(run$path, names)
   present <- file.exists(paths)
   hashes <- vapply(

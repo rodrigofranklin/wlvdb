@@ -979,6 +979,76 @@ test_that("scientific checks and sidecar inventory are deterministic", {
   second <- build()
   expect_identical(first, second)
 
+  inherited_io <- scientific_validation_environment$
+    wlv_inherited_io_scientific_checks(
+      first,
+      values$method,
+      "2000"
+    )
+  expected_inherited_io <- first[
+    first$artifact == "m_io" & first$check_id != "io_year_coverage",
+    ,
+    drop = FALSE
+  ]
+  row.names(expected_inherited_io) <- NULL
+  expect_identical(inherited_io, expected_inherited_io)
+  expect_error(
+    scientific_validation_environment$wlv_validate_staged_results(
+      staging = tempdir(),
+      method = values$method,
+      mode = "calculate",
+      runtime = list(),
+      expected_metadata = list(),
+      aggregation_registry = list(),
+      expected_io_artifacts = "m_io.fst",
+      reader = function(path) path,
+      inherited_scientific_checks = first
+    ),
+    "restricted to stage-5 recalculation",
+    fixed = TRUE
+  )
+
+  missing_coverage <- first[first$check_id != "io_year_coverage", , drop = FALSE]
+  expect_error(
+    scientific_validation_environment$wlv_inherited_io_scientific_checks(
+      missing_coverage,
+      values$method,
+      "2000"
+    ),
+    "invalid I/O year coverage",
+    fixed = TRUE
+  )
+  duplicated_coverage <- rbind(
+    first,
+    first[first$check_id == "io_year_coverage", , drop = FALSE]
+  )
+  expect_error(
+    scientific_validation_environment$wlv_inherited_io_scientific_checks(
+      duplicated_coverage,
+      values$method,
+      "2000"
+    ),
+    "invalid I/O year coverage",
+    fixed = TRUE
+  )
+  duplicated_inventory <- rbind(
+    first,
+    first[
+      first$artifact == "m_io" & first$check_id != "io_year_coverage",
+      ,
+      drop = FALSE
+    ][1L, , drop = FALSE]
+  )
+  expect_error(
+    scientific_validation_environment$wlv_inherited_io_scientific_checks(
+      duplicated_inventory,
+      values$method,
+      "2000"
+    ),
+    "lacks a unique I/O check inventory",
+    fixed = TRUE
+  )
+
   stale_diagnostics <- diagnostics
   stale_diagnostics[["_leontief_diagnostics.csv"]]$lambda_fingerprint <-
     scientific_validation_environment$wlv_lambda_fingerprint(

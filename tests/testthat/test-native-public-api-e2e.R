@@ -8,6 +8,101 @@ test_that("public native calculation and recalculation publish immutable runs", 
   runtime <- fixture$runtime
   parent_seed_roots <- character()
   contract_report_reads <- character()
+  array_reads <- character()
+  prepared_payload_validations <- 0L
+  io_scientific_validations <- 0L
+  io_filter_builds <- 0L
+  import_group_builds <- 0L
+  world_bank_assumption_reads <- 0L
+  china_hours_assumption_reads <- 0L
+  original_read_fst_array <- runtime$read_fst_array
+  assign(
+    "read_fst_array",
+    function(file_name) {
+      array_reads <<- c(array_reads, normalizePath(
+        file_name,
+        winslash = "/",
+        mustWork = TRUE
+      ))
+      original_read_fst_array(file_name)
+    },
+    envir = runtime
+  )
+  original_load_catalog_validator <- runtime$wlv_load_catalog_validator
+  assign(
+    "wlv_load_catalog_validator",
+    function(...) {
+      bundle <- original_load_catalog_validator(...)
+      original_validate <- bundle$validate
+      bundle$validate <- function(...) {
+        prepared_payload_validations <<- prepared_payload_validations + 1L
+        original_validate(...)
+      }
+      bundle
+    },
+    envir = runtime
+  )
+  original_scientific_validate_io_array <-
+    runtime$wlv_scientific_validate_io_array
+  assign(
+    "wlv_scientific_validate_io_array",
+    function(...) {
+      io_scientific_validations <<- io_scientific_validations + 1L
+      original_scientific_validate_io_array(...)
+    },
+    envir = runtime
+  )
+  original_io_filters <- runtime$wlv_native_io_filters
+  assign(
+    "wlv_native_io_filters",
+    function(...) {
+      io_filter_builds <<- io_filter_builds + 1L
+      original_io_filters(...)
+    },
+    envir = runtime
+  )
+  original_import_groups <- runtime$wlv_native_import_group_indices
+  assign(
+    "wlv_native_import_group_indices",
+    function(...) {
+      import_group_builds <<- import_group_builds + 1L
+      original_import_groups(...)
+    },
+    envir = runtime
+  )
+  original_read_semicolon <- runtime$wlv_native_read_semicolon
+  assign(
+    "wlv_native_read_semicolon",
+    function(path, ...) {
+      normalized <- normalizePath(
+        path,
+        winslash = "/",
+        mustWork = FALSE
+      )
+      if (grepl("/complementar/worldbank/", normalized, fixed = TRUE) &&
+          basename(normalized) %in% c(
+            "employment_row.new.csv",
+            "employment_row.csv",
+            "employment_china.csv"
+          )) {
+        world_bank_assumption_reads <<-
+          world_bank_assumption_reads + 1L
+      }
+      original_read_semicolon(path, ...)
+    },
+    envir = runtime
+  )
+  original_read_china_hours <-
+    runtime$wlv_read_wiodr16_china_hours_per_worker
+  assign(
+    "wlv_read_wiodr16_china_hours_per_worker",
+    function(...) {
+      china_hours_assumption_reads <<-
+        china_hours_assumption_reads + 1L
+      original_read_china_hours(...)
+    },
+    envir = runtime
+  )
   original_read_contract_report <- runtime$wlv_read_contract_report
   assign(
     "wlv_read_contract_report",
@@ -194,6 +289,11 @@ test_that("public native calculation and recalculation publish immutable runs", 
     calculation_diagnostic_hashes
   )
 
+  io_reads_before_stage4 <- sum(startsWith(
+    basename(array_reads),
+    "m_io"
+  ))
+  io_validations_before_stage4 <- io_scientific_validations
   stage4 <- run_public(function() runtime$recalc_wlv(
     methods = fixture$method,
     at_stage = 4L,
@@ -207,11 +307,28 @@ test_that("public native calculation and recalculation publish immutable runs", 
   ) %in% trace_ids(stage4)))
   expect_false("indicator.gross_output.s.us" %in% trace_ids(stage4))
   expect_false("matrix.synthetic" %in% trace_ids(stage4))
+  expect_gt(
+    sum(startsWith(basename(array_reads), "m_io")),
+    io_reads_before_stage4
+  )
+  expect_gt(io_scientific_validations, io_validations_before_stage4)
   expect_identical(
     wlv_native_public_e2e_diagnostic_hashes(fixture),
     calculation_diagnostic_hashes
   )
 
+  payload_validations_before_stage5 <- prepared_payload_validations
+  io_validations_before_stage5 <- io_scientific_validations
+  io_filter_builds_before_stage5 <- io_filter_builds
+  import_group_builds_before_stage5 <- import_group_builds
+  assumption_reads_before_stage5 <- c(
+    world_bank = world_bank_assumption_reads,
+    china_hours = china_hours_assumption_reads
+  )
+  io_reads_before_stage5 <- sum(startsWith(
+    basename(array_reads),
+    "m_io"
+  ))
   stage5 <- run_public(function() runtime$recalc_wlv(
     methods = fixture$method,
     at_stage = 5L,
@@ -223,6 +340,27 @@ test_that("public native calculation and recalculation publish immutable runs", 
   expect_false("indicator.gross_output.s.us" %in% trace_ids(stage5))
   expect_false("indicator.gross_output.s.mv" %in% trace_ids(stage5))
   expect_false("matrix.synthetic" %in% trace_ids(stage5))
+  expect_identical(
+    prepared_payload_validations,
+    payload_validations_before_stage5
+  )
+  expect_identical(
+    sum(startsWith(basename(array_reads), "m_io")),
+    io_reads_before_stage5
+  )
+  expect_identical(
+    io_scientific_validations,
+    io_validations_before_stage5
+  )
+  expect_identical(io_filter_builds, io_filter_builds_before_stage5)
+  expect_identical(import_group_builds, import_group_builds_before_stage5)
+  expect_identical(
+    c(
+      world_bank = world_bank_assumption_reads,
+      china_hours = china_hours_assumption_reads
+    ),
+    assumption_reads_before_stage5
+  )
   expect_identical(
     wlv_native_public_e2e_diagnostic_hashes(fixture),
     calculation_diagnostic_hashes
@@ -446,6 +584,45 @@ test_that("parent scientific receipt closes the authenticated read window", {
     "mismatch for parent scientific artifact"
   )
   expect_true(injected)
+  expect_identical(
+    runtime$wlv_list_channel_markers(fixture$root, fixture$channel),
+    markers_before
+  )
+
+  original_read_scientific_checks <-
+    runtime$wlv_read_scientific_check_artifact
+  scientific_checks_injected <- FALSE
+  assign(
+    "wlv_read_scientific_check_artifact",
+    function(path, method) {
+      records <- original_read_scientific_checks(path, method)
+      normalized <- normalizePath(path, winslash = "/", mustWork = TRUE)
+      if (!scientific_checks_injected &&
+          identical(basename(normalized), "_scientific_checks.csv") &&
+          grepl("/results/.staging/.staging-native_test-", normalized,
+            fixed = TRUE
+          )) {
+        connection <- file(path, open = "ab")
+        on.exit(close(connection), add = TRUE)
+        writeBin(charToRaw("\n# authenticated-read-window mutation\n"), connection)
+        scientific_checks_injected <<- TRUE
+      }
+      records
+    },
+    envir = runtime
+  )
+
+  expect_error(
+    runtime$recalc_wlv(
+      methods = fixture$method,
+      at_stage = 5L,
+      workers = 1L,
+      channel = fixture$channel,
+      allow_experimental = TRUE
+    ),
+    "mismatch for parent scientific artifact"
+  )
+  expect_true(scientific_checks_injected)
   expect_identical(
     runtime$wlv_list_channel_markers(fixture$root, fixture$channel),
     markers_before

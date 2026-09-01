@@ -4520,9 +4520,18 @@ wlv_validate_staged_results <- function(
     expected_io_artifacts,
     at_stage = NULL,
     reader = read_fst_array,
-    runtime_snapshot_receipt = NULL) {
+    runtime_snapshot_receipt = NULL,
+    inherited_scientific_checks = NULL) {
   if (!is.function(reader)) {
     stop("`reader` must be an array reader.", call. = FALSE)
+  }
+  inherit_io_checks <- !is.null(inherited_scientific_checks)
+  if (inherit_io_checks &&
+      (!identical(mode, "recalculate") || !identical(at_stage, 5L))) {
+    stop(
+      "Inherited I/O scientific checks are restricted to stage-5 recalculation.",
+      call. = FALSE
+    )
   }
   if (is.null(runtime$scientific_profile)) {
     stop("Staged result validation requires an explicit scientific profile.",
@@ -4669,32 +4678,51 @@ wlv_validate_staged_results <- function(
   if (!length(io_files)) {
     stop(sprintf("Staged results for `%s` contain no m_io array.", method), call. = FALSE)
   }
-  for (path in io_files) {
-    io_value <- reader(path)
-    wlv_validate_m_io_contract(
-      runtime,
-      io_value,
-      checkpoint = "post_roundtrip"
-    )
-    if (!is.null(snapshot_io_bindings)) {
-      wlv_runtime_snapshot_validate_materialized_io(
-        snapshot_io_bindings,
-        wlv_native_io_partition(path),
-        io_value
+  if (inherit_io_checks) {
+    if (is.null(snapshot_io_bindings)) {
+      stop(
+        "Stage-5 I/O inheritance requires authenticated snapshot bindings.",
+        call. = FALSE
       )
     }
-    scientific_check_parts[[length(scientific_check_parts) + 1L]] <-
-      wlv_scientific_validate_io_array(
-        method = method,
-        m_io = io_value,
-        sea_sectors = sea_sectors
-      )
-    scientific_io_years <- c(
-      scientific_io_years,
-      dimnames(io_value)[[1L]]
+    scientific_io_years <- unlist(
+      lapply(io_files, wlv_native_io_years),
+      use.names = FALSE
     )
-    rm(io_value)
-    gc()
+    scientific_check_parts[[length(scientific_check_parts) + 1L]] <-
+      wlv_inherited_io_scientific_checks(
+        inherited_scientific_checks,
+        method,
+        scientific_io_years
+      )
+  } else {
+    for (path in io_files) {
+      io_value <- reader(path)
+      wlv_validate_m_io_contract(
+        runtime,
+        io_value,
+        checkpoint = "post_roundtrip"
+      )
+      if (!is.null(snapshot_io_bindings)) {
+        wlv_runtime_snapshot_validate_materialized_io(
+          snapshot_io_bindings,
+          wlv_native_io_partition(path),
+          io_value
+        )
+      }
+      scientific_check_parts[[length(scientific_check_parts) + 1L]] <-
+        wlv_scientific_validate_io_array(
+          method = method,
+          m_io = io_value,
+          sea_sectors = sea_sectors
+        )
+      scientific_io_years <- c(
+        scientific_io_years,
+        dimnames(io_value)[[1L]]
+      )
+      rm(io_value)
+      gc()
+    }
   }
   rm(snapshot_io_bindings)
   persisted_runtime <- wlv_new_contract_runtime(

@@ -1396,6 +1396,92 @@ wlv_validate_scientific_check_artifact <- function(value, method) {
   invisible(value)
 }
 
+wlv_read_scientific_check_artifact <- function(path, method) {
+  if (!is.character(path) || length(path) != 1L || is.na(path) ||
+      !file.exists(path) || isTRUE(file.info(path)$isdir)) {
+    stop("Scientific-check sidecar is missing.", call. = FALSE)
+  }
+  value <- tryCatch(
+    utils::read.csv2(
+      path,
+      stringsAsFactors = FALSE,
+      check.names = FALSE,
+      na.strings = "NA",
+      fileEncoding = "UTF-8",
+      colClasses = c(
+        rep("character", 6L),
+        "integer", "numeric", "numeric", "character", "character"
+      )
+    ),
+    error = function(error) {
+      stop(
+        sprintf("Cannot read scientific-check sidecar: %s", conditionMessage(error)),
+        call. = FALSE
+      )
+    }
+  )
+  row.names(value) <- NULL
+  wlv_validate_scientific_check_artifact(value, method)
+  value
+}
+
+wlv_inherited_io_scientific_checks <- function(value, method, io_years) {
+  wlv_validate_scientific_check_artifact(value, method)
+  io_years <- as.character(io_years)
+  if (!length(io_years) || anyNA(io_years) || any(!nzchar(io_years)) ||
+      anyDuplicated(io_years)) {
+    wlv_abort_scientific_validation(
+      method,
+      "inherited_io_checks",
+      "_scientific_checks.csv",
+      reason = "the inherited I/O year coverage is invalid"
+    )
+  }
+  coverage <- value[
+    value$artifact == "m_io" & value$check_id == "io_year_coverage",
+    ,
+    drop = FALSE
+  ]
+  row.names(coverage) <- NULL
+  expected_coverage <- wlv_scientific_check_row(
+    method,
+    "io_year_coverage",
+    "m_io",
+    observations = length(io_years),
+    detail = "Every result year appears in exactly one I/O artifact."
+  )
+  if (!identical(coverage, expected_coverage)) {
+    wlv_abort_scientific_validation(
+      method,
+      "inherited_io_checks",
+      "_scientific_checks.csv",
+      reason = "the authenticated parent has invalid I/O year coverage"
+    )
+  }
+  result <- value[
+    value$artifact == "m_io" & value$check_id != "io_year_coverage",
+    ,
+    drop = FALSE
+  ]
+  keys <- paste(
+    result$check_id,
+    result$artifact,
+    result$indicator,
+    result$scope,
+    sep = "\034"
+  )
+  if (!nrow(result) || anyDuplicated(keys)) {
+    wlv_abort_scientific_validation(
+      method,
+      "inherited_io_checks",
+      "_scientific_checks.csv",
+      reason = "the authenticated parent lacks a unique I/O check inventory"
+    )
+  }
+  row.names(result) <- NULL
+  result[wlv_scientific_check_columns()]
+}
+
 wlv_scientific_validate_lambda_fingerprints <- function(
     leontief,
     sea_sectors,

@@ -84,6 +84,137 @@ test_that("all executable methods resolve only typed native execution inputs", {
   })
   expect_identical(repeated, compatibility)
 
+  expected_assumptions <- list(
+    wiodr13 = "assumption/employment_row_current",
+    wiodr16 = c(
+      "assumption/employment_row_current",
+      "assumption/china_hours_per_worker"
+    ),
+    alternative_1 = c(
+      "assumption/employment_china",
+      "assumption/employment_row_legacy"
+    ),
+    alternative_2 = c(
+      "assumption/employment_china",
+      "assumption/employment_row_legacy"
+    ),
+    norow_w13 = character(),
+    ochoa_1 = c(
+      "assumption/employment_china",
+      "assumption/employment_row_legacy"
+    ),
+    ochoa_2 = c(
+      "assumption/employment_china",
+      "assumption/employment_row_legacy"
+    ),
+    petrovic = c(
+      "assumption/employment_china",
+      "assumption/employment_row_legacy"
+    ),
+    wiodr13v09 = "assumption/employment_row_legacy",
+    wiodr16v09 = c(
+      "assumption/employment_row_legacy",
+      "assumption/china_hours_per_worker"
+    ),
+    zerodep_1 = "assumption/employment_row_current",
+    zerodep_2 = c(
+      "assumption/employment_row_current",
+      "assumption/china_hours_per_worker"
+    )
+  )
+  expect_setequal(names(expected_assumptions), plan$method_names)
+
+  for (method in plan$method_names) {
+    record <- plan$methods[plan$methods$method == method, , drop = FALSE]
+    partitions <- if (identical(record$source[[1L]], "wiodr13")) {
+      "1995-2009"
+    } else {
+      "2000-2014"
+    }
+    full_inventories <- lapply(
+      list(calculate = "calculate", stage1 = "recalculate"),
+      function(mode) {
+        instances <- runtime$wlv_native_plan_instances(
+          registry = plan$native_registry,
+          config = plan$configuration[[method]],
+          aggregation_registry = plan$aggregation_registries[[method]],
+          indicators = plan$indicators[[method]],
+          partitions = partitions,
+          mode = mode,
+          at_stage = 1L
+        )
+        runtime$wlv_native_instance_required_keys(
+          plan$native_registry,
+          instances
+        )
+      }
+    )
+    for (inventory_name in names(full_inventories)) {
+      inventory <- full_inventories[[inventory_name]]
+      assumption_keys <- inventory[startsWith(inventory, "assumption/")]
+      expect_true(
+        identical(
+          sort(assumption_keys),
+          sort(expected_assumptions[[method]])
+        ),
+        info = sprintf("%s %s assumption inventory", method, inventory_name)
+      )
+      expect_true(all(c(
+        "source/sea",
+        "source/io",
+        "dimensions/lists",
+        "dimensions/rows",
+        "dimensions/io_filters",
+        "dimensions/import_group_indices"
+      ) %in% inventory), info = sprintf(
+        "%s %s full resource inventory",
+        method,
+        inventory_name
+      ))
+    }
+
+    stage5_instances <- runtime$wlv_native_plan_instances(
+      registry = plan$native_registry,
+      config = plan$configuration[[method]],
+      aggregation_registry = plan$aggregation_registries[[method]],
+      indicators = plan$indicators[[method]],
+      partitions = partitions,
+      mode = "recalculate",
+      at_stage = 5L
+    )
+    required_keys <- runtime$wlv_native_instance_required_keys(
+      plan$native_registry,
+      stage5_instances
+    )
+    dimension_assumption_keys <- required_keys[
+      startsWith(required_keys, "dimensions/") |
+        startsWith(required_keys, "assumption/")
+    ]
+    expect_setequal(
+      dimension_assumption_keys,
+      c("dimensions/lists", "dimensions/rows")
+    )
+    expect_true("source/sea" %in% required_keys, info = method)
+
+    stage4_instances <- runtime$wlv_native_plan_instances(
+      registry = plan$native_registry,
+      config = plan$configuration[[method]],
+      aggregation_registry = plan$aggregation_registries[[method]],
+      indicators = plan$indicators[[method]],
+      partitions = partitions,
+      mode = "recalculate",
+      at_stage = 4L
+    )
+    stage4_keys <- runtime$wlv_native_instance_required_keys(
+      plan$native_registry,
+      stage4_instances
+    )
+    expect_true(all(c(
+      "dimensions/io_filters",
+      "dimensions/import_group_indices"
+    ) %in% stage4_keys), info = method)
+  }
+
   method <- plan$method_names[[1L]]
   configuration <- plan$configuration[[method]]
   canonical <- runtime$wlv_native_configuration_descriptor(
@@ -243,6 +374,9 @@ test_that("profiled non-finite coordinates close against normalized source label
     source = "wiodr13",
     indicators = plan$indicators$alternative_2
   )
+  expect_false(runtime$wlv_native_can_inherit_io_scientific_checks(
+    module_plan
+  ))
   expect_invisible(runtime$wlv_native_validate_nonfinite_module_bindings(
     profile,
     module_plan,
@@ -288,6 +422,9 @@ test_that("profiled non-finite coordinates close against normalized source label
     at_stage = 5L,
     indicators = plan$indicators$alternative_2
   )
+  expect_true(runtime$wlv_native_can_inherit_io_scientific_checks(
+    selective_plan
+  ))
   selective_targets <- runtime$wlv_native_recalculated_anomaly_targets(
     selective_plan
   )

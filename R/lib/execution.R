@@ -1321,7 +1321,8 @@ wlv_native_parent_scientific_receipt <- function(
       c("_gfcf_negative_cells.csv", "_gfcf_negative_summary.csv")
     },
     "_leontief_diagnostics.csv",
-    if (nonfinite_name %in% manifest_paths) nonfinite_name
+    if (nonfinite_name %in% manifest_paths) nonfinite_name,
+    "_scientific_checks.csv"
   )
   artifact_records <- wlv_run_manifest_artifact_subset(
     parent_manifest,
@@ -1404,6 +1405,11 @@ wlv_native_validate_parent_scientific_profile <- function(
   profile <- plan$scientific_profiles[[method]]
   wlv_assert_scientific_profile(profile, method, source)
   artifact_paths <- vapply(receipt$artifacts, `[[`, character(1L), "path")
+  scientific_checks_name <- "_scientific_checks.csv"
+  diagnostic_paths <- setdiff(
+    artifact_paths,
+    c("_anomalies.csv", scientific_checks_name)
+  )
   nonfinite_name <- "_nonfinite_resolution_diagnostics.csv"
   runtime <- wlv_new_contract_runtime(
     method = method,
@@ -1443,7 +1449,15 @@ wlv_native_validate_parent_scientific_profile <- function(
     profile,
     method
   )
-  if (!identical(artifact_paths, c("_anomalies.csv", names(diagnostics)))) {
+  scientific_checks <- wlv_read_scientific_check_artifact(
+    file.path(result_dir, scientific_checks_name),
+    method
+  )
+  if (!identical(diagnostic_paths, names(diagnostics)) ||
+      !identical(
+        artifact_paths,
+        c("_anomalies.csv", names(diagnostics), scientific_checks_name)
+      )) {
     stop(
       "Parent scientific diagnostics differ from their manifest inventory.",
       call. = FALSE
@@ -1458,7 +1472,11 @@ wlv_native_validate_parent_scientific_profile <- function(
     artifact_paths,
     label = "parent scientific artifact"
   )
-  list(anomalies = anomalies, diagnostics = diagnostics)
+  list(
+    anomalies = anomalies,
+    diagnostics = diagnostics,
+    scientific_checks = scientific_checks
+  )
 }
 
 wlv_native_validate_nonfinite_source_coordinates <- function(
@@ -1581,6 +1599,46 @@ wlv_native_scientific_binding_preflight <- function(
   )
 }
 
+wlv_native_prepared_label_projection <- function(normalized_root) {
+  tables <- list(
+    countries = wlv_native_read_semicolon(
+      file.path(normalized_root, "countries.csv")
+    ),
+    sectors = wlv_native_read_semicolon(
+      file.path(normalized_root, "sectors.csv")
+    ),
+    demands = wlv_native_read_semicolon(
+      file.path(normalized_root, "demand.csv")
+    )
+  )
+  columns <- c(
+    countries = "country.source",
+    sectors = "sector.source",
+    demands = "demand"
+  )
+  labels <- lapply(names(tables), function(name) {
+    column <- columns[[name]]
+    table <- tables[[name]]
+    if (!column %in% names(table)) {
+      stop(
+        sprintf("Normalized `%s` labels lack `%s`.", name, column),
+        call. = FALSE
+      )
+    }
+    value <- as.character(table[[column]])
+    if (!length(value) || anyNA(value) || any(!nzchar(value)) ||
+        anyDuplicated(value)) {
+      stop(
+        sprintf("Normalized `%s` labels must be non-missing and unique.", name),
+        call. = FALSE
+      )
+    }
+    value
+  })
+  names(labels) <- names(tables)
+  labels
+}
+
 wlv_validate_method_prepared_artifacts <- function(
     plan,
     method_record,
@@ -1589,7 +1647,14 @@ wlv_validate_method_prepared_artifacts <- function(
     configuration,
     scientific_validation = NULL,
     validator_override = NULL,
-    euklems_files = NULL) {
+    euklems_files = NULL,
+    validate_payloads = TRUE) {
+  if (!is.logical(validate_payloads) || length(validate_payloads) != 1L ||
+      is.na(validate_payloads)) {
+    stop("Prepared payload-validation flag must be TRUE or FALSE.",
+      call. = FALSE
+    )
+  }
   method <- method_record$method[[1L]]
   source <- method_record$source[[1L]]
   manifest <- wlv_validate_method_source_manifest(
@@ -1598,11 +1663,19 @@ wlv_validate_method_prepared_artifacts <- function(
     artifacts
   )
 
-  validator_bundle <- wlv_load_catalog_validator(plan, method_record)
-  validator <- validator_override
-  if (!is.function(validator)) validator <- validator_bundle$validate
   if (is.null(scientific_validation)) {
-    scientific_validation <- validator(manifest$normalized_root)
+    scientific_validation <- if (isTRUE(validate_payloads)) {
+      validator_bundle <- wlv_load_catalog_validator(plan, method_record)
+      validator <- validator_override
+      if (!is.function(validator)) validator <- validator_bundle$validate
+      validator(manifest$normalized_root)
+    } else {
+      # Stage 5 consumes only terminal panel resources from the authenticated
+      # parent.  The normalized generation is still fully manifest-verified,
+      # while this label projection avoids deserializing source IO that cannot
+      # be reached by the checkpoint-specific DAG.
+      wlv_native_prepared_label_projection(manifest$normalized_root)
+    }
   }
   method_sectors <- wlv_native_read_semicolon(
     method_record$sectors_file[[1L]]
@@ -1663,11 +1736,18 @@ wlv_validate_method_prepared_artifacts <- function(
         call. = FALSE
       )
     }
-    validator_bundle$validate_euklems(
-      euklems_files,
-      required_variables = method_sectors$euklems.capital,
-      required_sectors = method_sectors$euklems.sector
-    )
+    if (isTRUE(validate_payloads)) {
+      validator_bundle <- if (exists("validator_bundle", inherits = FALSE)) {
+        validator_bundle
+      } else {
+        wlv_load_catalog_validator(plan, method_record)
+      }
+      validator_bundle$validate_euklems(
+        euklems_files,
+        required_variables = method_sectors$euklems.capital,
+        required_sectors = method_sectors$euklems.sector
+      )
+    }
   }
 
   list(
@@ -1801,7 +1881,9 @@ wlv_validate_data <- function(
       source_io = source_io,
       configuration = configuration,
       scientific_validation = scientific_validations[[source]],
-      validator_override = validator_overrides[[source]]
+      validator_override = validator_overrides[[source]],
+      validate_payloads = identical(plan$mode, "calculate") ||
+        plan$at_stage <= 4L
     )
     manifest <- prepared$manifest
     scientific_validations[[source]] <- prepared$scientific_validation
@@ -3229,6 +3311,26 @@ wlv_native_recalculation_module_ids <- function(module_plan) {
   ))
 }
 
+wlv_native_can_inherit_io_scientific_checks <- function(module_plan) {
+  if (!inherits(module_plan, "wlv_module_plan") ||
+      !is.environment(module_plan) || !environmentIsLocked(module_plan)) {
+    stop("I/O scientific inheritance requires a compiled native plan.",
+      call. = FALSE
+    )
+  }
+  provided <- unique(unlist(lapply(module_plan$modules, function(module) {
+    vapply(module$provides, function(output) output$ref$key, character(1L))
+  }), use.names = FALSE))
+  io_dependencies <- c(
+    "artifact/m_io",
+    "sea/sector/capital_stock.s.us",
+    "sea/sector/capital_depreciation.s.us",
+    "sea/sector/gross_output.s.mv"
+  )
+  !any(startsWith(provided, "io/")) &&
+    !any(provided %in% io_dependencies)
+}
+
 wlv_native_merge_recalculation_diagnostics <- function(
     run_data,
     current,
@@ -3637,6 +3739,8 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
     )
     runtime_data$parent_scientific_diagnostics <-
       parent_scientific$diagnostics
+    runtime_data$parent_scientific_checks <-
+      parent_scientific$scientific_checks
   }
   policy <- wlv_load_run_missingness_policy(plan, method_record)
   compatibility <- wlv_native_runtime_compatibility(
@@ -3688,6 +3792,10 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         operation = plan$mode,
         partitions = run_data$partitions
       )
+      inherit_io_scientific_checks <-
+        identical(plan$mode, "recalculate") &&
+        identical(plan$at_stage, 5L) &&
+        wlv_native_can_inherit_io_scientific_checks(module_plan)
       if (identical(plan$mode, "recalculate")) {
         wlv_native_reset_recalculated_anomalies(
           contract_runtime,
@@ -3956,6 +4064,11 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
           NULL
         },
         reader = read_fst_array,
+        inherited_scientific_checks = if (inherit_io_scientific_checks) {
+          runtime_data$parent_scientific_checks
+        } else {
+          NULL
+        },
         runtime_snapshot_receipt = (function(owner) {
           if (!exists("receipt", envir = owner, inherits = FALSE)) {
             stop("Runtime snapshot receipt ownership was already transferred.",

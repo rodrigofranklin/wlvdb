@@ -104,11 +104,26 @@ wlv_native_import_group_indices <- function(filters) {
   structure(indices, class = c("wlv_import_group_indices", "list"))
 }
 
-wlv_native_dimensions <- function(source_sea, sectors, normalized_dir) {
-  if (!is.array(source_sea) || length(dim(source_sea)) != 4L ||
-      is.null(dimnames(source_sea)) ||
-      any(vapply(dimnames(source_sea), is.null, logical(1L)))) {
-    stop("Normalized SEA must be a fully labelled four-dimensional array.", call. = FALSE)
+wlv_native_dimensions_from_years <- function(
+    years,
+    sectors,
+    normalized_dir,
+    required_keys = NULL) {
+  years <- as.character(years)
+  if (!length(years) || anyNA(years) || any(!nzchar(years)) ||
+      anyDuplicated(years)) {
+    stop("Normalized SEA years must be non-missing and unique.", call. = FALSE)
+  }
+  if (is.null(required_keys)) {
+    required_keys <- c(
+      "dimensions/io_filters",
+      "dimensions/import_group_indices"
+    )
+  } else if (!is.character(required_keys) || anyNA(required_keys) ||
+      any(!nzchar(required_keys)) || anyDuplicated(required_keys)) {
+    stop("Required dimension keys must be unique non-empty strings.",
+      call. = FALSE
+    )
   }
   countries <- wlv_native_read_semicolon(
     file.path(normalized_dir, "countries.csv")
@@ -121,7 +136,7 @@ wlv_native_dimensions <- function(source_sea, sectors, normalized_dir) {
   lists <- list(
     countries = as.character(countries$country.source),
     sectors = as.character(sectors$sector.source),
-    years = as.character(dimnames(source_sea)[[1L]])
+    years = years
   )
   nums <- list(
     countries = length(lists$countries),
@@ -156,8 +171,27 @@ wlv_native_dimensions <- function(source_sea, sectors, normalized_dir) {
   lists$output <- columns$country_sector
   nums$input <- length(lists$input)
   nums$output <- length(lists$output)
-  filters <- wlv_native_io_filters(lists, nums, rows, columns)
-  import_group_indices <- wlv_native_import_group_indices(filters)
+  filters_required <- any(c(
+    "dimensions/io_filters",
+    "dimensions/import_group_indices"
+  ) %in% required_keys)
+  filters_working <- if (filters_required) {
+    wlv_native_io_filters(lists, nums, rows, columns)
+  } else {
+    NULL
+  }
+  filters <- if ("dimensions/io_filters" %in% required_keys) {
+    filters_working
+  } else {
+    NULL
+  }
+  import_group_indices <- if (
+    "dimensions/import_group_indices" %in% required_keys
+  ) {
+    wlv_native_import_group_indices(filters_working)
+  } else {
+    NULL
+  }
   list(
     lists = lists,
     nums = nums,
@@ -168,6 +202,49 @@ wlv_native_dimensions <- function(source_sea, sectors, normalized_dir) {
     io_filters = filters,
     import_group_indices = import_group_indices
   )
+}
+
+wlv_native_dimensions <- function(source_sea, sectors, normalized_dir) {
+  if (!is.array(source_sea) || length(dim(source_sea)) != 4L ||
+      is.null(dimnames(source_sea)) ||
+      any(vapply(dimnames(source_sea), is.null, logical(1L)))) {
+    stop("Normalized SEA must be a fully labelled four-dimensional array.", call. = FALSE)
+  }
+  wlv_native_dimensions_from_years(
+    dimnames(source_sea)[[1L]],
+    sectors,
+    normalized_dir
+  )
+}
+
+wlv_native_instance_required_keys <- function(registry, instances) {
+  keys <- as.character(unique(unlist(lapply(instances, function(instance) {
+    spec <- wlv_registry_module(registry, instance$module_id)
+    args <- wlv_runtime_resolve_arguments(spec, instance)
+    requires <- wlv_runtime_resolve_contract_list(
+      spec$requires,
+      args,
+      "requires",
+      "wlv_resource_ref",
+      instance
+    )
+    vapply(requires, function(ref) ref$key, character(1L))
+  }), use.names = FALSE)))
+  if (anyNA(keys) || any(!nzchar(keys))) {
+    stop("Native instances resolved invalid required resource keys.",
+      call. = FALSE
+    )
+  }
+  keys
+}
+
+wlv_native_instances_require_resource <- function(registry, instances, key) {
+  if (!is.character(key) || length(key) != 1L || is.na(key) || !nzchar(key)) {
+    stop("Required native resource key must be one non-empty string.",
+      call. = FALSE
+    )
+  }
+  key %in% wlv_native_instance_required_keys(registry, instances)
 }
 
 wlv_native_io_filters <- function(lists, nums, rows, columns) {
@@ -273,36 +350,71 @@ wlv_native_collect_indicator_metadata <- function(
   wlv_complete_indicator_metadata(metadata, units = units)
 }
 
-wlv_native_assumption_seeds <- function(root, source, dimensions, sectors) {
-  current <- wlv_native_read_semicolon(
-    file.path(root, "complementar", "worldbank", "employment_row.new.csv"),
-    row.names = 1L
+wlv_native_assumption_seeds <- function(
+    root,
+    source,
+    dimensions,
+    sectors,
+    required_keys = NULL) {
+  available <- c(
+    "assumption/employment_row_current",
+    "assumption/employment_row_legacy",
+    "assumption/employment_china",
+    if (identical(source, "wiodr16")) {
+      "assumption/china_hours_per_worker"
+    }
   )
-  legacy <- wlv_native_read_semicolon(
-    file.path(root, "complementar", "worldbank", "employment_row.csv"),
-    row.names = 1L
-  )
-  china <- wlv_native_read_semicolon(
-    file.path(root, "complementar", "worldbank", "employment_china.csv")
-  )
-  result <- list(
-    wlv_seed_resource(
-      "assumption/employment_row_current",
-      current,
-      wlv_resource_contract(scope = "run", value_type = "data.frame")
-    ),
-    wlv_seed_resource(
-      "assumption/employment_row_legacy",
-      legacy,
-      wlv_resource_contract(scope = "run", value_type = "data.frame")
-    ),
-    wlv_seed_resource(
-      "assumption/employment_china",
-      china,
+  if (is.null(required_keys)) {
+    required_keys <- available
+  } else if (!is.character(required_keys) || anyNA(required_keys) ||
+      any(!nzchar(required_keys)) || anyDuplicated(required_keys)) {
+    stop("Required assumption keys must be unique non-empty strings.",
+      call. = FALSE
+    )
+  }
+  requested <- required_keys[startsWith(required_keys, "assumption/")]
+  unavailable <- setdiff(requested, available)
+  if (length(unavailable)) {
+    stop(
+      sprintf(
+        "Native instances require unavailable assumptions: %s.",
+        paste(sort(unavailable), collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  if (!length(requested)) return(list())
+
+  result <- list()
+  add_data_frame <- function(key, path, row.names = NULL) {
+    value <- wlv_native_read_semicolon(path, row.names = row.names)
+    result[[length(result) + 1L]] <<- wlv_seed_resource(
+      key,
+      value,
       wlv_resource_contract(scope = "run", value_type = "data.frame")
     )
-  )
-  if (identical(source, "wiodr16")) {
+  }
+  if ("assumption/employment_row_current" %in% requested) {
+    add_data_frame(
+      "assumption/employment_row_current",
+      file.path(root, "complementar", "worldbank", "employment_row.new.csv"),
+      row.names = 1L
+    )
+  }
+  if ("assumption/employment_row_legacy" %in% requested) {
+    add_data_frame(
+      "assumption/employment_row_legacy",
+      file.path(root, "complementar", "worldbank", "employment_row.csv"),
+      row.names = 1L
+    )
+  }
+  if ("assumption/employment_china" %in% requested) {
+    add_data_frame(
+      "assumption/employment_china",
+      file.path(root, "complementar", "worldbank", "employment_china.csv")
+    )
+  }
+  if ("assumption/china_hours_per_worker" %in% requested) {
     hours <- wlv_read_wiodr16_china_hours_per_worker(
       file.path(root, "complementar", "wiodr16", "china_hours_per_worker.csv"),
       expected_codes = dimensions$lists$sectors,
@@ -456,15 +568,31 @@ wlv_native_base_seeds <- function(
   method <- method_record$method[[1L]]
   source <- method_record$source[[1L]]
   parameters <- wlv_native_method_parameters(plan$root, method)
-  source_sea <- read_fst_array(run_data$source_sea)
-  source_sea <- wlv_native_with_named_axes(
-    source_sea,
-    c("year", "variable", "sector", "country")
+  required_keys <- wlv_native_instance_required_keys(registry, instances)
+  source_instances <- Filter(
+    function(instance) identical(instance$module_id, "source_indicator"),
+    instances
   )
-  dimensions <- wlv_native_dimensions(
-    source_sea,
+  source_sea_required <- "source/sea" %in% required_keys
+  source_sea <- if (isTRUE(source_sea_required)) {
+    value <- read_fst_array(run_data$source_sea)
+    wlv_native_with_named_axes(
+      value,
+      c("year", "variable", "sector", "country")
+    )
+  } else {
+    NULL
+  }
+  source_years <- if (is.null(source_sea)) {
+    wlv_native_metadata_years(run_data$source_sea)
+  } else {
+    dimnames(source_sea)[[1L]]
+  }
+  dimensions <- wlv_native_dimensions_from_years(
+    source_years,
     parameters$sectors,
-    dirname(run_data$source_sea)
+    dirname(run_data$source_sea),
+    required_keys = required_keys
   )
   metadata <- wlv_native_collect_indicator_metadata(
     registry,
@@ -475,10 +603,6 @@ wlv_native_base_seeds <- function(
       function(instance) instance$module_id,
       character(1L)
     ))
-  )
-  source_instances <- Filter(
-    function(instance) identical(instance$module_id, "source_indicator"),
-    instances
   )
   if (length(source_instances)) {
     source_indicators <- vapply(source_instances, function(instance) {
@@ -512,11 +636,58 @@ wlv_native_base_seeds <- function(
       call. = FALSE
     )
   }
-  source_seeds <- wlv_native_stateful_seed_pair(wlv_seed_resource(
-    "source/sea",
-    source_sea,
-    wlv_native_source_sea_contract()
-  ))
+  source_seeds <- if (is.null(source_sea)) {
+    list()
+  } else {
+    wlv_native_stateful_seed_pair(wlv_seed_resource(
+      "source/sea",
+      source_sea,
+      wlv_native_source_sea_contract()
+    ))
+  }
+  dimension_values <- list(
+    "dimensions/lists" = dimensions$lists,
+    "dimensions/nums" = dimensions$nums,
+    "dimensions/rows" = dimensions$rows,
+    "dimensions/columns" = dimensions$columns,
+    "dimensions/io_filters" = dimensions$io_filters,
+    "dimensions/import_group_indices" = dimensions$import_group_indices,
+    "labels/countries" = dimensions$countries,
+    "labels/demands" = dimensions$demands
+  )
+  dimension_contracts <- list(
+    "dimensions/lists" = wlv_resource_contract(
+      scope = "run", value_type = "list"
+    ),
+    "dimensions/nums" = wlv_resource_contract(
+      scope = "run", value_type = "list"
+    ),
+    "dimensions/rows" = wlv_resource_contract(
+      scope = "run", value_type = "data.frame"
+    ),
+    "dimensions/columns" = wlv_resource_contract(
+      scope = "run", value_type = "data.frame"
+    ),
+    "dimensions/io_filters" = wlv_native_filters_contract(),
+    "dimensions/import_group_indices" = wlv_native_control_contract("list"),
+    "labels/countries" = wlv_resource_contract(
+      scope = "run", value_type = "data.frame"
+    ),
+    "labels/demands" = wlv_resource_contract(
+      scope = "run", value_type = "data.frame"
+    )
+  )
+  dimension_keys <- names(dimension_values)[
+    names(dimension_values) %in% required_keys
+  ]
+  dimension_seeds <- lapply(dimension_keys, function(key) {
+    wlv_seed_resource(
+      key,
+      dimension_values[[key]],
+      dimension_contracts[[key]]
+    )
+  })
+
   seeds <- c(list(
     wlv_seed_resource(
       "request/method",
@@ -547,48 +718,8 @@ wlv_native_base_seeds <- function(
       "configuration/sectors",
       parameters$sectors,
       wlv_resource_contract(scope = "run", value_type = "data.frame")
-    ),
-    wlv_seed_resource(
-      "dimensions/lists",
-      dimensions$lists,
-      wlv_resource_contract(scope = "run", value_type = "list")
-    ),
-    wlv_seed_resource(
-      "dimensions/nums",
-      dimensions$nums,
-      wlv_resource_contract(scope = "run", value_type = "list")
-    ),
-    wlv_seed_resource(
-      "dimensions/rows",
-      dimensions$rows,
-      wlv_resource_contract(scope = "run", value_type = "data.frame")
-    ),
-    wlv_seed_resource(
-      "dimensions/columns",
-      dimensions$columns,
-      wlv_resource_contract(scope = "run", value_type = "data.frame")
-    ),
-    wlv_seed_resource(
-      "dimensions/io_filters",
-      dimensions$io_filters,
-      wlv_native_filters_contract()
-    ),
-    wlv_seed_resource(
-      "dimensions/import_group_indices",
-      dimensions$import_group_indices,
-      wlv_native_control_contract("list")
-    ),
-    wlv_seed_resource(
-      "labels/countries",
-      dimensions$countries,
-      wlv_resource_contract(scope = "run", value_type = "data.frame")
-    ),
-    wlv_seed_resource(
-      "labels/demands",
-      dimensions$demands,
-      wlv_resource_contract(scope = "run", value_type = "data.frame")
     )
-  ), source_seeds, list(
+  ), dimension_seeds, source_seeds, list(
     wlv_seed_resource(
       "metadata/indicators",
       metadata,
@@ -601,7 +732,8 @@ wlv_native_base_seeds <- function(
       plan$root,
       source,
       dimensions,
-      parameters$sectors
+      parameters$sectors,
+      required_keys = required_keys
     )
   )
   wlv_native_validate_seed_semantic_pairs(seeds)
