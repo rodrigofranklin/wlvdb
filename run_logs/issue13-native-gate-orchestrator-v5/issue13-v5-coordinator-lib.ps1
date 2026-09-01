@@ -479,9 +479,9 @@ $script:Issue13V5BaselineOverlayPatchId =
 # Terminal harness fixture. Keep this one coordinator triplet synchronized with
 # materialize-harness and sealed_inventory when the terminal dry-run reseals it.
 $script:Issue13V5HarnessFileCount = 47L
-$script:Issue13V5HarnessTotalBytes = 2629957L
+$script:Issue13V5HarnessTotalBytes = 2634087L
 $script:Issue13V5HarnessInventorySha256 =
-  '926ff38a659b7ab8c52af906ed00ddf45d9c4ec2d1daacf2ae2d2a98b63a401c'
+  'a9fa44706264cd6b8392790ff1f032cc9314a8a73e18243d65e7f6ccbea02c71'
 $script:Issue13V5SourceToolingRelativeRoot =
   'run_logs/issue13-evidence-source-v5'
 $script:Issue13V5SourceToolingPathListSha256 =

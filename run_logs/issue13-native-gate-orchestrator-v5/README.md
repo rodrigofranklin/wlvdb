@@ -310,8 +310,8 @@ no mesmo host: os tipos nativos compilados ficam no AppDomain, e uma segunda
 entrada é recusada de forma fail-closed como estado herdado.
 
 O selo terminal foi derivado de uma staging write-once materializada dos blobs
-autenticados do candidato: `47` arquivos, `2629957` bytes e inventário SHA-256
-`926ff38a659b7ab8c52af906ed00ddf45d9c4ec2d1daacf2ae2d2a98b63a401c`.
+autenticados do candidato: `47` arquivos, `2634087` bytes e inventário SHA-256
+`a9fa44706264cd6b8392790ff1f032cc9314a8a73e18243d65e7f6ccbea02c71`.
 O spec do Oracle registra `status = sealed`; gerador e validador exigem essa
 tripla exata antes da prova Oracle e do gate longo. O output continua exigindo
 um único diretório plano `issue13-evidence-harness`, sem subdiretório oculto; o
