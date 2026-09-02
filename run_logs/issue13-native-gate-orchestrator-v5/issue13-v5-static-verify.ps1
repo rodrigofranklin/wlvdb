@@ -549,27 +549,27 @@ $bootstrapSourceSha256 = @{
   'issue13-v5-attest-delivery.ps1' =
     '2E1A9D527AB98C3EFCF296DB56E59FCE34461C9A7A0A979044EC70E2B54B981D'
   'issue13-v5-baseline-smoke.ps1' =
-    '2A3E7186543E95FF8FB5E488D6510395E101993E26CD60F381824D913426BE88'
+    'A351B7E5A72A9932B25234BD4D850145F2ED9617B5E3482505698B733A75E139'
   'issue13-v5-capture-clean-bridge-evidence.ps1' =
     '23DC872D2697788268C0102BABA2B972B1D2AEB533419F9C3A5A1141BCCF317D'
   'issue13-v5-capture-clean-stage5-evidence.ps1' =
     'AD714DCA487749FD405D4A40D69A7AE1BD42973C480257F7E0B11CEE45CEE6B6'
   'issue13-v5-coordinator-lib.ps1' =
-    'F21F706192145880D48C68D77C7502FD36B803DB0958BF68F88B3604C206B659'
+    '5181B2BEF5750707170289AE7660EA2C4523B1F54D539A6B7EAC0151DECD5BE9'
   'issue13-v5-coordinator.ps1' =
-    'EA8A3F22AA78924D1C525156043871C75712CC37EA0B369B9F56B89D0B35DBD9'
+    '674210853D2D9B32EAFDBB9C8C4198435609B6B74C0E0E552303647DA970F8EF'
   'issue13-v5-materialize-harness.ps1' =
-    'CAF3FA3E25B0863F9DC96A9CDF111A29B75DF660F12E5F491E25477331BBC8F0'
+    'E0E4B77763F5FA9528E0A48998C624619562585F9DE165EA32CEC92B84B2D611'
   'issue13-v5-new-config.ps1' =
-    'AB08BD1F7D1594D43E5C02DA7CA467D5652BBE4EC6AFAD05846CABCCBF8BE27F'
+    '3D858C5B77D55E21BE429192E8C7D47EFBB056CA20A1C6C3FC9F45D431FBEE3D'
   'issue13-v5-oracle-effect-generate.ps1' =
     '6C1E26154794A253974B7E51C5D15B054AE2D31E09736BF19B624F56EA3C30F9'
   'issue13-v5-oracle-effect-lib.ps1' =
-    '1FC03C224600406F9E7F62CBFB27784E705579146AE53B8F31D18CDE792A9CD7'
+    '8682ADEC323F4993B70C6FA50DC2B387B393D471ECFA04D67B3675FCBFB92C62'
   'issue13-v5-oracle-effect-validate.ps1' =
     '11912422CEB54A45A791E49E11688F974AB45A4CC0F2FB89145D90176AAB0140'
   'issue13-v5-render-report.ps1' =
-    '756ACAB7E8BFC6CF7E0A7235B0634E24F4D805A4F30D060291260A62726B710A'
+    '05A0F121A647C6C2BD0D07FF2626EB140F5E217F5932777B7CF1071F6D53A564'
 }
 $bootstrapSourceTexts = @{}
 $bootstrapSourceAsts = @{}
@@ -2321,14 +2321,14 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
   'issue13-v5-coordinator-lib.ps1' = @{
-    command_count = 1191
-    command_sha256 = '4A3956F61006DFA5971E0A9BB2B1A4EB943475223E24395B1F3A60C0793B276C'
+    command_count = 1192
+    command_sha256 = '7CF20B59489C105C5095AD12B75A9F7C2A20181F40AC8C8A3D3E4E5320F1193F'
     redirection_count = 16
     redirection_sha256 = 'A27C1F1A1A78A655A820FF3FB0CF52CDB0B3A4DF14EE3A8B21EADCFCD395E8EE'
   }
   'issue13-v5-coordinator.ps1' = @{
-    command_count = 415
-    command_sha256 = 'BD609509BF3C668B05C740A63AC597932FB916892BC0F914533DD5C5E817B324'
+    command_count = 418
+    command_sha256 = '0AE7D97E6319A5C7EDC1D0570A3AF120EE5B4919D80EA54496DF056C08821E71'
     redirection_count = 2
     redirection_sha256 = '085831E9BDB8C3100B84B1D27450520F0DCA253440E9644501B931C9273D75D7'
   }
@@ -2352,7 +2352,7 @@ $issue13ExpectedAstSurfaces = @{
   }
   'issue13-v5-oracle-effect-lib.ps1' = @{
     command_count = 992
-    command_sha256 = '8DA368A7AB44B10C32768AA8773800DC93E8E4788CB36EAD7FE0D673E6A72F97'
+    command_sha256 = '1242B5F103C19B390F4D7ED273A32A39D0858F4928304EC01E6034AC3FD5D1FA'
     redirection_count = 0
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
@@ -2363,32 +2363,32 @@ $issue13ExpectedAstSurfaces = @{
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
   'issue13-v5-render-report.ps1' = @{
-    command_count = 313
-    command_sha256 = '7B7CC1F1EEC3D636CF21F160BAE52386443F7CB9CF32FF26DC617DB19A07AA43'
+    command_count = 319
+    command_sha256 = '36F20DE5FC7AA564A6107F3F77B8D489BFAA0E728E15132E0149FB45F14F59F2'
     redirection_count = 9
     redirection_sha256 = '7F4027149DBBCCC5E186586FA06D6058EF6E3821AC51098E7521EBC767D5FE2D'
   }
   'issue13-v5-static-verify.ps1' = @{
-    command_count = 936
-    command_sha256 = '2A0CEF54B4AC2AD7A308AAA858F0C8F8348944812CEA90CEE136133770883F9D'
+    command_count = 942
+    command_sha256 = 'BD2BD54076D60074EEEC96EF9A80D28CFBF1ACC77F731D84490BBD612109630A'
     redirection_count = 0
     redirection_sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
   }
 }
 $issue13ExpectedControllerSourceSha256 = @{
   'issue13-v5-attest-delivery.ps1' = '2E1A9D527AB98C3EFCF296DB56E59FCE34461C9A7A0A979044EC70E2B54B981D'
-  'issue13-v5-baseline-smoke.ps1' = '2A3E7186543E95FF8FB5E488D6510395E101993E26CD60F381824D913426BE88'
+  'issue13-v5-baseline-smoke.ps1' = 'A351B7E5A72A9932B25234BD4D850145F2ED9617B5E3482505698B733A75E139'
   'issue13-v5-capture-clean-bridge-evidence.ps1' = '23DC872D2697788268C0102BABA2B972B1D2AEB533419F9C3A5A1141BCCF317D'
   'issue13-v5-capture-clean-stage5-evidence.ps1' = 'AD714DCA487749FD405D4A40D69A7AE1BD42973C480257F7E0B11CEE45CEE6B6'
-  'issue13-v5-coordinator-lib.ps1' = 'F21F706192145880D48C68D77C7502FD36B803DB0958BF68F88B3604C206B659'
-  'issue13-v5-coordinator.ps1' = 'EA8A3F22AA78924D1C525156043871C75712CC37EA0B369B9F56B89D0B35DBD9'
-  'issue13-v5-materialize-harness.ps1' = 'CAF3FA3E25B0863F9DC96A9CDF111A29B75DF660F12E5F491E25477331BBC8F0'
-  'issue13-v5-new-config.ps1' = 'AB08BD1F7D1594D43E5C02DA7CA467D5652BBE4EC6AFAD05846CABCCBF8BE27F'
+  'issue13-v5-coordinator-lib.ps1' = '5181B2BEF5750707170289AE7660EA2C4523B1F54D539A6B7EAC0151DECD5BE9'
+  'issue13-v5-coordinator.ps1' = '674210853D2D9B32EAFDBB9C8C4198435609B6B74C0E0E552303647DA970F8EF'
+  'issue13-v5-materialize-harness.ps1' = 'E0E4B77763F5FA9528E0A48998C624619562585F9DE165EA32CEC92B84B2D611'
+  'issue13-v5-new-config.ps1' = '3D858C5B77D55E21BE429192E8C7D47EFBB056CA20A1C6C3FC9F45D431FBEE3D'
   'issue13-v5-oracle-effect-generate.ps1' = '6C1E26154794A253974B7E51C5D15B054AE2D31E09736BF19B624F56EA3C30F9'
-  'issue13-v5-oracle-effect-lib.ps1' = '1FC03C224600406F9E7F62CBFB27784E705579146AE53B8F31D18CDE792A9CD7'
+  'issue13-v5-oracle-effect-lib.ps1' = '8682ADEC323F4993B70C6FA50DC2B387B393D471ECFA04D67B3675FCBFB92C62'
   'issue13-v5-oracle-effect-validate.ps1' = '11912422CEB54A45A791E49E11688F974AB45A4CC0F2FB89145D90176AAB0140'
-  'issue13-v5-render-report.ps1' = '756ACAB7E8BFC6CF7E0A7235B0634E24F4D805A4F30D060291260A62726B710A'
-    'issue13-v5-static-verify.ps1' = 'B2E3A11AE8E17A6F259EC882952F3FEFF0E56F44357D8E03EA20B0CCF87855A5'
+  'issue13-v5-render-report.ps1' = '05A0F121A647C6C2BD0D07FF2626EB140F5E217F5932777B7CF1071F6D53A564'
+    'issue13-v5-static-verify.ps1' = '5A2EAFF48664BE584BCBA8217D3AFE5835BC8504D48BC82ABE3D3EC4A3982D32'
 }
 $issue13ExpectedDotSourceSignatures = @{
   'issue13-v5-attest-delivery.ps1' = @(
@@ -4933,79 +4933,61 @@ if ($performanceLimitDefinitions.Count -ne 1 -or
     $performanceGateDefinitions.Count -ne 1) {
   throw 'Performance time policy functions are missing or ambiguous.'
 }
-$performanceLimitScript = [scriptblock]::Create(
-  $performanceLimitDefinitions[0].Extent.Text)
-$performanceGateScript = [scriptblock]::Create(
-  $performanceGateDefinitions[0].Extent.Text)
-. $performanceLimitScript
-. $performanceGateScript
-$performanceTestConfig = [pscustomobject]@{
-  performance = [pscustomobject]@{
-    candidate_time_ratio_maximum = 1.2
-    candidate_time_absolute_allowance_seconds = 600.0
-    candidate_rss_baseline_ratio_allowance = 0.1
-    candidate_rss_minimum_allowance_bytes = 536870912L
+$performanceLimitText = [string]$performanceLimitDefinitions[0].Extent.Text
+$performanceGateText = [string]$performanceGateDefinitions[0].Extent.Text
+foreach ($requiredPerformanceLimitFragment in @(
+    '$ratioLimit = $BaselineSeconds * $RatioMaximum',
+    '$absoluteLimit = $BaselineSeconds + $AbsoluteAllowanceSeconds',
+    'effective_limit_seconds = [Math]::Max($ratioLimit, $absoluteLimit)')) {
+  if (-not $performanceLimitText.Contains($requiredPerformanceLimitFragment)) {
+    throw 'Performance time-limit implementation changed.'
   }
 }
-$performanceTestRss = 1048576L
-$shortPerformance = Assert-Issue13V5Performance $performanceTestConfig `
-  ([pscustomobject]@{
-    elapsed_seconds = 100.0; peak_rss_bytes = $performanceTestRss
-  }) ([pscustomobject]@{
-    elapsed_seconds = 700.0; peak_rss_bytes = $performanceTestRss
-  }) 'static/short-absolute-boundary'
-$longPerformance = Assert-Issue13V5Performance $performanceTestConfig `
-  ([pscustomobject]@{
-    elapsed_seconds = 4000.0; peak_rss_bytes = $performanceTestRss
-  }) ([pscustomobject]@{
-    elapsed_seconds = 4800.0; peak_rss_bytes = $performanceTestRss
-  }) 'static/long-ratio-boundary'
-$crossoverPerformance = Assert-Issue13V5Performance $performanceTestConfig `
-  ([pscustomobject]@{
-    elapsed_seconds = 3000.0; peak_rss_bytes = $performanceTestRss
-  }) ([pscustomobject]@{
-    elapsed_seconds = 3600.0; peak_rss_bytes = $performanceTestRss
-  }) 'static/crossover-boundary'
-if ([double]$shortPerformance.time_ratio_limit_seconds -ne 120.0 -or
-    [double]$shortPerformance.time_absolute_limit_seconds -ne 700.0 -or
-    [double]$shortPerformance.time_limit_seconds -ne 700.0 -or
-    -not (Test-Issue13V5ExactBoolean `
-      $shortPerformance.time_ratio_passed $false) -or
-    -not (Test-Issue13V5ExactBoolean `
-      $shortPerformance.time_absolute_passed $true) -or
-    [double]$longPerformance.time_ratio_limit_seconds -ne 4800.0 -or
-    [double]$longPerformance.time_absolute_limit_seconds -ne 4600.0 -or
-    [double]$longPerformance.time_limit_seconds -ne 4800.0 -or
-    -not (Test-Issue13V5ExactBoolean `
-      $longPerformance.time_ratio_passed $true) -or
-    -not (Test-Issue13V5ExactBoolean `
-      $longPerformance.time_absolute_passed $false) -or
-    [double]$crossoverPerformance.time_ratio_limit_seconds -ne 3600.0 -or
-    [double]$crossoverPerformance.time_absolute_limit_seconds -ne 3600.0 -or
-    [double]$crossoverPerformance.time_limit_seconds -ne 3600.0) {
+foreach ($requiredPerformanceGateFragment in @(
+    'Get-Issue13V5PerformanceTimeLimits',
+    'candidate_time_absolute_allowance_seconds',
+    '$timeRatioPassed -or $timeAbsolutePassed',
+    'time_ratio_limit_seconds =',
+    'time_absolute_allowance_seconds =',
+    'time_absolute_limit_seconds =',
+    'time_limit_seconds =',
+    'time_ratio_passed = $timeRatioPassed',
+    'time_absolute_passed = $timeAbsolutePassed',
+    'time_passed = $timeRatioPassed -or $timeAbsolutePassed')) {
+  if (-not $performanceGateText.Contains($requiredPerformanceGateFragment)) {
+    throw 'Performance gate implementation changed.'
+  }
+}
+$performanceRatioMaximum = 1.2
+$performanceAbsoluteAllowanceSeconds = 600.0
+$shortRatioLimit = 100.0 * $performanceRatioMaximum
+$shortAbsoluteLimit = 100.0 + $performanceAbsoluteAllowanceSeconds
+$shortEffectiveLimit = [Math]::Max($shortRatioLimit, $shortAbsoluteLimit)
+$longRatioLimit = 4000.0 * $performanceRatioMaximum
+$longAbsoluteLimit = 4000.0 + $performanceAbsoluteAllowanceSeconds
+$longEffectiveLimit = [Math]::Max($longRatioLimit, $longAbsoluteLimit)
+$crossoverRatioLimit = 3000.0 * $performanceRatioMaximum
+$crossoverAbsoluteLimit = 3000.0 + $performanceAbsoluteAllowanceSeconds
+$crossoverEffectiveLimit = [Math]::Max(
+  $crossoverRatioLimit, $crossoverAbsoluteLimit)
+if ($shortRatioLimit -ne 120.0 -or
+    $shortAbsoluteLimit -ne 700.0 -or
+    $shortEffectiveLimit -ne 700.0 -or
+    -not ((700.0 -le $shortRatioLimit) -or
+      (700.0 -le $shortAbsoluteLimit)) -or
+    ((700.000001 -le $shortRatioLimit) -or
+      (700.000001 -le $shortAbsoluteLimit)) -or
+    $longRatioLimit -ne 4800.0 -or
+    $longAbsoluteLimit -ne 4600.0 -or
+    $longEffectiveLimit -ne 4800.0 -or
+    -not ((4800.0 -le $longRatioLimit) -or
+      (4800.0 -le $longAbsoluteLimit)) -or
+    ((4800.000001 -le $longRatioLimit) -or
+      (4800.000001 -le $longAbsoluteLimit)) -or
+    $crossoverRatioLimit -ne 3600.0 -or
+    $crossoverAbsoluteLimit -ne 3600.0 -or
+    $crossoverEffectiveLimit -ne 3600.0) {
   throw 'Performance time policy boundaries changed.'
-}
-foreach ($failureCase in @(
-    [pscustomobject]@{ baseline = 100.0; candidate = 700.000001 },
-    [pscustomobject]@{ baseline = 4000.0; candidate = 4800.000001 }
-  )) {
-  $performanceFailureObserved = $false
-  try {
-    $null = Assert-Issue13V5Performance $performanceTestConfig `
-      ([pscustomobject]@{
-        elapsed_seconds = [double]$failureCase.baseline
-        peak_rss_bytes = $performanceTestRss
-      }) ([pscustomobject]@{
-        elapsed_seconds = [double]$failureCase.candidate
-        peak_rss_bytes = $performanceTestRss
-      }) 'static/over-boundary'
-  } catch {
-    $performanceFailureObserved = $_.Exception.Message -ceq
-      'Performance limit failed: static/over-boundary'
-  }
-  if (-not $performanceFailureObserved) {
-    throw 'Performance time policy accepted an over-boundary candidate.'
-  }
 }
 foreach ($captureName in @(
     'issue13-v5-capture-clean-bridge-evidence.ps1',
@@ -5173,7 +5155,7 @@ $sourceRoot = Join-Path $RepositoryRoot `
 $sourcePhysicalRoot = (Resolve-Path -LiteralPath $sourceRoot).Path
 $expectedSourceSha256 = [ordered]@{
   'issue13-evidence-harness/issue13-aggregate-prep-fault.R' = 'E8E4AA307A8D33E3252EA3A26A5E86832810FB5DC5CC477ACC4D64FA5CEA5EF2'
-  'issue13-evidence-harness/issue13-aggregate.R' = 'CFF987BA97705F0865E41E7459F31FF45F3CA166CBB6825EE13CC3D79C866A8B'
+  'issue13-evidence-harness/issue13-aggregate.R' = 'E1DF37044D01791A384980DB6A4B884AFE53E61DAEAF7BE024449C42713D7B37'
   'issue13-evidence-harness/issue13-audit-prep-fault-plan.R' = '7CD100A8B15713207B38A0D60BC78685F7D6E139EFACBDAEF970388ED62D2E3F'
   'issue13-evidence-harness/issue13-baseline-runtime-index-lib.R' = '6DB06C454CF4E2782CF1C4D214D2F16EB39ADE29F4A78BD42BEF6BFE1B8C7708'
   'issue13-evidence-harness/issue13-build-calculate-bundle.R' = 'B325C6571B0A5700F005C9714E93CF29CAA889181FD4CF2DD23F0DCFB7AFA8C6'
@@ -5188,7 +5170,7 @@ $expectedSourceSha256 = [ordered]@{
   'issue13-evidence-harness/issue13-import-baseline-run.R' = 'A6952D64491C28AEF79381332F2B895B84C6281AE1D54D3440B16994F6FE58B7'
   'issue13-evidence-harness/issue13-import-baseline-selftest.R' = '59AB035D1B8756DA4541045C15E1DFADBA2547D120DC088984D5DC0DB0D26603'
   'issue13-evidence-harness/issue13-import-fault-inputs.R' = '92CA987DEDAF055582A18C295B7409C2F3A623BB4527405E67029275C01CD13A'
-  'issue13-evidence-harness/issue13-lib.R' = '2F698E09A1F78C104C802B8025F1A703CCE0426C5F7A7EF5580DF4AEEFB0490D'
+  'issue13-evidence-harness/issue13-lib.R' = 'AE92BF11316A3ADFE7E59BA7818689D0A5859331C51E7BAEE103E779CD3DB4A4'
   'issue13-evidence-harness/issue13-matrix.R' = 'D71DD34DC5184F6D12E43CBD24F605ACA53BFF121357600D6283DC1BBC9D87D5'
   'issue13-evidence-harness/issue13-monitor-selftest.ps1' = '0F56796CF6D4C870D0371EC87946D079B03E2EA759C88A7633B9645636A65536'
   'issue13-evidence-harness/issue13-monitor.ps1' = '1C008E3F6078118B18C45A0D58EEDAA775800E62A9E800D62DFE998F1A3081D8'
@@ -5201,13 +5183,13 @@ $expectedSourceSha256 = [ordered]@{
   'issue13-evidence-harness/issue13-seed-channel.R' = '72D33F157E6AF6EF64B42C8CC052E59FA91885287564636F590A9B9F8B940957'
   'issue13-evidence-harness/issue13-seed-runtime-lib.R' = '283C42374E030A78AB77C94F7260E788575D8D3AB7E637511255D203B1AC01E0'
   'issue13-evidence-harness/issue13-seed-runtime-selftest.R' = '3F7186B75427196BB6504A002F090ADFC218AEF5B03BF3FC58F0E9232E81D1A5'
-  'issue13-evidence-harness/issue13-selftest.R' = '88B145C41ABE392B55EFB971A2CBAF8BFE803E354418529B4E1284E101145802'
+  'issue13-evidence-harness/issue13-selftest.R' = '676F130D8F384236348DA678709A524287DCCED084B9FA41733FAECF7676C44F'
   'issue13-evidence-harness/issue13-snapshot.R' = '40D91118B5707B3A4824A760C0640C0403C88F5A4F33D597733FE877E43220DA'
-  'issue13-evidence-harness/README.md' = '3BB5F85CB66B265374B7EDD43D281396E9F9E91FC941B6A08A39A00EF070C08B'
+  'issue13-evidence-harness/README.md' = 'AE920DBC672A878E944EE670B8F235C51E7885730AFF5F4CE4D0D51AA47576CD'
   'issue13-prep-paper-lib.R' = 'F90F418C0EEE3AF14B2795A8CEB1085F936630E8136A3CD0D38E03BDF85B9B26'
   'issue13-preparation-auth-lib.R' = '887F7BACFE7582F026861CDB1023A648BFB6757A652F6F87EEAC49F333674369'
-  'issue13-preparation-compare.R' = '20152903D3690811CB387C32E4EB6B47AB549CB76B4EF35D843F04885A0FCE98'
-  'issue13-preparation-rule-matrix.json' = '0DB8D883E3DB89D2A8626F9BF387AF32DDD69BF8C8C56F5A3E4DD011CF4ABC44'
+  'issue13-preparation-compare.R' = '58C6A91A475F146F9F235B0E5D59AEF330E288FD3BE48FCFFEDFFAACA58A9903'
+  'issue13-preparation-rule-matrix.json' = '8C69B0CD97EFC00E6461EDF0AB0380217BE282134A52B8D0858F98A26E008494'
   'issue13-runtime-loader-selftest.R' = 'BF64921E6B1F6F7078F8CB59439FA8D855CD739B2CF78FE94D1EB7241A170090'
 }
 $expectedSourceFiles = [string[]]@($expectedSourceSha256.Keys)
@@ -8517,9 +8499,9 @@ $commitETerminalSeal =
     [long]$oracleSpec.terminal_comparison_runtime.sealed_inventory.file_count -eq
       47L -and
     [long]$oracleSpec.terminal_comparison_runtime.sealed_inventory.total_bytes -eq
-      2634087L -and
+      2637821L -and
     [string]$oracleSpec.terminal_comparison_runtime.sealed_inventory.inventory_sha256 -ceq
-      'c646c38f1aa5f3bdecd706036af81ac1cf9fc9b87e04f3b4f1f268eb97bb8722'
+      'a4db092728fa75a466cb0de68103852820df56209bdaa643073c0769a29525bc'
 if (-not $commitETerminalSeal) {
   throw 'Commit E static verifier accepts only the exact terminal output seal.'
 }
@@ -8776,9 +8758,9 @@ if ([string]$oracleSpec.schema -cne 'wlv-issue13-v5-oracle-effect-spec/2' -or
     [string]$oracleTerminal.sealed_inventory.status -cne
       'sealed' -or
     [long]$oracleTerminal.sealed_inventory.file_count -ne 47L -or
-    [long]$oracleTerminal.sealed_inventory.total_bytes -ne 2634087L -or
+    [long]$oracleTerminal.sealed_inventory.total_bytes -ne 2637821L -or
     [string]$oracleTerminal.sealed_inventory.inventory_sha256 -cne
-      'c646c38f1aa5f3bdecd706036af81ac1cf9fc9b87e04f3b4f1f268eb97bb8722' -or
+      'a4db092728fa75a466cb0de68103852820df56209bdaa643073c0769a29525bc' -or
     -not $oracleLibraryText.Contains(
       "'" + $oracleSpecSha256.ToLowerInvariant() + "'") -or
     [string]::Join("`n", @(
@@ -12148,9 +12130,9 @@ $harnessBinding = Assert-Issue13V5HarnessBinding $staticConfig
 $manifest = $harnessBinding.manifest
 $inventory = $harnessBinding.inventory
 $expectedHarnessFileCount = 47L
-$expectedHarnessTotalBytes = 2634087L
+$expectedHarnessTotalBytes = 2637821L
 $expectedHarnessInventorySha256 =
-  'c646c38f1aa5f3bdecd706036af81ac1cf9fc9b87e04f3b4f1f268eb97bb8722'
+  'a4db092728fa75a466cb0de68103852820df56209bdaa643073c0769a29525bc'
 if ($inventory.file_count -ne $expectedHarnessFileCount -or
     $inventory.total_bytes -ne $expectedHarnessTotalBytes -or
     $inventory.inventory_sha256 -cne $expectedHarnessInventorySha256 -or

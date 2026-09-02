@@ -486,9 +486,9 @@ $sourceToolingFiles = @(
   'issue13-runtime-loader-selftest.R'
 )
 $expectedOutputFileCount = 47L
-$expectedOutputTotalBytes = 2634087L
+$expectedOutputTotalBytes = 2637821L
 $expectedOutputInventory =
-  'c646c38f1aa5f3bdecd706036af81ac1cf9fc9b87e04f3b4f1f268eb97bb8722'
+  'a4db092728fa75a466cb0de68103852820df56209bdaa643073c0769a29525bc'
 $controllerFiles = @(
   'README.md',
   'issue13-v5-aggregate-hardening.R',

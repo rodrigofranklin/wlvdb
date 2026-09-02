@@ -672,9 +672,9 @@ $sourceInventorySha256 =
 $sourceDirectorySha256 =
   '8b3a622a748f2489fe8cfd2a8273ec98ad4c372b2378d587a5ee2e3c5c916640'
 $expectedHarnessFileCount = 47L
-$expectedHarnessTotalBytes = 2634087L
+$expectedHarnessTotalBytes = 2637821L
 $expectedHarnessInventorySha256 =
-  'c646c38f1aa5f3bdecd706036af81ac1cf9fc9b87e04f3b4f1f268eb97bb8722'
+  'a4db092728fa75a466cb0de68103852820df56209bdaa643073c0769a29525bc'
 $methods = @(
   'wiodr13', 'wiodr16', 'alternative_1', 'alternative_2', 'norow_w13',
   'ochoa_1', 'ochoa_2', 'petrovic', 'wiodr13v09', 'wiodr16v09',
