@@ -29,6 +29,42 @@ assert_error <- function(expression, pattern, message) {
   )
   invisible(observed)
 }
+
+short_time_limits <- wlv13_performance_time_limits(100)
+assert(identical(short_time_limits$ratio_limit_seconds, 120),
+  "Short performance ratio limit changed."
+)
+assert(identical(short_time_limits$absolute_limit_seconds, 700),
+  "Short performance absolute limit changed."
+)
+assert(identical(short_time_limits$effective_limit_seconds, 700),
+  "Short performance effective limit changed."
+)
+assert(700 <= short_time_limits$effective_limit_seconds &&
+    !(700.000001 <= short_time_limits$effective_limit_seconds),
+  "Short performance boundary is not inclusive and fail-closed."
+)
+long_time_limits <- wlv13_performance_time_limits(4000)
+assert(identical(long_time_limits$ratio_limit_seconds, 4800),
+  "Long performance ratio limit changed."
+)
+assert(identical(long_time_limits$absolute_limit_seconds, 4600),
+  "Long performance absolute limit changed."
+)
+assert(identical(long_time_limits$effective_limit_seconds, 4800),
+  "Long performance effective limit changed."
+)
+assert(4800 <= long_time_limits$effective_limit_seconds &&
+    !(4800.000001 <= long_time_limits$effective_limit_seconds),
+  "Long performance boundary is not inclusive and fail-closed."
+)
+crossover_time_limits <- wlv13_performance_time_limits(3000)
+assert(identical(crossover_time_limits$ratio_limit_seconds, 3600) &&
+    identical(crossover_time_limits$absolute_limit_seconds, 3600) &&
+    identical(crossover_time_limits$effective_limit_seconds, 3600),
+  "Performance crossover changed."
+)
+
 temporary_root <- tempfile("wlv13-harness-selftest-")
 if (!dir.create(temporary_root, recursive = TRUE, showWarnings = FALSE)) {
   stop("Cannot create self-test root.", call. = FALSE)

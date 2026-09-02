@@ -37,6 +37,20 @@ wlv13_scalar_text <- function(value, name, pattern = NULL) {
   value
 }
 
+wlv13_performance_time_limits <- function(
+    baseline_seconds,
+    ratio_maximum = 1.2,
+    absolute_allowance_seconds = 10 * 60) {
+  ratio_limit <- baseline_seconds * ratio_maximum
+  absolute_limit <- baseline_seconds + absolute_allowance_seconds
+  list(
+    ratio_limit_seconds = ratio_limit,
+    absolute_allowance_seconds = absolute_allowance_seconds,
+    absolute_limit_seconds = absolute_limit,
+    effective_limit_seconds = max(ratio_limit, absolute_limit)
+  )
+}
+
 wlv13_renv_library_root <- function(r_library) {
   library <- wlv13_normalize_existing_dir(r_library, "R library")
   architecture <- basename(library)

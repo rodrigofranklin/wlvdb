@@ -5849,7 +5849,9 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
     'comparison', 'performance', 'preparation', 'paper0', 'report'
   ) 'V5 config root'
   $null = Assert-Issue13V5ExactPropertyNames $config.performance @(
-    'candidate_time_ratio_maximum', 'candidate_rss_baseline_ratio_allowance',
+    'candidate_time_ratio_maximum',
+    'candidate_time_absolute_allowance_seconds',
+    'candidate_rss_baseline_ratio_allowance',
     'candidate_rss_minimum_allowance_bytes', 'workers2_methods',
     'require_cluster_closed', 'rss_worker_lifecycle_scope', 'elapsed_scope',
     'allow_unrelated_r_processes', 'external_load_policy'
@@ -5866,7 +5868,7 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
     $null = ConvertTo-Issue13V5PhysicalPath $configuredPath 'V5 configured path'
     Assert-Issue13V5NoReparseAncestors $configuredPath 'V5 configured path'
   }
-  if ([string]$config.schema -cne 'wlv-issue13-native-gate-config/3' -or
+  if ([string]$config.schema -cne 'wlv-issue13-native-gate-config/4' -or
       [string]$config.generation -cne 'v5' -or
       -not (Test-Issue13V5ExactBoolean `
         $config.final_evidence_eligible $true) -or
@@ -6028,6 +6030,8 @@ function Assert-Issue13V5Config([string]$ConfigPath) {
     throw 'V5 scientific comparison policy changed.'
   }
   if ([double]$config.performance.candidate_time_ratio_maximum -ne 1.2 -or
+      [double]$config.performance.candidate_time_absolute_allowance_seconds `
+        -ne 600.0 -or
       [double]$config.performance.candidate_rss_baseline_ratio_allowance `
         -ne 0.1 -or
       [long]$config.performance.candidate_rss_minimum_allowance_bytes -ne
@@ -7731,27 +7735,55 @@ function Assert-Issue13V5ScenarioEvidence(
   }
 }
 
+function Get-Issue13V5PerformanceTimeLimits(
+  [double]$BaselineSeconds,
+  [double]$RatioMaximum,
+  [double]$AbsoluteAllowanceSeconds
+) {
+  $ratioLimit = $BaselineSeconds * $RatioMaximum
+  $absoluteLimit = $BaselineSeconds + $AbsoluteAllowanceSeconds
+  [pscustomobject][ordered]@{
+    ratio_limit_seconds = $ratioLimit
+    absolute_allowance_seconds = $AbsoluteAllowanceSeconds
+    absolute_limit_seconds = $absoluteLimit
+    effective_limit_seconds = [Math]::Max($ratioLimit, $absoluteLimit)
+  }
+}
+
 function Assert-Issue13V5Performance(
   [object]$Config,
   [object]$Baseline,
   [object]$Candidate,
   [string]$Phase
 ) {
-  $timeLimit = [double]$Baseline.elapsed_seconds *
-    [double]$Config.performance.candidate_time_ratio_maximum
+  $time = Get-Issue13V5PerformanceTimeLimits `
+    ([double]$Baseline.elapsed_seconds) `
+    ([double]$Config.performance.candidate_time_ratio_maximum) `
+    ([double]$Config.performance.candidate_time_absolute_allowance_seconds)
+  $timeRatioPassed =
+    [double]$Candidate.elapsed_seconds -le [double]$time.ratio_limit_seconds
+  $timeAbsolutePassed =
+    [double]$Candidate.elapsed_seconds -le [double]$time.absolute_limit_seconds
   $rssAllowance = [Math]::Max(
     [double]$Baseline.peak_rss_bytes *
       [double]$Config.performance.candidate_rss_baseline_ratio_allowance,
     [double]$Config.performance.candidate_rss_minimum_allowance_bytes)
   $rssLimit = [double]$Baseline.peak_rss_bytes + $rssAllowance
-  if ([double]$Candidate.elapsed_seconds -gt $timeLimit -or
+  if (-not ($timeRatioPassed -or $timeAbsolutePassed) -or
       [double]$Candidate.peak_rss_bytes -gt $rssLimit) {
     throw "Performance limit failed: $Phase"
   }
   [pscustomobject][ordered]@{
     baseline_seconds = [double]$Baseline.elapsed_seconds
     candidate_seconds = [double]$Candidate.elapsed_seconds
-    time_limit_seconds = $timeLimit
+    time_ratio_limit_seconds = [double]$time.ratio_limit_seconds
+    time_absolute_allowance_seconds =
+      [double]$time.absolute_allowance_seconds
+    time_absolute_limit_seconds = [double]$time.absolute_limit_seconds
+    time_limit_seconds = [double]$time.effective_limit_seconds
+    time_ratio_passed = $timeRatioPassed
+    time_absolute_passed = $timeAbsolutePassed
+    time_passed = $timeRatioPassed -or $timeAbsolutePassed
     baseline_peak_rss_bytes = [int64]$Baseline.peak_rss_bytes
     candidate_peak_rss_bytes = [int64]$Candidate.peak_rss_bytes
     rss_limit_bytes = [int64][Math]::Floor($rssLimit)

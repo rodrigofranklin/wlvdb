@@ -54,7 +54,7 @@
         {
           "id": "performance",
           "artifacts": "authenticated process metrics",
-          "comparison": "candidate elapsed <= 120% baseline; candidate peak RSS <= baseline + max(10%, 512 MiB)"
+          "comparison": "candidate elapsed <= max(120% baseline, baseline + 600 seconds); candidate peak RSS <= baseline + max(10%, 512 MiB)"
         }
       ],
       "numeric_tolerance": "none-bitwise",

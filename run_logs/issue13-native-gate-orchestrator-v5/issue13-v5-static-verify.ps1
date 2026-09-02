@@ -4916,8 +4916,96 @@ if (-not $centralText.Contains(
         'allow_unrelated_r_processes = $true') -or
     -not ([string]$issue13ControllerPowerShellTexts[
       'issue13-v5-new-config.ps1']).Contains(
-        "external_load_policy = 'minimum-free-physical-memory-no-cpu-exclusivity'")) {
+        "external_load_policy = 'minimum-free-physical-memory-no-cpu-exclusivity'") -or
+    -not $centralText.Contains(
+      'candidate_time_absolute_allowance_seconds') -or
+    -not $centralText.Contains('-ne 600.0') -or
+    -not ([string]$issue13ControllerPowerShellTexts[
+      'issue13-v5-new-config.ps1']).Contains(
+        'candidate_time_absolute_allowance_seconds = 600.0')) {
   throw 'Process attribution/performance policy is not sealed end-to-end.'
+}
+$performanceLimitDefinitions = @(Get-Issue13V5StaticTopLevelFunctions `
+  $centralAst 'Get-Issue13V5PerformanceTimeLimits')
+$performanceGateDefinitions = @(Get-Issue13V5StaticTopLevelFunctions `
+  $centralAst 'Assert-Issue13V5Performance')
+if ($performanceLimitDefinitions.Count -ne 1 -or
+    $performanceGateDefinitions.Count -ne 1) {
+  throw 'Performance time policy functions are missing or ambiguous.'
+}
+$performanceLimitScript = [scriptblock]::Create(
+  $performanceLimitDefinitions[0].Extent.Text)
+$performanceGateScript = [scriptblock]::Create(
+  $performanceGateDefinitions[0].Extent.Text)
+. $performanceLimitScript
+. $performanceGateScript
+$performanceTestConfig = [pscustomobject]@{
+  performance = [pscustomobject]@{
+    candidate_time_ratio_maximum = 1.2
+    candidate_time_absolute_allowance_seconds = 600.0
+    candidate_rss_baseline_ratio_allowance = 0.1
+    candidate_rss_minimum_allowance_bytes = 536870912L
+  }
+}
+$performanceTestRss = 1048576L
+$shortPerformance = Assert-Issue13V5Performance $performanceTestConfig `
+  ([pscustomobject]@{
+    elapsed_seconds = 100.0; peak_rss_bytes = $performanceTestRss
+  }) ([pscustomobject]@{
+    elapsed_seconds = 700.0; peak_rss_bytes = $performanceTestRss
+  }) 'static/short-absolute-boundary'
+$longPerformance = Assert-Issue13V5Performance $performanceTestConfig `
+  ([pscustomobject]@{
+    elapsed_seconds = 4000.0; peak_rss_bytes = $performanceTestRss
+  }) ([pscustomobject]@{
+    elapsed_seconds = 4800.0; peak_rss_bytes = $performanceTestRss
+  }) 'static/long-ratio-boundary'
+$crossoverPerformance = Assert-Issue13V5Performance $performanceTestConfig `
+  ([pscustomobject]@{
+    elapsed_seconds = 3000.0; peak_rss_bytes = $performanceTestRss
+  }) ([pscustomobject]@{
+    elapsed_seconds = 3600.0; peak_rss_bytes = $performanceTestRss
+  }) 'static/crossover-boundary'
+if ([double]$shortPerformance.time_ratio_limit_seconds -ne 120.0 -or
+    [double]$shortPerformance.time_absolute_limit_seconds -ne 700.0 -or
+    [double]$shortPerformance.time_limit_seconds -ne 700.0 -or
+    -not (Test-Issue13V5ExactBoolean `
+      $shortPerformance.time_ratio_passed $false) -or
+    -not (Test-Issue13V5ExactBoolean `
+      $shortPerformance.time_absolute_passed $true) -or
+    [double]$longPerformance.time_ratio_limit_seconds -ne 4800.0 -or
+    [double]$longPerformance.time_absolute_limit_seconds -ne 4600.0 -or
+    [double]$longPerformance.time_limit_seconds -ne 4800.0 -or
+    -not (Test-Issue13V5ExactBoolean `
+      $longPerformance.time_ratio_passed $true) -or
+    -not (Test-Issue13V5ExactBoolean `
+      $longPerformance.time_absolute_passed $false) -or
+    [double]$crossoverPerformance.time_ratio_limit_seconds -ne 3600.0 -or
+    [double]$crossoverPerformance.time_absolute_limit_seconds -ne 3600.0 -or
+    [double]$crossoverPerformance.time_limit_seconds -ne 3600.0) {
+  throw 'Performance time policy boundaries changed.'
+}
+foreach ($failureCase in @(
+    [pscustomobject]@{ baseline = 100.0; candidate = 700.000001 },
+    [pscustomobject]@{ baseline = 4000.0; candidate = 4800.000001 }
+  )) {
+  $performanceFailureObserved = $false
+  try {
+    $null = Assert-Issue13V5Performance $performanceTestConfig `
+      ([pscustomobject]@{
+        elapsed_seconds = [double]$failureCase.baseline
+        peak_rss_bytes = $performanceTestRss
+      }) ([pscustomobject]@{
+        elapsed_seconds = [double]$failureCase.candidate
+        peak_rss_bytes = $performanceTestRss
+      }) 'static/over-boundary'
+  } catch {
+    $performanceFailureObserved = $_.Exception.Message -ceq
+      'Performance limit failed: static/over-boundary'
+  }
+  if (-not $performanceFailureObserved) {
+    throw 'Performance time policy accepted an over-boundary candidate.'
+  }
 }
 foreach ($captureName in @(
     'issue13-v5-capture-clean-bridge-evidence.ps1',
@@ -5172,6 +5260,38 @@ foreach ($relativeSource in $expectedSourceFiles) {
     }
     $sourceAsts[$relativeSource] = $sourceAst
   }
+}
+$timePolicySourceTexts = [ordered]@{
+  library = [IO.File]::ReadAllText((Join-Path $sourcePhysicalRoot `
+    'issue13-evidence-harness\issue13-lib.R'), $bootstrapEncoding)
+  aggregate = [IO.File]::ReadAllText((Join-Path $sourcePhysicalRoot `
+    'issue13-evidence-harness\issue13-aggregate.R'), $bootstrapEncoding)
+  preparation = [IO.File]::ReadAllText((Join-Path $sourcePhysicalRoot `
+    'issue13-preparation-compare.R'), $bootstrapEncoding)
+  selftest = [IO.File]::ReadAllText((Join-Path $sourcePhysicalRoot `
+    'issue13-evidence-harness\issue13-selftest.R'), $bootstrapEncoding)
+}
+if (-not $timePolicySourceTexts.library.Contains(
+      'wlv13_performance_time_limits <- function(') -or
+    -not $timePolicySourceTexts.library.Contains(
+      'absolute_allowance_seconds = 10 * 60') -or
+    -not $timePolicySourceTexts.library.Contains(
+      'effective_limit_seconds = max(ratio_limit, absolute_limit)') -or
+    -not $timePolicySourceTexts.aggregate.Contains(
+      'time_limits <- wlv13_performance_time_limits(baseline_time)') -or
+    -not $timePolicySourceTexts.aggregate.Contains(
+      'time_ok <- time_ratio_ok || time_absolute_ok') -or
+    -not $timePolicySourceTexts.preparation.Contains(
+      'elapsed_limits <- wlv13_performance_time_limits(baseline_elapsed)') -or
+    -not $timePolicySourceTexts.preparation.Contains(
+      'elapsed_passed <- elapsed_ratio_passed || elapsed_absolute_passed') -or
+    -not $timePolicySourceTexts.selftest.Contains(
+      'short_time_limits <- wlv13_performance_time_limits(100)') -or
+    -not $timePolicySourceTexts.selftest.Contains(
+      'long_time_limits <- wlv13_performance_time_limits(4000)') -or
+    -not $timePolicySourceTexts.selftest.Contains(
+      'crossover_time_limits <- wlv13_performance_time_limits(3000)')) {
+  throw 'The relative-or-absolute time policy is not sealed end-to-end.'
 }
 $guardedEntrypointAsts = [ordered]@{
   'run_logs/issue13-native-gate-orchestrator-v5/issue13-v5-attest-delivery.ps1' =
@@ -9584,7 +9704,7 @@ foreach ($required in @(
     'Get-Issue13V5ConfiguredPaths', 'Test-Issue13V5LegacyPath',
     'Get-Issue13V5SourceBinding', 'Get-Issue13V5SourceContractSha256',
     'Assert-Issue13V5SourceContractBindings', 'candidate_source_origin',
-    'wlv-issue13-native-gate-config/3',
+    'wlv-issue13-native-gate-config/4',
     'Invoke-Issue13V5OracleEffectValidation',
     'Assert-Issue13V5OracleEffectControlRecord',
     '''-OracleSmokeSummary'', [string]$oracle.oracle_smoke.path',

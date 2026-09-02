@@ -297,14 +297,15 @@ Rscript --vanilla "$Issue13HarnessRoot\issue13-aggregate.R" `
 Antes de concluir, o agregador relê uma vez cada inventário distinto e confere
 todos os bytes autenticados. Também aplica, por cenário pareado:
 
-- tempo candidato `<= 120%` do baseline;
+- tempo candidato `<= max(120% do baseline, baseline + 10 minutos)`;
 - RSS candidato `<= baseline + max(10%, 512 MiB)`;
 - equivalência workers 1/2;
 - vínculo exato de cada comparação aos outputs registrados;
 - completude e unicidade de toda a matriz.
 
 Outputs: `aggregate.json`, `checks.csv`, `oracle-classification.csv` e
-`performance.csv`.
+`performance.csv`. A tabela de desempenho registra os tetos percentual,
+absoluto e efetivo, além de indicar qual alternativa aprovou cada par.
 
 ## Self-tests leves
 

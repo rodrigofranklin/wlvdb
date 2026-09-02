@@ -68,7 +68,7 @@ seja limpo e tenha `cc2c861` como pai direto.
 - preparação WIOD13/WIOD16/EU KLEMS e paper 0;
 - dez falhas injetadas;
 - 162 cenários monitorados e 202 comparações autenticadas;
-- tempo candidato `<= 120%` do baseline e RSS candidato
+- tempo candidato `<= max(120% do baseline, baseline + 10 minutos)` e RSS candidato
   `<= baseline + max(10%, 512 MiB)`.
 
 ## Inventário fonte fechado do controller

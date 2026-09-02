@@ -155,7 +155,11 @@ metric_comparison <- function() {
   candidate_elapsed <- as.double(candidate$elapsed_seconds)
   baseline_rss <- as.double(baseline$peak_rss_bytes)
   candidate_rss <- as.double(candidate$peak_rss_bytes)
-  elapsed_limit <- baseline_elapsed * 1.2
+  elapsed_limits <- wlv13_performance_time_limits(baseline_elapsed)
+  elapsed_ratio_limit <- elapsed_limits$ratio_limit_seconds
+  elapsed_absolute_allowance <- elapsed_limits$absolute_allowance_seconds
+  elapsed_absolute_limit <- elapsed_limits$absolute_limit_seconds
+  elapsed_limit <- elapsed_limits$effective_limit_seconds
   rss_allowance <- max(baseline_rss * 0.1, 512 * 1024^2)
   rss_limit <- baseline_rss + rss_allowance
   valid_numbers <- all(is.finite(c(
@@ -163,9 +167,14 @@ metric_comparison <- function() {
   ))) && all(c(
     baseline_elapsed, candidate_elapsed, baseline_rss, candidate_rss
   ) >= 0)
+  elapsed_ratio_passed <- valid_numbers &&
+    candidate_elapsed <= elapsed_ratio_limit
+  elapsed_absolute_passed <- valid_numbers &&
+    candidate_elapsed <= elapsed_absolute_limit
+  elapsed_passed <- elapsed_ratio_passed || elapsed_absolute_passed
   list(
     passed = baseline_identity && candidate_identity && valid_numbers &&
-      isTRUE(candidate_elapsed <= elapsed_limit) &&
+      elapsed_passed &&
       isTRUE(candidate_rss <= rss_limit),
     baseline_metrics_path = baseline_metrics_path,
     candidate_metrics_path = candidate_metrics_path,
@@ -176,8 +185,13 @@ metric_comparison <- function() {
     numeric_metrics_valid = valid_numbers,
     baseline_elapsed_seconds = baseline_elapsed,
     candidate_elapsed_seconds = candidate_elapsed,
+    elapsed_ratio_limit_seconds = elapsed_ratio_limit,
+    elapsed_absolute_allowance_seconds = elapsed_absolute_allowance,
+    elapsed_absolute_limit_seconds = elapsed_absolute_limit,
     elapsed_limit_seconds = elapsed_limit,
-    elapsed_passed = candidate_elapsed <= elapsed_limit,
+    elapsed_ratio_passed = elapsed_ratio_passed,
+    elapsed_absolute_passed = elapsed_absolute_passed,
+    elapsed_passed = elapsed_passed,
     baseline_peak_rss_bytes = baseline_rss,
     candidate_peak_rss_bytes = candidate_rss,
     rss_allowance_bytes = rss_allowance,

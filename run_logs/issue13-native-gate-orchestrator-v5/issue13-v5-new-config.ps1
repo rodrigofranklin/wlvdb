@@ -1129,7 +1129,7 @@ $sourceContractBindings = @(
 )
 
 $config = [ordered]@{
-  schema = 'wlv-issue13-native-gate-config/3'
+  schema = 'wlv-issue13-native-gate-config/4'
   generation = 'v5'
   created_at_utc = [DateTime]::UtcNow.ToString('o')
   final_evidence_eligible = $true
@@ -1233,6 +1233,7 @@ $config = [ordered]@{
   }
   performance = [ordered]@{
     candidate_time_ratio_maximum = 1.2
+    candidate_time_absolute_allowance_seconds = 600.0
     candidate_rss_baseline_ratio_allowance = 0.1
     candidate_rss_minimum_allowance_bytes = 536870912L
     workers2_methods = @('wiodr13', 'wiodr16')

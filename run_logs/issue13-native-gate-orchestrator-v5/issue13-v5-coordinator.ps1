@@ -1234,7 +1234,22 @@ function Ensure-Issue13V5PreparationSemanticComparison(
     -ConfirmExecuteR:$ConfirmExecuteR
   $reportPath = Join-Path $output 'issue13-preparation-comparison.json'
   $report = Read-Issue13V5Json $reportPath
-  if ([string]$report.status -cne 'passed') {
+  $preparationPerformance = $report.performance
+  $preparationRatioPassed = Test-Issue13V5ExactBoolean `
+    $preparationPerformance.elapsed_ratio_passed $true
+  $preparationAbsolutePassed = Test-Issue13V5ExactBoolean `
+    $preparationPerformance.elapsed_absolute_passed $true
+  $preparationEffectiveLimit = [Math]::Max(
+    [double]$preparationPerformance.elapsed_ratio_limit_seconds,
+    [double]$preparationPerformance.elapsed_absolute_limit_seconds)
+  if ([string]$report.status -cne 'passed' -or
+      [double]$preparationPerformance.elapsed_absolute_allowance_seconds -ne
+        [double]$Config.performance.candidate_time_absolute_allowance_seconds -or
+      [double]$preparationPerformance.elapsed_limit_seconds -ne
+        $preparationEffectiveLimit -or
+      -not ($preparationRatioPassed -or $preparationAbsolutePassed) -or
+      -not (Test-Issue13V5ExactBoolean `
+        $preparationPerformance.elapsed_passed $true)) {
     throw 'Bitwise preparation comparison failed.'
   }
   $workflow.preparation_comparison_status = 'passed'
@@ -1677,7 +1692,17 @@ function Invoke-Issue13V5Aggregate(
       [string]::Join("`n", $observedPerformanceScenarios) -cne
         [string]::Join("`n", $expectedPerformanceScenarios) -or
       @($performance | Where-Object {
+        $ratioPassed = [string]$_.time_ratio_passed -ceq 'TRUE'
+        $absolutePassed = [string]$_.time_absolute_passed -ceq 'TRUE'
         [string]$_.time_passed -cne 'TRUE' -or
+        [string]$_.time_ratio_passed -cnotin @('TRUE', 'FALSE') -or
+        [string]$_.time_absolute_passed -cnotin @('TRUE', 'FALSE') -or
+        -not ($ratioPassed -or $absolutePassed) -or
+        [double]$_.time_absolute_allowance_seconds -ne
+          [double]$config.performance.candidate_time_absolute_allowance_seconds -or
+        [double]$_.time_limit_seconds -ne [Math]::Max(
+          [double]$_.time_ratio_limit_seconds,
+          [double]$_.time_absolute_limit_seconds) -or
         [string]$_.rss_passed -cne 'TRUE' -or
         [string]$_.rss_recomputed_from_authenticated_samples -cne 'TRUE' -or
         [long]$_.baseline_rss_sample_count -le 0L -or

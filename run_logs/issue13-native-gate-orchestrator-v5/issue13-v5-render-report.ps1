@@ -676,7 +676,17 @@ if ($performance.Count -ne 76 -or
     [string]::Join("`n", $observedPerformanceScenarios) -cne
       [string]::Join("`n", $expectedPerformanceScenarios) -or
     @($performance | Where-Object {
+      $ratioPassed = [string]$_.time_ratio_passed -ceq 'TRUE'
+      $absolutePassed = [string]$_.time_absolute_passed -ceq 'TRUE'
       [string]$_.time_passed -cne 'TRUE' -or
+      [string]$_.time_ratio_passed -cnotin @('TRUE', 'FALSE') -or
+      [string]$_.time_absolute_passed -cnotin @('TRUE', 'FALSE') -or
+      -not ($ratioPassed -or $absolutePassed) -or
+      [double]$_.time_absolute_allowance_seconds -ne
+        [double]$config.performance.candidate_time_absolute_allowance_seconds -or
+      [double]$_.time_limit_seconds -ne [Math]::Max(
+        [double]$_.time_ratio_limit_seconds,
+        [double]$_.time_absolute_limit_seconds) -or
       [string]$_.rss_passed -cne 'TRUE' -or
       [string]$_.rss_recomputed_from_authenticated_samples -cne 'TRUE' -or
       [long]$_.baseline_rss_sample_count -le 0L -or
@@ -1312,6 +1322,20 @@ $candidateSeconds = [double](($performance | Measure-Object `
 $maximumTimeRatio = ($performance | ForEach-Object {
   [double]$_.candidate_seconds / [double]$_.baseline_seconds
 } | Measure-Object -Maximum).Maximum
+$maximumTimeOverheadSeconds = ($performance | ForEach-Object {
+  [double]$_.candidate_seconds - [double]$_.baseline_seconds
+} | Measure-Object -Maximum).Maximum
+$minimumTimeHeadroomSeconds = ($performance | ForEach-Object {
+  [double]$_.time_limit_seconds - [double]$_.candidate_seconds
+} | Measure-Object -Minimum).Minimum
+$absoluteOnlyTimeCount = @($performance | Where-Object {
+  [string]$_.time_ratio_passed -ceq 'FALSE' -and
+    [string]$_.time_absolute_passed -ceq 'TRUE'
+}).Count
+$ratioOnlyTimeCount = @($performance | Where-Object {
+  [string]$_.time_ratio_passed -ceq 'TRUE' -and
+    [string]$_.time_absolute_passed -ceq 'FALSE'
+}).Count
 $maximumCandidateRss = ($performance | ForEach-Object {
   [int64]$_.candidate_peak_rss_bytes
 } | Measure-Object -Maximum).Maximum
@@ -1696,7 +1720,13 @@ $oracleValidationCommandLine
 - Tempo baseline somado: `$([Math]::Round($baselineSeconds, 3))` segundos.
 - Tempo candidato somado: `$([Math]::Round($candidateSeconds, 3))` segundos.
 - Maior razão candidato/baseline: `$([Math]::Round($maximumTimeRatio, 6))`
-  (limite `1.2`).
+  (informativa; a margem absoluta pode ser a governante).
+- Maior acréscimo absoluto: `$([Math]::Round($maximumTimeOverheadSeconds, 3))`
+  segundos; menor folga para o teto efetivo:
+  `$([Math]::Round($minimumTimeHeadroomSeconds, 3))` segundos.
+- Regra: candidato `<= max(120% do baseline, baseline + 600 segundos)`.
+- Pares aprovados somente pela margem absoluta: `$absoluteOnlyTimeCount`;
+  somente pela margem percentual: `$ratioOnlyTimeCount`.
 - Todos os 76 limites de tempo passaram: `TRUE`.
 
 ## peak_rss

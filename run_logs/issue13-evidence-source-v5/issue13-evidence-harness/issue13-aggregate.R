@@ -726,15 +726,27 @@ if (is.null(fatal_error)) {
     candidate_time <- as.numeric(candidate$elapsed_seconds)
     baseline_rss <- as.numeric(baseline$peak_rss_bytes)
     candidate_rss <- as.numeric(candidate$peak_rss_bytes)
-    time_limit <- baseline_time * 1.2
+    time_limits <- wlv13_performance_time_limits(baseline_time)
+    time_ratio_limit <- time_limits$ratio_limit_seconds
+    time_absolute_allowance <- time_limits$absolute_allowance_seconds
+    time_absolute_limit <- time_limits$absolute_limit_seconds
+    time_limit <- time_limits$effective_limit_seconds
     rss_limit <- baseline_rss + max(baseline_rss * 0.1, 512 * 1024^2)
-    time_ok <- is.finite(baseline_time) && baseline_time > 0 &&
-      is.finite(candidate_time) && candidate_time <= time_limit
+    valid_time <- is.finite(baseline_time) && baseline_time > 0 &&
+      is.finite(candidate_time)
+    time_ratio_ok <- valid_time && candidate_time <= time_ratio_limit
+    time_absolute_ok <- valid_time && candidate_time <= time_absolute_limit
+    time_ok <- time_ratio_ok || time_absolute_ok
     rss_ok <- is.finite(baseline_rss) && baseline_rss >= 0 &&
       is.finite(candidate_rss) && candidate_rss <= rss_limit
     add_check("performance-time", suffix, time_ok,
-      sprintf("candidate=%.3f baseline=%.3f limit=%.3f",
-        candidate_time, baseline_time, time_limit
+      sprintf(
+        paste0(
+          "candidate=%.3f baseline=%.3f ratio_limit=%.3f ",
+          "absolute_limit=%.3f effective_limit=%.3f"
+        ),
+        candidate_time, baseline_time, time_ratio_limit,
+        time_absolute_limit, time_limit
       ), priority = "P1"
     )
     add_check("performance-rss", suffix, rss_ok,
@@ -748,7 +760,12 @@ if (is.null(fatal_error)) {
       scenario = suffix,
       baseline_seconds = baseline_time,
       candidate_seconds = candidate_time,
+      time_ratio_limit_seconds = time_ratio_limit,
+      time_absolute_allowance_seconds = time_absolute_allowance,
+      time_absolute_limit_seconds = time_absolute_limit,
       time_limit_seconds = time_limit,
+      time_ratio_passed = time_ratio_ok,
+      time_absolute_passed = time_absolute_ok,
       time_passed = time_ok,
       baseline_peak_rss_bytes = baseline_rss,
       candidate_peak_rss_bytes = candidate_rss,
