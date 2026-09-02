@@ -223,7 +223,7 @@ wlv13_v5_metadata_manifest <- function() {
     ) &&
     identical(
       value$candidate_commit_at_derivation,
-      "899f6379daffeb5697c08a605260c64dea750ec7"
+      "1995d527805fb20cb25b478e6c05f3d98f2dd90c"
     ) &&
     identical(
       value$derivation,

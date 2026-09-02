@@ -311,7 +311,7 @@ entrada é recusada de forma fail-closed como estado herdado.
 
 O selo terminal foi derivado de uma staging write-once materializada dos blobs
 autenticados do candidato: `47` arquivos, `2634087` bytes e inventário SHA-256
-`a9fa44706264cd6b8392790ff1f032cc9314a8a73e18243d65e7f6ccbea02c71`.
+`033efde1ed201158af70438522481cb86bad568056b0d7c658005d2907aec884`.
 O spec do Oracle registra `status = sealed`; gerador e validador exigem essa
 tripla exata antes da prova Oracle e do gate longo. O output continua exigindo
 um único diretório plano `issue13-evidence-harness`, sem subdiretório oculto; o

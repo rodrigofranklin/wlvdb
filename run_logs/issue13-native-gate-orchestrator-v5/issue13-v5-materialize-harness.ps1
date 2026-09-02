@@ -488,7 +488,7 @@ $sourceToolingFiles = @(
 $expectedOutputFileCount = 47L
 $expectedOutputTotalBytes = 2634087L
 $expectedOutputInventory =
-  'a9fa44706264cd6b8392790ff1f032cc9314a8a73e18243d65e7f6ccbea02c71'
+  '033efde1ed201158af70438522481cb86bad568056b0d7c658005d2907aec884'
 $controllerFiles = @(
   'README.md',
   'issue13-v5-aggregate-hardening.R',
