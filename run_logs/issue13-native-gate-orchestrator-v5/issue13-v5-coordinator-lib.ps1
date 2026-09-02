@@ -481,7 +481,7 @@ $script:Issue13V5BaselineOverlayPatchId =
 $script:Issue13V5HarnessFileCount = 47L
 $script:Issue13V5HarnessTotalBytes = 2634087L
 $script:Issue13V5HarnessInventorySha256 =
-  '033efde1ed201158af70438522481cb86bad568056b0d7c658005d2907aec884'
+  'c646c38f1aa5f3bdecd706036af81ac1cf9fc9b87e04f3b4f1f268eb97bb8722'
 $script:Issue13V5SourceToolingRelativeRoot =
   'run_logs/issue13-evidence-source-v5'
 $script:Issue13V5SourceToolingPathListSha256 =
