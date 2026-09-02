@@ -426,18 +426,76 @@ wlv_publication_input_paths <- function(plan, method) {
   sort(normalizePath(candidates, winslash = "/", mustWork = TRUE), method = "radix")
 }
 
-wlv_publication_input_inventory <- function(plan, method) {
-  capture <- function() {
-    paths <- wlv_publication_input_paths(plan, method)
-    lapply(paths, function(path) {
-      list(
-        path = wlv_publication_relative_path(path, plan$root),
-        sha256 = wlv_publication_file_sha256(path)
-      )
-    })
+wlv_publication_input_inventory_capture <- function(
+    plan,
+    method,
+    paths = wlv_publication_input_paths(plan, method)) {
+  lapply(paths, function(path) {
+    list(
+      path = wlv_publication_relative_path(path, plan$root),
+      sha256 = wlv_publication_file_sha256(path)
+    )
+  })
+}
+
+wlv_publication_input_path_stamps <- function(paths) {
+  if (!is.character(paths) || anyNA(paths) || any(!nzchar(paths)) ||
+      anyDuplicated(paths)) {
+    stop("Publication input paths are invalid.", call. = FALSE)
   }
-  first <- capture()
-  second <- capture()
+  info <- file.info(paths, extra_cols = FALSE)
+  if (nrow(info) != length(paths) || anyNA(info$isdir) || any(info$isdir) ||
+      anyNA(info$size) || anyNA(info$mtime) || anyNA(info$ctime)) {
+    stop("Publication input metadata could not be captured.", call. = FALSE)
+  }
+  lapply(seq_along(paths), function(index) {
+    list(
+      path = paths[[index]],
+      size = as.double(info$size[[index]]),
+      mtime = as.double(info$mtime[[index]]),
+      ctime = as.double(info$ctime[[index]])
+    )
+  })
+}
+
+wlv_publication_input_inventory <- function(
+    plan,
+    method,
+    stabilize = TRUE) {
+  if (!is.logical(stabilize) || length(stabilize) != 1L || is.na(stabilize)) {
+    stop("Publication input stabilization flag is invalid.", call. = FALSE)
+  }
+  first_paths <- wlv_publication_input_paths(plan, method)
+  first_stamps <- if (!isTRUE(stabilize)) {
+    wlv_publication_input_path_stamps(first_paths)
+  } else {
+    NULL
+  }
+  first <- wlv_publication_input_inventory_capture(
+    plan,
+    method,
+    paths = first_paths
+  )
+  if (!isTRUE(stabilize)) {
+    # Hash content once, then re-enumerate the paths and compare filesystem
+    # change stamps around that pass. This detects additions/removals and
+    # same-path writes without doubling all content I/O. As with any completed
+    # capture, later writes are rejected by the next transactional boundary.
+    second_paths <- wlv_publication_input_paths(plan, method)
+    second_stamps <- wlv_publication_input_path_stamps(second_paths)
+    if (!identical(first_paths, second_paths) ||
+        !identical(first_stamps, second_stamps)) {
+      stop(
+        sprintf(
+          "Publication inputs changed while method `%s` was being inventoried.",
+          method
+        ),
+        call. = FALSE
+      )
+    }
+    return(first)
+  }
+  second <- wlv_publication_input_inventory_capture(plan, method)
   if (!identical(first, second)) {
     stop(
       sprintf(
@@ -495,14 +553,27 @@ wlv_publication_changed_inputs <- function(expected, current) {
 
 wlv_assert_plan_publication_inputs_unchanged <- function(
     plan,
-    methods = plan$method_names) {
+    methods = plan$method_names,
+    stabilize = FALSE) {
   if (!is.character(methods) || !length(methods) || anyNA(methods) ||
       any(!methods %in% plan$method_names)) {
     stop("Publication input verification received invalid methods.", call. = FALSE)
   }
+  if (!is.logical(stabilize) || length(stabilize) != 1L || is.na(stabilize)) {
+    stop("Publication input stabilization flag is invalid.", call. = FALSE)
+  }
   for (method in methods) {
     expected <- wlv_plan_publication_input_inventory(plan, method)
-    current <- wlv_publication_input_inventory(plan, method)
+    # The immutable preflight inventory is already stabilized by two complete
+    # captures. Intermediate transaction boundaries hash each file once and
+    # bind that pass to stable paths and filesystem change stamps. The final
+    # boundary requests two complete captures because Windows timestamps can be
+    # restored after a same-size overwrite.
+    current <- wlv_publication_input_inventory(
+      plan,
+      method,
+      stabilize = stabilize
+    )
     if (!identical(expected, current)) {
       changed <- wlv_publication_changed_inputs(expected, current)
       stop(
@@ -1313,10 +1384,17 @@ wlv_commit_release <- function(plan, run_environments) {
   wlv_write_result_csv(indicators, file.path(staging, "indicators_en.csv"))
   wlv_write_result_csv(metadata, file.path(staging, "meta_indicators.csv"))
 
-  wlv_assert_plan_publication_inputs_unchanged(plan)
-  paper_result <- wlv_run_staged_paper(plan, run_environments, staging)
-  wlv_assert_plan_publication_inputs_unchanged(plan)
-  wlv_assert_run_environments_source_inputs_unchanged(plan, run_environments)
+  paper_result <- NULL
+  if (isTRUE(plan$prepaper)) {
+    # Papers execute against the staged immutable runs, so bind both sides of
+    # that execution to the preflight inventories. Ordinary calculations do
+    # no work at this boundary and are covered by the release and final checks
+    # below without two redundant full-tree hash passes.
+    wlv_assert_plan_publication_inputs_unchanged(plan)
+    paper_result <- wlv_run_staged_paper(plan, run_environments, staging)
+    wlv_assert_plan_publication_inputs_unchanged(plan)
+    wlv_assert_run_environments_source_inputs_unchanged(plan, run_environments)
+  }
   release_artifacts <- c("indicators_en.csv", "meta_indicators.csv")
   release_roles <- c("panel_labels", "panel_metadata")
   if (!is.null(paper_result)) {
@@ -1361,13 +1439,6 @@ wlv_commit_release <- function(plan, run_environments) {
       call. = FALSE
     )
   }
-  wlv_verify_release_manifest(
-    installed_release,
-    release_root = final,
-    publication_root = paths$results,
-    reject_unlisted = TRUE
-  )
-
   marker <- wlv_build_channel_marker(
     channel = plan$channel,
     sequence = sequence,
@@ -1414,13 +1485,20 @@ wlv_commit_release <- function(plan, run_environments) {
   }, add = TRUE)
   pending_marker_path <- file.path(marker_staging, marker_filename)
   wlv_write_channel_marker(marker, pending_marker_path)
+  wlv_assert_plan_publication_inputs_unchanged(plan, stabilize = TRUE)
+  wlv_assert_run_environments_source_inputs_unchanged(plan, run_environments)
+  # This is the final fallible release validation boundary. It re-reads the exact
+  # manifest named and hashed by the marker, then verifies the installed
+  # release and every referenced run after all injectable publication checks.
   wlv_verify_channel_marker(
     marker,
     paths$results,
-    verify_release = FALSE
+    verify_release = TRUE
   )
-  wlv_assert_plan_publication_inputs_unchanged(plan)
-  wlv_assert_run_environments_source_inputs_unchanged(plan, run_environments)
+  pending_marker <- wlv_read_channel_marker(pending_marker_path)
+  if (!wlv_publication_json_identical(pending_marker, marker)) {
+    stop("Pending channel marker changed after it was written.", call. = FALSE)
+  }
   if (file.exists(marker_path) ||
       !file.rename(pending_marker_path, marker_path)) {
     stop("Could not atomically install channel marker.", call. = FALSE)

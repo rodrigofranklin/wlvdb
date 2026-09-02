@@ -876,14 +876,34 @@ wlv_seal_resource_store <- function(store) {
   invisible(store)
 }
 
-wlv_runtime_fork_store <- function(store) {
+wlv_runtime_fork_store <- function(store, retain_locator_ids = NULL) {
   if (!inherits(store, "wlv_resource_store") || !is.environment(store)) {
     wlv_runtime_abort("`store` must be a resource store.", "wlv_store_error")
   }
   wlv_runtime_store_identity_assert(store, "wlv_store_error")
+  if (!is.null(retain_locator_ids)) {
+    if (!is.character(retain_locator_ids) || anyNA(retain_locator_ids) ||
+        any(!nzchar(retain_locator_ids)) || anyDuplicated(retain_locator_ids)) {
+      wlv_runtime_abort(
+        "Retained fork locators must be unique non-empty character IDs.",
+        "wlv_store_error"
+      )
+    }
+    unknown <- setdiff(retain_locator_ids, names(store$entries))
+    if (length(unknown)) {
+      wlv_runtime_abort(
+        sprintf("Cannot retain unknown fork locator `%s`.", unknown[[1L]]),
+        "wlv_store_error"
+      )
+    }
+  }
   fork <- new.env(parent = emptyenv())
   fork$identity_token <- wlv_runtime_new_store_identity()
-  fork$entries <- store$entries
+  fork$entries <- if (is.null(retain_locator_ids)) {
+    store$entries
+  } else {
+    store$entries[retain_locator_ids]
+  }
   fork$sealed <- FALSE
   class(fork) <- "wlv_resource_store"
   fork
@@ -2653,21 +2673,35 @@ wlv_runtime_module_services <- function(module, inputs, store, services) {
     semantic_input_mode = module$semantic_input_mode
   )
   result$contract_runtime <- runtime
-  result$module_contract <- local({
-    resolved_module <- module
-    module_runtime <- runtime
-    module_inputs <- inputs
-    input_store <- store
-    function(module_result) {
-      wlv_semantic_finalize_module_result(
-        resolved_module,
-        module_result,
-        module_runtime,
-        module_inputs,
-        input_store
-      )
-    }
-  })
+  resolved_module <- module
+  module_runtime <- runtime
+  module_inputs <- inputs
+  # The semantic finalizer needs declared inputs and predecessor values, but a
+  # module must never receive a closure over the runner's complete mutable
+  # working store. Retain only locators named by this module's contract, then
+  # seal the physically distinct fork before exposing the finalizer service.
+  input_store <- wlv_runtime_fork_store(
+    store,
+    retain_locator_ids = wlv_runtime_module_live_locator_ids(resolved_module)
+  )
+  wlv_seal_resource_store(input_store)
+  finalizer_environment <- new.env(parent = emptyenv())
+  finalizer_environment$resolved_module <- resolved_module
+  finalizer_environment$module_runtime <- module_runtime
+  finalizer_environment$module_inputs <- module_inputs
+  finalizer_environment$input_store <- input_store
+  finalizer_environment$wlv_semantic_finalize_module_result <-
+    wlv_semantic_finalize_module_result
+  finalizer <- function(module_result) wlv_semantic_finalize_module_result(
+    resolved_module,
+    module_result,
+    module_runtime,
+    module_inputs,
+    input_store
+  )
+  environment(finalizer) <- finalizer_environment
+  lockEnvironment(finalizer_environment, bindings = TRUE)
+  result$module_contract <- finalizer
   result[module$services]
 }
 

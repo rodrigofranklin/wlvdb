@@ -223,7 +223,7 @@ test_that("git provenance fails closed and hashes deterministic status", {
 })
 
 test_that("the publication input tree includes every native configuration class", {
-  fixture <- wlv_make_native_publication_fixture()
+  fixture <- wlv_make_native_publication_fixture(mutable = TRUE)
   on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
   roots <- c(
     "R", "catalog", "config", "complementar", "contracts/results",
@@ -254,9 +254,47 @@ test_that("the publication input tree includes every native configuration class"
       stringsAsFactors = FALSE
     )
   )
+  hash_calls <- 0L
+  original_file_sha256 <- fixture$runtime$wlv_publication_file_sha256
+  counting_file_sha256 <- function(...) {
+    hash_calls <<- hash_calls + 1L
+    original_file_sha256(...)
+  }
+  assign(
+    "wlv_publication_file_sha256",
+    counting_file_sha256,
+    envir = fixture$runtime
+  )
+  on.exit(assign(
+    "wlv_publication_file_sha256",
+    original_file_sha256,
+    envir = fixture$runtime
+  ), add = TRUE)
+  input_count <- length(fixture$runtime$wlv_publication_input_paths(
+    plan,
+    fixture$method
+  ))
   inventory <- fixture$runtime$wlv_publication_input_inventory(
     plan,
     fixture$method
+  )
+  expect_identical(hash_calls, 2L * input_count)
+  hash_calls <- 0L
+  one_pass <- fixture$runtime$wlv_publication_input_inventory(
+    plan,
+    fixture$method,
+    stabilize = FALSE
+  )
+  expect_identical(hash_calls, input_count)
+  expect_identical(one_pass, inventory)
+  expect_error(
+    fixture$runtime$wlv_publication_input_inventory(
+      plan,
+      fixture$method,
+      stabilize = NA
+    ),
+    "stabilization flag is invalid",
+    fixed = TRUE
   )
   relative <- vapply(inventory, `[[`, character(1L), "path")
 
@@ -269,6 +307,111 @@ test_that("the publication input tree includes every native configuration class"
   expect_true(any(startsWith(relative, "methods/native_test/")))
   expect_true(any(startsWith(relative, "parameters/native_test/")))
   expect_true(any(startsWith(relative, "parameters/common_ground/")))
+
+  plan$publication_inputs <- stats::setNames(list(inventory), fixture$method)
+  hash_calls <- 0L
+  expect_invisible(
+    fixture$runtime$wlv_assert_plan_publication_inputs_unchanged(plan)
+  )
+  expect_identical(hash_calls, input_count)
+
+  raced_path <- file.path(fixture$root, "config", "raced-input.txt")
+  race_injected <- FALSE
+  assign(
+    "wlv_publication_file_sha256",
+    function(...) {
+      value <- original_file_sha256(...)
+      if (!race_injected) {
+        wlv_native_test_write_text(raced_path, "raced input")
+        race_injected <<- TRUE
+      }
+      value
+    },
+    envir = fixture$runtime
+  )
+  expect_error(
+    fixture$runtime$wlv_assert_plan_publication_inputs_unchanged(plan),
+    "changed while method",
+    fixed = TRUE
+  )
+  unlink(raced_path, force = TRUE)
+
+  overwritten_path <- file.path(fixture$root, "config", "input.txt")
+  overwrite_injected <- FALSE
+  assign(
+    "wlv_publication_file_sha256",
+    function(path) {
+      value <- original_file_sha256(path)
+      if (!overwrite_injected && identical(
+            normalizePath(path, winslash = "/", mustWork = TRUE),
+            normalizePath(overwritten_path, winslash = "/", mustWork = TRUE)
+          )) {
+        wlv_native_test_write_text(
+          overwritten_path,
+          "same-path input overwritten after its hash was captured"
+        )
+        overwrite_injected <<- TRUE
+      }
+      value
+    },
+    envir = fixture$runtime
+  )
+  expect_error(
+    fixture$runtime$wlv_assert_plan_publication_inputs_unchanged(plan),
+    "changed while method",
+    fixed = TRUE
+  )
+  expect_true(overwrite_injected)
+  wlv_native_test_write_text(overwritten_path, "native config")
+
+  original_bytes <- readBin(
+    overwritten_path,
+    what = "raw",
+    n = file.info(overwritten_path)$size
+  )
+  original_mtime <- file.info(overwritten_path)$mtime
+  preserved_overwrite_injected <- FALSE
+  hash_calls <- 0L
+  assign(
+    "wlv_publication_file_sha256",
+    function(path) {
+      hash_calls <<- hash_calls + 1L
+      value <- original_file_sha256(path)
+      if (!preserved_overwrite_injected && identical(
+            normalizePath(path, winslash = "/", mustWork = TRUE),
+            normalizePath(overwritten_path, winslash = "/", mustWork = TRUE)
+          )) {
+        changed <- original_bytes
+        changed[[1L]] <- as.raw(bitwXor(as.integer(changed[[1L]]), 1L))
+        writeBin(changed, overwritten_path)
+        Sys.setFileTime(overwritten_path, original_mtime)
+        preserved_overwrite_injected <<- TRUE
+      }
+      value
+    },
+    envir = fixture$runtime
+  )
+  expect_error(
+    fixture$runtime$wlv_assert_plan_publication_inputs_unchanged(
+      plan,
+      stabilize = TRUE
+    ),
+    "changed while method",
+    fixed = TRUE
+  )
+  expect_true(preserved_overwrite_injected)
+  expect_gt(hash_calls, input_count)
+  expect_identical(
+    as.double(file.info(overwritten_path)$size),
+    as.double(length(original_bytes))
+  )
+  writeBin(original_bytes, overwritten_path)
+  Sys.setFileTime(overwritten_path, original_mtime)
+  assign(
+    "wlv_publication_file_sha256",
+    counting_file_sha256,
+    envir = fixture$runtime
+  )
 
   before <- vapply(inventory, `[[`, character(1L), "sha256")
   wlv_native_test_write_text(
@@ -283,7 +426,6 @@ test_that("the publication input tree includes every native configuration class"
   )
   expect_false(identical(before, after))
 
-  plan$publication_inputs <- stats::setNames(list(inventory), fixture$method)
   expect_error(
     fixture$runtime$wlv_assert_plan_publication_inputs_unchanged(plan),
     "inputs changed after preflight validation",
@@ -465,6 +607,70 @@ test_that("installed release verification blocks post-staging run corruption", {
   )
 })
 
+test_that("final marker boundary blocks corruption from the last input check", {
+  fixture <- wlv_make_native_publication_fixture(mutable = TRUE)
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  plan <- wlv_native_test_release_plan(fixture)
+  first <- wlv_native_test_run_environment(fixture, "run-boundary-001")
+  runtime$wlv_commit_release(plan, list(first))
+  current_before <- runtime$wlv_read_current_release(
+    fixture$root,
+    "stable",
+    required = TRUE
+  )
+  markers_before <- runtime$wlv_list_channel_markers(fixture$root, "stable")
+
+  original_assert_source <-
+    runtime$wlv_assert_run_environments_source_inputs_unchanged
+  corrupted <- FALSE
+  runtime$wlv_assert_run_environments_source_inputs_unchanged <- function(
+      plan,
+      run_environments) {
+    value <- original_assert_source(plan, run_environments)
+    release_root <- file.path(fixture$root, "results", "releases")
+    releases <- list.dirs(release_root, recursive = FALSE, full.names = TRUE)
+    releases <- releases[
+      basename(releases) != current_before$manifest$release_id
+    ]
+    artifacts <- file.path(releases, "indicators_en.csv")
+    artifacts <- artifacts[file.exists(artifacts)]
+    if (!corrupted && length(artifacts)) {
+      connection <- file(artifacts[[1L]], open = "ab")
+      on.exit(close(connection), add = TRUE)
+      writeBin(charToRaw("post-input-check corruption"), connection)
+      corrupted <<- TRUE
+    }
+    value
+  }
+  on.exit({
+    runtime$wlv_assert_run_environments_source_inputs_unchanged <-
+      original_assert_source
+  }, add = TRUE)
+  second <- wlv_native_test_run_environment(fixture, "run-boundary-002")
+
+  expect_error(
+    runtime$wlv_commit_release(plan, list(second)),
+    "mismatch for release artifact"
+  )
+  expect_true(corrupted)
+  runtime$wlv_assert_run_environments_source_inputs_unchanged <-
+    original_assert_source
+  current_after <- runtime$wlv_read_current_release(
+    fixture$root,
+    "stable",
+    required = TRUE
+  )
+  expect_identical(
+    runtime$wlv_list_channel_markers(fixture$root, "stable"),
+    markers_before
+  )
+  expect_identical(
+    current_after$manifest$release_id,
+    current_before$manifest$release_id
+  )
+})
+
 test_that("the channel-marker rename remains the final fallible commit step", {
   fixture <- wlv_make_native_publication_fixture(mutable = TRUE)
   on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
@@ -517,6 +723,88 @@ test_that("the channel-marker rename remains the final fallible commit step", {
     required = TRUE
   )
   expect_identical(current$manifest$runs[[1L]]$run_id, "run-final-002")
+})
+
+test_that("pending marker is re-read after final release verification", {
+  fixture <- wlv_make_native_publication_fixture(mutable = TRUE)
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  plan <- wlv_native_test_release_plan(fixture)
+  first <- wlv_native_test_run_environment(fixture, "run-pending-001")
+  runtime$wlv_commit_release(plan, list(first))
+  current_before <- runtime$wlv_read_current_release(
+    fixture$root,
+    "stable",
+    required = TRUE
+  )
+  markers_before <- runtime$wlv_list_channel_markers(fixture$root, "stable")
+
+  original_verify <- runtime$wlv_verify_channel_marker
+  marker_mutated <- FALSE
+  runtime$wlv_verify_channel_marker <- function(
+      marker,
+      publication_root,
+      marker_path = NULL,
+      verify_release = TRUE) {
+    value <- original_verify(
+      marker,
+      publication_root,
+      marker_path = marker_path,
+      verify_release = verify_release
+    )
+    if (!marker_mutated && isTRUE(verify_release) && is.null(marker_path)) {
+      filename <- runtime$wlv_channel_marker_filename(
+        marker$sequence,
+        marker$release_id
+      )
+      candidates <- list.files(
+        file.path(fixture$root, "results", ".staging"),
+        recursive = TRUE,
+        full.names = TRUE,
+        all.files = TRUE,
+        no.. = TRUE
+      )
+      candidates <- candidates[basename(candidates) == filename]
+      if (length(candidates) != 1L) {
+        stop("Expected one pending marker during injected verification.")
+      }
+      changed <- marker
+      first_digit <- substring(changed$release_manifest_sha256, 1L, 1L)
+      substring(changed$release_manifest_sha256, 1L, 1L) <-
+        if (identical(first_digit, "0")) "1" else "0"
+      writeBin(
+        charToRaw(enc2utf8(runtime$wlv_publication_json_text(changed))),
+        candidates[[1L]]
+      )
+      marker_mutated <<- TRUE
+    }
+    value
+  }
+  on.exit({
+    runtime$wlv_verify_channel_marker <- original_verify
+  }, add = TRUE)
+  second <- wlv_native_test_run_environment(fixture, "run-pending-002")
+
+  expect_error(
+    runtime$wlv_commit_release(plan, list(second)),
+    "Pending channel marker changed after it was written.",
+    fixed = TRUE
+  )
+  expect_true(marker_mutated)
+  runtime$wlv_verify_channel_marker <- original_verify
+  current_after <- runtime$wlv_read_current_release(
+    fixture$root,
+    "stable",
+    required = TRUE
+  )
+  expect_identical(
+    runtime$wlv_list_channel_markers(fixture$root, "stable"),
+    markers_before
+  )
+  expect_identical(
+    current_after$manifest$release_id,
+    current_before$manifest$release_id
+  )
 })
 
 test_that("a later native method failure prevents the joint release commit", {

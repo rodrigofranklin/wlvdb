@@ -170,6 +170,80 @@ test_that("versioned FST bundles preserve values, dimensions, and Unicode dimnam
   )
 })
 
+test_that("authenticated FST reads bind the expected bundle using intrinsic hashes", {
+  skip_if_not_installed("fst")
+  skip_if_not_installed("openssl")
+  root <- wlv_fst_integrity_root("authenticated-read")
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+
+  value <- array(
+    c(1, NA_real_, NaN, Inf),
+    dim = c(2L, 2L),
+    dimnames = list(c("r1", "r2"), c("c1", "c2"))
+  )
+  path <- file.path(root, "array.fst")
+  metadata_path <- paste0(path, ".meta")
+  fst_integrity_environment$write_fst_array(value, path)
+  expected_sha256 <- fst_integrity_environment$wlv_fst_file_sha256(path)
+  expected_metadata_sha256 <-
+    fst_integrity_environment$wlv_fst_file_sha256(metadata_path)
+
+  original_hash <- fst_integrity_environment$wlv_fst_file_sha256
+  hash_paths <- character()
+  fst_integrity_environment$wlv_fst_file_sha256 <- function(file_name) {
+    hash_paths <<- c(hash_paths, normalizePath(file_name, winslash = "/"))
+    original_hash(file_name)
+  }
+  on.exit({
+    fst_integrity_environment$wlv_fst_file_sha256 <- original_hash
+  }, add = TRUE)
+
+  expect_identical(
+    fst_integrity_environment$read_fst_array(
+      path,
+      expected_sha256 = expected_sha256,
+      expected_metadata_sha256 = expected_metadata_sha256
+    ),
+    value
+  )
+  normalized_data <- normalizePath(path, winslash = "/")
+  normalized_metadata <- normalizePath(metadata_path, winslash = "/")
+  expect_identical(sum(hash_paths == normalized_data), 2L)
+  expect_identical(sum(hash_paths == normalized_metadata), 3L)
+
+  expect_error(
+    fst_integrity_environment$read_fst_array(
+      path,
+      expected_sha256 = strrep("0", 64L),
+      expected_metadata_sha256 = expected_metadata_sha256
+    ),
+    "differs from its authenticated snapshot [(]data SHA-256[)]"
+  )
+  expect_error(
+    fst_integrity_environment$read_fst_array(
+      path,
+      expected_sha256 = expected_sha256,
+      expected_metadata_sha256 = strrep("0", 64L)
+    ),
+    "differs from its authenticated snapshot [(]sidecar SHA-256[)]"
+  )
+  expect_error(
+    fst_integrity_environment$read_fst_array(
+      path,
+      expected_sha256 = expected_sha256
+    ),
+    "must both be lowercase SHA-256 hashes"
+  )
+  expect_error(
+    fst_integrity_environment$read_fst_array(
+      path,
+      expected_sha256 = toupper(expected_sha256),
+      expected_metadata_sha256 = expected_metadata_sha256
+    ),
+    "must both be lowercase SHA-256 hashes"
+  )
+})
+
 test_that("streaming FST verification is exact across chunks", {
   skip_if_not_installed("fst")
   skip_if_not_installed("openssl")

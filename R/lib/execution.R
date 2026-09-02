@@ -3331,6 +3331,21 @@ wlv_native_can_inherit_io_scientific_checks <- function(module_plan) {
     !any(provided %in% io_dependencies)
 }
 
+wlv_native_can_reuse_inherited_io_validation <- function(module_plan) {
+  if (!inherits(module_plan, "wlv_module_plan") ||
+      !is.environment(module_plan) || !environmentIsLocked(module_plan)) {
+    stop("Inherited I/O validation requires a compiled native plan.",
+      call. = FALSE
+    )
+  }
+  provided <- unique(unlist(lapply(module_plan$modules, function(module) {
+    vapply(module$provides, function(output) output$ref$key, character(1L))
+  }), use.names = FALSE))
+  provided_targets <- sub("^semantic_state/", "", provided)
+  !any(startsWith(provided_targets, "io/")) &&
+    !any(provided_targets %in% c("artifact/m_io", "intermediate/lambda"))
+}
+
 wlv_native_merge_recalculation_diagnostics <- function(
     run_data,
     current,
@@ -3796,6 +3811,9 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         identical(plan$mode, "recalculate") &&
         identical(plan$at_stage, 5L) &&
         wlv_native_can_inherit_io_scientific_checks(module_plan)
+      reuse_inherited_io_validation <-
+        identical(plan$mode, "recalculate") &&
+        wlv_native_can_reuse_inherited_io_validation(module_plan)
       if (identical(plan$mode, "recalculate")) {
         wlv_native_reset_recalculated_anomalies(
           contract_runtime,
@@ -3907,7 +3925,7 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
           validate_parent = FALSE
         )
       }
-      rm(parent_snapshot, runtime_store)
+      rm(runtime_store)
       invisible(gc(full = TRUE))
 
       wlv_validate_sea_stage(
@@ -3982,6 +4000,17 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
           validate_bound = FALSE
         )
       }
+      io_inheritance_assertion <- if (isTRUE(
+        reuse_inherited_io_validation
+      )) {
+        wlv_runtime_snapshot_assert_io_inherited(
+          parent_snapshot,
+          snapshot
+        )
+      } else {
+        NULL
+      }
+      rm(parent_snapshot)
       rm(snapshot_capture)
       snapshot_receipt <- wlv_runtime_snapshot_write(
         snapshot,
@@ -3998,6 +4027,15 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         staging,
         authenticate_bound_files = FALSE
       )
+      inherited_io_validation <- if (!is.null(io_inheritance_assertion)) {
+        wlv_runtime_snapshot_bind_io_inheritance(
+          io_inheritance_assertion,
+          snapshot_receipt
+        )
+      } else {
+        NULL
+      }
+      rm(io_inheritance_assertion)
       snapshot_receipt_owner <- new.env(parent = emptyenv())
       snapshot_receipt_owner$receipt <- snapshot_receipt
       rm(snapshot_receipt)
@@ -4069,6 +4107,7 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         } else {
           NULL
         },
+        inherited_io_validation = inherited_io_validation,
         runtime_snapshot_receipt = (function(owner) {
           if (!exists("receipt", envir = owner, inherits = FALSE)) {
             stop("Runtime snapshot receipt ownership was already transferred.",
@@ -4080,6 +4119,7 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
           value
         })(snapshot_receipt_owner)
       )
+      rm(inherited_io_validation)
       if (exists("receipt", envir = snapshot_receipt_owner, inherits = FALSE)) {
         stop("Runtime snapshot receipt ownership was not transferred.",
           call. = FALSE

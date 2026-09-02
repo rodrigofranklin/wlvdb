@@ -365,6 +365,62 @@ test_that("scientific IO cannot be hidden behind aliases or dynamic lookup", {
   expect_true(any(violations$symbol == "get"))
 })
 
+test_that("scientific modules cannot introspect runner frames or bindings", {
+  root <- tempfile("wlv-static-science-reflection-")
+  dir.create(file.path(root, "R", "modules", "native"), recursive = TRUE)
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  module <- file.path(root, "R", "modules", "native", "probe.R")
+  writeLines(
+    c(
+      "probe <- function(ctx) {",
+      "  environment(ctx$service('module_contract'))",
+      "  .BaseNamespaceEnv[['environment']](ctx$service('module_contract'))",
+      "  methods::getFunction('environment')",
+      "  utils::getAnywhere('sys.frames')$objs[[1L]]()",
+      "  utils::getFromNamespace('sys.frames', 'base')()",
+      "  base::getExportedValue('base', 'sys.frames')()",
+      "  base::dynGet('working')",
+      "  base::.Primitive('globalenv')()",
+      "  base::asNamespace('base')[['sys.frames']]()",
+      "  base:::sys.frames()",
+      "  utils::dump.frames(to.file = FALSE)",
+      "  methods::findFunction('sys.frames')",
+      "  sys.frames()",
+      "  base::sys.status()",
+      "  parent.frame()",
+      "  base::unlockBinding('entries', ctx)",
+      "  rlang::env_get(ctx, 'input_store')",
+      "}"
+    ),
+    module
+  )
+
+  violations <- runtime_static_environment$wlv_runtime_static_violations(
+    root = root,
+    files = module,
+    allowlist = character()
+  )
+  scientific <- violations[violations$rule == "scientific_io", , drop = FALSE]
+
+  expect_true(any(scientific$symbol == "environment"))
+  expect_true(any(scientific$symbol == ".BaseNamespaceEnv"))
+  expect_true(any(scientific$symbol == "methods::getFunction"))
+  expect_true(any(scientific$symbol == "getAnywhere"))
+  expect_true(any(scientific$symbol == "getFromNamespace"))
+  expect_true(any(scientific$symbol == "getExportedValue"))
+  expect_true(any(scientific$symbol == "dynGet"))
+  expect_true(any(scientific$symbol == ".Primitive"))
+  expect_true(any(scientific$symbol == "asNamespace"))
+  expect_true(any(scientific$symbol == "sys.frames"))
+  expect_true(any(scientific$symbol == "dump.frames"))
+  expect_true(any(scientific$symbol == "methods::findFunction"))
+  expect_true(any(scientific$symbol == "sys.frames"))
+  expect_true(any(scientific$symbol == "sys.status"))
+  expect_true(any(scientific$symbol == "parent.frame"))
+  expect_true(any(scientific$symbol == "unlockBinding"))
+  expect_true(any(scientific$symbol == "rlang::env_get"))
+})
+
 test_that("namespaced and higher-order scientific escapes are rejected", {
   root <- tempfile("wlv-static-science-namespaced-")
   dir.create(file.path(root, "R", "modules", "native"), recursive = TRUE)

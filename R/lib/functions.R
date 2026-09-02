@@ -542,12 +542,40 @@ wlv_fst_parse_sidecar <- function(metadata, file_name) {
   )
 }
 
-wlv_fst_read_bundle <- function(file_name) {
+wlv_fst_read_bundle <- function(
+    file_name,
+    expected_sha256 = NULL,
+    expected_metadata_sha256 = NULL) {
   if (
     !is.character(file_name) || length(file_name) != 1L ||
     is.na(file_name) || !nzchar(file_name)
   ) {
     stop("`file_name` must be one non-empty path.", call. = FALSE)
+  }
+  authenticated <- !is.null(expected_sha256) ||
+    !is.null(expected_metadata_sha256)
+  valid_expected_sha256 <- is.character(expected_sha256) &&
+    length(expected_sha256) == 1L && !is.na(expected_sha256) &&
+    grepl("^[0-9a-f]{64}$", expected_sha256)
+  valid_expected_metadata_sha256 <-
+    is.character(expected_metadata_sha256) &&
+    length(expected_metadata_sha256) == 1L &&
+    !is.na(expected_metadata_sha256) &&
+    grepl("^[0-9a-f]{64}$", expected_metadata_sha256)
+  if (isTRUE(authenticated) &&
+      (!isTRUE(valid_expected_sha256) ||
+        !isTRUE(valid_expected_metadata_sha256))) {
+    stop(
+      paste0(
+        "`expected_sha256` and `expected_metadata_sha256` must both be ",
+        "lowercase SHA-256 hashes when authenticating an FST bundle."
+      ),
+      call. = FALSE
+    )
+  }
+  if (isTRUE(authenticated)) {
+    expected_sha256 <- unname(expected_sha256)
+    expected_metadata_sha256 <- unname(expected_metadata_sha256)
   }
   if (!file.exists(file_name) || isTRUE(file.info(file_name)$isdir)) {
     stop(sprintf("FST array file does not exist: %s", file_name), call. = FALSE)
@@ -564,6 +592,16 @@ wlv_fst_read_bundle <- function(file_name) {
     )
   }
   metadata_sha256_before <- wlv_fst_file_sha256(metadata_path)
+  if (isTRUE(authenticated) &&
+      !identical(metadata_sha256_before, expected_metadata_sha256)) {
+    stop(
+      sprintf(
+        "FST bundle `%s` differs from its authenticated snapshot (sidecar SHA-256).",
+        file_name
+      ),
+      call. = FALSE
+    )
+  }
   metadata <- tryCatch(
     readRDS(metadata_path),
     error = function(error) {
@@ -587,6 +625,16 @@ wlv_fst_read_bundle <- function(file_name) {
   contract <- wlv_fst_parse_sidecar(metadata, file_name)
 
   data_sha256_before <- wlv_fst_file_sha256(file_name)
+  if (isTRUE(authenticated) &&
+      !identical(data_sha256_before, expected_sha256)) {
+    stop(
+      sprintf(
+        "FST bundle `%s` differs from its authenticated snapshot (data SHA-256).",
+        file_name
+      ),
+      call. = FALSE
+    )
+  }
   if (!is.null(contract$fst_sha256)) {
     if (!identical(data_sha256_before, contract$fst_sha256)) {
       stop(
@@ -663,8 +711,15 @@ wlv_fst_read_bundle <- function(file_name) {
   value
 }
 
-read_fst_array <- function(file_name) {
-  wlv_fst_read_bundle(file_name)
+read_fst_array <- function(
+    file_name,
+    expected_sha256 = NULL,
+    expected_metadata_sha256 = NULL) {
+  wlv_fst_read_bundle(
+    file_name,
+    expected_sha256 = expected_sha256,
+    expected_metadata_sha256 = expected_metadata_sha256
+  )
 }
 
 wlv_fst_sidecar <- function(value, fst_sha256, drop_axis_names = FALSE) {

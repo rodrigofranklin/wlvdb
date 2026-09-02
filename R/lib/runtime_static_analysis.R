@@ -171,14 +171,25 @@ wlv_runtime_static_scientific_io <- function() {
     "file.rename", "file.create", "file.remove", "file.append",
     "file.link", "file.symlink", "tempfile", "tempdir", "system",
     "system2", "shell", ".Call", ".External", ".External2", ".C",
-    ".Fortran", ".Internal", "library", "require", "attach", "detach"
+    ".Fortran", ".Internal", "library", "require", "attach", "detach",
+    "environment", "environment<-", "parent.frame", "sys.frame",
+    "sys.frames", "sys.status", "sys.parent", "sys.parents", "sys.function",
+    "sys.call", "sys.calls", "eval.parent", "topenv", "pos.to.env", "unlockBinding",
+    "lockBinding", "lockEnvironment", "makeActiveBinding",
+    "activeBindingFunction", ".Primitive", "dynGet", "asNamespace",
+    "getExportedValue", "getNamespaceExports", "getNamespaceImports",
+    "getNamespaceInfo", "getNamespaceName", "getNamespaceUsers",
+    "getNamespaceVersion", "getAnywhere", "getFromNamespace",
+    "getS3method", "dump.frames", "recover", "findFunction",
+    "findMethod", "findMethods", "getFunction", "getGeneric",
+    "getMethod"
   )
 }
 
 wlv_runtime_static_scientific_io_namespaces <- function() {
   c(
     "fs", "readr", "readxl", "fst", "processx", "curl", "httr",
-    "httr2", "R.matlab", "openxlsx", "writexl", "rio"
+    "httr2", "R.matlab", "openxlsx", "writexl", "rio", "rlang"
   )
 }
 
@@ -194,6 +205,19 @@ wlv_runtime_static_scientific_target <- function(target) {
   qualified <- grepl("::", target, fixed = TRUE)
   if (!qualified) return(FALSE)
   package <- sub("::.*$", "", target)
+  if (identical(package, "utils")) {
+    # Native modules use only the data-only `head()` helper from utils. A
+    # namespace-wide deny-by-default rule prevents new reflection helpers such
+    # as getAnywhere(), getFromNamespace(), dump.frames(), or recover() from
+    # becoming alternate paths into runner frames.
+    return(!terminal %in% c("head", "modifyList"))
+  }
+  if (identical(package, "methods")) {
+    # Matrix coercion is the only scientific use of methods. Keep the rest of
+    # the namespace unavailable so function/method lookup cannot recover frame
+    # inspection primitives through S4 reflection helpers.
+    return(!terminal %in% c("as", "selectMethod"))
+  }
   package %in% wlv_runtime_static_scientific_io_namespaces()
 }
 
@@ -876,6 +900,10 @@ wlv_runtime_static_walk <- function(
   if (is.symbol(node) && identical(as.character(node), ".GlobalEnv")) {
     add_violation("global_environment", ".GlobalEnv")
   }
+  if (is.symbol(node) && identical(as.character(node), ".BaseNamespaceEnv") &&
+      startsWith(gsub("\\\\", "/", file), "R/modules/native/")) {
+    add_violation("scientific_io", ".BaseNamespaceEnv")
+  }
   if (is.character(node) && length(node) == 1L) {
     legacy <- wlv_runtime_static_legacy_path(node)
     if (nzchar(legacy)) add_violation("legacy_path", legacy)
@@ -1013,6 +1041,12 @@ wlv_runtime_static_walk <- function(
       gsub("\\\\", "/", file),
       "R/modules/native/"
     )
+    internal_namespace_call <- is.call(node[[1L]]) &&
+      length(node[[1L]]) == 3L && is.symbol(node[[1L]][[1L]]) &&
+      identical(as.character(node[[1L]][[1L]]), ":::")
+    if (scientific_module && internal_namespace_call) {
+      add_violation("scientific_io", target_symbol)
+    }
     if (scientific_module && wlv_runtime_static_scientific_target(target)) {
       add_violation("scientific_io", target_symbol)
     }

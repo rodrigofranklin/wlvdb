@@ -4301,7 +4301,181 @@ wlv_runtime_snapshot_validate_materialized_panel <- function(
   invisible(value)
 }
 
-wlv_runtime_snapshot_validate_materialized_io <- function(
+wlv_runtime_snapshot_assert_io_inherited <- function(parent, current) {
+  identity <- function(snapshot) {
+    if (!is.list(snapshot) || !is.character(snapshot$partitions) ||
+        !is.data.frame(snapshot$io_artifacts) ||
+        !is.list(snapshot$resources) ||
+        !is.data.frame(snapshot$state_bindings)) {
+      stop("Inherited runtime I/O snapshot is invalid.", call. = FALSE)
+    }
+    resource_ids <- wlv_runtime_snapshot_capture_resource_ids(
+      snapshot$partitions
+    )
+    if (!identical(names(snapshot$resources), resource_ids)) {
+      stop("Inherited runtime I/O resources are incomplete.", call. = FALSE)
+    }
+    binding_rows <- match(resource_ids, snapshot$state_bindings$id)
+    if (anyNA(binding_rows) || anyDuplicated(snapshot$state_bindings$id)) {
+      stop("Inherited runtime I/O state bindings are incomplete.",
+        call. = FALSE
+      )
+    }
+    list(
+      method = snapshot$method,
+      source = snapshot$source,
+      partitions = snapshot$partitions,
+      io_artifacts = snapshot$io_artifacts,
+      resources = snapshot$resources[resource_ids],
+      state_bindings = snapshot$state_bindings[binding_rows, , drop = FALSE]
+    )
+  }
+  if (!identical(identity(parent), identity(current))) {
+    stop(
+      "Recalculation changed I/O resources declared as inherited.",
+      call. = FALSE
+    )
+  }
+  assertion <- new.env(parent = emptyenv())
+  assertion$version <- "wlv-inherited-io-assertion/1.0.0"
+  assertion$method <- current$method
+  assertion$source <- current$source
+  assertion$partitions <- current$partitions
+  assertion$snapshot_commitment_sha256 <-
+    wlv_runtime_snapshot_logical_commitment_sha256(
+      current,
+      verify_resource_states = FALSE
+    )
+  class(assertion) <- "wlv_inherited_io_assertion"
+  lockEnvironment(assertion, bindings = TRUE)
+  invisible(assertion)
+}
+
+wlv_runtime_snapshot_io_inheritance_assertion_assert <- function(assertion) {
+  if (!inherits(assertion, "wlv_inherited_io_assertion") ||
+      !is.environment(assertion) || !environmentIsLocked(assertion) ||
+      !identical(class(assertion), "wlv_inherited_io_assertion") ||
+      !identical(parent.env(assertion), emptyenv()) ||
+      !identical(
+        ls(envir = assertion, all.names = TRUE),
+        c(
+          "method", "partitions", "snapshot_commitment_sha256", "source",
+          "version"
+        )
+      ) ||
+      !identical(assertion$version, "wlv-inherited-io-assertion/1.0.0") ||
+      !is.character(assertion$method) || length(assertion$method) != 1L ||
+      is.na(assertion$method) || !nzchar(assertion$method) ||
+      !is.character(assertion$source) || length(assertion$source) != 1L ||
+      is.na(assertion$source) || !nzchar(assertion$source) ||
+      !is.character(assertion$partitions) || !length(assertion$partitions) ||
+      anyNA(assertion$partitions) || any(!nzchar(assertion$partitions)) ||
+      anyDuplicated(assertion$partitions) ||
+      !is.character(assertion$snapshot_commitment_sha256) ||
+      length(assertion$snapshot_commitment_sha256) != 1L ||
+      is.na(assertion$snapshot_commitment_sha256) ||
+      !grepl("^[0-9a-f]{64}$", assertion$snapshot_commitment_sha256) ||
+      any(!vapply(
+        ls(envir = assertion, all.names = TRUE),
+        bindingIsLocked,
+        logical(1L),
+        env = assertion
+      )) ||
+      any(vapply(
+        ls(envir = assertion, all.names = TRUE),
+        bindingIsActive,
+        logical(1L),
+        env = assertion
+      ))) {
+    stop("Inherited I/O assertion is invalid.", call. = FALSE)
+  }
+  invisible(assertion)
+}
+
+wlv_runtime_snapshot_bind_io_inheritance <- function(assertion, receipt) {
+  wlv_runtime_snapshot_io_inheritance_assertion_assert(assertion)
+  wlv_runtime_snapshot_receipt_assert(
+    receipt,
+    method = assertion$method,
+    source = assertion$source,
+    partitions = assertion$partitions
+  )
+  if (!identical(
+        assertion$snapshot_commitment_sha256,
+        receipt$snapshot_commitment_sha256
+      )) {
+    stop(
+      "Inherited I/O assertion differs from its authenticated snapshot receipt.",
+      call. = FALSE
+    )
+  }
+  proof <- new.env(parent = emptyenv())
+  proof$version <- "wlv-inherited-io-validation/1.0.0"
+  proof$method <- assertion$method
+  proof$source <- assertion$source
+  proof$partitions <- assertion$partitions
+  proof$snapshot_commitment_sha256 <- receipt$snapshot_commitment_sha256
+  class(proof) <- "wlv_inherited_io_validation"
+  lockEnvironment(proof, bindings = TRUE)
+  proof
+}
+
+wlv_runtime_snapshot_io_inheritance_proof_assert <- function(
+    proof,
+    method,
+    source,
+    partitions,
+    receipt) {
+  if (!inherits(proof, "wlv_inherited_io_validation") ||
+      !is.environment(proof) || !environmentIsLocked(proof) ||
+      !identical(class(proof), "wlv_inherited_io_validation") ||
+      !identical(parent.env(proof), emptyenv()) ||
+      !identical(
+        ls(envir = proof, all.names = TRUE),
+        c(
+          "method", "partitions", "snapshot_commitment_sha256", "source",
+          "version"
+        )
+      ) ||
+      !identical(proof$version, "wlv-inherited-io-validation/1.0.0") ||
+      !identical(proof$method, method) || !identical(proof$source, source) ||
+      !identical(
+        proof$partitions,
+        sort(as.character(partitions), method = "radix")
+      ) ||
+      !is.character(proof$snapshot_commitment_sha256) ||
+      length(proof$snapshot_commitment_sha256) != 1L ||
+      is.na(proof$snapshot_commitment_sha256) ||
+      !grepl("^[0-9a-f]{64}$", proof$snapshot_commitment_sha256) ||
+      any(!vapply(
+        ls(envir = proof, all.names = TRUE),
+        bindingIsLocked,
+        logical(1L),
+        env = proof
+      )) ||
+      any(vapply(
+        ls(envir = proof, all.names = TRUE),
+        bindingIsActive,
+        logical(1L),
+        env = proof
+      ))) {
+    stop("Inherited I/O validation proof is invalid.", call. = FALSE)
+  }
+  if (is.null(receipt) ||
+      !inherits(receipt, "wlv_runtime_snapshot_receipt") ||
+      !identical(
+        proof$snapshot_commitment_sha256,
+        receipt$snapshot_commitment_sha256
+      )) {
+    stop(
+      "Inherited I/O validation proof lacks its authenticated snapshot receipt.",
+      call. = FALSE
+    )
+  }
+  invisible(proof)
+}
+
+wlv_runtime_snapshot_validate_materialized_io_shape <- function(
     expectations,
     partition,
     value) {
@@ -4344,22 +4518,12 @@ wlv_runtime_snapshot_validate_materialized_io <- function(
       ,
       drop = FALSE
     ]
-    resource_index <- match(resource, resources)
-    value_sha256 <- wlv_runtime_snapshot_second_axis_slice_sha256(
-      value,
-      resource_index,
-      labels[slice_axes]
-    )
     if (nrow(row) != 1L || !identical(
       row$contract_sha256[[1L]],
       wlv_runtime_snapshot_contract_sha256(
         wlv_runtime_snapshot_contract(key)
       )
-    ) || !identical(row$axes_sha256[[1L]], slice_axes_sha256) ||
-        !identical(
-          row$value_sha256[[1L]],
-          value_sha256
-        )) {
+    ) || !identical(row$axes_sha256[[1L]], slice_axes_sha256)) {
       stop(
         sprintf(
           "Runtime snapshot IO generation differs for `%s[%s]`.",
@@ -4378,7 +4542,113 @@ wlv_runtime_snapshot_validate_materialized_io <- function(
       call. = FALSE
     )
   }
+  list(
+    expectations = expectations,
+    partition = partition,
+    labels = labels,
+    resources = resources,
+    slice_axes = slice_axes
+  )
+}
+
+wlv_runtime_snapshot_validate_materialized_io <- function(
+    expectations,
+    partition,
+    value) {
+  context <- wlv_runtime_snapshot_validate_materialized_io_shape(
+    expectations,
+    partition,
+    value
+  )
+  for (resource in context$resources) {
+    key <- paste0("io/", resource)
+    row <- context$expectations$io[
+      context$expectations$io$partition == context$partition &
+        context$expectations$io$key == key,
+      ,
+      drop = FALSE
+    ]
+    resource_index <- match(resource, context$resources)
+    value_sha256 <- wlv_runtime_snapshot_second_axis_slice_sha256(
+      value,
+      resource_index,
+      context$labels[context$slice_axes]
+    )
+    if (nrow(row) != 1L ||
+        !identical(row$value_sha256[[1L]], value_sha256)) {
+      stop(
+        sprintf(
+          "Runtime snapshot IO generation differs for `%s[%s]`.",
+          key,
+          context$partition
+        ),
+        call. = FALSE
+      )
+    }
+  }
   invisible(value)
+}
+
+wlv_runtime_snapshot_read_authenticated_materialized_io <- function(
+    expectations,
+    partition,
+    path,
+    expected_sha256,
+    expected_metadata_sha256) {
+  if (!is.character(path) || length(path) != 1L || is.na(path) ||
+      !nzchar(path) ||
+      !is.character(expected_sha256) || length(expected_sha256) != 1L ||
+      is.na(expected_sha256) ||
+      !grepl("^[0-9a-f]{64}$", expected_sha256) ||
+      !is.character(expected_metadata_sha256) ||
+      length(expected_metadata_sha256) != 1L ||
+      is.na(expected_metadata_sha256) ||
+      !grepl("^[0-9a-f]{64}$", expected_metadata_sha256)) {
+    stop("Authenticated runtime I/O read request is invalid.", call. = FALSE)
+  }
+  metadata_path <- paste0(path, ".meta")
+  paths <- c(path, metadata_path)
+  targets <- unique(c(paths, dirname(paths)))
+  stamps <- function() {
+    info <- file.info(targets, extra_cols = FALSE)
+    if (nrow(info) != length(targets) || anyNA(info$isdir) ||
+        anyNA(info$size) || anyNA(info$mtime) || anyNA(info$ctime)) {
+      stop("Authenticated runtime I/O change stamps are unavailable.",
+        call. = FALSE
+      )
+    }
+    lapply(seq_along(targets), function(index) {
+      list(
+        path = targets[[index]],
+        isdir = isTRUE(info$isdir[[index]]),
+        size = as.double(info$size[[index]]),
+        mtime = as.double(info$mtime[[index]]),
+        ctime = as.double(info$ctime[[index]])
+      )
+    })
+  }
+  stamps_before <- stamps()
+  value <- read_fst_array(
+    path,
+    expected_sha256 = unname(expected_sha256),
+    expected_metadata_sha256 = unname(expected_metadata_sha256)
+  )
+  stamps_after <- stamps()
+  if (!identical(stamps_after, stamps_before)) {
+    stop(
+      sprintf(
+        "Runtime I/O bundle `%s` changed during its authenticated read.",
+        basename(path)
+      ),
+      call. = FALSE
+    )
+  }
+  wlv_runtime_snapshot_validate_materialized_io_shape(
+    expectations,
+    partition,
+    value
+  )
+  value
 }
 
 wlv_runtime_snapshot_write <- function(

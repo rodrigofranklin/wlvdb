@@ -835,3 +835,105 @@ test_that("module runtime hydrates state aliases and finalizer materializes bund
   expect_identical(names(finalized$outputs$diagnostic), "leontief")
   expect_identical(finalized$diagnostics, list())
 })
+
+test_that("intrinsic finalizers expose only declared immutable resources", {
+  runtime <- semantic_resource_environment
+  scalar <- runtime$wlv_resource_contract(
+    scope = "run",
+    axes = character(),
+    value_type = "double",
+    unit = "test_unit_v1",
+    missingness = "strict_v1"
+  )
+  seed_ref <- runtime$wlv_resource_ref(
+    "input/value",
+    scalar,
+    producer = runtime$wlv_runtime_seed_producer()
+  )
+  mutation_rejected <- FALSE
+  exposed_locators <- character()
+  finalizer_environment_names <- character()
+  finalizer_parent_is_empty <- FALSE
+  complete_store_reachable <- TRUE
+  spec <- runtime$wlv_module_spec(
+    id = "sealed.finalizer",
+    checkpoint = 1L,
+    services = runtime$wlv_runtime_intrinsic_service_names(),
+    requires = list(input = seed_ref),
+    provides = list(output = runtime$wlv_resource_output(
+      runtime$wlv_resource_ref("output/value", scalar)
+    )),
+    run = function(ctx) {
+      finalizer <- ctx$service("module_contract")
+      get_environment <- methods::getFunction("environment")
+      get_parent <- methods::getFunction("parent.env")
+      finalizer_environment <- get_environment(finalizer)
+      finalizer_environment_names <<- ls(
+        finalizer_environment,
+        all.names = TRUE
+      )
+      finalizer_parent_is_empty <<- identical(
+        get_parent(finalizer_environment),
+        emptyenv()
+      )
+      complete_store_reachable <<- exists(
+        "store",
+        envir = finalizer_environment,
+        inherits = TRUE
+      )
+      leaked <- finalizer_environment$input_store
+      exposed_locators <<- names(leaked$entries)
+      locator_id <- names(leaked$entries)[[1L]]
+      mutation <- try(
+        leaked$entries[[locator_id]]$value <- 99,
+        silent = TRUE
+      )
+      mutation_rejected <<- inherits(mutation, "try-error")
+      finalizer(runtime$wlv_module_result(list(
+        output = ctx$input("input") + 1
+      )))
+    }
+  )
+  store <- runtime$wlv_new_resource_store(list(
+    runtime$wlv_seed_resource("input/value", 1, scalar),
+    runtime$wlv_seed_resource("secret/undeclared", 41, scalar)
+  ))
+  plan <- runtime$wlv_compile_module_plan(
+    runtime$wlv_module_registry(list(spec)),
+    list(runtime$wlv_module_instance("sealed.finalizer", "sealed.finalizer")),
+    store
+  )
+  result <- runtime$wlv_run_module_plan(
+    plan,
+    store,
+    retain_history = TRUE
+  )
+
+  expect_true(mutation_rejected)
+  expect_true(finalizer_parent_is_empty)
+  expect_false(complete_store_reachable)
+  expect_setequal(
+    finalizer_environment_names,
+    c(
+      "input_store", "module_inputs", "module_runtime", "resolved_module",
+      "wlv_semantic_finalize_module_result"
+    )
+  )
+  expect_identical(
+    exposed_locators,
+    runtime$wlv_runtime_locator_id(
+      "input/value",
+      NULL,
+      runtime$wlv_runtime_seed_producer()
+    )
+  )
+  expect_false(any(grepl("secret/undeclared", exposed_locators, fixed = TRUE)))
+  expect_identical(runtime$wlv_store_read(result$store, seed_ref), 1)
+  expect_identical(
+    runtime$wlv_store_read(
+      result$store,
+      runtime$wlv_resource_ref("output/value", scalar)
+    ),
+    2
+  )
+})

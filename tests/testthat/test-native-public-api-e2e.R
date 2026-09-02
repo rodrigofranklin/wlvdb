@@ -9,22 +9,64 @@ test_that("public native calculation and recalculation publish immutable runs", 
   parent_seed_roots <- character()
   contract_report_reads <- character()
   array_reads <- character()
+  source_io_seed_builds <- 0L
+  io_snapshot_validations <- 0L
+  io_authenticated_reads <- 0L
+  io_inheritance_assertions <- 0L
   prepared_payload_validations <- 0L
   io_scientific_validations <- 0L
   io_filter_builds <- 0L
   import_group_builds <- 0L
   world_bank_assumption_reads <- 0L
   china_hours_assumption_reads <- 0L
-  original_read_fst_array <- runtime$read_fst_array
+  original_read_fst_bundle <- runtime$wlv_fst_read_bundle
   assign(
-    "read_fst_array",
-    function(file_name) {
+    "wlv_fst_read_bundle",
+    function(file_name, ...) {
       array_reads <<- c(array_reads, normalizePath(
         file_name,
         winslash = "/",
         mustWork = TRUE
       ))
-      original_read_fst_array(file_name)
+      original_read_fst_bundle(file_name, ...)
+    },
+    envir = runtime
+  )
+  original_source_io_seeds <- runtime$wlv_native_source_io_seeds
+  assign(
+    "wlv_native_source_io_seeds",
+    function(...) {
+      source_io_seed_builds <<- source_io_seed_builds + 1L
+      original_source_io_seeds(...)
+    },
+    envir = runtime
+  )
+  original_validate_materialized_io <-
+    runtime$wlv_runtime_snapshot_validate_materialized_io
+  assign(
+    "wlv_runtime_snapshot_validate_materialized_io",
+    function(...) {
+      io_snapshot_validations <<- io_snapshot_validations + 1L
+      original_validate_materialized_io(...)
+    },
+    envir = runtime
+  )
+  original_read_authenticated_io <-
+    runtime$wlv_runtime_snapshot_read_authenticated_materialized_io
+  assign(
+    "wlv_runtime_snapshot_read_authenticated_materialized_io",
+    function(...) {
+      io_authenticated_reads <<- io_authenticated_reads + 1L
+      original_read_authenticated_io(...)
+    },
+    envir = runtime
+  )
+  original_assert_io_inherited <- runtime$wlv_runtime_snapshot_assert_io_inherited
+  assign(
+    "wlv_runtime_snapshot_assert_io_inherited",
+    function(...) {
+      io_inheritance_assertions <<- io_inheritance_assertions + 1L
+      original_assert_io_inherited(...)
     },
     envir = runtime
   )
@@ -171,6 +213,10 @@ test_that("public native calculation and recalculation publish immutable runs", 
     channel = fixture$channel,
     allow_experimental = TRUE
   ))
+  expect_identical(source_io_seed_builds, 1L)
+  expect_identical(io_snapshot_validations, 1L)
+  expect_identical(io_authenticated_reads, 0L)
+  expect_identical(io_inheritance_assertions, 0L)
   expect_true(all(c(
     "indicator.gross_output.s.us",
     "indicator.gross_output.s.mv",
@@ -252,6 +298,10 @@ test_that("public native calculation and recalculation publish immutable runs", 
     channel = fixture$channel,
     allow_experimental = TRUE
   ))
+  expect_identical(source_io_seed_builds, 1L)
+  expect_identical(io_snapshot_validations, 1L)
+  expect_identical(io_authenticated_reads, 1L)
+  expect_identical(io_inheritance_assertions, 1L)
   expect_true(all(c(
     "indicator.gross_output.s.us",
     "indicator.gross_output.s.mv",
@@ -301,6 +351,10 @@ test_that("public native calculation and recalculation publish immutable runs", 
     channel = fixture$channel,
     allow_experimental = TRUE
   ))
+  expect_identical(source_io_seed_builds, 1L)
+  expect_identical(io_snapshot_validations, 1L)
+  expect_identical(io_authenticated_reads, 2L)
+  expect_identical(io_inheritance_assertions, 2L)
   expect_true(all(c(
     "indicator.gross_output.s.mv",
     "indicator.value.m.mv"
@@ -336,6 +390,10 @@ test_that("public native calculation and recalculation publish immutable runs", 
     channel = fixture$channel,
     allow_experimental = TRUE
   ))
+  expect_identical(source_io_seed_builds, 1L)
+  expect_identical(io_snapshot_validations, 1L)
+  expect_identical(io_authenticated_reads, 2L)
+  expect_identical(io_inheritance_assertions, 3L)
   expect_true("indicator.value.m.mv" %in% trace_ids(stage5))
   expect_false("indicator.gross_output.s.us" %in% trace_ids(stage5))
   expect_false("indicator.gross_output.s.mv" %in% trace_ids(stage5))
@@ -375,6 +433,10 @@ test_that("public native calculation and recalculation publish immutable runs", 
     channel = fixture$channel,
     allow_experimental = TRUE
   ))
+  expect_identical(source_io_seed_builds, 1L)
+  expect_identical(io_snapshot_validations, 1L)
+  expect_identical(io_authenticated_reads, 3L)
+  expect_identical(io_inheritance_assertions, 4L)
   expect_true("indicator.gross_output.s.mv" %in% trace_ids(stage4_selective))
   expect_false("indicator.gross_output.s.us" %in% trace_ids(stage4_selective))
   expect_false("indicator.value.m.mv" %in% trace_ids(stage4_selective))
@@ -398,6 +460,10 @@ test_that("public native calculation and recalculation publish immutable runs", 
     channel = fixture$channel,
     allow_experimental = TRUE
   ))
+  expect_identical(source_io_seed_builds, 1L)
+  expect_identical(io_snapshot_validations, 1L)
+  expect_identical(io_authenticated_reads, 4L)
+  expect_identical(io_inheritance_assertions, 5L)
   expect_true("indicator.value.m.mv" %in% trace_ids(stage4_formula_selective))
   expect_false("indicator.gross_output.s.us" %in% trace_ids(
     stage4_formula_selective
@@ -425,6 +491,10 @@ test_that("public native calculation and recalculation publish immutable runs", 
     channel = fixture$channel,
     allow_experimental = TRUE
   ))
+  expect_identical(source_io_seed_builds, 1L)
+  expect_identical(io_snapshot_validations, 1L)
+  expect_identical(io_authenticated_reads, 4L)
+  expect_identical(io_inheritance_assertions, 6L)
   expect_true("indicator.value.m.mv" %in% trace_ids(stage5_selective))
   expect_false("indicator.gross_output.s.us" %in% trace_ids(stage5_selective))
   expect_false("indicator.gross_output.s.mv" %in% trace_ids(stage5_selective))

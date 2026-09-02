@@ -726,6 +726,74 @@ test_that("runtime snapshot persists lambda and IO states without duplicating IO
     ),
     compatibility = fixture$compatibility
   )
+  io_inheritance_assertion <- runtime$wlv_runtime_snapshot_assert_io_inherited(
+    snapshot,
+    snapshot
+  )
+  expect_s3_class(io_inheritance_assertion, "wlv_inherited_io_assertion")
+  expect_true(environmentIsLocked(io_inheritance_assertion))
+  changed_io_artifact <- snapshot
+  changed_io_artifact$io_artifacts$sha256[[1L]] <- strrep("0", 64L)
+  expect_error(
+    runtime$wlv_runtime_snapshot_assert_io_inherited(
+      snapshot,
+      changed_io_artifact
+    ),
+    "changed I/O resources declared as inherited",
+    fixed = TRUE
+  )
+  changed_io_resource <- snapshot
+  io_id <- names(changed_io_resource$resources)[vapply(
+    changed_io_resource$resources,
+    function(entry) identical(entry$key, "io/values"),
+    logical(1L)
+  )][[1L]]
+  changed_io_resource$resources[[io_id]]$value_sha256 <- strrep("0", 64L)
+  expect_error(
+    runtime$wlv_runtime_snapshot_assert_io_inherited(
+      snapshot,
+      changed_io_resource
+    ),
+    "changed I/O resources declared as inherited",
+    fixed = TRUE
+  )
+  changed_lambda <- snapshot
+  lambda_id <- names(changed_lambda$resources)[vapply(
+    changed_lambda$resources,
+    function(entry) identical(entry$key, "intermediate/lambda"),
+    logical(1L)
+  )][[1L]]
+  changed_lambda$resources[[lambda_id]]$value_sha256 <- strrep("0", 64L)
+  expect_error(
+    runtime$wlv_runtime_snapshot_assert_io_inherited(snapshot, changed_lambda),
+    "changed I/O resources declared as inherited",
+    fixed = TRUE
+  )
+  changed_binding <- snapshot
+  binding_row <- match(io_id, changed_binding$state_bindings$id)
+  changed_binding$state_bindings$binding_sha256[[binding_row]] <-
+    strrep("0", 64L)
+  expect_error(
+    runtime$wlv_runtime_snapshot_assert_io_inherited(snapshot, changed_binding),
+    "changed I/O resources declared as inherited",
+    fixed = TRUE
+  )
+  reordered_resources <- snapshot
+  reordered_resources$resources <- rev(reordered_resources$resources)
+  expect_error(
+    runtime$wlv_runtime_snapshot_assert_io_inherited(
+      snapshot,
+      reordered_resources
+    ),
+    "resources are incomplete",
+    fixed = TRUE
+  )
+  changed_panel_only <- snapshot
+  changed_panel_only$panel_artifacts$sha256[[1L]] <- strrep("0", 64L)
+  expect_invisible(runtime$wlv_runtime_snapshot_assert_io_inherited(
+    snapshot,
+    changed_panel_only
+  ))
   expect_identical(
     runtime$wlv_runtime_snapshot_state_bindings(snapshot),
     runtime$wlv_runtime_snapshot_state_bindings(
@@ -780,6 +848,49 @@ test_that("runtime snapshot persists lambda and IO states without duplicating IO
     return_receipt = TRUE
   )
   expect_s3_class(receipt, "wlv_runtime_snapshot_receipt")
+  different_snapshot <- snapshot
+  different_snapshot$panel_artifacts$sha256[[1L]] <- strrep("0", 64L)
+  different_receipt <- runtime$wlv_runtime_snapshot_receipt_from_sha256(
+    different_snapshot,
+    strrep("1", 64L),
+    verify_resource_states = FALSE
+  )
+  expect_error(
+    runtime$wlv_runtime_snapshot_bind_io_inheritance(
+      io_inheritance_assertion,
+      different_receipt
+    ),
+    "differs from its authenticated snapshot receipt",
+    fixed = TRUE
+  )
+  io_inheritance_proof <- runtime$wlv_runtime_snapshot_bind_io_inheritance(
+    io_inheritance_assertion,
+    receipt
+  )
+  expect_s3_class(io_inheritance_proof, "wlv_inherited_io_validation")
+  expect_true(environmentIsLocked(io_inheritance_proof))
+  expect_invisible(
+    runtime$wlv_runtime_snapshot_io_inheritance_proof_assert(
+      io_inheritance_proof,
+      method = snapshot$method,
+      source = snapshot$source,
+      partitions = snapshot$partitions,
+      receipt = receipt
+    )
+  )
+  mismatched_receipt <- receipt
+  mismatched_receipt$snapshot_commitment_sha256 <- strrep("0", 64L)
+  expect_error(
+    runtime$wlv_runtime_snapshot_io_inheritance_proof_assert(
+      io_inheritance_proof,
+      method = snapshot$method,
+      source = snapshot$source,
+      partitions = snapshot$partitions,
+      receipt = mismatched_receipt
+    ),
+    "lacks its authenticated snapshot receipt",
+    fixed = TRUE
+  )
   expect_s3_class(
     attr(
       receipt,
@@ -1034,6 +1145,63 @@ test_that("runtime snapshot persists lambda and IO states without duplicating IO
       drifted_io
     ),
     "IO generation differs"
+  )
+  io_artifact <- snapshot$io_artifacts[
+    snapshot$io_artifacts$partition == fixture$partition,
+    ,
+    drop = FALSE
+  ]
+  authenticated_m_io <- m_io
+  names(dimnames(authenticated_m_io)) <- NULL
+  expect_identical(
+    runtime$wlv_runtime_snapshot_read_authenticated_materialized_io(
+      bindings,
+      fixture$partition,
+      io_path,
+      io_artifact$sha256[[1L]],
+      io_artifact$meta_sha256[[1L]]
+    ),
+    authenticated_m_io
+  )
+  expect_error(
+    runtime$wlv_runtime_snapshot_read_authenticated_materialized_io(
+      bindings,
+      fixture$partition,
+      io_path,
+      strrep("0", 64L),
+      io_artifact$meta_sha256[[1L]]
+    ),
+    "differs from its authenticated snapshot"
+  )
+  expect_error(
+    runtime$wlv_runtime_snapshot_read_authenticated_materialized_io(
+      bindings,
+      fixture$partition,
+      io_path,
+      io_artifact$sha256[[1L]],
+      strrep("0", 64L)
+    ),
+    "differs from its authenticated snapshot"
+  )
+  expect_error(
+    runtime$wlv_runtime_snapshot_read_authenticated_materialized_io(
+      bindings,
+      fixture$partition,
+      io_path,
+      NULL,
+      NULL
+    ),
+    "read request is invalid"
+  )
+  expect_error(
+    runtime$wlv_runtime_snapshot_read_authenticated_materialized_io(
+      bindings,
+      fixture$partition,
+      io_path,
+      rep(io_artifact$sha256[[1L]], 2L),
+      io_artifact$meta_sha256[[1L]]
+    ),
+    "read request is invalid"
   )
   drifted_panel <- fixture$panel_values$sea_sectors
   drifted_panel[1L] <- drifted_panel[1L] + 1

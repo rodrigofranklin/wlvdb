@@ -1170,7 +1170,11 @@ wlv_native_build_store <- function(
     indicators,
     unit_definitions
   )
-  source_io <- if (plan$mode == "calculate" || plan$at_stage <= 4L) {
+  source_io <- if (wlv_native_instances_require_resource(
+    registry,
+    instances,
+    "source/io"
+  )) {
     wlv_native_source_io_seeds(run_data$source_io)
   } else {
     list()

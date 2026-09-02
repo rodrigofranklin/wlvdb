@@ -4510,6 +4510,35 @@ wlv_assert_staged_result_artifact_allowlist <- function(
   invisible(observed)
 }
 
+wlv_runtime_snapshot_receipt_io_bundles <- function(
+    receipt,
+    expected_io_artifacts) {
+  if (!inherits(receipt, "wlv_runtime_snapshot_receipt") ||
+      !is.list(receipt) || !is.data.frame(receipt$files) ||
+      !identical(names(receipt$files), c("path", "sha256")) ||
+      !is.character(expected_io_artifacts) || !length(expected_io_artifacts) ||
+      anyNA(expected_io_artifacts) || any(!nzchar(expected_io_artifacts)) ||
+      anyDuplicated(expected_io_artifacts)) {
+    stop("Authenticated runtime I/O bundle inventory is invalid.", call. = FALSE)
+  }
+  data_rows <- match(expected_io_artifacts, receipt$files$path)
+  metadata_rows <- match(paste0(expected_io_artifacts, ".meta"), receipt$files$path)
+  if (anyNA(data_rows) || anyNA(metadata_rows)) {
+    stop(
+      "Runtime snapshot receipt lacks an expected I/O bundle.",
+      call. = FALSE
+    )
+  }
+  bundles <- lapply(seq_along(expected_io_artifacts), function(index) {
+    list(
+      sha256 = receipt$files$sha256[[data_rows[[index]]]],
+      meta_sha256 = receipt$files$sha256[[metadata_rows[[index]]]]
+    )
+  })
+  names(bundles) <- expected_io_artifacts
+  bundles
+}
+
 wlv_validate_staged_results <- function(
     staging,
     method,
@@ -4521,9 +4550,14 @@ wlv_validate_staged_results <- function(
     at_stage = NULL,
     reader = read_fst_array,
     runtime_snapshot_receipt = NULL,
-    inherited_scientific_checks = NULL) {
+    inherited_scientific_checks = NULL,
+    inherited_io_validation = NULL) {
   if (!is.function(reader)) {
     stop("`reader` must be an array reader.", call. = FALSE)
+  }
+  reuse_inherited_io_validation <- !is.null(inherited_io_validation)
+  if (reuse_inherited_io_validation && !identical(mode, "recalculate")) {
+    stop("Inherited I/O validation request is invalid.", call. = FALSE)
   }
   inherit_io_checks <- !is.null(inherited_scientific_checks)
   if (inherit_io_checks &&
@@ -4563,6 +4597,16 @@ wlv_validate_staged_results <- function(
     wlv_native_io_partition,
     character(1L)
   )
+  if (reuse_inherited_io_validation) {
+    wlv_runtime_snapshot_io_inheritance_proof_assert(
+      inherited_io_validation,
+      method = method,
+      source = runtime$source,
+      partitions = runtime_partitions,
+      receipt = runtime_snapshot_receipt
+    )
+  }
+  rm(inherited_io_validation)
   expected_artifacts <- wlv_expected_staged_result_artifacts(
     expected_metadata,
     expected_io_artifacts
@@ -4574,6 +4618,7 @@ wlv_validate_staged_results <- function(
   )
   pre_validation_artifacts <- wlv_capture_validated_run_artifacts(staging)
   snapshot_bindings <- NULL
+  snapshot_io_artifacts <- NULL
   if (is.null(runtime_snapshot_receipt)) {
     wlv_runtime_snapshot_read(
       staging,
@@ -4590,6 +4635,12 @@ wlv_validate_staged_results <- function(
       artifacts = pre_validation_artifacts,
       staging = staging
     )
+    if (isTRUE(reuse_inherited_io_validation)) {
+      snapshot_io_artifacts <- wlv_runtime_snapshot_receipt_io_bundles(
+        runtime_snapshot_receipt,
+        expected_io_artifacts
+      )
+    }
   }
   rm(runtime_snapshot_receipt)
   invisible(gc(full = FALSE))
@@ -4621,6 +4672,13 @@ wlv_validate_staged_results <- function(
     NULL
   } else {
     wlv_runtime_snapshot_io_binding_expectations(snapshot_bindings)
+  }
+  if (isTRUE(reuse_inherited_io_validation) &&
+      (is.null(snapshot_io_bindings) || is.null(snapshot_io_artifacts))) {
+    stop(
+      "Inherited I/O validation requires authenticated snapshot bindings.",
+      call. = FALSE
+    )
   }
   rm(snapshot_bindings)
   invisible(gc(full = TRUE))
@@ -4697,18 +4755,41 @@ wlv_validate_staged_results <- function(
       )
   } else {
     for (path in io_files) {
-      io_value <- reader(path)
-      wlv_validate_m_io_contract(
-        runtime,
-        io_value,
-        checkpoint = "post_roundtrip"
-      )
-      if (!is.null(snapshot_io_bindings)) {
-        wlv_runtime_snapshot_validate_materialized_io(
+      io_artifact <- basename(path)
+      io_value <- if (isTRUE(reuse_inherited_io_validation)) {
+        expected_bundle <- snapshot_io_artifacts[[io_artifact]]
+        if (is.null(expected_bundle)) {
+          stop(
+            sprintf(
+              "Authenticated runtime I/O bundle `%s` is missing.",
+              io_artifact
+            ),
+            call. = FALSE
+          )
+        }
+        wlv_runtime_snapshot_read_authenticated_materialized_io(
           snapshot_io_bindings,
           wlv_native_io_partition(path),
-          io_value
+          path,
+          expected_sha256 = expected_bundle$sha256,
+          expected_metadata_sha256 = expected_bundle$meta_sha256
         )
+      } else {
+        reader(path)
+      }
+      if (!isTRUE(reuse_inherited_io_validation)) {
+        wlv_validate_m_io_contract(
+          runtime,
+          io_value,
+          checkpoint = "post_roundtrip"
+        )
+        if (!is.null(snapshot_io_bindings)) {
+          wlv_runtime_snapshot_validate_materialized_io(
+            snapshot_io_bindings,
+            wlv_native_io_partition(path),
+            io_value
+          )
+        }
       }
       scientific_check_parts[[length(scientific_check_parts) + 1L]] <-
         wlv_scientific_validate_io_array(
@@ -4724,7 +4805,7 @@ wlv_validate_staged_results <- function(
       gc()
     }
   }
-  rm(snapshot_io_bindings)
+  rm(snapshot_io_bindings, snapshot_io_artifacts)
   persisted_runtime <- wlv_new_contract_runtime(
     method = runtime$method,
     source = runtime$source,

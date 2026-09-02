@@ -195,6 +195,7 @@ test_that("all executable methods resolve only typed native execution inputs", {
       c("dimensions/lists", "dimensions/rows")
     )
     expect_true("source/sea" %in% required_keys, info = method)
+    expect_false("source/io" %in% required_keys, info = method)
 
     stage4_instances <- runtime$wlv_native_plan_instances(
       registry = plan$native_registry,
@@ -213,6 +214,117 @@ test_that("all executable methods resolve only typed native execution inputs", {
       "dimensions/io_filters",
       "dimensions/import_group_indices"
     ) %in% stage4_keys), info = method)
+    expect_true("source/io" %in% stage4_keys, info = method)
+
+    stage4_selective_instances <- runtime$wlv_native_plan_instances(
+      registry = plan$native_registry,
+      config = plan$configuration[[method]],
+      aggregation_registry = plan$aggregation_registries[[method]],
+      indicators = plan$indicators[[method]],
+      partitions = partitions,
+      mode = "recalculate",
+      at_stage = 4L,
+      sea_vars = "gross_output.s.mv"
+    )
+    stage4_selective_keys <- runtime$wlv_native_instance_required_keys(
+      plan$native_registry,
+      stage4_selective_instances
+    )
+    expect_true("io/values" %in% stage4_selective_keys, info = method)
+    expect_false("source/io" %in% stage4_selective_keys, info = method)
+
+    source_io_indicators <- intersect(
+      c(
+        "basket_price.r.pc", "basket_value.r.pc",
+        "exports.s.us", "imports.s.us"
+      ),
+      plan$indicators[[method]]
+    )
+    for (indicator in source_io_indicators) {
+      source_io_instances <- runtime$wlv_native_plan_instances(
+        registry = plan$native_registry,
+        config = plan$configuration[[method]],
+        aggregation_registry = plan$aggregation_registries[[method]],
+        indicators = plan$indicators[[method]],
+        partitions = partitions,
+        mode = "recalculate",
+        at_stage = 4L,
+        sea_vars = indicator
+      )
+      expect_true(
+        runtime$wlv_native_instances_require_resource(
+          plan$native_registry,
+          source_io_instances,
+          "source/io"
+        ),
+        info = sprintf("%s %s source IO dependency", method, indicator)
+      )
+    }
+
+    classification_cases <- list(
+      calculate = list(
+        mode = "calculate", at_stage = 1L, sea_vars = NULL,
+        reuse = FALSE, science = FALSE
+      ),
+      stage1 = list(
+        mode = "recalculate", at_stage = 1L, sea_vars = NULL,
+        reuse = TRUE, science = FALSE
+      ),
+      stage4_full = list(
+        mode = "recalculate", at_stage = 4L, sea_vars = NULL,
+        reuse = TRUE, science = FALSE
+      ),
+      stage4_selective = list(
+        mode = "recalculate", at_stage = 4L,
+        sea_vars = "gross_output.s.mv", reuse = TRUE, science = FALSE
+      ),
+      stage5_full = list(
+        mode = "recalculate", at_stage = 5L, sea_vars = NULL,
+        reuse = TRUE, science = TRUE
+      ),
+      stage5_selective = list(
+        mode = "recalculate", at_stage = 5L,
+        sea_vars = "value.m.mv", reuse = TRUE, science = TRUE
+      )
+    )
+    for (case_name in names(classification_cases)) {
+      current <- classification_cases[[case_name]]
+      instance_args <- list(
+        registry = plan$native_registry,
+        config = plan$configuration[[method]],
+        aggregation_registry = plan$aggregation_registries[[method]],
+        indicators = plan$indicators[[method]],
+        partitions = partitions,
+        mode = current$mode,
+        at_stage = current$at_stage
+      )
+      if (!is.null(current$sea_vars)) {
+        instance_args$sea_vars <- current$sea_vars
+      }
+      classified_instances <- do.call(
+        runtime$wlv_native_plan_instances,
+        instance_args
+      )
+      classified_plan <- runtime$wlv_native_preflight_plan(
+        plan$native_registry,
+        classified_instances,
+        partitions,
+        mode = current$mode,
+        source = record$source[[1L]],
+        at_stage = current$at_stage,
+        indicators = plan$indicators[[method]]
+      )
+      expect_identical(
+        runtime$wlv_native_can_reuse_inherited_io_validation(classified_plan),
+        current$reuse,
+        info = sprintf("%s %s physical I/O inheritance", method, case_name)
+      )
+      expect_identical(
+        runtime$wlv_native_can_inherit_io_scientific_checks(classified_plan),
+        current$science,
+        info = sprintf("%s %s scientific I/O inheritance", method, case_name)
+      )
+    }
   }
 
   method <- plan$method_names[[1L]]
@@ -377,6 +489,9 @@ test_that("profiled non-finite coordinates close against normalized source label
   expect_false(runtime$wlv_native_can_inherit_io_scientific_checks(
     module_plan
   ))
+  expect_false(runtime$wlv_native_can_reuse_inherited_io_validation(
+    module_plan
+  ))
   expect_invisible(runtime$wlv_native_validate_nonfinite_module_bindings(
     profile,
     module_plan,
@@ -425,6 +540,74 @@ test_that("profiled non-finite coordinates close against normalized source label
   expect_true(runtime$wlv_native_can_inherit_io_scientific_checks(
     selective_plan
   ))
+  expect_true(runtime$wlv_native_can_reuse_inherited_io_validation(
+    selective_plan
+  ))
+
+  stage4_instances <- runtime$wlv_native_plan_instances(
+    registry = plan$native_registry,
+    config = plan$configuration$alternative_2,
+    aggregation_registry = plan$aggregation_registries$alternative_2,
+    indicators = plan$indicators$alternative_2,
+    partitions = partitions,
+    mode = "recalculate",
+    at_stage = 4L,
+    sea_vars = "gross_output.s.mv"
+  )
+  stage4_selective_plan <- runtime$wlv_native_preflight_plan(
+    plan$native_registry,
+    stage4_instances,
+    partitions,
+    mode = "recalculate",
+    source = "wiodr13",
+    at_stage = 4L,
+    indicators = plan$indicators$alternative_2
+  )
+  expect_false(runtime$wlv_native_can_inherit_io_scientific_checks(
+    stage4_selective_plan
+  ))
+  expect_true(runtime$wlv_native_can_reuse_inherited_io_validation(
+    stage4_selective_plan
+  ))
+
+  stage4_full_instances <- runtime$wlv_native_plan_instances(
+    registry = plan$native_registry,
+    config = plan$configuration$alternative_2,
+    aggregation_registry = plan$aggregation_registries$alternative_2,
+    indicators = plan$indicators$alternative_2,
+    partitions = partitions,
+    mode = "recalculate",
+    at_stage = 4L
+  )
+  stage4_full_plan <- runtime$wlv_native_preflight_plan(
+    plan$native_registry,
+    stage4_full_instances,
+    partitions,
+    mode = "recalculate",
+    source = "wiodr13",
+    at_stage = 4L,
+    indicators = plan$indicators$alternative_2
+  )
+  expect_true(runtime$wlv_native_can_reuse_inherited_io_validation(
+    stage4_full_plan
+  ))
+  for (provided_key in c(
+    "intermediate/lambda",
+    "semantic_state/io/values",
+    "semantic_state/artifact/m_io",
+    "semantic_state/intermediate/lambda"
+  )) {
+    io_provider_plan <- new.env(parent = emptyenv())
+    io_provider_plan$modules <- list(list(
+      provides = list(list(ref = list(key = provided_key)))
+    ))
+    class(io_provider_plan) <- "wlv_module_plan"
+    lockEnvironment(io_provider_plan, bindings = TRUE)
+    expect_false(
+      runtime$wlv_native_can_reuse_inherited_io_validation(io_provider_plan),
+      info = provided_key
+    )
+  }
   selective_targets <- runtime$wlv_native_recalculated_anomaly_targets(
     selective_plan
   )
