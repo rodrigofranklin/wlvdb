@@ -1314,11 +1314,94 @@ wlv_catalog_input_inventory <- function(root) {
   stats::setNames(hashes, chartr("\\", "/", relative))
 }
 
-wlv_catalog_assert_inputs_unchanged <- function(catalog) {
+wlv_catalog_input_path_stamps <- function(paths) {
+  if (!is.character(paths) || anyNA(paths) || any(!nzchar(paths)) ||
+      anyDuplicated(paths)) {
+    wlv_catalog_stop("Catalog input paths are invalid.")
+  }
+  info <- file.info(paths, extra_cols = FALSE)
+  if (nrow(info) != length(paths) || anyNA(info$isdir) || any(info$isdir) ||
+      anyNA(info$size) || anyNA(info$mtime) || anyNA(info$ctime)) {
+    wlv_catalog_stop("Catalog input metadata could not be captured.")
+  }
+  lapply(seq_along(paths), function(index) {
+    list(
+      path = paths[[index]],
+      size = as.double(info$size[[index]]),
+      mtime = as.double(info$mtime[[index]]),
+      ctime = as.double(info$ctime[[index]])
+    )
+  })
+}
+
+wlv_catalog_input_receipt <- function(root, inventory, paths, stamps) {
+  root <- normalizePath(root, winslash = "/", mustWork = TRUE)
+  if (!is.character(paths) || anyNA(paths) || any(!nzchar(paths)) ||
+      anyDuplicated(paths) || !is.list(stamps) ||
+      !identical(length(stamps), length(paths))) {
+    wlv_catalog_stop("Catalog input receipt paths are invalid.")
+  }
+  stamp_paths <- vapply(stamps, `[[`, character(1L), "path")
+  relative <- chartr("\\", "/", substring(paths, nchar(root) + 2L))
+  if (!is.character(inventory) || is.null(names(inventory)) ||
+      anyNA(inventory) || any(!nzchar(inventory)) ||
+      !identical(names(inventory), relative) ||
+      !identical(stamp_paths, paths)) {
+    wlv_catalog_stop("Catalog input receipt inventory is invalid.")
+  }
+  receipt <- new.env(parent = emptyenv())
+  receipt$schema <- "wlv-catalog-input-receipt/1.0.0"
+  receipt$root <- root
+  receipt$inventory <- inventory
+  receipt$paths <- paths
+  receipt$stamps <- stamps
+  lockEnvironment(receipt, bindings = TRUE)
+  receipt
+}
+
+wlv_catalog_input_receipt_is_current <- function(catalog, expected) {
+  receipt <- attr(catalog, "wlv_catalog_input_receipt", exact = TRUE)
+  tryCatch({
+    fields <- if (is.environment(receipt)) {
+      sort(ls(receipt, all.names = TRUE), method = "radix")
+    } else {
+      character()
+    }
+    required <- sort(
+      c("schema", "root", "inventory", "paths", "stamps"),
+      method = "radix"
+    )
+    if (!is.environment(receipt) ||
+        !identical(parent.env(receipt), emptyenv()) ||
+        !environmentIsLocked(receipt) || !identical(fields, required) ||
+        !all(vapply(fields, bindingIsLocked, logical(1L), env = receipt)) ||
+        any(vapply(fields, bindingIsActive, logical(1L), env = receipt)) ||
+        !identical(receipt$schema, "wlv-catalog-input-receipt/1.0.0") ||
+        !identical(
+          receipt$root,
+          normalizePath(catalog$root, winslash = "/", mustWork = TRUE)
+        ) || !identical(receipt$inventory, expected)) {
+      return(FALSE)
+    }
+    paths <- wlv_catalog_input_paths(receipt$root)
+    stamps <- wlv_catalog_input_path_stamps(paths)
+    identical(paths, receipt$paths) && identical(stamps, receipt$stamps)
+  }, error = function(error) FALSE)
+}
+
+wlv_catalog_assert_inputs_unchanged <- function(catalog, force_hash = TRUE) {
   wlv_catalog_assert(catalog)
+  if (!is.logical(force_hash) || length(force_hash) != 1L ||
+      is.na(force_hash)) {
+    wlv_catalog_stop("Catalog input force-hash flag is invalid.")
+  }
   expected <- attr(catalog, "wlv_catalog_input_inventory", exact = TRUE)
   if (!is.character(expected) || is.null(names(expected)) || anyNA(expected)) {
     wlv_catalog_stop("The catalog lacks its immutable input inventory.")
+  }
+  if (!isTRUE(force_hash) &&
+      wlv_catalog_input_receipt_is_current(catalog, expected)) {
+    return(invisible(TRUE))
   }
   current <- wlv_catalog_input_inventory(catalog$root)
   if (!identical(expected, current)) {
@@ -1406,12 +1489,26 @@ wlv_load_catalog <- function(root = ".") {
     ),
     class = c("wlv_catalog", "list")
   )
+  current_paths <- wlv_catalog_input_paths(root)
+  current_stamps <- wlv_catalog_input_path_stamps(current_paths)
   current_inventory <- wlv_catalog_input_inventory(root)
+  final_inventory <- wlv_catalog_input_inventory(root)
+  final_paths <- wlv_catalog_input_paths(root)
+  final_stamps <- wlv_catalog_input_path_stamps(final_paths)
   if (!identical(input_inventory, current_inventory) ||
-      !identical(current_inventory, wlv_catalog_input_inventory(root))) {
+      !identical(current_inventory, final_inventory) ||
+      !identical(current_paths, final_paths) ||
+      !identical(current_stamps, final_stamps)) {
     wlv_catalog_stop("Catalog inputs changed while the catalog was loading.")
   }
   attr(catalog, "wlv_catalog_input_inventory") <- input_inventory
+  attr(catalog, "wlv_catalog_input_receipt") <-
+    wlv_catalog_input_receipt(
+      root,
+      input_inventory,
+      paths = final_paths,
+      stamps = final_stamps
+    )
   catalog
 }
 

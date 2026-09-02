@@ -686,6 +686,116 @@ wlv_test_runtime_snapshot_fixture <- function() {
   )
 }
 
+test_that("runtime snapshot binds inherited scientific I/O inputs exactly", {
+  runtime <- runtime_snapshot_environment
+  dependencies <- c(
+    "capital_stock.s.us",
+    "capital_depreciation.s.us",
+    "gross_output.s.mv"
+  )
+  expect_identical(
+    runtime$wlv_runtime_snapshot_io_scientific_dependencies(),
+    dependencies
+  )
+
+  hashes <- vapply(seq_len(4L), function(index) {
+    runtime$wlv_runtime_snapshot_value_sha256(list(index = index))
+  }, character(1L))
+  provenance <- data.frame(
+    artifact = rep("sea_sectors", 4L),
+    indicator = c(dependencies, "unrelated.s.us"),
+    key = paste0("sea/sector/", c(dependencies, "unrelated.s.us")),
+    contract_sha256 = rep(hashes[[1L]], 4L),
+    axes_sha256 = rep(hashes[[2L]], 4L),
+    value_sha256 = rep(hashes[[3L]], 4L),
+    state_sha256 = rep(hashes[[4L]], 4L),
+    stringsAsFactors = FALSE
+  )
+  snapshot <- list(
+    method = "synthetic",
+    source = "wiodr13",
+    partitions = "full",
+    panel_provenance = provenance
+  )
+  expected <- runtime$wlv_runtime_snapshot_io_scientific_inputs_sha256(
+    snapshot,
+    snapshot
+  )
+  expect_match(expected, "^[0-9a-f]{64}$")
+
+  reordered <- snapshot
+  reordered$panel_provenance <- reordered$panel_provenance[c(4L, 3L, 1L, 2L), ]
+  row.names(reordered$panel_provenance) <- NULL
+  expect_identical(
+    runtime$wlv_runtime_snapshot_io_scientific_inputs_sha256(
+      snapshot,
+      reordered
+    ),
+    expected
+  )
+
+  unrelated <- snapshot
+  unrelated$panel_provenance$value_sha256[[4L]] <- hashes[[1L]]
+  expect_identical(
+    runtime$wlv_runtime_snapshot_io_scientific_inputs_sha256(
+      snapshot,
+      unrelated
+    ),
+    expected
+  )
+
+  for (indicator in dependencies) {
+    dependency_row <- match(indicator, snapshot$panel_provenance$indicator)
+    for (field in c(
+      "contract_sha256", "axes_sha256", "value_sha256", "state_sha256"
+    )) {
+      changed <- snapshot
+      changed$panel_provenance[[field]][[dependency_row]] <-
+        runtime$wlv_runtime_snapshot_value_sha256(list(
+          field = field,
+          indicator = indicator
+        ))
+      expect_null(runtime$wlv_runtime_snapshot_io_scientific_inputs_sha256(
+        snapshot,
+        changed
+      ))
+    }
+  }
+
+  changed_identity <- snapshot
+  changed_identity$partitions <- "other"
+  expect_null(runtime$wlv_runtime_snapshot_io_scientific_inputs_sha256(
+    snapshot,
+    changed_identity
+  ))
+
+  incomplete <- snapshot
+  incomplete$panel_provenance <- incomplete$panel_provenance[
+    incomplete$panel_provenance$indicator != "gross_output.s.mv",
+    ,
+    drop = FALSE
+  ]
+  expect_error(
+    runtime$wlv_runtime_snapshot_io_scientific_fingerprint(incomplete),
+    "dependency coverage is invalid",
+    fixed = TRUE
+  )
+  expect_null(runtime$wlv_runtime_snapshot_io_scientific_inputs_sha256(
+    snapshot,
+    incomplete
+  ))
+
+  duplicated <- snapshot
+  duplicated$panel_provenance <- rbind(
+    duplicated$panel_provenance,
+    duplicated$panel_provenance[1L, , drop = FALSE]
+  )
+  expect_null(runtime$wlv_runtime_snapshot_io_scientific_inputs_sha256(
+    snapshot,
+    duplicated
+  ))
+})
+
 test_that("runtime snapshot persists lambda and IO states without duplicating IO", {
   fixture <- wlv_test_runtime_snapshot_fixture()
   runtime <- fixture$runtime
@@ -732,6 +842,7 @@ test_that("runtime snapshot persists lambda and IO states without duplicating IO
   )
   expect_s3_class(io_inheritance_assertion, "wlv_inherited_io_assertion")
   expect_true(environmentIsLocked(io_inheritance_assertion))
+  expect_null(io_inheritance_assertion$scientific_inputs_sha256)
   changed_io_artifact <- snapshot
   changed_io_artifact$io_artifacts$sha256[[1L]] <- strrep("0", 64L)
   expect_error(
@@ -869,6 +980,7 @@ test_that("runtime snapshot persists lambda and IO states without duplicating IO
   )
   expect_s3_class(io_inheritance_proof, "wlv_inherited_io_validation")
   expect_true(environmentIsLocked(io_inheritance_proof))
+  expect_null(io_inheritance_proof$scientific_inputs_sha256)
   expect_invisible(
     runtime$wlv_runtime_snapshot_io_inheritance_proof_assert(
       io_inheritance_proof,
@@ -877,6 +989,104 @@ test_that("runtime snapshot persists lambda and IO states without duplicating IO
       partitions = snapshot$partitions,
       receipt = receipt
     )
+  )
+  snapshot_bindings <- attr(
+    receipt,
+    runtime$wlv_runtime_snapshot_receipt_bindings_attribute(),
+    exact = TRUE
+  )
+  expect_error(
+    runtime$wlv_runtime_snapshot_io_scientific_inheritance_proof_assert(
+      io_inheritance_proof,
+      snapshot_bindings,
+      receipt
+    ),
+    "lacks an authenticated proof",
+    fixed = TRUE
+  )
+
+  scientific_snapshot <- snapshot
+  dependencies <- runtime$wlv_runtime_snapshot_io_scientific_dependencies()
+  template <- scientific_snapshot$panel_provenance[
+    scientific_snapshot$panel_provenance$artifact == "sea_sectors",
+    ,
+    drop = FALSE
+  ][1L, , drop = FALSE]
+  scientific_rows <- do.call(rbind, lapply(dependencies, function(indicator) {
+    row <- template
+    row$indicator <- indicator
+    row$key <- paste0("sea/sector/", indicator)
+    row$contract_sha256 <- runtime$wlv_runtime_snapshot_value_sha256(
+      list("contract", indicator)
+    )
+    row$axes_sha256 <- runtime$wlv_runtime_snapshot_value_sha256(
+      list("axes", indicator)
+    )
+    row$value_sha256 <- runtime$wlv_runtime_snapshot_value_sha256(
+      list("value", indicator)
+    )
+    row$state_sha256 <- runtime$wlv_runtime_snapshot_value_sha256(
+      list("state", indicator)
+    )
+    row
+  }))
+  scientific_snapshot$panel_provenance <- rbind(
+    scientific_snapshot$panel_provenance,
+    scientific_rows
+  )
+  row.names(scientific_snapshot$panel_provenance) <- NULL
+  scientific_assertion <- runtime$wlv_runtime_snapshot_assert_io_inherited(
+    scientific_snapshot,
+    scientific_snapshot
+  )
+  expect_match(
+    scientific_assertion$scientific_inputs_sha256,
+    "^[0-9a-f]{64}$"
+  )
+  scientific_snapshot_sha256 <- runtime$wlv_runtime_snapshot_value_sha256(
+    list("scientific-snapshot")
+  )
+  scientific_receipt <- runtime$wlv_runtime_snapshot_receipt_from_sha256(
+    scientific_snapshot,
+    scientific_snapshot_sha256,
+    verify_resource_states = FALSE
+  )
+  scientific_receipt <- runtime$wlv_runtime_snapshot_receipt_attach_bindings(
+    scientific_receipt,
+    scientific_snapshot,
+    scientific_snapshot_sha256
+  )
+  scientific_proof <- runtime$wlv_runtime_snapshot_bind_io_inheritance(
+    scientific_assertion,
+    scientific_receipt
+  )
+  scientific_bindings <- attr(
+    scientific_receipt,
+    runtime$wlv_runtime_snapshot_receipt_bindings_attribute(),
+    exact = TRUE
+  )
+  expect_invisible(
+    runtime$wlv_runtime_snapshot_io_scientific_inheritance_proof_assert(
+      scientific_proof,
+      scientific_bindings,
+      scientific_receipt
+    )
+  )
+  tampered_scientific_bindings <- scientific_bindings
+  dependency_row <- match(
+    "gross_output.s.mv",
+    tampered_scientific_bindings$panel_provenance$indicator
+  )
+  tampered_scientific_bindings$panel_provenance$value_sha256[[dependency_row]] <-
+    runtime$wlv_runtime_snapshot_value_sha256(list("tampered"))
+  expect_error(
+    runtime$wlv_runtime_snapshot_io_scientific_inheritance_proof_assert(
+      scientific_proof,
+      tampered_scientific_bindings,
+      scientific_receipt
+    ),
+    "dependencies differ from their proof",
+    fixed = TRUE
   )
   mismatched_receipt <- receipt
   mismatched_receipt$snapshot_commitment_sha256 <- strrep("0", 64L)

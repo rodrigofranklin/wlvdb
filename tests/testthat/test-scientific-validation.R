@@ -1004,7 +1004,24 @@ test_that("scientific checks and sidecar inventory are deterministic", {
       reader = function(path) path,
       inherited_scientific_checks = first
     ),
-    "restricted to stage-5 recalculation",
+    "require stage-5 or authenticated stage-4 recalculation",
+    fixed = TRUE
+  )
+  expect_error(
+    scientific_validation_environment$wlv_validate_staged_results(
+      staging = tempdir(),
+      method = values$method,
+      mode = "recalculate",
+      runtime = list(),
+      expected_metadata = list(),
+      aggregation_registry = list(),
+      expected_io_artifacts = "m_io.fst",
+      at_stage = 4L,
+      reader = function(path) path,
+      inherited_scientific_checks = first,
+      inherited_io_validation = NULL
+    ),
+    "require stage-5 or authenticated stage-4 recalculation",
     fixed = TRUE
   )
 

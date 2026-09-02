@@ -13,6 +13,8 @@ test_that("public native calculation and recalculation publish immutable runs", 
   io_snapshot_validations <- 0L
   io_authenticated_reads <- 0L
   io_inheritance_assertions <- 0L
+  io_scientific_inheritance_proofs <- 0L
+  force_io_scientific_fallback <- FALSE
   prepared_payload_validations <- 0L
   io_scientific_validations <- 0L
   io_filter_builds <- 0L
@@ -66,7 +68,36 @@ test_that("public native calculation and recalculation publish immutable runs", 
     "wlv_runtime_snapshot_assert_io_inherited",
     function(...) {
       io_inheritance_assertions <<- io_inheritance_assertions + 1L
-      original_assert_io_inherited(...)
+      assertion <- original_assert_io_inherited(...)
+      if (!isTRUE(force_io_scientific_fallback)) {
+        return(assertion)
+      }
+      fallback <- new.env(parent = emptyenv())
+      for (name in ls(envir = assertion, all.names = TRUE)) {
+        assign(
+          name,
+          if (identical(name, "scientific_inputs_sha256")) {
+            NULL
+          } else {
+            get(name, envir = assertion, inherits = FALSE)
+          },
+          envir = fallback
+        )
+      }
+      class(fallback) <- class(assertion)
+      lockEnvironment(fallback, bindings = TRUE)
+      fallback
+    },
+    envir = runtime
+  )
+  original_assert_io_scientific_inheritance <-
+    runtime$wlv_runtime_snapshot_io_scientific_inheritance_proof_assert
+  assign(
+    "wlv_runtime_snapshot_io_scientific_inheritance_proof_assert",
+    function(...) {
+      io_scientific_inheritance_proofs <<-
+        io_scientific_inheritance_proofs + 1L
+      original_assert_io_scientific_inheritance(...)
     },
     envir = runtime
   )
@@ -353,19 +384,20 @@ test_that("public native calculation and recalculation publish immutable runs", 
   ))
   expect_identical(source_io_seed_builds, 1L)
   expect_identical(io_snapshot_validations, 1L)
-  expect_identical(io_authenticated_reads, 2L)
+  expect_identical(io_authenticated_reads, 1L)
   expect_identical(io_inheritance_assertions, 2L)
+  expect_identical(io_scientific_inheritance_proofs, 1L)
   expect_true(all(c(
     "indicator.gross_output.s.mv",
     "indicator.value.m.mv"
   ) %in% trace_ids(stage4)))
   expect_false("indicator.gross_output.s.us" %in% trace_ids(stage4))
   expect_false("matrix.synthetic" %in% trace_ids(stage4))
-  expect_gt(
+  expect_identical(
     sum(startsWith(basename(array_reads), "m_io")),
     io_reads_before_stage4
   )
-  expect_gt(io_scientific_validations, io_validations_before_stage4)
+  expect_identical(io_scientific_validations, io_validations_before_stage4)
   expect_identical(
     wlv_native_public_e2e_diagnostic_hashes(fixture),
     calculation_diagnostic_hashes
@@ -392,8 +424,9 @@ test_that("public native calculation and recalculation publish immutable runs", 
   ))
   expect_identical(source_io_seed_builds, 1L)
   expect_identical(io_snapshot_validations, 1L)
-  expect_identical(io_authenticated_reads, 2L)
+  expect_identical(io_authenticated_reads, 1L)
   expect_identical(io_inheritance_assertions, 3L)
+  expect_identical(io_scientific_inheritance_proofs, 1L)
   expect_true("indicator.value.m.mv" %in% trace_ids(stage5))
   expect_false("indicator.gross_output.s.us" %in% trace_ids(stage5))
   expect_false("indicator.gross_output.s.mv" %in% trace_ids(stage5))
@@ -435,8 +468,9 @@ test_that("public native calculation and recalculation publish immutable runs", 
   ))
   expect_identical(source_io_seed_builds, 1L)
   expect_identical(io_snapshot_validations, 1L)
-  expect_identical(io_authenticated_reads, 3L)
+  expect_identical(io_authenticated_reads, 1L)
   expect_identical(io_inheritance_assertions, 4L)
+  expect_identical(io_scientific_inheritance_proofs, 2L)
   expect_true("indicator.gross_output.s.mv" %in% trace_ids(stage4_selective))
   expect_false("indicator.gross_output.s.us" %in% trace_ids(stage4_selective))
   expect_false("indicator.value.m.mv" %in% trace_ids(stage4_selective))
@@ -452,6 +486,12 @@ test_that("public native calculation and recalculation publish immutable runs", 
   )
 
   before_stage4_formula_selective <- after_stage4_selective
+  io_reads_before_stage4_formula <- sum(startsWith(
+    basename(array_reads),
+    "m_io"
+  ))
+  io_validations_before_stage4_formula <- io_scientific_validations
+  force_io_scientific_fallback <- TRUE
   stage4_formula_selective <- run_public(function() runtime$recalc_wlv(
     methods = fixture$method,
     at_stage = 4L,
@@ -460,10 +500,20 @@ test_that("public native calculation and recalculation publish immutable runs", 
     channel = fixture$channel,
     allow_experimental = TRUE
   ))
+  force_io_scientific_fallback <- FALSE
   expect_identical(source_io_seed_builds, 1L)
   expect_identical(io_snapshot_validations, 1L)
-  expect_identical(io_authenticated_reads, 4L)
+  expect_identical(io_authenticated_reads, 2L)
   expect_identical(io_inheritance_assertions, 5L)
+  expect_identical(io_scientific_inheritance_proofs, 2L)
+  expect_identical(
+    sum(startsWith(basename(array_reads), "m_io")),
+    io_reads_before_stage4_formula + 1L
+  )
+  expect_identical(
+    io_scientific_validations,
+    io_validations_before_stage4_formula + 1L
+  )
   expect_true("indicator.value.m.mv" %in% trace_ids(stage4_formula_selective))
   expect_false("indicator.gross_output.s.us" %in% trace_ids(
     stage4_formula_selective
@@ -493,8 +543,9 @@ test_that("public native calculation and recalculation publish immutable runs", 
   ))
   expect_identical(source_io_seed_builds, 1L)
   expect_identical(io_snapshot_validations, 1L)
-  expect_identical(io_authenticated_reads, 4L)
+  expect_identical(io_authenticated_reads, 2L)
   expect_identical(io_inheritance_assertions, 6L)
+  expect_identical(io_scientific_inheritance_proofs, 2L)
   expect_true("indicator.value.m.mv" %in% trace_ids(stage5_selective))
   expect_false("indicator.gross_output.s.us" %in% trace_ids(stage5_selective))
   expect_false("indicator.gross_output.s.mv" %in% trace_ids(stage5_selective))

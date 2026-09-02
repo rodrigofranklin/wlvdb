@@ -458,7 +458,35 @@ wlv_publication_input_path_stamps <- function(paths) {
   })
 }
 
-wlv_publication_input_inventory <- function(
+wlv_publication_input_receipt <- function(
+    plan,
+    method,
+    inventory,
+    paths,
+    stamps) {
+  relative <- vapply(inventory, `[[`, character(1L), "path")
+  stamp_paths <- vapply(stamps, `[[`, character(1L), "path")
+  if (!is.character(method) || length(method) != 1L || is.na(method) ||
+      !nzchar(method) || !is.list(inventory) ||
+      !is.character(paths) || anyNA(paths) || any(!nzchar(paths)) ||
+      anyDuplicated(paths) || !is.list(stamps) ||
+      !identical(length(stamps), length(paths)) ||
+      !identical(stamp_paths, paths) ||
+      !identical(length(relative), length(paths))) {
+    stop("Publication input receipt values are invalid.", call. = FALSE)
+  }
+  receipt <- new.env(parent = emptyenv())
+  receipt$schema <- "wlv-publication-input-receipt/1.0.0"
+  receipt$root <- normalizePath(plan$root, winslash = "/", mustWork = TRUE)
+  receipt$method <- method
+  receipt$inventory <- inventory
+  receipt$paths <- paths
+  receipt$stamps <- stamps
+  lockEnvironment(receipt, bindings = TRUE)
+  receipt
+}
+
+wlv_publication_input_capture <- function(
     plan,
     method,
     stabilize = TRUE) {
@@ -466,37 +494,16 @@ wlv_publication_input_inventory <- function(
     stop("Publication input stabilization flag is invalid.", call. = FALSE)
   }
   first_paths <- wlv_publication_input_paths(plan, method)
-  first_stamps <- if (!isTRUE(stabilize)) {
-    wlv_publication_input_path_stamps(first_paths)
-  } else {
-    NULL
-  }
+  first_stamps <- wlv_publication_input_path_stamps(first_paths)
   first <- wlv_publication_input_inventory_capture(
     plan,
     method,
     paths = first_paths
   )
-  if (!isTRUE(stabilize)) {
-    # Hash content once, then re-enumerate the paths and compare filesystem
-    # change stamps around that pass. This detects additions/removals and
-    # same-path writes without doubling all content I/O. As with any completed
-    # capture, later writes are rejected by the next transactional boundary.
-    second_paths <- wlv_publication_input_paths(plan, method)
-    second_stamps <- wlv_publication_input_path_stamps(second_paths)
-    if (!identical(first_paths, second_paths) ||
-        !identical(first_stamps, second_stamps)) {
-      stop(
-        sprintf(
-          "Publication inputs changed while method `%s` was being inventoried.",
-          method
-        ),
-        call. = FALSE
-      )
-    }
-    return(first)
-  }
-  second <- wlv_publication_input_inventory_capture(plan, method)
-  if (!identical(first, second)) {
+  second_paths <- wlv_publication_input_paths(plan, method)
+  second_stamps <- wlv_publication_input_path_stamps(second_paths)
+  if (!identical(first_paths, second_paths) ||
+      !identical(first_stamps, second_stamps)) {
     stop(
       sprintf(
         "Publication inputs changed while method `%s` was being inventoried.",
@@ -505,7 +512,61 @@ wlv_publication_input_inventory <- function(
       call. = FALSE
     )
   }
-  first
+  if (!isTRUE(stabilize)) {
+    # Hash content once, then re-enumerate the paths and compare filesystem
+    # change stamps around that pass. This detects additions/removals and
+    # same-path writes without doubling all content I/O. As with any completed
+    # capture, later writes are rejected by the next transactional boundary.
+    return(list(
+      inventory = first,
+      receipt = wlv_publication_input_receipt(
+        plan,
+        method,
+        first,
+        second_paths,
+        second_stamps
+      )
+    ))
+  }
+  second <- wlv_publication_input_inventory_capture(
+    plan,
+    method,
+    paths = second_paths
+  )
+  final_paths <- wlv_publication_input_paths(plan, method)
+  final_stamps <- wlv_publication_input_path_stamps(final_paths)
+  if (!identical(second_paths, final_paths) ||
+      !identical(second_stamps, final_stamps) ||
+      !identical(first, second)) {
+    stop(
+      sprintf(
+        "Publication inputs changed while method `%s` was being inventoried.",
+        method
+      ),
+      call. = FALSE
+    )
+  }
+  list(
+    inventory = first,
+    receipt = wlv_publication_input_receipt(
+      plan,
+      method,
+      first,
+      final_paths,
+      final_stamps
+    )
+  )
+}
+
+wlv_publication_input_inventory <- function(
+    plan,
+    method,
+    stabilize = TRUE) {
+  wlv_publication_input_capture(
+    plan,
+    method,
+    stabilize = stabilize
+  )$inventory
 }
 
 wlv_capture_plan_publication_inputs <- function(plan) {
@@ -513,10 +574,22 @@ wlv_capture_plan_publication_inputs <- function(plan) {
       !length(plan$method_names) || anyNA(plan$method_names)) {
     stop("A method plan is required to capture publication inputs.", call. = FALSE)
   }
-  inventories <- lapply(plan$method_names, function(method) {
-    wlv_publication_input_inventory(plan, method)
+  captures <- lapply(plan$method_names, function(method) {
+    # The preflight capture is bracketed by exact path/size/mtime/ctime stamps.
+    # A mandatory two-pass strong capture remains at the final commit boundary.
+    wlv_publication_input_capture(plan, method, stabilize = FALSE)
   })
+  inventories <- lapply(captures, `[[`, "inventory")
   names(inventories) <- plan$method_names
+  receipts <- lapply(captures, `[[`, "receipt")
+  names(receipts) <- plan$method_names
+  cache <- new.env(parent = emptyenv())
+  cache$schema <- "wlv-publication-input-receipt-cache/1.0.0"
+  cache$root <- normalizePath(plan$root, winslash = "/", mustWork = TRUE)
+  cache$methods <- plan$method_names
+  cache$receipts <- receipts
+  lockEnvironment(cache, bindings = TRUE)
+  attr(inventories, "wlv_publication_input_receipts") <- cache
   inventories
 }
 
@@ -531,6 +604,89 @@ wlv_plan_publication_input_inventory <- function(plan, method) {
     )
   }
   plan$publication_inputs[[method]]
+}
+
+wlv_plan_publication_input_receipt <- function(plan, method) {
+  expected <- wlv_plan_publication_input_inventory(plan, method)
+  cache <- attr(
+    plan$publication_inputs,
+    "wlv_publication_input_receipts",
+    exact = TRUE
+  )
+  valid <- tryCatch({
+    cache_fields <- if (is.environment(cache)) {
+      sort(ls(cache, all.names = TRUE), method = "radix")
+    } else {
+      character()
+    }
+    required_cache_fields <- sort(
+      c("schema", "root", "methods", "receipts"),
+      method = "radix"
+    )
+    if (!is.environment(cache) || !identical(parent.env(cache), emptyenv()) ||
+        !environmentIsLocked(cache) ||
+        !identical(cache_fields, required_cache_fields) ||
+        !all(vapply(cache_fields, bindingIsLocked, logical(1L), env = cache)) ||
+        any(vapply(cache_fields, bindingIsActive, logical(1L), env = cache)) ||
+        !identical(cache$schema, "wlv-publication-input-receipt-cache/1.0.0") ||
+        !identical(
+          cache$root,
+          normalizePath(plan$root, winslash = "/", mustWork = TRUE)
+        ) || !identical(cache$methods, plan$method_names) ||
+        !is.list(cache$receipts) ||
+        !identical(names(cache$receipts), plan$method_names)) {
+      return(NULL)
+    }
+    receipt <- cache$receipts[[method]]
+    receipt_fields <- if (is.environment(receipt)) {
+      sort(ls(receipt, all.names = TRUE), method = "radix")
+    } else {
+      character()
+    }
+    required_receipt_fields <- sort(
+      c("schema", "root", "method", "inventory", "paths", "stamps"),
+      method = "radix"
+    )
+    if (!is.environment(receipt) ||
+        !identical(parent.env(receipt), emptyenv()) ||
+        !environmentIsLocked(receipt) ||
+        !identical(receipt_fields, required_receipt_fields) ||
+        !all(vapply(
+          receipt_fields,
+          bindingIsLocked,
+          logical(1L),
+          env = receipt
+        )) || any(vapply(
+          receipt_fields,
+          bindingIsActive,
+          logical(1L),
+          env = receipt
+        )) ||
+        !identical(receipt$schema, "wlv-publication-input-receipt/1.0.0") ||
+        !identical(receipt$root, cache$root) ||
+        !identical(receipt$method, method) ||
+        !identical(receipt$inventory, expected)) {
+      return(NULL)
+    }
+    stamp_paths <- vapply(receipt$stamps, `[[`, character(1L), "path")
+    if (!is.character(receipt$paths) || anyNA(receipt$paths) ||
+        any(!nzchar(receipt$paths)) || anyDuplicated(receipt$paths) ||
+        !identical(stamp_paths, receipt$paths) ||
+        !identical(length(receipt$paths), length(expected))) {
+      return(NULL)
+    }
+    receipt
+  }, error = function(error) NULL)
+  valid
+}
+
+wlv_publication_input_receipt_is_current <- function(plan, method, receipt) {
+  if (is.null(receipt)) return(FALSE)
+  tryCatch({
+    paths <- wlv_publication_input_paths(plan, method)
+    stamps <- wlv_publication_input_path_stamps(paths)
+    identical(paths, receipt$paths) && identical(stamps, receipt$stamps)
+  }, error = function(error) FALSE)
 }
 
 wlv_publication_changed_inputs <- function(expected, current) {
@@ -554,7 +710,8 @@ wlv_publication_changed_inputs <- function(expected, current) {
 wlv_assert_plan_publication_inputs_unchanged <- function(
     plan,
     methods = plan$method_names,
-    stabilize = FALSE) {
+    stabilize = FALSE,
+    use_receipt = FALSE) {
   if (!is.character(methods) || !length(methods) || anyNA(methods) ||
       any(!methods %in% plan$method_names)) {
     stop("Publication input verification received invalid methods.", call. = FALSE)
@@ -562,8 +719,20 @@ wlv_assert_plan_publication_inputs_unchanged <- function(
   if (!is.logical(stabilize) || length(stabilize) != 1L || is.na(stabilize)) {
     stop("Publication input stabilization flag is invalid.", call. = FALSE)
   }
+  if (!is.logical(use_receipt) || length(use_receipt) != 1L ||
+      is.na(use_receipt)) {
+    stop("Publication input receipt flag is invalid.", call. = FALSE)
+  }
   for (method in methods) {
     expected <- wlv_plan_publication_input_inventory(plan, method)
+    receipt <- if (isTRUE(use_receipt) && !isTRUE(stabilize)) {
+      wlv_plan_publication_input_receipt(plan, method)
+    } else {
+      NULL
+    }
+    if (wlv_publication_input_receipt_is_current(plan, method, receipt)) {
+      next
+    }
     # The immutable preflight inventory is already stabilized by two complete
     # captures. Intermediate transaction boundaries hash each file once and
     # bind that pass to stable paths and filesystem change stamps. The final
@@ -1079,13 +1248,22 @@ wlv_promote_method_run <- function(
     validated_artifacts,
     label = "validated artifacts"
   )
-  wlv_assert_plan_publication_inputs_unchanged(plan, method)
+  wlv_assert_plan_publication_inputs_unchanged(
+    plan,
+    method,
+    use_receipt = TRUE
+  )
   method_record <- plan$methods[
     match(method, plan$methods$method),
     ,
     drop = FALSE
   ]
-  wlv_assert_method_source_inputs_unchanged(plan, method_record, run_data)
+  wlv_assert_method_source_inputs_unchanged(
+    plan,
+    method_record,
+    run_data,
+    use_receipt = TRUE
+  )
   paths <- wlv_publication_ensure_store(plan$root)
   finished_at <- Sys.time()
   artifacts <- sort(list.files(
@@ -1139,8 +1317,17 @@ wlv_promote_method_run <- function(
   # the manifest. The mandatory full verification after the directory rename
   # below closes the remaining staging-to-run window before this function
   # returns an immutable run.
-  wlv_assert_plan_publication_inputs_unchanged(plan, method)
-  wlv_assert_method_source_inputs_unchanged(plan, method_record, run_data)
+  wlv_assert_plan_publication_inputs_unchanged(
+    plan,
+    method,
+    use_receipt = TRUE
+  )
+  wlv_assert_method_source_inputs_unchanged(
+    plan,
+    method_record,
+    run_data,
+    use_receipt = TRUE
+  )
 
   staging <- wlv_publication_assert_real_directory(
     staging,
@@ -1182,14 +1369,17 @@ wlv_promote_method_run <- function(
   run_environment$wlv_result_id <- installed_manifest$result_id
   run_environment$wlv_run_dir <- final
   run_environment$wlv_run_manifest <- installed_manifest
+  run_environment$wlv_source_manifest <- run_data$source_manifest
   run_environment$wlv_source_provenance <- run_data$source_provenance
   run_environment$wlv_source_provenance_inputs <-
     run_data$source_provenance_inputs
   run_environment$wlv_source_provenance_input_inventory <-
     run_data$source_provenance_input_inventory
+  run_environment$wlv_source_input_receipt <- run_data$source_input_receipt
   wlv_assert_run_environments_source_inputs_unchanged(
     plan,
-    list(run_environment)
+    list(run_environment),
+    use_receipt = TRUE
   )
   run_environment
 }
@@ -1278,8 +1468,12 @@ wlv_merge_panel_result_tables <- function(
 }
 
 wlv_commit_release <- function(plan, run_environments) {
-  wlv_assert_plan_publication_inputs_unchanged(plan)
-  wlv_assert_run_environments_source_inputs_unchanged(plan, run_environments)
+  wlv_assert_plan_publication_inputs_unchanged(plan, use_receipt = TRUE)
+  wlv_assert_run_environments_source_inputs_unchanged(
+    plan,
+    run_environments,
+    use_receipt = TRUE
+  )
   paths <- wlv_publication_ensure_store(plan$root)
   # Only the marker and release manifest are needed to compose the next
   # release. Runs retained from the current release are authenticated below,
@@ -1390,10 +1584,14 @@ wlv_commit_release <- function(plan, run_environments) {
     # that execution to the preflight inventories. Ordinary calculations do
     # no work at this boundary and are covered by the release and final checks
     # below without two redundant full-tree hash passes.
-    wlv_assert_plan_publication_inputs_unchanged(plan)
+    wlv_assert_plan_publication_inputs_unchanged(plan, use_receipt = TRUE)
     paper_result <- wlv_run_staged_paper(plan, run_environments, staging)
-    wlv_assert_plan_publication_inputs_unchanged(plan)
-    wlv_assert_run_environments_source_inputs_unchanged(plan, run_environments)
+    wlv_assert_plan_publication_inputs_unchanged(plan, use_receipt = TRUE)
+    wlv_assert_run_environments_source_inputs_unchanged(
+      plan,
+      run_environments,
+      use_receipt = TRUE
+    )
   }
   release_artifacts <- c("indicators_en.csv", "meta_indicators.csv")
   release_roles <- c("panel_labels", "panel_metadata")
@@ -1424,8 +1622,12 @@ wlv_commit_release <- function(plan, run_environments) {
     reject_unlisted = TRUE,
     verify_runs = FALSE
   )
-  wlv_assert_plan_publication_inputs_unchanged(plan)
-  wlv_assert_run_environments_source_inputs_unchanged(plan, run_environments)
+  wlv_assert_plan_publication_inputs_unchanged(plan, use_receipt = TRUE)
+  wlv_assert_run_environments_source_inputs_unchanged(
+    plan,
+    run_environments,
+    use_receipt = TRUE
+  )
   final <- file.path(paths$releases, release_id)
   if (file.exists(final) || !file.rename(staging, final)) {
     stop(sprintf("Could not promote release `%s`.", release_id), call. = FALSE)
@@ -1550,26 +1752,33 @@ wlv_with_publication_lock <- function(plan, execute) {
 
 wlv_execute_preparation_plan <- function(plan) {
   wlv_with_publication_lock(plan, function() {
-    wlv_assert_plan_publication_inputs_unchanged(plan)
+    wlv_assert_plan_publication_inputs_unchanged(plan, use_receipt = TRUE)
     wlv_prepare_sources(plan)
     validated <- wlv_validate_data(plan)
-    wlv_assert_plan_publication_inputs_unchanged(validated)
+    wlv_assert_plan_publication_inputs_unchanged(
+      validated,
+      stabilize = TRUE
+    )
     validated
   })
 }
 
 wlv_execute_run_plan <- function(plan) {
   wlv_with_publication_lock(plan, function() {
-    wlv_assert_plan_publication_inputs_unchanged(plan)
+    wlv_assert_plan_publication_inputs_unchanged(plan, use_receipt = TRUE)
     if (isTRUE(plan$repeat_pp)) {
       wlv_prepare_sources(plan)
     }
 
     plan <- wlv_validate_data(plan)
-    wlv_assert_plan_publication_inputs_unchanged(plan)
+    wlv_assert_plan_publication_inputs_unchanged(plan, use_receipt = TRUE)
     run_environments <- wlv_with_cluster(plan$workers, function(cluster) {
       lapply(plan$method_names, function(method) {
-        wlv_assert_plan_publication_inputs_unchanged(plan, method)
+        wlv_assert_plan_publication_inputs_unchanged(
+          plan,
+          method,
+          use_receipt = TRUE
+        )
         message(sprintf(
           "%s %s...",
           if (plan$mode == "recalculate") "Recalculating" else "Calculating",

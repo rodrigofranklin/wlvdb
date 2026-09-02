@@ -48,13 +48,12 @@ wlv_source_sha256_raw <- function(value) {
 }
 
 wlv_source_file_sha256 <- function(path) {
+  scalar <- is.character(path) && length(path) == 1L && !is.na(path) &&
+    nzchar(path)
+  info <- if (scalar) file.info(path, extra_cols = FALSE) else NULL
   if (
-    !is.character(path) ||
-    length(path) != 1L ||
-    is.na(path) ||
-    !nzchar(path) ||
-    !file.exists(path) ||
-    isTRUE(file.info(path)$isdir)
+    !scalar || is.null(info) || nrow(info) != 1L ||
+    is.na(info$isdir[[1L]]) || isTRUE(info$isdir[[1L]])
   ) {
     stop(sprintf("Cannot hash source file: %s", path), call. = FALSE)
   }

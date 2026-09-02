@@ -4301,6 +4301,74 @@ wlv_runtime_snapshot_validate_materialized_panel <- function(
   invisible(value)
 }
 
+wlv_runtime_snapshot_io_scientific_dependencies <- function() {
+  c(
+    "capital_stock.s.us",
+    "capital_depreciation.s.us",
+    "gross_output.s.mv"
+  )
+}
+
+wlv_runtime_snapshot_io_scientific_fingerprint <- function(snapshot) {
+  fields <- c(
+    "artifact", "indicator", "key", "contract_sha256", "axes_sha256",
+    "value_sha256", "state_sha256"
+  )
+  if (!is.list(snapshot) || !is.character(snapshot$method) ||
+      length(snapshot$method) != 1L || is.na(snapshot$method) ||
+      !nzchar(snapshot$method) || !is.character(snapshot$source) ||
+      length(snapshot$source) != 1L || is.na(snapshot$source) ||
+      !nzchar(snapshot$source) || !is.character(snapshot$partitions) ||
+      !length(snapshot$partitions) || anyNA(snapshot$partitions) ||
+      any(!nzchar(snapshot$partitions)) || anyDuplicated(snapshot$partitions) ||
+      !is.data.frame(snapshot$panel_provenance) ||
+      any(!fields %in% names(snapshot$panel_provenance))) {
+    stop("Runtime snapshot scientific I/O dependencies are invalid.",
+      call. = FALSE
+    )
+  }
+  indicators <- wlv_runtime_snapshot_io_scientific_dependencies()
+  rows <- snapshot$panel_provenance[
+    snapshot$panel_provenance$artifact == "sea_sectors" &
+      snapshot$panel_provenance$indicator %in% indicators,
+    fields,
+    drop = FALSE
+  ]
+  if (!"gross_output.s.mv" %in% rows$indicator ||
+      anyDuplicated(rows$indicator) || anyNA(rows) ||
+      any(!nzchar(as.matrix(rows)))) {
+    stop("Runtime snapshot scientific I/O dependency coverage is invalid.",
+      call. = FALSE
+    )
+  }
+  rows <- rows[order(match(rows$indicator, indicators)), , drop = FALSE]
+  row.names(rows) <- NULL
+  list(
+    method = snapshot$method,
+    source = snapshot$source,
+    partitions = snapshot$partitions,
+    dependencies = rows
+  )
+}
+
+wlv_runtime_snapshot_io_scientific_inputs_sha256 <- function(parent, current) {
+  fingerprint_or_null <- function(snapshot) {
+    tryCatch(
+      wlv_runtime_snapshot_io_scientific_fingerprint(snapshot),
+      error = function(error) NULL
+    )
+  }
+  parent_fingerprint <- fingerprint_or_null(parent)
+  current_fingerprint <- fingerprint_or_null(current)
+  if (is.null(parent_fingerprint) || is.null(current_fingerprint)) {
+    return(NULL)
+  }
+  if (!identical(parent_fingerprint, current_fingerprint)) {
+    return(NULL)
+  }
+  wlv_runtime_snapshot_value_sha256(current_fingerprint)
+}
+
 wlv_runtime_snapshot_assert_io_inherited <- function(parent, current) {
   identity <- function(snapshot) {
     if (!is.list(snapshot) || !is.character(snapshot$partitions) ||
@@ -4337,15 +4405,17 @@ wlv_runtime_snapshot_assert_io_inherited <- function(parent, current) {
     )
   }
   assertion <- new.env(parent = emptyenv())
-  assertion$version <- "wlv-inherited-io-assertion/1.0.0"
   assertion$method <- current$method
   assertion$source <- current$source
   assertion$partitions <- current$partitions
+  assertion$scientific_inputs_sha256 <-
+    wlv_runtime_snapshot_io_scientific_inputs_sha256(parent, current)
   assertion$snapshot_commitment_sha256 <-
     wlv_runtime_snapshot_logical_commitment_sha256(
       current,
       verify_resource_states = FALSE
     )
+  assertion$version <- "wlv-inherited-io-assertion/1.1.0"
   class(assertion) <- "wlv_inherited_io_assertion"
   lockEnvironment(assertion, bindings = TRUE)
   invisible(assertion)
@@ -4359,11 +4429,11 @@ wlv_runtime_snapshot_io_inheritance_assertion_assert <- function(assertion) {
       !identical(
         ls(envir = assertion, all.names = TRUE),
         c(
-          "method", "partitions", "snapshot_commitment_sha256", "source",
-          "version"
+          "method", "partitions", "scientific_inputs_sha256",
+          "snapshot_commitment_sha256", "source", "version"
         )
       ) ||
-      !identical(assertion$version, "wlv-inherited-io-assertion/1.0.0") ||
+      !identical(assertion$version, "wlv-inherited-io-assertion/1.1.0") ||
       !is.character(assertion$method) || length(assertion$method) != 1L ||
       is.na(assertion$method) || !nzchar(assertion$method) ||
       !is.character(assertion$source) || length(assertion$source) != 1L ||
@@ -4371,6 +4441,11 @@ wlv_runtime_snapshot_io_inheritance_assertion_assert <- function(assertion) {
       !is.character(assertion$partitions) || !length(assertion$partitions) ||
       anyNA(assertion$partitions) || any(!nzchar(assertion$partitions)) ||
       anyDuplicated(assertion$partitions) ||
+      (!is.null(assertion$scientific_inputs_sha256) &&
+        (!is.character(assertion$scientific_inputs_sha256) ||
+          length(assertion$scientific_inputs_sha256) != 1L ||
+          is.na(assertion$scientific_inputs_sha256) ||
+          !grepl("^[0-9a-f]{64}$", assertion$scientific_inputs_sha256))) ||
       !is.character(assertion$snapshot_commitment_sha256) ||
       length(assertion$snapshot_commitment_sha256) != 1L ||
       is.na(assertion$snapshot_commitment_sha256) ||
@@ -4409,12 +4484,38 @@ wlv_runtime_snapshot_bind_io_inheritance <- function(assertion, receipt) {
       call. = FALSE
     )
   }
+  if (!is.null(assertion$scientific_inputs_sha256)) {
+    expectations <- attr(
+      receipt,
+      wlv_runtime_snapshot_receipt_bindings_attribute(),
+      exact = TRUE
+    )
+    if (is.null(expectations)) {
+      stop(
+        "Scientific I/O inheritance lacks authenticated snapshot bindings.",
+        call. = FALSE
+      )
+    }
+    observed_scientific_sha256 <- wlv_runtime_snapshot_value_sha256(
+      wlv_runtime_snapshot_io_scientific_fingerprint(expectations)
+    )
+    if (!identical(
+          observed_scientific_sha256,
+          assertion$scientific_inputs_sha256
+        )) {
+      stop(
+        "Scientific I/O inheritance differs from the authenticated snapshot.",
+        call. = FALSE
+      )
+    }
+  }
   proof <- new.env(parent = emptyenv())
-  proof$version <- "wlv-inherited-io-validation/1.0.0"
   proof$method <- assertion$method
   proof$source <- assertion$source
   proof$partitions <- assertion$partitions
+  proof$scientific_inputs_sha256 <- assertion$scientific_inputs_sha256
   proof$snapshot_commitment_sha256 <- receipt$snapshot_commitment_sha256
+  proof$version <- "wlv-inherited-io-validation/1.1.0"
   class(proof) <- "wlv_inherited_io_validation"
   lockEnvironment(proof, bindings = TRUE)
   proof
@@ -4433,16 +4534,21 @@ wlv_runtime_snapshot_io_inheritance_proof_assert <- function(
       !identical(
         ls(envir = proof, all.names = TRUE),
         c(
-          "method", "partitions", "snapshot_commitment_sha256", "source",
-          "version"
+          "method", "partitions", "scientific_inputs_sha256",
+          "snapshot_commitment_sha256", "source", "version"
         )
       ) ||
-      !identical(proof$version, "wlv-inherited-io-validation/1.0.0") ||
+      !identical(proof$version, "wlv-inherited-io-validation/1.1.0") ||
       !identical(proof$method, method) || !identical(proof$source, source) ||
       !identical(
         proof$partitions,
         sort(as.character(partitions), method = "radix")
       ) ||
+      (!is.null(proof$scientific_inputs_sha256) &&
+        (!is.character(proof$scientific_inputs_sha256) ||
+          length(proof$scientific_inputs_sha256) != 1L ||
+          is.na(proof$scientific_inputs_sha256) ||
+          !grepl("^[0-9a-f]{64}$", proof$scientific_inputs_sha256))) ||
       !is.character(proof$snapshot_commitment_sha256) ||
       length(proof$snapshot_commitment_sha256) != 1L ||
       is.na(proof$snapshot_commitment_sha256) ||
@@ -4469,6 +4575,44 @@ wlv_runtime_snapshot_io_inheritance_proof_assert <- function(
       )) {
     stop(
       "Inherited I/O validation proof lacks its authenticated snapshot receipt.",
+      call. = FALSE
+    )
+  }
+  invisible(proof)
+}
+
+wlv_runtime_snapshot_io_scientific_inheritance_proof_assert <- function(
+    proof,
+    expectations,
+    receipt) {
+  wlv_runtime_snapshot_binding_expectations_assert(
+    expectations,
+    validate_panel_states = FALSE
+  )
+  wlv_runtime_snapshot_io_inheritance_proof_assert(
+    proof,
+    method = expectations$method,
+    source = expectations$source,
+    partitions = expectations$partitions,
+    receipt = receipt
+  )
+  if (!inherits(proof, "wlv_inherited_io_validation") ||
+      !is.environment(proof) ||
+      is.null(proof$scientific_inputs_sha256) ||
+      !identical(proof$method, expectations$method) ||
+      !identical(proof$source, expectations$source) ||
+      !identical(proof$partitions, expectations$partitions)) {
+    stop(
+      "Stage-4 scientific I/O inheritance lacks an authenticated proof.",
+      call. = FALSE
+    )
+  }
+  observed <- wlv_runtime_snapshot_value_sha256(
+    wlv_runtime_snapshot_io_scientific_fingerprint(expectations)
+  )
+  if (!identical(observed, proof$scientific_inputs_sha256)) {
+    stop(
+      "Stage-4 scientific I/O dependencies differ from their proof.",
       call. = FALSE
     )
   }

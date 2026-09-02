@@ -155,7 +155,8 @@ test_that("release source rechecks deduplicate identical generation snapshots", 
   runtime$wlv_assert_method_source_inputs_unchanged <- function(
       plan,
       method,
-      run_data) {
+      run_data,
+      use_receipt = FALSE) {
     checked <<- c(checked, method$method[[1L]])
     invisible(TRUE)
   }
@@ -308,10 +309,76 @@ test_that("the publication input tree includes every native configuration class"
   expect_true(any(startsWith(relative, "parameters/native_test/")))
   expect_true(any(startsWith(relative, "parameters/common_ground/")))
 
+  hash_calls <- 0L
+  plan$publication_inputs <-
+    fixture$runtime$wlv_capture_plan_publication_inputs(plan)
+  expect_identical(hash_calls, input_count)
+  receipt_cache <- attr(
+    plan$publication_inputs,
+    "wlv_publication_input_receipts",
+    exact = TRUE
+  )
+  expect_true(is.environment(receipt_cache))
+  expect_true(environmentIsLocked(receipt_cache))
+  hash_calls <- 0L
+  expect_invisible(
+    fixture$runtime$wlv_assert_plan_publication_inputs_unchanged(
+      plan,
+      use_receipt = TRUE
+    )
+  )
+  expect_identical(hash_calls, 0L)
+  expect_invisible(
+    fixture$runtime$wlv_assert_plan_publication_inputs_unchanged(
+      plan,
+      stabilize = TRUE
+    )
+  )
+  expect_identical(hash_calls, 2L * input_count)
+
+  plan_without_receipt <- plan
+  attr(
+    plan_without_receipt$publication_inputs,
+    "wlv_publication_input_receipts"
+  ) <- new.env(parent = emptyenv())
+  hash_calls <- 0L
+  expect_invisible(
+    fixture$runtime$wlv_assert_plan_publication_inputs_unchanged(
+      plan_without_receipt,
+      use_receipt = TRUE
+    )
+  )
+  expect_identical(hash_calls, input_count)
+
+  receipt_overwrite <- file.path(fixture$root, "config", "input.txt")
+  receipt_original <- readBin(
+    receipt_overwrite,
+    what = "raw",
+    n = file.info(receipt_overwrite)$size
+  )
+  wlv_native_test_write_text(
+    receipt_overwrite,
+    "configuration changed after its receipt"
+  )
+  hash_calls <- 0L
+  expect_error(
+    fixture$runtime$wlv_assert_plan_publication_inputs_unchanged(
+      plan,
+      use_receipt = TRUE
+    ),
+    "inputs changed after preflight validation",
+    fixed = TRUE
+  )
+  expect_true(hash_calls >= input_count)
+  writeBin(receipt_original, receipt_overwrite)
+
   plan$publication_inputs <- stats::setNames(list(inventory), fixture$method)
   hash_calls <- 0L
   expect_invisible(
-    fixture$runtime$wlv_assert_plan_publication_inputs_unchanged(plan)
+    fixture$runtime$wlv_assert_plan_publication_inputs_unchanged(
+      plan,
+      use_receipt = TRUE
+    )
   )
   expect_identical(hash_calls, input_count)
 
@@ -400,7 +467,9 @@ test_that("the publication input tree includes every native configuration class"
     fixed = TRUE
   )
   expect_true(preserved_overwrite_injected)
-  expect_gt(hash_calls, input_count)
+  # A platform may expose the overwrite through ctime immediately; otherwise
+  # the mandatory second hash pass detects it. Both outcomes must fail closed.
+  expect_true(hash_calls >= input_count)
   expect_identical(
     as.double(file.info(overwritten_path)$size),
     as.double(length(original_bytes))
@@ -626,8 +695,13 @@ test_that("final marker boundary blocks corruption from the last input check", {
   corrupted <- FALSE
   runtime$wlv_assert_run_environments_source_inputs_unchanged <- function(
       plan,
-      run_environments) {
-    value <- original_assert_source(plan, run_environments)
+      run_environments,
+      use_receipt = FALSE) {
+    value <- original_assert_source(
+      plan,
+      run_environments,
+      use_receipt = use_receipt
+    )
     release_root <- file.path(fixture$root, "results", "releases")
     releases <- list.dirs(release_root, recursive = FALSE, full.names = TRUE)
     releases <- releases[
@@ -1106,6 +1180,154 @@ test_that("native preparation, validation, execution, and commit share one lock"
   expect_no_error(runtime$wlv_execute_preparation_plan(plan))
   expect_identical(events, c("prepare", "validate"))
   expect_false(dir.exists(lock_path))
+})
+
+test_that("preparation strong-checks inputs before committing staged artifacts", {
+  fixture <- wlv_make_native_publication_fixture(mutable = TRUE)
+  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
+  runtime <- fixture$runtime
+  source <- fixture$method
+  source_dir <- file.path(fixture$root, "source_data", source)
+  normalized_dir <- file.path(source_dir, "normalized")
+  destination <- file.path(normalized_dir, "payload.txt")
+  publication_input <- file.path(fixture$root, "config", "input.txt")
+  previous_payload <- charToRaw("previous prepared generation")
+  next_payload <- charToRaw("next prepared generation")
+  original_input <- charToRaw("AAAAAAAA")
+  changed_input <- charToRaw("BBBBBBBB")
+
+  dir.create(normalized_dir, recursive = TRUE)
+  writeBin(previous_payload, destination)
+  wlv_native_test_write_text(publication_input, rawToChar(original_input))
+  original_mtime <- file.info(publication_input)$mtime
+
+  plan <- wlv_native_test_release_plan(fixture)
+  plan$methods$source <- source
+  plan$methods$source_dir <- source_dir
+  plan$catalog <- list()
+  plan$configuration <- stats::setNames(
+    list(data.frame(module_id = character(), stringsAsFactors = FALSE)),
+    source
+  )
+  plan$scientific_profiles <- stats::setNames(list(list()), source)
+  class(plan) <- c("wlv_run_plan", "list")
+
+  drift_injected <- FALSE
+  hashed_after_drift <- character()
+  original_file_sha256 <- runtime$wlv_publication_file_sha256
+  runtime$wlv_publication_file_sha256 <- function(path) {
+    if (drift_injected) {
+      hashed_after_drift <<- c(
+        hashed_after_drift,
+        normalizePath(path, winslash = "/", mustWork = TRUE)
+      )
+    }
+    original_file_sha256(path)
+  }
+
+  spec <- runtime$wlv_preparation_task_spec(
+    source = source,
+    services = "noop",
+    run = function(context) {
+      staged_normalized <- context$stage_path(
+        "source_data",
+        source,
+        "normalized"
+      )
+      dir.create(staged_normalized, recursive = TRUE)
+      writeBin(next_payload, file.path(staged_normalized, "payload.txt"))
+      runtime$wlv_preparation_result(list(
+        normalized = runtime$wlv_preparation_promotion(
+          staged_normalized,
+          normalized_dir
+        )
+      ))
+    }
+  )
+  registry <- runtime$wlv_preparation_registry(spec)
+  services <- list(noop = function(...) NULL)
+  runtime$wlv_default_preparation_registry <- function() registry
+  runtime$wlv_default_preparation_services <- function() services
+  runtime$wlv_catalog_source <- function(catalog, source) {
+    data.frame(
+      source = source,
+      preparation_task = source,
+      stringsAsFactors = FALSE
+    )
+  }
+  runtime$wlv_resolve_source_artifacts <- function(
+      plan,
+      method_record,
+      needs_io = TRUE) {
+    input_output <- file.path(
+      method_record$source_dir[[1L]],
+      "normalized",
+      "payload.txt"
+    )
+    expect_true(needs_io)
+    expect_true(file.exists(input_output))
+    list(input_output = input_output, socioeconomic = character())
+  }
+  runtime$wlv_native_validate_partition_coverage <- function(...) invisible(TRUE)
+  runtime$wlv_native_validate_leontief_zero_source_coordinates <-
+    function(...) invisible(TRUE)
+  runtime$wlv_euklems_files <- function(...) character()
+  runtime$wlv_validate_method_prepared_artifacts <- function(
+      plan,
+      method_record,
+      artifacts,
+      source_io,
+      configuration,
+      scientific_validation,
+      euklems_files) {
+    expect_identical(
+      readBin(source_io, what = "raw", n = file.info(source_io)$size),
+      next_payload
+    )
+    writeBin(changed_input, publication_input)
+    Sys.setFileTime(publication_input, original_mtime)
+    drift_injected <<- TRUE
+    list(scientific_validation = list())
+  }
+  commit_called <- FALSE
+  original_commit <- runtime$wlv_commit_preparation_result
+  runtime$wlv_commit_preparation_result <- function(...) {
+    commit_called <<- TRUE
+    original_commit(...)
+  }
+
+  expect_error(
+    runtime$wlv_prepare_sources(plan),
+    "inputs changed after preflight validation",
+    fixed = TRUE
+  )
+
+  normalized_input <- normalizePath(
+    publication_input,
+    winslash = "/",
+    mustWork = TRUE
+  )
+  expect_true(drift_injected)
+  expect_identical(sum(hashed_after_drift == normalized_input), 2L)
+  expect_identical(
+    as.double(file.info(publication_input)$size),
+    as.double(length(original_input))
+  )
+  expect_equal(
+    as.double(file.info(publication_input)$mtime),
+    as.double(original_mtime),
+    tolerance = 0.001
+  )
+  expect_false(commit_called)
+  expect_identical(
+    readBin(destination, what = "raw", n = file.info(destination)$size),
+    previous_payload
+  )
+  expect_false(dir.exists(file.path(
+    fixture$root,
+    "source_data",
+    paste0(".prepare-lock-", source)
+  )))
 })
 
 test_that("result locks reject concurrency and remain reusable", {

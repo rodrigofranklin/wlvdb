@@ -410,7 +410,7 @@ wlv_validate_request <- function(
       stop("`catalog` belongs to a different project root.", call. = FALSE)
     }
   }
-  wlv_catalog_assert_inputs_unchanged(catalog)
+  wlv_catalog_assert_inputs_unchanged(catalog, force_hash = TRUE)
   catalog_methods <- wlv_catalog_method_table(catalog)
   unknown <- setdiff(methods, catalog_methods$method)
   if (length(unknown)) {
@@ -556,7 +556,7 @@ wlv_validate_request <- function(
     methods = method_plan,
     indicators = indicators
   )
-  wlv_catalog_assert_inputs_unchanged(catalog)
+  wlv_catalog_assert_inputs_unchanged(catalog, force_hash = FALSE)
 
   plan <- structure(
     list(
@@ -585,7 +585,7 @@ wlv_validate_request <- function(
     class = c("wlv_run_plan", "list")
   )
   plan$publication_inputs <- wlv_capture_plan_publication_inputs(plan)
-  wlv_catalog_assert_inputs_unchanged(catalog)
+  wlv_catalog_assert_inputs_unchanged(catalog, force_hash = TRUE)
   for (method in plan$method_names) {
     wlv_assert_plan_scientific_profile_inventory(plan, method)
   }
@@ -600,8 +600,12 @@ wlv_assert_plan_scientific_profile_inventory <- function(plan, method) {
       call. = FALSE
     )
   }
-  wlv_assert_plan_publication_inputs_unchanged(plan, method)
-  wlv_catalog_assert_inputs_unchanged(plan$catalog)
+  wlv_assert_plan_publication_inputs_unchanged(
+    plan,
+    method,
+    use_receipt = TRUE
+  )
+  wlv_catalog_assert_inputs_unchanged(plan$catalog, force_hash = FALSE)
   snapshot_root <- wlv_authenticated_scientific_snapshot(plan, method)
   on.exit(unlink(snapshot_root, recursive = TRUE, force = TRUE), add = TRUE)
   expected <- wlv_native_scientific_profile(
@@ -610,8 +614,12 @@ wlv_assert_plan_scientific_profile_inventory <- function(plan, method) {
     method,
     plan$indicators[[method]]
   )
-  wlv_catalog_assert_inputs_unchanged(plan$catalog)
-  wlv_assert_plan_publication_inputs_unchanged(plan, method)
+  wlv_catalog_assert_inputs_unchanged(plan$catalog, force_hash = FALSE)
+  wlv_assert_plan_publication_inputs_unchanged(
+    plan,
+    method,
+    use_receipt = TRUE
+  )
   observed <- plan$scientific_profiles[[method]]
   if (!identical(observed, expected)) {
     stop(sprintf(
@@ -868,10 +876,69 @@ wlv_method_unit_definitions <- function(plan, method) {
   wlv_catalog_unit_contract(plan$catalog, contract_id)$units
 }
 
+wlv_method_source_input_paths <- function(
+    plan,
+    method,
+    artifacts,
+    manifest,
+    additional_paths = character()) {
+  if (!is.list(artifacts) || is.null(artifacts$manifest) ||
+      is.null(artifacts$required)) {
+    stop("Resolved source artifacts are required.", call. = FALSE)
+  }
+  if (is.null(additional_paths)) additional_paths <- character()
+  if (!is.character(additional_paths) || anyNA(additional_paths) ||
+      any(!nzchar(additional_paths))) {
+    stop("Additional source inputs must be file paths.", call. = FALSE)
+  }
+  wlv_validate_source_manifest(manifest)
+  contract <- wlv_method_unit_contract_paths(plan, method)
+  normalized_root <- dirname(artifacts$manifest)
+  manifest_artifacts <- wlv_source_resolve_artifacts(
+    normalized_root,
+    manifest$artifact
+  )
+  paths <- c(
+    artifacts$manifest,
+    artifacts$required,
+    contract$paths,
+    manifest_artifacts,
+    additional_paths
+  )
+  wlv_require_files(
+    unique(paths),
+    sprintf("source inputs for method `%s`", method$method[[1L]])
+  )
+  paths <- normalizePath(paths, winslash = "/", mustWork = TRUE)
+  if (any(file.info(paths, extra_cols = FALSE)$isdir %in% TRUE)) {
+    stop("Method source inputs must be files.", call. = FALSE)
+  }
+  sort(unique(paths), method = "radix")
+}
+
 wlv_validate_method_source_manifest <- function(plan, method, artifacts) {
   contract <- wlv_method_unit_contract_paths(plan, method)
   normalized_root <- dirname(artifacts$manifest)
   manifest <- wlv_read_source_manifest(artifacts$manifest)
+  source_input_paths <- wlv_method_source_input_paths(
+    plan,
+    method,
+    artifacts,
+    manifest
+  )
+  source_input_stamps <- wlv_publication_input_path_stamps(source_input_paths)
+  stable_manifest <- wlv_read_source_manifest(artifacts$manifest)
+  stable_paths <- wlv_method_source_input_paths(
+    plan,
+    method,
+    artifacts,
+    stable_manifest
+  )
+  if (!identical(manifest, stable_manifest) ||
+      !identical(source_input_paths, stable_paths)) {
+    stop("Source inputs changed before manifest verification.", call. = FALSE)
+  }
+  manifest <- stable_manifest
   wlv_verify_source_manifest(
     manifest,
     source_root = normalized_root,
@@ -879,6 +946,21 @@ wlv_validate_method_source_manifest <- function(plan, method, artifacts) {
     expected_contract_id = contract$id,
     expected_contract_version = contract$version
   )
+  final_source_input_paths <- wlv_method_source_input_paths(
+    plan,
+    method,
+    artifacts,
+    manifest
+  )
+  final_source_input_stamps <- wlv_publication_input_path_stamps(
+    final_source_input_paths
+  )
+  if (!identical(source_input_paths, final_source_input_paths) ||
+      !identical(source_input_stamps, final_source_input_stamps)) {
+    stop("Source inputs changed while their manifest was being verified.",
+      call. = FALSE
+    )
+  }
   normalized_root_path <- normalizePath(
     normalized_root,
     winslash = "/",
@@ -922,28 +1004,160 @@ wlv_validate_method_source_manifest <- function(plan, method, artifacts) {
     manifest = manifest,
     provenance = wlv_source_provenance(manifest, method$source[[1L]]),
     normalized_root = normalized_root,
-    gfcf_observations = file.path(normalized_root, "_gfcf_canonical.rds")
+    gfcf_observations = file.path(normalized_root, "_gfcf_canonical.rds"),
+    source_input_paths = final_source_input_paths,
+    source_input_stamps = final_source_input_stamps
   )
 }
 
-wlv_assert_method_source_inputs_unchanged <- function(plan, method, run_data) {
-  if (!is.list(run_data) || is.null(run_data$source_provenance) ||
+wlv_source_input_receipt <- function(plan, method, run_data, paths, stamps) {
+  inventory <- run_data$source_provenance_input_inventory
+  valid_inventory <- is.list(inventory) && all(vapply(
+    inventory,
+    function(record) {
+      is.list(record) &&
+        identical(names(record), c("path", "size_bytes", "sha256")) &&
+        is.character(record$path) && length(record$path) == 1L &&
+        !is.na(record$path) && nzchar(record$path) &&
+        is.numeric(record$size_bytes) && length(record$size_bytes) == 1L &&
+        !is.na(record$size_bytes) && record$size_bytes >= 0 &&
+        is.character(record$sha256) && length(record$sha256) == 1L &&
+        grepl("^[0-9a-f]{64}$", record$sha256)
+    },
+    logical(1L)
+  ))
+  stamp_paths <- tryCatch(
+    vapply(stamps, `[[`, character(1L), "path"),
+    error = function(error) character()
+  )
+  if (!inherits(plan, "wlv_run_plan") ||
+      !is.data.frame(method) || nrow(method) != 1L ||
+      is.null(run_data$source_manifest) ||
+      is.null(run_data$source_provenance) || !valid_inventory ||
+      !is.character(paths) || anyNA(paths) || any(!nzchar(paths)) ||
+      anyDuplicated(paths) || !is.list(stamps) ||
+      !identical(length(paths), length(stamps)) ||
+      !identical(stamp_paths, paths)) {
+    stop("Source input receipt values are invalid.", call. = FALSE)
+  }
+  wlv_validate_source_manifest(run_data$source_manifest)
+  wlv_validate_source_provenance(run_data$source_provenance)
+  receipt <- new.env(parent = emptyenv())
+  receipt$schema <- "wlv-source-input-receipt/1.0.0"
+  receipt$root <- normalizePath(plan$root, winslash = "/", mustWork = TRUE)
+  receipt$method <- method$method[[1L]]
+  receipt$source <- method$source[[1L]]
+  receipt$artifact_profile <- method$artifact_profile[[1L]]
+  receipt$unit_contract <- method$unit_contract[[1L]]
+  receipt$source_manifest_sha256 <-
+    wlv_source_manifest_sha256(run_data$source_manifest)
+  receipt$source_provenance <- run_data$source_provenance
+  receipt$source_provenance_input_inventory <- inventory
+  receipt$paths <- paths
+  receipt$stamps <- stamps
+  lockEnvironment(receipt, bindings = TRUE)
+  receipt
+}
+
+wlv_source_input_receipt_is_current <- function(plan, method, run_data) {
+  receipt <- run_data$source_input_receipt
+  tryCatch({
+    fields <- if (is.environment(receipt)) {
+      sort(ls(receipt, all.names = TRUE), method = "radix")
+    } else {
+      character()
+    }
+    required <- sort(c(
+      "schema", "root", "method", "source", "artifact_profile",
+      "unit_contract", "source_manifest_sha256", "source_provenance",
+      "source_provenance_input_inventory", "paths", "stamps"
+    ), method = "radix")
+    if (!is.environment(receipt) ||
+        !identical(parent.env(receipt), emptyenv()) ||
+        !environmentIsLocked(receipt) || !identical(fields, required) ||
+        !all(vapply(fields, bindingIsLocked, logical(1L), env = receipt)) ||
+        any(vapply(fields, bindingIsActive, logical(1L), env = receipt)) ||
+        !identical(receipt$schema, "wlv-source-input-receipt/1.0.0") ||
+        !identical(
+          receipt$root,
+          normalizePath(plan$root, winslash = "/", mustWork = TRUE)
+        ) || !identical(receipt$method, method$method[[1L]]) ||
+        !identical(receipt$source, method$source[[1L]]) ||
+        !identical(receipt$artifact_profile, method$artifact_profile[[1L]]) ||
+        !identical(receipt$unit_contract, method$unit_contract[[1L]]) ||
+        !identical(
+          receipt$source_manifest_sha256,
+          wlv_source_manifest_sha256(run_data$source_manifest)
+        ) || !identical(receipt$source_provenance, run_data$source_provenance) ||
+        !identical(
+          receipt$source_provenance_input_inventory,
+          run_data$source_provenance_input_inventory
+        )) {
+      return(FALSE)
+    }
+    artifacts <- wlv_resolve_source_artifacts(plan, method, needs_io = TRUE)
+    paths <- wlv_method_source_input_paths(
+      plan,
+      method,
+      artifacts,
+      run_data$source_manifest,
+      additional_paths = run_data$source_provenance_inputs
+    )
+    stamps <- wlv_publication_input_path_stamps(paths)
+    identical(paths, receipt$paths) && identical(stamps, receipt$stamps)
+  }, error = function(error) FALSE)
+}
+
+wlv_assert_method_source_inputs_unchanged <- function(
+    plan,
+    method,
+    run_data,
+    use_receipt = FALSE) {
+  if (!is.list(run_data) || is.null(run_data$source_manifest) ||
+      is.null(run_data$source_provenance) ||
       is.null(run_data$source_provenance_input_inventory)) {
     stop("The validated run data lack source provenance.", call. = FALSE)
   }
+  if (!is.logical(use_receipt) || length(use_receipt) != 1L ||
+      is.na(use_receipt)) {
+    stop("Source input receipt flag is invalid.", call. = FALSE)
+  }
+  wlv_validate_source_provenance(run_data$source_provenance)
+  if (isTRUE(use_receipt) &&
+      wlv_source_input_receipt_is_current(plan, method, run_data)) {
+    return(invisible(run_data$source_provenance))
+  }
   artifacts <- wlv_resolve_source_artifacts(plan, method, needs_io = TRUE)
+  first_paths <- wlv_method_source_input_paths(
+    plan,
+    method,
+    artifacts,
+    run_data$source_manifest,
+    additional_paths = run_data$source_provenance_inputs
+  )
+  first_stamps <- wlv_publication_input_path_stamps(first_paths)
   current <- wlv_validate_method_source_manifest(plan, method, artifacts)
   current_provenance <- wlv_source_provenance(
     current$manifest,
     method$source[[1L]],
     additional_paths = run_data$source_provenance_inputs
   )
-  wlv_validate_source_provenance(run_data$source_provenance)
   current_inventory <- wlv_publication_source_input_inventory(
     plan$root,
     run_data$source_provenance_inputs
   )
-  if (!identical(current_provenance, run_data$source_provenance) ||
+  final_paths <- wlv_method_source_input_paths(
+    plan,
+    method,
+    artifacts,
+    current$manifest,
+    additional_paths = run_data$source_provenance_inputs
+  )
+  final_stamps <- wlv_publication_input_path_stamps(final_paths)
+  if (!identical(first_paths, final_paths) ||
+      !identical(first_stamps, final_stamps) ||
+      !identical(current$manifest, run_data$source_manifest) ||
+      !identical(current_provenance, run_data$source_provenance) ||
       !identical(
         current_inventory,
         run_data$source_provenance_input_inventory
@@ -961,14 +1175,20 @@ wlv_assert_method_source_inputs_unchanged <- function(plan, method, run_data) {
 
 wlv_assert_run_environments_source_inputs_unchanged <- function(
     plan,
-    run_environments) {
+    run_environments,
+    use_receipt = FALSE) {
   if (!inherits(plan, "wlv_run_plan")) {
     return(invisible(TRUE))
+  }
+  if (!is.logical(use_receipt) || length(use_receipt) != 1L ||
+      is.na(use_receipt)) {
+    stop("Source input receipt flag is invalid.", call. = FALSE)
   }
   if (!is.list(run_environments) || !length(run_environments)) {
     stop("Published runs are required for source-input verification.", call. = FALSE)
   }
-  records <- lapply(run_environments, function(run_environment) {
+  records <- lapply(seq_along(run_environments), function(run_index) {
+    run_environment <- run_environments[[run_index]]
     if (!is.environment(run_environment) ||
         is.null(run_environment$wlv_run_manifest$method) ||
         is.null(run_environment$wlv_source_provenance) ||
@@ -1001,14 +1221,21 @@ wlv_assert_run_environments_source_inputs_unchanged <- function(
       inventory_key,
       sep = "\034"
     )
+    if (isTRUE(use_receipt)) {
+      # Every transient receipt must validate independently. Content hashing at
+      # the strong final boundary may still be deduplicated by source snapshot.
+      key <- paste(key, run_index, sep = "\034")
+    }
     list(
       key = key,
       method = plan$methods[method_index, , drop = FALSE],
       run_data = list(
+        source_manifest = run_environment$wlv_source_manifest,
         source_provenance = provenance,
         source_provenance_inputs =
           run_environment$wlv_source_provenance_inputs,
-        source_provenance_input_inventory = inventory
+        source_provenance_input_inventory = inventory,
+        source_input_receipt = run_environment$wlv_source_input_receipt
       )
     )
   })
@@ -1017,7 +1244,8 @@ wlv_assert_run_environments_source_inputs_unchanged <- function(
     wlv_assert_method_source_inputs_unchanged(
       plan,
       records[[index]]$method,
-      records[[index]]$run_data
+      records[[index]]$run_data,
+      use_receipt = use_receipt
     )
   }
   invisible(TRUE)
@@ -1911,6 +2139,32 @@ wlv_validate_data <- function(
       )
     )
 
+    source_input_paths <- wlv_method_source_input_paths(
+      plan,
+      method_record,
+      artifacts,
+      manifest$manifest,
+      additional_paths = euklems_files
+    )
+    source_input_stamps <- wlv_publication_input_path_stamps(
+      source_input_paths
+    )
+    manifest_path_indexes <- match(
+      manifest$source_input_paths,
+      source_input_paths
+    )
+    if (anyNA(manifest_path_indexes) || !identical(
+          source_input_stamps[manifest_path_indexes],
+          manifest$source_input_stamps
+        )) {
+      stop(
+        sprintf(
+          "Source inputs changed while method `%s` was being validated.",
+          method
+        ),
+        call. = FALSE
+      )
+    }
     first_input_inventory <- wlv_publication_source_input_inventory(
       plan$root,
       euklems_files
@@ -1924,7 +2178,19 @@ wlv_validate_data <- function(
       plan$root,
       euklems_files
     )
-    if (!identical(first_input_inventory, second_input_inventory)) {
+    final_source_input_paths <- wlv_method_source_input_paths(
+      plan,
+      method_record,
+      artifacts,
+      manifest$manifest,
+      additional_paths = euklems_files
+    )
+    final_source_input_stamps <- wlv_publication_input_path_stamps(
+      final_source_input_paths
+    )
+    if (!identical(first_input_inventory, second_input_inventory) ||
+        !identical(source_input_paths, final_source_input_paths) ||
+        !identical(source_input_stamps, final_source_input_stamps)) {
       stop(
         sprintf(
           "Source inputs changed while method `%s` was being validated.",
@@ -1935,6 +2201,13 @@ wlv_validate_data <- function(
     }
     method_data$source_provenance_inputs <- euklems_files
     method_data$source_provenance_input_inventory <- first_input_inventory
+    method_data$source_input_receipt <- wlv_source_input_receipt(
+      plan,
+      method_record,
+      method_data,
+      paths = final_source_input_paths,
+      stamps = final_source_input_stamps
+    )
 
     if (identical(plan$mode, "recalculate")) {
       parent_run <- wlv_resolve_current_method_run_reference(
@@ -2164,6 +2437,11 @@ wlv_validate_staged_preparation <- function(plan, source, result) {
     )
     scientific_validation <- prepared$scientific_validation
   }
+  wlv_assert_plan_publication_inputs_unchanged(
+    plan,
+    methods = plan$methods$method[source_indexes],
+    stabilize = TRUE
+  )
   invisible(TRUE)
 }
 
@@ -4010,6 +4288,18 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
       } else {
         NULL
       }
+      scientific_io_inputs_inherited <-
+        !is.null(io_inheritance_assertion) &&
+        !is.null(io_inheritance_assertion$scientific_inputs_sha256)
+      # Stage 4 may rebuild a sector dependency of the scientific I/O checks.
+      # The inherited-I/O assertion authorizes reuse only when its parent and
+      # child snapshots bind the exact same dependency fingerprints. Any
+      # difference falls back to complete materialized I/O validation.
+      inherit_io_scientific_checks <-
+        isTRUE(scientific_io_inputs_inherited) &&
+        (isTRUE(inherit_io_scientific_checks) ||
+          (identical(plan$mode, "recalculate") &&
+            identical(plan$at_stage, 4L)))
       rm(parent_snapshot)
       rm(snapshot_capture)
       snapshot_receipt <- wlv_runtime_snapshot_write(
@@ -4044,7 +4334,12 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
       for (name in names(diagnostics)) {
         wlv_write_result_csv(diagnostics[[name]], file.path(staging, name))
       }
-      wlv_assert_method_source_inputs_unchanged(plan, method_record, run_data)
+      wlv_assert_method_source_inputs_unchanged(
+        plan,
+        method_record,
+        run_data,
+        use_receipt = TRUE
+      )
       wlv_write_result_csv(
         run_data$source_provenance,
         file.path(staging, wlv_source_provenance_filename())

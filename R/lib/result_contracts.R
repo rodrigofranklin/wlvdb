@@ -4560,10 +4560,16 @@ wlv_validate_staged_results <- function(
     stop("Inherited I/O validation request is invalid.", call. = FALSE)
   }
   inherit_io_checks <- !is.null(inherited_scientific_checks)
-  if (inherit_io_checks &&
-      (!identical(mode, "recalculate") || !identical(at_stage, 5L))) {
+  authenticated_stage_4 <- identical(mode, "recalculate") &&
+    identical(at_stage, 4L) && reuse_inherited_io_validation
+  authorized_inheritance <- identical(mode, "recalculate") &&
+    (identical(at_stage, 5L) || isTRUE(authenticated_stage_4))
+  if (inherit_io_checks && !isTRUE(authorized_inheritance)) {
     stop(
-      "Inherited I/O scientific checks are restricted to stage-5 recalculation.",
+      paste0(
+        "Inherited I/O scientific checks require stage-5 or authenticated ",
+        "stage-4 recalculation."
+      ),
       call. = FALSE
     )
   }
@@ -4606,7 +4612,6 @@ wlv_validate_staged_results <- function(
       receipt = runtime_snapshot_receipt
     )
   }
-  rm(inherited_io_validation)
   expected_artifacts <- wlv_expected_staged_result_artifacts(
     expected_metadata,
     expected_io_artifacts
@@ -4642,6 +4647,14 @@ wlv_validate_staged_results <- function(
       )
     }
   }
+  if (inherit_io_checks && identical(at_stage, 4L)) {
+    wlv_runtime_snapshot_io_scientific_inheritance_proof_assert(
+      inherited_io_validation,
+      snapshot_bindings,
+      runtime_snapshot_receipt
+    )
+  }
+  rm(inherited_io_validation)
   rm(runtime_snapshot_receipt)
   invisible(gc(full = FALSE))
 

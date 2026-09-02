@@ -454,6 +454,12 @@ wlv_publication_sha256_raw <- function(value) {
 }
 
 wlv_publication_file_sha256 <- function(path) {
+  # The native runtime always loads the source-manifest hashing primitive.
+  # Delegate before performing the fallback validation so each publication
+  # hash crosses the filesystem boundary only once.
+  if (exists("wlv_source_file_sha256", mode = "function", inherits = TRUE)) {
+    return(wlv_source_file_sha256(path))
+  }
   if (
     !is.character(path) ||
     length(path) != 1L ||
@@ -463,9 +469,6 @@ wlv_publication_file_sha256 <- function(path) {
     isTRUE(file.info(path)$isdir)
   ) {
     stop(sprintf("Cannot hash publication file: %s.", path), call. = FALSE)
-  }
-  if (exists("wlv_source_file_sha256", mode = "function", inherits = TRUE)) {
-    return(wlv_source_file_sha256(path))
   }
   if (!requireNamespace("openssl", quietly = TRUE)) {
     stop("Package `openssl` is required for publication manifests.", call. = FALSE)

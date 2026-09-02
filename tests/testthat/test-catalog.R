@@ -872,6 +872,85 @@ test_that("module and aggregation configuration drift invalidates a loaded catal
   )
 })
 
+test_that("catalog input receipts avoid repeated hashes and fail closed", {
+  root <- wlv_make_catalog_fixture()
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  module_directory <- file.path(root, "config", "modules")
+  dir.create(module_directory, recursive = TRUE, showWarnings = FALSE)
+  module_path <- file.path(module_directory, "common.csv")
+  writeLines("instance_id;module_id", module_path, useBytes = TRUE)
+
+  catalog <- catalog_environment$wlv_load_catalog(root)
+  receipt <- attr(catalog, "wlv_catalog_input_receipt", exact = TRUE)
+  expect_true(is.environment(receipt))
+  expect_true(environmentIsLocked(receipt))
+
+  inventory_calls <- 0L
+  original_inventory <- catalog_environment$wlv_catalog_input_inventory
+  assign(
+    "wlv_catalog_input_inventory",
+    function(...) {
+      inventory_calls <<- inventory_calls + 1L
+      original_inventory(...)
+    },
+    envir = catalog_environment
+  )
+  on.exit(assign(
+    "wlv_catalog_input_inventory",
+    original_inventory,
+    envir = catalog_environment
+  ), add = TRUE)
+
+  expect_invisible(
+    catalog_environment$wlv_catalog_assert_inputs_unchanged(
+      catalog,
+      force_hash = FALSE
+    )
+  )
+  expect_identical(inventory_calls, 0L)
+  expect_invisible(catalog_environment$wlv_catalog_assert_inputs_unchanged(
+    catalog,
+    force_hash = TRUE
+  ))
+  expect_identical(inventory_calls, 1L)
+  expect_error(
+    catalog_environment$wlv_catalog_assert_inputs_unchanged(
+      catalog,
+      force_hash = NA
+    ),
+    "force-hash flag is invalid",
+    fixed = TRUE
+  )
+
+  without_receipt <- catalog
+  attr(without_receipt, "wlv_catalog_input_receipt") <-
+    new.env(parent = emptyenv())
+  inventory_calls <- 0L
+  expect_invisible(
+    catalog_environment$wlv_catalog_assert_inputs_unchanged(
+      without_receipt,
+      force_hash = FALSE
+    )
+  )
+  expect_identical(inventory_calls, 1L)
+
+  writeLines(
+    c("instance_id;module_id", "probe;probe.module"),
+    module_path,
+    useBytes = TRUE
+  )
+  inventory_calls <- 0L
+  expect_error(
+    catalog_environment$wlv_catalog_assert_inputs_unchanged(
+      catalog,
+      force_hash = FALSE
+    ),
+    "config/modules/common.csv",
+    fixed = TRUE
+  )
+  expect_identical(inventory_calls, 1L)
+})
+
 test_that("unit contract schemas and foreign keys reject drift", {
   cases <- list(
     list(
