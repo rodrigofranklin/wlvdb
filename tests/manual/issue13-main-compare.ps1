@@ -1,5 +1,6 @@
 param(
   [Parameter(Mandatory = $true)][string]$ConfigPath,
+  [Parameter(Mandatory = $true)][string]$ComparisonBindingPath,
   [ValidateRange(1, 2)][int]$MaxJobs = 2,
   [ValidateRange(1, 10)][int]$MaxAttempts = 1
 )
@@ -7,6 +8,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'issue13-main-lib.ps1')
+. (Join-Path $PSScriptRoot 'issue13-main-comparison-binding.ps1')
 
 function Save-CompareState([object]$State, [string]$Path) {
   $State.revision = [long]$State.revision + 1L
@@ -35,6 +37,10 @@ function Get-ComparisonInputs([object]$State, [object]$Comparison) {
       candidate_selector = $selector
       baseline_result = Get-Issue13MainScenarioResult $phase.baseline
       baseline_selector = $selector
+      input_contracts = @(
+        (New-ComparisonInputContract $State $phase 'candidate' 'candidate'),
+        (New-ComparisonInputContract $State $phase 'baseline' 'baseline')
+      )
     }
   }
   $armName = [string]$Comparison.arm
@@ -44,6 +50,21 @@ function Get-ComparisonInputs([object]$State, [object]$Comparison) {
     candidate_selector = $selector
     baseline_result = Get-Issue13MainScenarioResult $full.$armName
     baseline_selector = $selector
+    input_contracts = @(
+      (New-ComparisonInputContract $State $phase 'candidate' $armName),
+      (New-ComparisonInputContract $State $full 'baseline' $armName)
+    )
+  }
+}
+
+function New-ComparisonInputContract(
+  [object]$State, [object]$Phase, [string]$Side, [string]$Arm
+) {
+  [ordered]@{
+    side = $Side; arm = $Arm; method = [string]$Phase.method
+    scenario_id = $Arm + '/' + [string]$Phase.phase
+    commit = [string]$State.arm_bindings.$Arm.commit
+    expected_worker_processes = $(if ([long]$Phase.workers -eq 2) { 2L } else { 0L })
   }
 }
 
@@ -120,6 +141,8 @@ function Get-BoundComparisonJob(
     throw 'A comparison job changed after scheduling.'
   }
   $job = Read-Issue13MainJson $jobPath
+  $null = Assert-Issue13MainComparisonBindingIdentity $job $Attempt `
+    $script:resolvedComparisonBinding $script:comparisonBindingSha256
   $safe = Get-Issue13MainSafeId ([string]$Comparison.id)
   $attemptName = 'attempt-' + ([long]$Attempt.attempt).ToString('0000')
   $expectedAttemptRoot = Join-Path (Join-Path (Join-Path `
@@ -128,7 +151,7 @@ function Get-BoundComparisonJob(
     ([string]$Config.evidence_root) 'comparison-attempts') $safe) $attemptName
   $inputs = Get-ComparisonInputs $State $Comparison
   if ($Comparison.allow_difference -isnot [bool] -or
-      $job.schema -cne 'wlv-issue13-main-comparison-job/1' -or
+      $job.schema -cne 'wlv-issue13-main-comparison-job/2' -or
       [string]$job.comparison_id -cne [string]$Comparison.id -or
       [long]$job.attempt -ne [long]$Attempt.attempt -or
       [string]$job.mode -cne [string]$Comparison.mode -or
@@ -159,8 +182,16 @@ function Get-BoundComparisonJob(
       throw "Comparison input changed: $side/$($Comparison.id)"
     }
   }
+  if ((ConvertTo-Json -InputObject $job.input_contracts -Depth 8 -Compress) -cne
+      (ConvertTo-Json -InputObject $inputs.input_contracts -Depth 8 -Compress)) {
+    throw 'Comparison input contracts differ from the scientific plan.'
+  }
+  $null = Assert-Issue13MainComparisonInputs $job $Config
   $null = Assert-Issue13MainControllerSnapshots `
     ([object[]]$job.controller_records)
+  $null = Assert-Issue13MainComparisonBinding `
+    ([string]$job.comparison_binding_path) `
+    ([string]$job.comparison_binding_sha256) $Config
   $job
 }
 
@@ -178,7 +209,7 @@ function Get-ValidatedComparisonResult(
     (Join-Path ([string]$job.output_directory) 'comparison.json') `
     -RequireExistingFile
   $document = Read-Issue13MainJson $comparisonPath
-  if ($result.schema -cne 'wlv-issue13-main-comparison-attempt/1' -or
+  if ($result.schema -cne 'wlv-issue13-main-comparison-attempt/2' -or
       [string]$result.comparison_id -cne [string]$job.comparison_id -or
       [long]$result.attempt -ne [long]$job.attempt -or
       [string]$result.status -cne 'passed' -or
@@ -190,6 +221,10 @@ function Get-ValidatedComparisonResult(
       [string]$result.config_sha256 -cne [string]$job.config_sha256 -or
       [string]$result.tooling_binding_sha256 -cne
         [string]$job.tooling_binding_sha256 -or
+      [string]$result.comparison_binding_sha256 -cne
+        [string]$job.comparison_binding_sha256 -or
+      -not (Test-Issue13MainSamePath $result.comparison_binding_path `
+        $job.comparison_binding_path) -or
       -not (Test-Issue13MainSamePath ([string]$result.output_directory) `
         ([string]$job.output_directory)) -or
       -not (Test-Issue13MainControllerRecordEquality `
@@ -235,11 +270,13 @@ function Start-Comparison(
     [pscustomobject]@{ role = 'comparison-scheduler'; path = $PSCommandPath },
     [pscustomobject]@{ role = 'shared-lib'; path =
       (Join-Path $PSScriptRoot 'issue13-main-lib.ps1') },
+    [pscustomobject]@{ role = 'comparison-binding-lib'; path =
+      (Join-Path $PSScriptRoot 'issue13-main-comparison-binding.ps1') },
     [pscustomobject]@{ role = 'comparison-worker'; path =
       (Join-Path $PSScriptRoot 'issue13-main-compare-worker.ps1') }
   )
   $job = [ordered]@{
-    schema = 'wlv-issue13-main-comparison-job/1'
+    schema = 'wlv-issue13-main-comparison-job/2'
     comparison_id = [string]$Comparison.id
     attempt = $attempt
     attempt_root = $attemptRoot
@@ -258,6 +295,9 @@ function Start-Comparison(
     config_sha256 = [string]$State.config_sha256
     tooling_binding_path = [string]$State.tooling_binding_path
     tooling_binding_sha256 = [string]$State.tooling_binding_sha256
+    comparison_binding_path = $script:resolvedComparisonBinding
+    comparison_binding_sha256 = $script:comparisonBindingSha256
+    input_contracts = $inputs.input_contracts
     controller_records = [object[]]$controllerRecords
   }
   $jobPath = Join-Path $attemptRoot 'job.json'
@@ -267,6 +307,8 @@ function Start-Comparison(
     job_sha256 = $jobSha; result_path = Join-Path $attemptRoot `
       'attempt-result.json'; result_sha256 = $null; pid = $null
     process_started_at_utc = $null; exit_code = $null
+    comparison_binding_path = $script:resolvedComparisonBinding
+    comparison_binding_sha256 = $script:comparisonBindingSha256
   }
   $Comparison.attempt_count = $attempt
   $Comparison.status = 'running'
@@ -576,6 +618,12 @@ function Complete-OracleDeltas(
 $resolvedConfig = ConvertTo-Issue13MainFullPath $ConfigPath -RequireExistingFile
 $config = Read-Issue13MainJson $resolvedConfig
 $null = Assert-Issue13MainConfig $config
+$script:resolvedComparisonBinding = ConvertTo-Issue13MainFullPath `
+  $ComparisonBindingPath -RequireExistingFile
+$script:comparisonBindingSha256 = Get-Issue13MainSha256 `
+  $script:resolvedComparisonBinding
+$null = Assert-Issue13MainComparisonBinding `
+  $script:resolvedComparisonBinding $script:comparisonBindingSha256 $config
 $statePath = ConvertTo-Issue13MainFullPath `
   (Join-Path ([string]$config.control_root) 'state.json') -RequireExistingFile
 $state = Read-Issue13MainJson $statePath

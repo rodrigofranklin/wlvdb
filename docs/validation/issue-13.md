@@ -8,7 +8,7 @@ Estado em 2026-09-04: **relatório parcial; gate de merge pendente**. Este regis
 - Referência científica original: merge do #12, `cc2c861`. Baseline executável de compatibilidade: `e2f4d6dae9a6d35c966b305fabac52e489faa3e7`, discriminado do commit original.
 - Candidato congelado para a campanha 054: `972d9f8fc7a887b3db485080264f2958cce13cdd`.
 - Configuração local efetiva: `D:/Trabalho/Code/wlvdb-issue13-main-054/campaign-v2.json`; configuração anterior preservada em `campaign.json`.
-- Tooling de comparação: runtime externo da campanha 053, vinculado por arquivo e hash; não representa adoção dos seus resultados anteriores.
+- Tooling científico: cópia privada do runtime externo da campanha 053, vinculada por arquivo e hash. Comparação: derivada separada em `comparison-tooling-v1/`, sem alterar o tooling ou o estado científico; não representa adoção de resultados científicos anteriores.
 - Matriz: 14 pares científicos (cálculo, recálculos 1/4/5, seleções 4/5 e `workers=2`), duas preparações e dez falhas. São 40 cenários nessa matriz, além dos seeds auxiliares, e 41 comparações previstas.
 - Papers não integram este corte.
 
@@ -28,7 +28,7 @@ As preparações usam os mesmos seis caches oficiais: WIOD13 (`WIOTS_in_MATLAB.z
 | Isolamento e retomada do suplemento | Casos de igualdade/ancestralidade de paths e identidade PID + horário de início passaram. |
 | Inicialização suplementar | Plano de 12 registros construído e auditor independente passou. Vínculo do controlador atualizado após sua estabilização, preservando a inicialização provisória. Nenhum cenário de preparação/falha foi executado. |
 | Execução científica real | Revisão v2, tentativa 2: quatro cálculos `workers=1` iniciados simultaneamente às 22h23min32 BRT de 2026-09-04. WIOD13 baseline/candidato e WIOD16 candidato terminaram com `passed=true`; WIOD16 baseline ainda executava na última consulta. Conclusão de execução não implica paridade. |
-| Comparação antecipada WIOD13 | Parou antes de produzir `comparison.json`: o perfil histórico de metadados contém a geração candidata antiga. Nenhuma divergência científica foi calculada por essa tentativa; correção do vínculo de comparação pendente, preservando os cálculos concluídos. |
+| Comparação antecipada WIOD13 | A primeira tentativa parou no perfil histórico de metadados, antes de produzir `comparison.json`. A derivação atual e seu vínculo separado passaram; segunda tentativa em execução desde `2026-09-05T02:28:07Z`, preservando os cálculos concluídos. |
 | Paridade real, desempenho, preparação e dez falhas | Gate pendente; execução científica iniciada, demais provas ainda não concluídas. |
 
 A inicialização suplementar provisória terminou em `2026-09-05T01:01:48Z` (2026-09-04 no horário local). Seu plano tem SHA-256 `7fa43b85892dc2b34ccd9113c21d0edfa31a7d0241bb127037101210093732c3`; o auditor, `f08bdc7cafb39136fb1de0de6a77fddffe54052fed0f9376f970f80f7a55a950`.
@@ -47,6 +47,21 @@ O canal público permanece intacto: a campanha opera nos seus canais e roots iso
 
 A comparação antecipada de WIOD13 (`early/parity/wiodr13/001`), executada de `01:44:49Z` a `01:47:23Z`, preservou comando, entradas e hashes em `early-parity-wiodr13-001/`. O erro `Candidate runtime generation differs from metadata derivation.` veio do perfil V5 derivado em `3ae99a848156a28431ff44cf4d9e619c6de84a83`, que espera geração `4668bf1eadb9ea3ea3f121a889f6b29016c1505f1dbcb3cc27ed3c02ab52c2dd`; o candidato congelado apresenta `600d8cdd2c692fea0b608285b84c3d260b123aac4cf1904ee8b6b997ec988c63`. O diagnóstico integral está em `execution-error.json`. Não houve `comparison.json`, escrita no estado científico ou reinício dos cálculos. O próximo ajuste deve reconstruir e verificar a equivalência dos metadados a partir dos commits congelados, em um vínculo de comparação separado; não basta substituir o hash esperado nem modificar o harness utilizado pelos processos científicos ativos.
 
+Esse ajuste foi implementado por `tests/manual/issue13-main-build-metadata.R`: definições e configurações foram reconstruídas em três worktrees limpos, somente de código, nos commits `cc2c861`, `e2f4d6d` e `972d9f8`. Nenhum payload científico foi aberto ou calculado. Os seis sidecars do baseline original e do oráculo executável são exatamente iguais. As 12 tabelas por braço dos dois métodos também são iguais aos perfis históricos, sem diferenças de esquema, linhas, células ou ordem. As únicas três diferenças de envelope são commit candidato, geração e redução de 12 para dois métodos. Os negativos de método, geração, célula e ordem passaram.
+
+Artefatos locais em `comparison-tooling-v1/`:
+
+| Artefato | SHA-256 |
+| --- | --- |
+| `metadata-derived.json` | `8476d0389d7cdaf87c8d63e2be569ad00d4978627869810f560bc26fceecaf23` |
+| `metadata-derivation-provenance.json` | `dde0c2e6b1c1c4dfaefa42341349c7bc67149f238ae1687fe30616fa6642dbdb` |
+| `metadata-diff-vs-v5.json` | `edee1e23c59d43113ede4389677b38278a143435cd85bd7fc9a6bf369b74b161` |
+| `comparison-binding.json` | `b464b4c29255feed2a30a41c59f22d9ef5df4dd9304efc01dcfd62e37871e3d9` |
+
+O vínculo separado conserva 45 dos 47 arquivos byte a byte; muda somente o perfil de metadados e, deterministicamente, os guards de commit e métodos do validador. Também autentica os dois braços de execução, a proveniência semanticamente validada, snapshots do controlador e contratos de entrada por lado. Paridade aceita os commits diferentes dos dois motores; comparações internas usam o mesmo braço. Retomada com outro vínculo é rejeitada. Os 25 testes positivos/negativos passaram em `comparison-selftest-001/selftest.json`, sem alteração no tooling científico. A segunda comparação antecipada usa o worker `/2` e registra evidência em `early-parity-wiodr13-002/`; é diagnóstico antecipado, não adoção automática entre as 38 comparações finais.
+
+A inspeção dos demais perfis alcançáveis não exigiu mudanças: oito SHA-256 de `_unit_contract.csv`/`_source_manifest.csv` dos dados normalizados dos dois métodos/braços coincidiram com o perfil de preparação histórico. Os quatro `_anomalies.csv` de cálculo coincidiram com os fingerprints históricos dos bridges e parents de estágio 5; o target baseline WIOD13/estágio 1 também coincidiu. Os outros cinco targets de recálculo ainda precisam ser conferidos quando concluídos. Os perfis históricos de preparação, bridges e multiplicidade permaneceram byte-idênticos; seus artefatos e contratos atuais continuam sujeitos à comparação efetiva.
+
 O suplemento da revisão v2 foi inicializado e auditado às `2026-09-05T01:18:52Z`, sem executar os cenários de preparação/falha: zero cenários e zero comparações concluídos. SHA-256 do plano: `e4ea4f7c1d575657d30699a9f721502ceeed7c34cb86ff5b76018322bf31dc72`; vínculo do tooling suplementar: `4cd8afad9dfc8b716713583ea500b8f126464c526c33561a9c59138041ac1fa2`. O controle anterior permanece preservado.
 
 Às `2026-09-05T01:44:29Z`, somente o controlador suplementar foi reautenticado para registrar intervalos individuais de processos. Estado e vínculo anteriores foram preservados, com igualdade dos hashes confirmada, em `control-v2/supplemental/initializations/before-process-journal-20260905T014428967Z/`. O novo vínculo tem SHA-256 `73988e10a28537ce6f3e6fcec8ce6e1bb0f949c0f027f8746322b681563045fd`. Plano, auditor e inventário de logs permaneceram iguais: nenhum builder, auditor R, preparação ou cenário foi repetido. O journal começa vazio e conserva o limite histórico anterior em `01:18:52Z`, sem estendê-lo até a reautenticação. O estado científico não foi alterado.
@@ -56,10 +71,11 @@ Executar a partir do checkout, usando o PowerShell selado definido na configura�
 ```powershell
 $campaign = 'D:\Trabalho\Code\wlvdb-issue13-main-054\campaign-v2.json'
 $runner = 'D:\Trabalho\Code\wlvdb-issue13-main-054\tools\powershell\pwsh.exe'
+$comparisonBinding = 'D:\Trabalho\Code\wlvdb-issue13-main-054\comparison-tooling-v1\comparison-binding.json'
 & $runner -NoProfile -File tests/manual/issue13-main-gate.ps1 -Action Plan
 & $runner -NoProfile -File tests/manual/issue13-main-gate.ps1 -Action Initialize -ConfigPath $campaign
 & $runner -NoProfile -File tests/manual/issue13-main-gate.ps1 -Action RunScience -ConfigPath $campaign -Arm all -MaxJobs 4
-& $runner -NoProfile -File tests/manual/issue13-main-compare.ps1 -ConfigPath $campaign -MaxJobs 2
+& $runner -NoProfile -File tests/manual/issue13-main-compare.ps1 -ConfigPath $campaign -ComparisonBindingPath $comparisonBinding -MaxJobs 2
 & $runner -NoProfile -File tests/manual/issue13-main-gate.ps1 -Action Status -ConfigPath $campaign
 ```
 

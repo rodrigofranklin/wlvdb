@@ -5,18 +5,19 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'issue13-main-lib.ps1')
+. (Join-Path $PSScriptRoot 'issue13-main-comparison-binding.ps1')
 
 $resolvedJobPath = ConvertTo-Issue13MainFullPath $JobPath -RequireExistingFile
 $jobSha256 = Get-Issue13MainSha256 $resolvedJobPath
 $job = Read-Issue13MainJson $resolvedJobPath
-if ($job.schema -cne 'wlv-issue13-main-comparison-job/1') {
+if ($job.schema -cne 'wlv-issue13-main-comparison-job/2') {
   throw 'Unsupported reduced comparison job schema.'
 }
 $attemptRoot = ConvertTo-Issue13MainFullPath ([string]$job.attempt_root) `
   -RequireExistingDirectory
 $resultPath = Join-Path $attemptRoot 'attempt-result.json'
 $outcome = [ordered]@{
-  schema = 'wlv-issue13-main-comparison-attempt/1'
+  schema = 'wlv-issue13-main-comparison-attempt/2'
   comparison_id = [string]$job.comparison_id
   attempt = [long]$job.attempt
   status = 'running'; passed = $false
@@ -27,6 +28,8 @@ $outcome = [ordered]@{
   job_sha256 = $jobSha256
   config_sha256 = [string]$job.config_sha256
   tooling_binding_sha256 = [string]$job.tooling_binding_sha256
+  comparison_binding_sha256 = [string]$job.comparison_binding_sha256
+  comparison_binding_path = [string]$job.comparison_binding_path
   output_directory = [string]$job.output_directory
   comparison_sha256 = $null
   controller_records = [object[]]$job.controller_records
@@ -52,6 +55,12 @@ try {
     throw 'Tooling binding changed after comparison planning.'
   }
   $null = Assert-Issue13MainToolingBinding $binding
+  $comparisonBinding = Assert-Issue13MainComparisonBinding `
+    ([string]$job.comparison_binding_path) `
+    ([string]$job.comparison_binding_sha256) $config
+  $comparisonHarness = Join-Path ([string]$comparisonBinding.runtime_root) `
+    'issue13-evidence-harness'
+  $null = Assert-Issue13MainComparisonInputs $job $config
   foreach ($side in @('candidate', 'baseline')) {
     $pathName = $side + '_result'
     $hashName = $side + '_result_sha256'
@@ -64,7 +73,7 @@ try {
     throw 'Comparison output directory already exists.'
   }
   & ([string]$config.rscript) --vanilla `
-    (Join-Path ([string]$config.harness_root) 'issue13-compare-results.R') `
+    (Join-Path $comparisonHarness 'issue13-compare-results.R') `
     --candidate-result ([string]$job.candidate_result) `
     --candidate-selector ([string]$job.candidate_selector) `
     --baseline-result ([string]$job.baseline_result) `
@@ -73,6 +82,9 @@ try {
     --scenario-id ([string]$job.comparison_id) `
     --comparison-mode ([string]$job.mode) --chunk-rows 1000000
   $exitCode = $LASTEXITCODE
+  $null = Assert-Issue13MainComparisonBinding `
+    ([string]$job.comparison_binding_path) `
+    ([string]$job.comparison_binding_sha256) $config
   $allowedExitCodes = if (Test-Issue13MainExactBoolean `
       $job.allow_difference $true) { @(0, 1) } else { @(0) }
   if ($exitCode -notin $allowedExitCodes) {
