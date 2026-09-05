@@ -245,6 +245,24 @@ function Add-EarlyParityPerformanceIntervals([string]$CampaignRoot) {
       Add-PerformanceInterval $errorPath ([string]$errorRecord.started_at_utc) $end
     } else { throw "Early comparison has no authenticated time interval: $($directory.FullName)" }
   }
+  foreach ($directory in @(Get-ChildItem -LiteralPath $CampaignRoot -Directory -Filter 'array-proof-canary-*')) {
+    $intervalPath = Join-Path $directory.FullName 'comparison-interval.json'
+    $record = Read-Issue13MainJson $intervalPath
+    if ($record.schema -cne 'wlv-issue13-main-array-proof-canary-interval/1') {
+      throw 'Array-proof canary has an invalid comparison interval.'
+    }
+    $end = if (Test-Issue13MainExactBoolean $record.process_absent_at_finished_at $true) {
+      [string]$record.finished_at_utc
+    } else { '9999-12-31T23:59:59Z' }
+    foreach ($output in @($record.comparison_outputs)) {
+      if ((Get-Issue13MainSha256 $output.path) -cne $output.sha256) {
+        throw 'Array-proof canary comparison evidence changed.'
+      }
+    }
+    # Bounds are explicitly conservative; never treat this diagnostic interval
+    # as a performance measurement or extend it using a later state timestamp.
+    Add-PerformanceInterval $intervalPath ([string]$record.started_at_utc) $end
+  }
 }
 
 function Get-PerformanceIntervals {

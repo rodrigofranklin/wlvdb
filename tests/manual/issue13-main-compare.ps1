@@ -1,6 +1,7 @@
 param(
   [Parameter(Mandatory = $true)][string]$ConfigPath,
   [Parameter(Mandatory = $true)][string]$ComparisonBindingPath,
+  [string]$ArrayProofBindingPath,
   [ValidateRange(1, 2)][int]$MaxJobs = 2,
   [ValidateRange(1, 10)][int]$MaxAttempts = 1
 )
@@ -9,6 +10,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'issue13-main-lib.ps1')
 . (Join-Path $PSScriptRoot 'issue13-main-comparison-binding.ps1')
+. (Join-Path $PSScriptRoot 'issue13-main-array-proof-binding.ps1')
 
 function Save-CompareState([object]$State, [string]$Path) {
   $State.revision = [long]$State.revision + 1L
@@ -141,6 +143,12 @@ function Get-BoundComparisonJob(
     throw 'A comparison job changed after scheduling.'
   }
   $job = Read-Issue13MainJson $jobPath
+  Assert-Issue13MainArrayProofSelection $job $script:resolvedArrayProofBinding $script:arrayProofBindingSha256
+  Assert-Issue13MainArrayProofSelection $Attempt $script:resolvedArrayProofBinding $script:arrayProofBindingSha256
+  if ($script:resolvedArrayProofBinding) {
+    $null = Assert-Issue13MainArrayProofBinding $script:resolvedArrayProofBinding `
+      $script:arrayProofBindingSha256 $job.config_path $script:resolvedComparisonBinding
+  }
   $null = Assert-Issue13MainComparisonBindingIdentity $job $Attempt `
     $script:resolvedComparisonBinding $script:comparisonBindingSha256
   $safe = Get-Issue13MainSafeId ([string]$Comparison.id)
@@ -205,6 +213,7 @@ function Get-ValidatedComparisonResult(
   $resultPath = ConvertTo-Issue13MainFullPath ([string]$Attempt.result_path) `
     -RequireExistingFile
   $result = Read-Issue13MainJson $resultPath
+  Assert-Issue13MainArrayProofSelection $result $script:resolvedArrayProofBinding $script:arrayProofBindingSha256
   $comparisonPath = ConvertTo-Issue13MainFullPath `
     (Join-Path ([string]$job.output_directory) 'comparison.json') `
     -RequireExistingFile
@@ -272,6 +281,8 @@ function Start-Comparison(
       (Join-Path $PSScriptRoot 'issue13-main-lib.ps1') },
     [pscustomobject]@{ role = 'comparison-binding-lib'; path =
       (Join-Path $PSScriptRoot 'issue13-main-comparison-binding.ps1') },
+    [pscustomobject]@{ role = 'array-proof-binding-lib'; path =
+      (Join-Path $PSScriptRoot 'issue13-main-array-proof-binding.ps1') },
     [pscustomobject]@{ role = 'comparison-worker'; path =
       (Join-Path $PSScriptRoot 'issue13-main-compare-worker.ps1') }
   )
@@ -297,6 +308,8 @@ function Start-Comparison(
     tooling_binding_sha256 = [string]$State.tooling_binding_sha256
     comparison_binding_path = $script:resolvedComparisonBinding
     comparison_binding_sha256 = $script:comparisonBindingSha256
+    array_proof_binding_path = $script:resolvedArrayProofBinding
+    array_proof_binding_sha256 = $script:arrayProofBindingSha256
     input_contracts = $inputs.input_contracts
     controller_records = [object[]]$controllerRecords
   }
@@ -309,6 +322,8 @@ function Start-Comparison(
     process_started_at_utc = $null; exit_code = $null
     comparison_binding_path = $script:resolvedComparisonBinding
     comparison_binding_sha256 = $script:comparisonBindingSha256
+    array_proof_binding_path = $script:resolvedArrayProofBinding
+    array_proof_binding_sha256 = $script:arrayProofBindingSha256
   }
   $Comparison.attempt_count = $attempt
   $Comparison.status = 'running'
@@ -624,6 +639,14 @@ $script:comparisonBindingSha256 = Get-Issue13MainSha256 `
   $script:resolvedComparisonBinding
 $null = Assert-Issue13MainComparisonBinding `
   $script:resolvedComparisonBinding $script:comparisonBindingSha256 $config
+$script:resolvedArrayProofBinding = $null
+$script:arrayProofBindingSha256 = $null
+if (-not [string]::IsNullOrWhiteSpace($ArrayProofBindingPath)) {
+  $script:resolvedArrayProofBinding = ConvertTo-Issue13MainFullPath $ArrayProofBindingPath -RequireExistingFile
+  $script:arrayProofBindingSha256 = Get-Issue13MainSha256 $script:resolvedArrayProofBinding
+  $null = Assert-Issue13MainArrayProofBinding $script:resolvedArrayProofBinding `
+    $script:arrayProofBindingSha256 $resolvedConfig $script:resolvedComparisonBinding
+}
 $statePath = ConvertTo-Issue13MainFullPath `
   (Join-Path ([string]$config.control_root) 'state.json') -RequireExistingFile
 $state = Read-Issue13MainJson $statePath
@@ -643,6 +666,11 @@ if ((Get-Issue13MainSha256 ([string]$state.tooling_binding_path)) -cne
 $null = Assert-Issue13MainToolingBinding $binding
 $lock = Enter-CompareLock $config
 try {
+  Assert-Issue13MainArrayProofHistory $state $script:resolvedArrayProofBinding $script:arrayProofBindingSha256
+  foreach ($comparison in @($state.comparisons | Where-Object status -CEQ 'passed')) {
+    $passed = @($comparison.attempts | Where-Object status -CEQ 'passed')[-1]
+    $null = Get-ValidatedComparisonResult $config $state $comparison $passed
+  }
   Repair-Comparisons $config $state $statePath
   $effectiveMax = [Math]::Min($MaxJobs, [long]$config.scheduling.comparison_jobs)
   while (@($state.comparisons | Where-Object status -CNE 'passed').Count) {

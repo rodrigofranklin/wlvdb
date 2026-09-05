@@ -6,10 +6,17 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'issue13-main-lib.ps1')
 . (Join-Path $PSScriptRoot 'issue13-main-comparison-binding.ps1')
+. (Join-Path $PSScriptRoot 'issue13-main-array-proof-binding.ps1')
 
 $resolvedJobPath = ConvertTo-Issue13MainFullPath $JobPath -RequireExistingFile
 $jobSha256 = Get-Issue13MainSha256 $resolvedJobPath
 $job = Read-Issue13MainJson $resolvedJobPath
+$proofPath = if ($job.PSObject.Properties.Name -ccontains 'array_proof_binding_path') {
+  [string]$job.array_proof_binding_path
+} else { '' }
+$proofSha = if ($job.PSObject.Properties.Name -ccontains 'array_proof_binding_sha256') {
+  [string]$job.array_proof_binding_sha256
+} else { '' }
 if ($job.schema -cne 'wlv-issue13-main-comparison-job/2') {
   throw 'Unsupported reduced comparison job schema.'
 }
@@ -30,6 +37,8 @@ $outcome = [ordered]@{
   tooling_binding_sha256 = [string]$job.tooling_binding_sha256
   comparison_binding_sha256 = [string]$job.comparison_binding_sha256
   comparison_binding_path = [string]$job.comparison_binding_path
+  array_proof_binding_path = $proofPath
+  array_proof_binding_sha256 = $proofSha
   output_directory = [string]$job.output_directory
   comparison_sha256 = $null
   controller_records = [object[]]$job.controller_records
@@ -72,16 +81,28 @@ try {
   if (Test-Path -LiteralPath ([string]$job.output_directory)) {
     throw 'Comparison output directory already exists.'
   }
-  & ([string]$config.rscript) --vanilla `
-    (Join-Path $comparisonHarness 'issue13-compare-results.R') `
+  $entrypoint = Join-Path $comparisonHarness 'issue13-compare-results.R'
+  $proofArguments = @()
+  Assert-Issue13MainArrayProofSelection $job $proofPath $proofSha
+  if (-not [string]::IsNullOrWhiteSpace($proofPath)) {
+    $proof = Assert-Issue13MainArrayProofBinding $proofPath $proofSha `
+      $job.config_path $job.comparison_binding_path
+    $entrypoint = $proof.records.entrypoint.path
+    $proofArguments = @(Get-Issue13MainArrayProofArguments $proof)
+  }
+  & ([string]$config.rscript) --vanilla $entrypoint `
     --candidate-result ([string]$job.candidate_result) `
     --candidate-selector ([string]$job.candidate_selector) `
     --baseline-result ([string]$job.baseline_result) `
     --baseline-selector ([string]$job.baseline_selector) `
     --output ([string]$job.output_directory) `
     --scenario-id ([string]$job.comparison_id) `
-    --comparison-mode ([string]$job.mode) --chunk-rows 1000000
+    --comparison-mode ([string]$job.mode) --chunk-rows 1000000 @proofArguments
   $exitCode = $LASTEXITCODE
+  if (-not [string]::IsNullOrWhiteSpace($proofPath)) {
+    $null = Assert-Issue13MainArrayProofBinding $proofPath $proofSha `
+      $job.config_path $job.comparison_binding_path
+  }
   $null = Assert-Issue13MainComparisonBinding `
     ([string]$job.comparison_binding_path) `
     ([string]$job.comparison_binding_sha256) $config
