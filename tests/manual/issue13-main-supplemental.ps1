@@ -70,6 +70,18 @@ function Save-SupplementalState {
   $null = Write-Issue13MainJson $state $statePath
 }
 
+function Initialize-SupplementalProcessJournal {
+  if ($state.Contains('process_journal')) { return }
+  # Retain a fixed, conservative interval for pre-journal history. Future calls
+  # must never extend that legacy interval over unrelated completed science.
+  $state.process_journal = [ordered]@{
+    schema = 'wlv-issue13-supplemental-process-journal/1'
+    complete_from_inception = [string]::IsNullOrWhiteSpace([string]$state.updated_at)
+    legacy_finished_at_utc = $state.updated_at
+    records = @()
+  }
+}
+
 function Restore-SupplementalProcessState {
   if ($null -eq $state.current) { return }
   if (-not $state.current.Contains('process_started_at_utc')) {
@@ -88,6 +100,13 @@ function Restore-SupplementalProcessState {
       log = $state.current.log; status = 'abandoned'
       recorded_at_utc = [DateTime]::UtcNow.ToString('o')
     })
+  if ($state.current.Contains('journal_id')) {
+    $record = @($state.process_journal.records | Where-Object id -CEQ $state.current.journal_id)
+    if ($record.Count -ne 1) { throw 'Abandoned process journal identity is missing.' }
+    # The exact end of an interrupted process tree is unknown. Leave the end
+    # open, so timing reuse cannot silently treat an abandoned run as isolated.
+    $record[0].status = 'abandoned'
+  }
   $state.current = $null
   Save-SupplementalState
 }
@@ -124,12 +143,21 @@ function Invoke-SupplementalProcess(
   $stdout = [IO.File]::Create($log + '.stdout.log')
   $stderr = [IO.File]::Create($log + '.stderr.log')
   $started = $false
+  $journal = $null
+  $passed = $false
   try {
     $null = $process.Start()
     $started = $true
+    $journal = [ordered]@{
+      id = [IO.Path]::GetFileName($log); action = $Action; step = $Name
+      pid = $process.Id; log = $log; status = 'running'; exit_code = $null
+      process_started_at_utc = $process.StartTime.ToUniversalTime().ToString('o')
+      finished_at_utc = $null
+    }
+    $state.process_journal.records = @($state.process_journal.records) + @($journal)
     $state.current = [ordered]@{
       step = $Name; pid = $process.Id; log = $log
-      process_started_at_utc = $process.StartTime.ToUniversalTime().ToString('o')
+      process_started_at_utc = $journal.process_started_at_utc; journal_id = $journal.id
     }
     Save-SupplementalState
     $outCopy = $process.StandardOutput.BaseStream.CopyToAsync($stdout)
@@ -147,17 +175,28 @@ function Invoke-SupplementalProcess(
     if ($process.ExitCode -ne 0) {
       throw "Supplemental process failed ($($process.ExitCode)): $Name; logs: $log"
     }
+    $passed = $true
   } finally {
-    if ($started -and -not $process.HasExited) {
-      $process.Kill($true)
-      $null = $process.WaitForExit(60000)
+    try {
+      if ($started -and -not $process.HasExited) {
+        $process.Kill($true)
+        if (-not $process.WaitForExit(60000)) {
+          throw 'Supplemental child did not stop; its journal interval remains open.'
+        }
+      }
+      if ($null -ne $journal -and $process.HasExited) {
+        $journal.finished_at_utc = $process.ExitTime.ToUniversalTime().ToString('o')
+        $journal.exit_code = $process.ExitCode
+        $journal.status = if ($passed) { 'passed' } else { 'failed' }
+        $state.current = $null
+        Save-SupplementalState
+      }
+    } finally {
+      $stdout.Dispose()
+      $stderr.Dispose()
+      $process.Dispose()
     }
-    $stdout.Dispose()
-    $stderr.Dispose()
-    $process.Dispose()
   }
-  $state.current = $null
-  Save-SupplementalState
 }
 
 function Invoke-SupplementalR([string]$Name, [string]$Script, [string[]]$Arguments) {
@@ -486,7 +525,8 @@ function Invoke-SupplementalFaults {
 
 try {
   $state = if (Test-Path -LiteralPath $statePath) {
-    Get-Content -LiteralPath $statePath -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable
+    Get-Content -LiteralPath $statePath -Raw -Encoding UTF8 |
+      ConvertFrom-Json -AsHashtable -DateKind String
   } else {
     [ordered]@{
       schema = 'wlv-issue13-main-supplemental/1'; campaign_id = [string]$config.campaign_id
@@ -497,6 +537,7 @@ try {
     }
   }
   Assert-SupplementalBinding
+  Initialize-SupplementalProcessJournal
   Restore-SupplementalProcessState
   $state.status = 'running'
   $state.failure = $null

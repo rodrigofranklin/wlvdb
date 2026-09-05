@@ -47,4 +47,3 @@ wlv13_json_write(result, arguments[[7L]])
 quit(save = "no", status = if (isTRUE(result$passed)) 0L else 1L,
   runLast = FALSE
 )
-

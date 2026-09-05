@@ -34,6 +34,50 @@ function Add-PerformanceInterval([string]$Id, [string]$Start, [string]$End,
   $intervals.Add([pscustomobject]@{ id = $Id; start = $from; end = $to; owner = $Owner })
 }
 
+function Add-SupplementalPerformanceIntervals([object]$Supplement, [string]$LegacyStart) {
+  if ($Supplement.PSObject.Properties.Name -ccontains 'process_journal') {
+    $journal = $Supplement.process_journal
+    if ($journal.schema -cne 'wlv-issue13-supplemental-process-journal/1' -or
+        $journal.complete_from_inception -isnot [bool]) {
+      throw 'Supplemental process journal schema or coverage is invalid.'
+    }
+    if (-not $journal.complete_from_inception) {
+      Add-PerformanceInterval 'supplemental-pre-journal-history' $LegacyStart `
+        ([string]$journal.legacy_finished_at_utc)
+    }
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($record in @($journal.records)) {
+      if ([string]::IsNullOrWhiteSpace([string]$record.id) -or -not $seen.Add([string]$record.id) -or
+          [long]$record.pid -le 0 -or
+          [string]$record.status -cnotin @('running', 'passed', 'failed', 'abandoned')) {
+        throw 'Supplemental process journal record is invalid.'
+      }
+      $end = if ([string]::IsNullOrWhiteSpace([string]$record.finished_at_utc)) {
+        if ($record.status -cin @('passed', 'failed')) { throw 'Finished process lacks its UTC end.' }
+        '9999-12-31T23:59:59Z'
+      } else { [string]$record.finished_at_utc }
+      Add-PerformanceInterval ('supplemental-process/' + $record.id) `
+        ([string]$record.process_started_at_utc) $end
+    }
+    if ($null -ne $Supplement.current -and
+        ($Supplement.current.PSObject.Properties.Name -cnotcontains 'journal_id' -or
+         -not $seen.Contains([string]$Supplement.current.journal_id))) {
+      throw 'Current supplemental process is missing from its journal.'
+    }
+    return
+  }
+  # Only old states without a process journal use the whole activity envelope.
+  if ([string]$Supplement.status -cne 'initialized' -or
+      @($Supplement.scenarios.PSObject.Properties).Count -gt 0 -or
+      @($Supplement.comparisons.PSObject.Properties).Count -gt 0 -or
+      $null -ne $Supplement.current) {
+    $end = if ($null -ne $Supplement.current -or $Supplement.status -ceq 'running') {
+      '9999-12-31T23:59:59Z'
+    } else { [string]$Supplement.updated_at }
+    Add-PerformanceInterval 'supplemental-conservative-envelope' $LegacyStart $end
+  }
+}
+
 function Get-PerformanceIntervals {
   $script:intervals = [Collections.Generic.List[object]]::new()
   foreach ($phase in @($science.phases)) {
@@ -71,18 +115,7 @@ function Get-PerformanceIntervals {
   $supplementPath = Join-Path ([string]$config.control_root) 'supplemental/state.json'
   if (Test-Path -LiteralPath $supplementPath -PathType Leaf) {
     $supplement = Read-Issue13MainJson $supplementPath
-    # Supplemental comparator/importer calls have no per-call UTC history. Never infer
-    # isolation from missing telemetry: conservatively exclude their entire envelope.
-    if ([string]$supplement.status -cne 'initialized' -or
-        @($supplement.scenarios.PSObject.Properties).Count -gt 0 -or
-        @($supplement.comparisons.PSObject.Properties).Count -gt 0 -or
-        $null -ne $supplement.current) {
-      $end = if ($null -ne $supplement.current -or $supplement.status -ceq 'running') {
-        '9999-12-31T23:59:59Z'
-      } else { [string]$supplement.updated_at }
-      Add-PerformanceInterval 'supplemental-conservative-envelope' `
-        ([string]$science.created_at_utc) $end
-    }
+    Add-SupplementalPerformanceIntervals $supplement ([string]$science.created_at_utc)
   }
   foreach ($attempt in @($performance.attempts)) {
     if ([string]::IsNullOrWhiteSpace([string]$attempt.process_started_at_utc)) { continue }
