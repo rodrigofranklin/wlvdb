@@ -428,12 +428,42 @@ function Invoke-SupplementalComparison {
   Save-SupplementalState
 }
 
+function Get-SupplementalScienceSeed(
+  [Parameter(Mandatory)][object]$MainState,
+  [Parameter(Mandatory)][object]$CandidateBinding
+) {
+  if ([string]$MainState.schema -cne 'wlv-issue13-main-state/1' -or
+      [string]$MainState.arm_bindings.candidate.binding_sha256 -cne
+        [string]$CandidateBinding.binding_sha256) {
+    throw 'The scientific state does not match the candidate arm binding.'
+  }
+  $phase = @($MainState.phases | Where-Object phase -CEQ 'calculate/wiodr13/workers1')
+  if ($phase.Count -ne 1) { throw 'The candidate WIOD13 calculation seed is missing.' }
+  $armState = $phase[0].candidate
+  $seedResult = Get-Issue13MainScenarioResult $armState
+  $proof = Test-Issue13MainScenarioEvidence `
+    ([string]$armState.evidence_directory) `
+    'candidate/calculate/wiodr13/workers1' `
+    ([string]$CandidateBinding.commit) 0
+  if ([string]$proof.result_sha256 -cne [string]$armState.scenario_result_sha256 -or
+      [string]$proof.metrics_sha256 -cne [string]$armState.process_metrics_sha256) {
+    throw 'The candidate WIOD13 seed differs from the hashes recorded by science.'
+  }
+  $result = Read-Issue13MainJson $seedResult
+  if (-not (Test-Issue13MainSamePath `
+        ([string]$result.project_root) ([string]$CandidateBinding.roots.wiodr13)) -or
+      [string]$result.kind -cne 'calculate' -or
+      [string]$result.request.method -cne 'wiodr13' -or
+      [long]$result.request.workers -ne 1) {
+    throw 'The candidate WIOD13 seed identity differs from its arm binding.'
+  }
+  $seedResult
+}
+
 function Invoke-SupplementalFaults {
   if ($null -eq $state.preparation_comparison) { throw 'Faults require preparation comparison.' }
   $mainState = Read-Issue13MainJson (Join-Path ([string]$config.control_root) 'state.json')
-  $phase = @($mainState.phases | Where-Object phase -CEQ 'calculate/wiodr13/workers1')
-  if ($phase.Count -ne 1) { throw 'The candidate WIOD13 calculation seed is missing.' }
-  $seedResult = Get-Issue13MainScenarioResult $phase[0].candidate
+  $seedResult = Get-SupplementalScienceSeed $mainState $candidate
   $inputRoot = Join-Path $supplementalRoot 'fault-inputs'
   $importPath = Join-Path $inputRoot 'fault-input-import.json'
   if (-not (Test-Path -LiteralPath $importPath)) {
