@@ -1,6 +1,6 @@
 # Issue 13 — validação do corte principal
 
-Estado em 2026-09-05: **paridade científica, desempenho e preparação aprovados; gate de merge pendente**. A campanha dos dois métodos principais atingiu `science-validated` às `08:35:12Z`; os 14 pares de desempenho passaram às `14:00:20Z`. A preparação corrigida passou nos dois braços às `14:44:55Z`, sua comparação integral às `15:24:30Z` e as três comparações complementares até `15:34:14Z`. O controlador registrou `compared` e iniciou `Faults` às `15:35:49Z`; os dez resultados de falha/rollback e o agregado final continuam pendentes. Os registros anteriores permanecem preservados; seus resultados não são convertidos automaticamente em evidência da campanha atual.
+Estado em 2026-09-05: **todos os gates técnicos aprovados; relatório integral concluído**. Ciência: 28 cenários, 38 comparações e dez deltas aprovados; desempenho: 14/14 pares dentro dos limites; preparação: dois braços e quatro comparações aprovados; falhas: 10/10 com rollback e nenhuma release parcial. O agregado final passou às `16:25:15Z` e foi adotado pelo controlador sem repetir cenários ou iniciar novos processos. A CI Windows/Ubuntu aprovou o código final `1480dd8`. O escopo é exclusivamente WIOD13/WIOD16, sem papers; o canal público não foi alterado. As tentativas anteriores, inclusive reprovadas, permanecem preservadas e discriminadas abaixo.
 
 ## Escopo e referências
 
@@ -22,17 +22,17 @@ As preparações usam os mesmos seis caches oficiais: WIOD13 (`WIOTS_in_MATLAB.z
 | Execução nativa, planejador e consistência dos slices terminais | Suítes focadas passaram com fixtures; experimentais habilitados apenas em catálogos de teste em memória. |
 | Catálogo publicado em `docs/methods.md` | Regeneração e `--check` passaram. |
 | Suíte completa de fixtures | 66 arquivos passaram em quatro shards antes do commit `972d9f8`; registros `unit-tests/shard1.json` a `shard4.json`, com 242,865 / 387,4972 / 97,33 / 249,79 segundos. |
-| CI | Commit `ebde11ccbe517349ab611e698d1b1e0b69e997c2` aprovado no run `33969210559`: Ubuntu terminou às `13:43:28Z` e Windows às `13:49:02Z`, ambos sem repetição. O commit anterior `21cf753` também passou no run `33968224908`. |
+| CI | Commit atual de código `1480dd890d36cab9382e417418f77c270271e538` aprovado no run `33975649479`: Ubuntu terminou às `15:54:27Z` e Windows às `15:59:32Z`. Inclui os wrappers finais das comparações e do agregado. Aprovações anteriores permanecem no histórico abaixo. |
 | Controlador suplementar | Parser passou; smoke de processo verificou captura de logs, erro de processo e escrita atômica de estado. |
 | Ambiente dos filhos | Teste confirmou 35 variáveis removidas e dez definidas; biblioteca R preservada. |
 | Isolamento e retomada do suplemento | Casos de igualdade/ancestralidade de paths e identidade PID + horário de início passaram. |
 | Inicialização suplementar | Plano de 12 registros construído e auditor independente passou. Vínculo do controlador atualizado após sua estabilização, preservando a inicialização provisória. Preparação iniciada com o plano existente, sem repetir inicialização ou auditor. |
-| Execução científica real | Os 28 cenários passaram; a campanha terminou às `2026-09-05T04:39:53.906680Z`, estado `science-completed`, revisão 103. Todos os registros de processos confirmam cluster encerrado. Isso ainda não constitui paridade integral. |
+| Execução científica real | Os 28 cenários passaram às `2026-09-05T04:39:53.906680Z`; as comparações e deltas posteriores concluíram a paridade às `08:35:12Z`, estado `science-validated`, revisão 230. Todos os registros de processos confirmam cluster encerrado. |
 | Comparação antecipada WIOD13 | Segunda tentativa passou às `2026-09-05T02:31:28Z`: 21 artefatos, zero diferenças de indicadores e nenhum artefato ausente/excedente. Oito diferenças arquiteturais foram validadas pelas regras explícitas existentes. Sem repetição de cálculo. |
 | Comparação antecipada WIOD16 | Passou às `2026-09-05T02:59:38Z`: 21 artefatos, zero diferenças de indicadores e nenhum artefato ausente/excedente. Oito diferenças arquiteturais foram validadas pelas mesmas regras explícitas. Sem repetição de cálculo. |
 | Desempenho controlado | **14/14 pares aprovados** em tempo/RSS às `14:00:20Z`, zero reprovados e zero medições pendentes. Todos passam também no limite relativo de 120%, sem precisar da margem absoluta de 600 segundos; todos usam menos RSS que o baseline. Quatro certificados de seeds aprovados. Controlador encerrado, `current=null`, sem processos ou locks remanescentes. |
 | Comparações finais | As 38 execuções terminaram às `08:10:37Z`: 14 paridades, quatro equivalências estritas `workers=2` versus `workers=1` e 20 verificações internas do oráculo. Os dez deltas foram aprovados às `08:35:12Z`: nove `exact-to-full` e um `baseline-known-divergence`, reproduzindo a divergência histórica WIOD13/estágio 4. Estado `science-validated`, revisão 230. |
-| Preparação e dez falhas | Preparação r2 passou nos dois braços, após correção isolada. Autenticação corrigida, desempenho e igualdade binária dos quatro arrays/sidecars passaram; comparação global ainda rejeita as regras históricas de formato/manifests baseline. Dez falhas pendentes. PR draft, canal público inalterado. |
+| Preparação e dez falhas | Preparação r2, comparação principal, três comparações complementares e 10/10 faults aprovados. Agregado final `db11419e…` confirma dez rollbacks, dez releases sentinela intactas, zero releases parciais e zero staging. Controlador encerrado, estado `passed`, `current=null`, sem erro. |
 
 ### Desempenho aprovado — resumo dos 14 pares
 
@@ -62,6 +62,8 @@ A inicialização suplementar provisória terminou em `2026-09-05T01:01:48Z` (20
 Após estabilização do controlador compartilhado, a vinculação foi atualizada em `2026-09-05T01:05:37Z`, reaproveitando o mesmo plano/auditor, sem repetir o builder nem executar cenários. Os arquivos anteriores de estado e vínculo foram preservados, com hashes conferidos, em `D:/Trabalho/Code/wlvdb-issue13-main-054/control/supplemental/initializations/before-controller-finalization/`. O novo `tooling-binding.json` tem SHA-256 `9547fc55f2f322b1db655053fac3969b71ed2accc4e82f06ffbd6ee942c7cc16`. O estado confirmado é `initialized`, com zero cenários e zero comparações concluídos no suplemento.
 
 ## Ações operacionais
+
+Esta seção preserva o histórico cronológico, inclusive hipóteses, comandos e estados posteriormente superados. Ela não é uma lista de tarefas pendentes nem autorização para repetir gates; o estado atual e os resultados normativos estão no resumo inicial e na conclusão.
 
 As duas primeiras tentativas de setup da 054 não produziram evidência científica: a primeira falhou na captura de `LASTEXITCODE` após inspeção Git; a segunda detectou que o PowerShell vinculado havia sido atualizado pelo aplicativo antes de iniciar R. Os diagnósticos foram preservados. A revisão operacional `054v2` mantém os mesmos roots de dados e separa controle/evidência em `control-v2` e `evidence-v2`; foi vinculada a uma cópia privada do PowerShell para não depender de futuras atualizações do aplicativo. Esses eventos não são resultados de paridade nem novos RunAll científicos.
 
@@ -315,6 +317,39 @@ Correção pronta em `tests/manual/issue13-main-aggregate-prep-fault.R`, SHA-256
 
 A continuação automática foi atualizada com as quatro comparações aprovadas, o lançamento de Faults e a correção exclusiva do agregado. Payload `run_logs/issue13-main-heartbeat-v5.json`; releitura do arquivo e dos campos salvos da automação conferida exatamente em UTF-8. O PR continua draft e o canal público não foi alterado. O commit `3c3c89c9b9a7546e683debfaf67a08fcc4b96346` foi publicado com seis arquivos conferidos local/remotamente por texto e blob; CI `33975052663` iniciou para esse commit. Alterações posteriores do wrapper complementar/agregado terão CI própria.
 
+### Falhas e rollback — provas individuais
+
+A importação isolada terminou aprovada às `15:36:46.127Z`, sem alteração dos stores de origem: `supplemental-r2/fault-inputs/fault-input-import.json`, SHA-256 `9aa8b531fe7afa26593caf8e015fa0a7e59a32006111904d68bdfe526491f2c2`. O plano dos dez canais sentinela tem SHA-256 `a65e8dc3d3325e5cb2b243233ad52f8757b48bcb1807b41ab3656cafa823387f`. Runtime `6549597` e seed `972d9f8` permanecem identificados separadamente.
+
+Na auditoria das `15:59Z`, seis de dez cenários estavam aprovados. Conferiram-se os hashes de resultado/métricas contra o estado, as identidades de cenário, fault, spec, hook e token, os nove flags transacionais booleanos, saída zero, encerramento dos processos e hashes de logs/telemetria. Não houve release parcial visível nem alteração do marker sentinela nesses seis cenários. Essa aprovação parcial não substitui o agregado final.
+
+| Fault aprovado | Tempo (s) | Pico RSS (bytes) | SHA-256 de `fault-result.json` |
+| --- | ---: | ---: | --- |
+| `module-execution` | 47,2953286 | 1.257.357.312 | `3b955d4d64b9caadc598eadb8451df1568c548f2c730a4687133155490535a3a` |
+| `preparation-promotion` | 29,9890802 | 475.889.664 | `b7f55db6d637ecbee3b668fe95438063a50f4d060f41002e92607a58ab1ef293` |
+| `publication-run-staging` | 32,2792306 | 1.279.791.104 | `c5719ed57c8246b6d34c6cb24d8a813fb0c64dcb8b48857bb525b86583955cc1` |
+| `publication-semantic-validation` | 267,0997130 | 5.442.367.488 | `2567487951837ddb117bcd63c15852940bb2a468531884ba5558ac9bff37417b` |
+| `publication-run-manifest` | 254,8451761 | 4.988.309.504 | `4739293a29816a213e219f5b3448fe844a093ea238bbf7067355b02d0999352e` |
+| `publication-run-promotion` | 339,6165956 | 5.050.896.384 | `efb94275665b5e7ddb92e1057334ead540f6655dea4fc76b260c512d75be1720` |
+| `publication-release-staging` | 303,2566178 | 5.480.792.064 | `5de7da65458d9d261bfb010b4b78662600219de0526cebc323b3856f31b6d836` |
+| `publication-release-manifest` | 412,0974755 | 6.020.313.088 | `bee809d29e96883a773fa19295276be62f14cfc4464e4bdb154a9c93b6117b16` |
+| `publication-release-promotion` | 401,4529739 | 5.724.696.576 | `6965cac497738ff8b6d862dd0d0e09166f1049998930906d013dbe4db4c90056` |
+| `publication-channel-marker` | 409,8188558 | 6.020.792.320 | `be5c25a27d354e5e68b9d697b9db6ddb96be5b7f029fbf57711ea97f8efab758` |
+
+Cada prova está em `supplemental-r2/plan/scenarios/candidate__fault__<fault>/`, acompanhada de resultado, métricas e logs autenticados. `publication-release-staging` iniciou às `15:58:13.4984597Z`, filho PID `28012`; o controlador PID `29920` mantém o início original de `15:35:49.3624730Z`, sem erro ou reinício. As quatro falhas restantes e o agregado ainda não estavam aprovados nessa consulta.
+
+A CI do código final `1480dd890d36cab9382e417418f77c270271e538` passou em ambos os sistemas: run `33975649479`, Ubuntu às `15:54:27Z` e Windows às `15:59:32Z`. Evidência recuperada da API GitHub Actions em `evidence-v2/ci-1480dd8.json`, SHA-256 `3916d4e3cf5d5b320627e585e6fa03c394e9bfa368c2bb0e111c7e5dc8b66911`. Esta atualização do relatório é somente documental; não modifica os executáveis usados nos gates.
+
+### Fechamento dos dez faults e do agregado
+
+A décima execução terminou em `2026-09-05T16:23:43.4229219Z`. Os dez resultados foram autenticados separadamente contra cenário, spec, token, hashes físicos, métricas e checks transacionais. Todos passaram, com cluster encerrado e nenhum PID remanescente. A omissão de campos no agregador original reproduziu a falha prevista entre `16:23:43.799Z` e `16:23:49.435Z`; report reprovado SHA-256 `7f26d6b75884fcd7fd67789c48878700ba7a3a0a1523abd0f2bff35608dfbb84`, preservado em `supplemental-r2/aggregate-attempt-001-failed/` por movimentação recuperável com hashes conferidos. Nenhuma falha científica foi ocultada ou convertida em aprovação.
+
+O comando registrado em `run_logs/issue13-complete-fault-aggregate-001.ps1` executou exclusivamente o wrapper do agregado no ambiente R fechado. PID `31400`, de `16:24:20.2266270Z` a `16:25:15.1323757Z`, exit 0, `status=passed`. Registro completo de argumentos, hashes de entradas conferidos antes/depois, arquivo arquivado e resultado: `supplemental-r2/aggregate-recovery-001/recovery.json`, SHA-256 `9c84fca891aa3eb57bb4804d6ae517a66acf04822b1bd6455d786f6c0d1918c0`.
+
+Agregado final: `supplemental-r2/aggregate/prep-fault-aggregate.json`, SHA-256 `db11419ec4c40efc92cc7b9c86e1c0c8d4a6671292270343373f2472618e7b9a`. Confirma duas preparações, três fontes comparadas, dez canais semeados, dez faults e dez rollbacks aprovados, zero releases parciais, zero staging, P0=0 e P1=0. A execução de `Action Faults` após esse resultado somente autenticou/adotou as provas existentes: os 12 registros de cenários ficaram idênticos e o journal não ganhou processo filho. Estado final `passed`, `current=null`, `failure=null`, SHA-256 `753c2d33b924cf1ec2d60198a9a42a7247f506fef28c8e127fa2c6fe87e78ab7`.
+
+Snapshots finais byte-idênticos, com os mesmos hashes: `evidence-v2/supplemental-completed-state.json` e `evidence-v2/supplemental-completed-report.json`. Ciência e desempenho mantêm seus próprios snapshots imutáveis e commits, sem reatribuição retroativa. O diff entre `6549597` e `1480dd8` em `R/`, `scripts/`, `methods/` e `contracts/` é vazio; as alterações posteriores são somente harness manual e documentação. O baseline legado continua fora do branch candidato.
+
 O smoke do journal executou dois processos PowerShell leves, um com saída zero e outro com erro sete, confirmando registro de ambos, fim real e preservação dos timestamps como strings UTC. Os testes conservaram medições anteriores/posteriores, recusaram a sobreposição efetiva e confirmaram que a atualização posterior do estado não amplia o intervalo histórico. Esse smoke não executou R e não constitui medição científica.
 
 As repetições usam o mesmo worker e os mesmos commits, fontes e seeds autenticados da ciência, em canais e diretórios de tentativa próprios. Não repetem comparações já aprovadas e não alteram o estado da paridade. O roteiro utiliza os locks dos controladores da campanha, sem exigir exclusividade de todos os processos R do computador. Se os resultados adicionais não couberem com a folga prevista, ele bloqueia a execução para coordenação de novos roots vinculados; não remove evidência para liberar espaço.
@@ -338,10 +373,10 @@ $performanceCampaign = 'C:\Users\rodri\AppData\Local\Packages\OpenAI.Codex_2p2nq
 & $runner -NoProfile -File tests/manual/issue13-main-performance.ps1 -Action Run -ConfigPath $campaign -ExecutionConfigPath $performanceCampaign -ComparisonBindingPath $comparisonBinding -MaximumRepeats 25
 ```
 
-## Critérios ainda necessários para encerrar o gate
+## Conclusão do gate
 
-A paridade de cálculo/recálculo e a equivalência `workers=1/2` estão aprovadas no snapshot científico acima, incluindo dimensões e dimnames, máscaras de `NA`/`NaN`, estados semânticos, metadados, matrizes, diagnósticos e células não selecionadas. Não há nova tolerância científica. Preservar os vínculos de fontes/artefatos e acrescentar os resultados dos gates restantes ao relatório final.
+A paridade de cálculo/recálculo e a equivalência `workers=1/2` estão aprovadas no snapshot científico acima, incluindo dimensões e dimnames, máscaras de `NA`/`NaN`, estados semânticos, metadados, matrizes, diagnósticos e células não selecionadas. Não há nova tolerância científica. Os vínculos de fontes/artefatos e todos os resultados finais permanecem preservados.
 
 As medições controladas de tempo e memória estão aprovadas nos snapshots de conclusão acima; não reexecutá-las. O limite temporal permanece `max(1,2 × baseline, baseline + 600 segundos)`; o de RSS, `baseline + max(10% do baseline, 512 MiB)`. Tempos coletados sob concorrência científica permanecem apenas observacionais. A revisão operacional 054v2 preservou orçamento de 80 GiB e reservas por job de 8/22/40 GiB (WIOD13, WIOD16 e `workers=2`), com piso de 16 GiB livres; nenhum limite científico foi alterado.
 
-Anexar a comparação das preparações, os dez resultados de falha com rollback e ausência de release parcial, o encerramento dos clusters, os registros da CI Windows/Ubuntu já aprovada e o resultado agregado final. Até essa evidência estar completa, manter o PR sem aprovação de merge e o #13 aberto.
+As comparações de preparação, os dez resultados de falha/rollback, a ausência de release parcial, o encerramento dos clusters, a CI Windows/Ubuntu e o agregado final estão aprovados e registrados acima. Não há gate técnico pendente no escopo autorizado WIOD13/WIOD16 sem papers. O PR #26 pode sair de draft; merge e encerramento do #13 devem vincular este relatório e preservar o canal público e todas as evidências locais.
