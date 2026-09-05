@@ -54,7 +54,6 @@ get_wlv <- function(
   )
   wlv_assert_dependencies(
     include_preparation = plan$repeat_pp,
-    include_papers = plan$prepaper,
     attach = FALSE
   )
 
@@ -87,7 +86,7 @@ recalc_wlv <- function(
     allow_experimental = allow_experimental,
     catalog = catalog
   )
-  wlv_assert_dependencies(include_papers = plan$prepaper, attach = FALSE)
+  wlv_assert_dependencies(attach = FALSE)
   execution <- wlv_execute_run_plan(plan)
   plan <- execution$plan
 

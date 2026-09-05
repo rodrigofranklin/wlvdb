@@ -92,11 +92,7 @@ test_that("all executable methods have a deterministic typed configuration", {
   )
   expect_identical(
     names(resolved),
-    c(
-      "wiodr13", "wiodr16", "alternative_1", "alternative_2",
-      "norow_w13", "ochoa_1", "ochoa_2", "petrovic", "wiodr13v09",
-      "wiodr16v09", "zerodep_1", "zerodep_2"
-    )
+    c("wiodr13", "wiodr16")
   )
   for (method in names(resolved)) {
     value <- resolved[[method]]
@@ -124,22 +120,6 @@ test_that("all executable methods have a deterministic typed configuration", {
   ]
   expect_identical(row_assumption$args[[1L]]$source, "wiodr13")
   expect_identical(row_assumption$args[[1L]]$variant, "standard")
-  wiodr16v09_row <- resolved$wiodr16v09[
-    resolved$wiodr16v09$instance_id == "assumption.row",
-    ,
-    drop = FALSE
-  ]
-  expect_identical(wiodr16v09_row$args[[1L]]$source, "wiodr16")
-  expect_identical(wiodr16v09_row$args[[1L]]$variant, "v09")
-
-  expect_identical(
-    resolved$alternative_1$module_id[
-      resolved$alternative_1$instance_id == "matrix.capital"
-    ],
-    "matrix.capital.reduction_problem"
-  )
-  expect_true("matrix.depreciation_override" %in% resolved$zerodep_1$instance_id)
-  expect_true("matrix.depreciation_override" %in% resolved$zerodep_2$instance_id)
 
   runtime <- new.env(parent = baseenv())
   sys.source(
@@ -154,6 +134,27 @@ test_that("all executable methods have a deterministic typed configuration", {
     logical(1L),
     "wlv_module_instance"
   )))
+})
+
+test_that("deferred configurations retain their native declarations", {
+  resolve <- function(method, source) {
+    module_config_environment$wlv_resolve_module_config(
+      wlv_test_root, method, source
+    )
+  }
+  legacy <- resolve("wiodr16v09", "wiodr16")
+  row <- legacy[legacy$instance_id == "assumption.row", , drop = FALSE]
+  expect_identical(row$args[[1L]]$source, "wiodr16")
+  expect_identical(row$args[[1L]]$variant, "v09")
+  alternative <- resolve("alternative_1", "wiodr13")
+  expect_identical(
+    alternative$module_id[alternative$instance_id == "matrix.capital"],
+    "matrix.capital.reduction_problem"
+  )
+  expect_true("matrix.depreciation_override" %in%
+    resolve("zerodep_1", "wiodr13")$instance_id)
+  expect_true("matrix.depreciation_override" %in%
+    resolve("zerodep_2", "wiodr16")$instance_id)
 })
 
 wlv_test_historical_aggregation <- function(source) {

@@ -31,7 +31,9 @@ release; and `disabled` means execution remains blocked until its documented
 recovery work is complete.
 
 WIOD13 and WIOD16 are currently the recovered source families. Their reference
-methods are stable, while the alternative WIOD methods remain experimental.
+methods, `wiodr13` and `wiodr16`, are the only executable methods in this release.
+The alternative WIOD definitions are retained for later incorporation, with
+calculation and recalculation disabled even with experimental opt-in.
 EXIOBASE and EORA sources remain experimental, and their methods are disabled
 until their preparation and calculation lifecycles are recovered.
 
@@ -97,11 +99,10 @@ The function accepts the following arguments:
 
 * methods - a string or a character vector like `c("wiodr13", "wiodr16")` for the methods to be calculated. Defaults to `"wiodr13"`
 * repeat_pp - boolean to indicate if full download and preparation of source data should be performed . Defaults to FALSE
-* papern - native paper task to run after calculation; only paper 0 is supported
-* prepaper - whether to run the supported native paper task
+* papern, prepaper - retired arguments retained only for call compatibility at their defaults (`0`, `FALSE`); paper generation has been removed and requests to enable it fail before calculation
 * workers - positive integer controlling PSOCK workers. The default is `1`, which runs sequentially without creating a cluster
 * channel - lowercase publication channel, optionally hierarchical, such as `stable` or `research/input-v3`. Defaults to `stable`
-* allow_experimental - boolean explicit opt-in for methods marked `experimental`. Defaults to `FALSE`; methods marked `disabled` remain blocked
+* allow_experimental - boolean explicit opt-in for experimental capabilities. Defaults to `FALSE`; it cannot enable a method whose calculation or recalculation capability is disabled
 
 
  ## Repository Folder Structure
@@ -149,15 +150,7 @@ not CSV row position, determines execution order.
  SEA_countries and SEA_sectors arrays
  
  
- 5) papers
-
-Paper 0 is a registered native task that consumes immutable published runs.
-Paper numbers 3 and 4 are rejected during preflight because their historical
-inputs and nomenclature are no longer supported.
-
-
-
-6) R
+5) R
 
 The deterministic bootstrap loads function definitions from `R/lib/`,
 `R/modules/native/`, `R/preparation/` and `R/main.R` into one locked private

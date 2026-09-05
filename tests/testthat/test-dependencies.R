@@ -8,6 +8,7 @@ test_that("declared dependencies are represented in the lockfile", {
   locked <- names(lockfile$Packages)
 
   expect_true(all(declared %in% locked))
+  expect_false("writexl" %in% locked)
 })
 
 test_that("the restored library and lockfile are synchronized", {
@@ -24,8 +25,11 @@ test_that("feature dependency groups remain declared", {
   declared <- trimws(unlist(strsplit(declared, ",")))
   declared <- sub("[[:space:]]*\\(.*$", "", declared)
 
-  grouped <- unique(unlist(environment$wlv_dependency_groups(), use.names = FALSE))
+  groups <- environment$wlv_dependency_groups()
+  grouped <- unique(unlist(groups, use.names = FALSE))
   expect_true(all(grouped %in% declared))
+  expect_false("papers" %in% names(groups))
+  expect_false("writexl" %in% grouped)
 })
 
 test_that("a missing dependency produces an actionable error", {

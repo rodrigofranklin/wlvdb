@@ -17,8 +17,10 @@ También incluye estimaciones preliminares sobre:
 
 La cobertura temporal y las operaciones disponibles se publican en la
 [matriz canónica de soporte](docs/methods.md). WIOD13 y WIOD16 son las familias
-recuperadas; sus métodos de referencia son estables y los métodos alternativos
-siguen siendo experimentales. Las fuentes EXIOBASE y EORA son experimentales,
+recuperadas; `wiodr13` y `wiodr16` son los únicos métodos ejecutables en esta
+entrega. Las definiciones alternativas se conservan para incorporarlas más
+adelante, con cálculo y recálculo bloqueados incluso con habilitación experimental.
+Las fuentes EXIOBASE y EORA son experimentales,
 y sus métodos permanecen deshabilitados hasta completar su recuperación.
  
 ## Inicio seguro y función principal
@@ -61,11 +63,10 @@ La función acepta los siguientes argumentos:
 
 * methods: una cadena o un vector de caracteres como `c("wiodr13", "wiodr16")`, especificando los métodos a calcular o recalcular. Por defecto, `"wiodr13"`
 * repeat_pp : Verdadero / Falso para indicar si se debe ejecutar la preparación completa de descarga y datos de origen. Por defecto, falso .
-* papern: tarea nativa de paper que se ejecuta después del cálculo; solo se admite el paper 0
-* prepaper: Verdadero / Falso para ejecutar la tarea nativa admitida
+* papern, prepaper: argumentos retirados, conservados únicamente con sus valores predeterminados (`0`, `FALSE`) para compatibilidad; se eliminó la generación de papers y los intentos de activarla fallan antes del cálculo
 * workers: entero positivo que controla los workers PSOCK. El valor predeterminado es `1`, que ejecuta secuencialmente sin crear un clúster
 * channel: canal de publicación en minúsculas, como `stable` o `research/input-v3`
-* allow_experimental: habilitación explícita de métodos experimentales; los métodos deshabilitados permanecen bloqueados
+* allow_experimental: habilitación explícita de capacidades experimentales; no habilita métodos cuyo cálculo o recálculo esté bloqueado
 
 ## Estructura / organización de la carpeta del repositorio 
 
@@ -101,13 +102,7 @@ Los resultados son runs inmutables en `results/runs/<método>/<run_id>/`.
 Las releases de `results/releases/` fijan conjuntos coherentes y los marcadores
 append-only de `results/channels/<canal>/` seleccionan la release vigente.
 
-### 5) papers 
-
-El paper 0 es una tarea nativa registrada que consume runs publicados e
-inmutables. Los papers 3 y 4 fallan en el preflight porque sus insumos y
-nomenclaturas históricos ya no son compatibles.
-
-### 6) Runtime R
+### 5) Runtime R
 
 El bootstrap determinista carga definiciones de función de `R/lib/`,
 `R/modules/native/`, `R/preparation/` y `R/main.R` en un único namespace

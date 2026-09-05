@@ -8,8 +8,6 @@ usage <- function() {
       "  --method NAME       Method to calculate; repeat or use comma-separated names.",
       "  --repeat-pp         Download and prepare source data before calculation.",
       "  --prepare-only      Download, prepare, and validate source data without calculating.",
-      "  --paper NUMBER      Select the paper script number (default: 0).",
-      "  --prepaper          Run the selected paper script after calculation.",
       "  --workers NUMBER    Number of workers; 1 is sequential (default: WLV_WORKERS or 1).",
       "  --channel NAME      Release channel to publish (default: WLV_CHANNEL or stable).",
       "  --allow-experimental  Explicitly allow methods marked as experimental.",
@@ -28,8 +26,6 @@ parse_cli <- function(args) {
     methods = character(),
     repeat_pp = FALSE,
     prepare_only = FALSE,
-    papern = 0L,
-    prepaper = FALSE,
     workers = suppressWarnings(as.numeric(Sys.getenv("WLV_WORKERS", unset = "1"))),
     channel = Sys.getenv("WLV_CHANNEL", unset = "stable"),
     allow_experimental = FALSE,
@@ -48,8 +44,17 @@ parse_cli <- function(args) {
     } else if (argument == "--prepare-only") {
       result$repeat_pp <- TRUE
       result$prepare_only <- TRUE
-    } else if (argument %in% c("--prepaper", "--prepare-paper")) {
-      result$prepaper <- TRUE
+    } else if (
+      argument %in% c("--paper", "--prepaper", "--prepare-paper") ||
+        grepl("^--paper=", argument)
+    ) {
+      stop(
+        paste0(
+          "Paper tooling has been removed; remove legacy `--paper`, ",
+          "`--prepaper`, or `--prepare-paper` options."
+        ),
+        call. = FALSE
+      )
     } else if (argument == "--check") {
       result$check <- TRUE
     } else if (argument == "--allow-experimental") {
@@ -82,23 +87,12 @@ parse_cli <- function(args) {
         stop("--method requires a value.", call. = FALSE)
       }
       result$methods <- c(result$methods, args[[i]])
-    } else if (grepl("^--paper=", argument)) {
-      result$papern <- suppressWarnings(as.integer(sub("^--paper=", "", argument)))
-    } else if (argument == "--paper") {
-      i <- i + 1L
-      if (i > length(args)) {
-        stop("--paper requires a number.", call. = FALSE)
-      }
-      result$papern <- suppressWarnings(as.integer(args[[i]]))
     } else {
       stop(sprintf("Unknown argument: %s", argument), call. = FALSE)
     }
     i <- i + 1L
   }
 
-  if (is.na(result$papern) || result$papern < 0L) {
-    stop("--paper must be a non-negative integer.", call. = FALSE)
-  }
   if (
     !is.null(result$list_methods) &&
     !(result$list_methods %in% c("table", "names", "csv"))
@@ -185,8 +179,6 @@ requested_operations <- if (args$prepare_only) {
 request <- runtime$wlv_validate_request(
   methods = args$methods,
   repeat_pp = args$repeat_pp,
-  papern = args$papern,
-  prepaper = args$prepaper,
   workers = args$workers,
   channel = args$channel,
   mode = "calculate",
@@ -198,7 +190,6 @@ request <- runtime$wlv_validate_request(
 
 runtime$wlv_assert_dependencies(
   include_preparation = request$repeat_pp,
-  include_papers = request$prepaper,
   attach = FALSE
 )
 
@@ -219,8 +210,6 @@ if (args$prepare_only) {
 runtime$get_wlv(
   methods = args$methods,
   repeat_pp = args$repeat_pp,
-  papern = args$papern,
-  prepaper = args$prepaper,
   workers = args$workers,
   channel = args$channel,
   allow_experimental = args$allow_experimental

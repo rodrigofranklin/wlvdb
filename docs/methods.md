@@ -25,23 +25,23 @@ Preparation is a source capability and is repeated here for convenience.
 
 | Method | Source | Method status | Source status | Coverage | Prepare | Calculate | Recalculate | Description | Validation ID | Documentation | Known limitations |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `alternative_1` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | yes | yes | Reduction Problem: Alternative 1 | — | — | Method-specific scientific validation and documentation are pending. |
-| `alternative_2` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | yes | yes | Reduction Problem: Alternative 2 | — | — | Method-specific scientific validation and documentation are pending. |
+| `alternative_1` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | no | no | Reduction Problem: Alternative 1 | — | — | Execution deferred beyond Issue 13. Method-specific scientific validation and documentation are pending. |
+| `alternative_2` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | no | no | Reduction Problem: Alternative 2 | — | — | Execution deferred beyond Issue 13. Method-specific scientific validation and documentation are pending. |
 | `eora26` | `eora26` | `disabled` | `experimental` | 1990–2016 | no | no | no | Standard v0.9 | — | — | Source recovery and scientific validation are required before execution. |
 | `exiobase37` | `exiobase37` | `disabled` | `experimental` | — | no | no | no | Standard v0.9 | — | — | Source recovery and scientific validation are required before execution. |
 | `exiobase381` | `exiobase381` | `disabled` | `experimental` | — | no | no | no | Standard v0.9 | — | — | Source recovery and scientific validation are required before execution. |
 | `exiobase382` | `exiobase382` | `disabled` | `experimental` | — | no | no | no | Standard v0.9 | — | — | Source recovery and scientific validation are required before execution. |
 | `exiobase395` | `exiobase395` | `disabled` | `experimental` | 1995–2022 | no | no | no | Standard v0.9 | — | — | Source recovery and scientific validation are required before execution. |
-| `norow_w13` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | yes | yes | Teste sem suposições para resto do mundo | — | — | Method-specific scientific validation and documentation are pending. |
-| `ochoa_1` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | yes | yes | Reduction Problem: Ochoa 1 | — | — | Method-specific scientific validation and documentation are pending. |
-| `ochoa_2` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | yes | yes | Reduction Problem: Ochoa 2 | — | — | Method-specific scientific validation and documentation are pending. |
-| `petrovic` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | yes | yes | Reduction Problem: Petrovic | — | — | Method-specific scientific validation and documentation are pending. |
+| `norow_w13` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | no | no | Teste sem suposições para resto do mundo | — | — | Execution deferred beyond Issue 13. Method-specific scientific validation and documentation are pending. |
+| `ochoa_1` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | no | no | Reduction Problem: Ochoa 1 | — | — | Execution deferred beyond Issue 13. Method-specific scientific validation and documentation are pending. |
+| `ochoa_2` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | no | no | Reduction Problem: Ochoa 2 | — | — | Execution deferred beyond Issue 13. Method-specific scientific validation and documentation are pending. |
+| `petrovic` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | no | no | Reduction Problem: Petrovic | — | — | Execution deferred beyond Issue 13. Method-specific scientific validation and documentation are pending. |
 | `wiodr13` | `wiodr13` | `stable` | `stable` | 1995–2009 | yes | yes | yes | Standard v1.0 | `wiodr13_scientific_v1` | [docs/wiodr13.md](wiodr13.md) | — |
-| `wiodr13v09` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | yes | yes | Standard v0.9 | — | — | Legacy method version has no independent scientific validation contract. |
+| `wiodr13v09` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | no | no | Standard v0.9 | — | — | Execution deferred beyond Issue 13. Legacy method version has no independent scientific validation contract. |
 | `wiodr16` | `wiodr16` | `stable` | `stable` | 2000–2014 | yes | yes | yes | Standard v1.0 | `wiodr16_scientific_v1` | [docs/wiodr16.md](wiodr16.md) | — |
-| `wiodr16v09` | `wiodr16` | `experimental` | `stable` | 2000–2014 | yes | yes | yes | Standard v0.9 | — | — | Experimental legacy profile with its worker-based ROW completion pinned by a versioned scientific contract. |
-| `zerodep_1` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | yes | yes | Zero depreciation | — | — | Counterfactual method requires explicit opt-in and method-specific documentation. |
-| `zerodep_2` | `wiodr16` | `experimental` | `stable` | 2000–2014 | yes | yes | yes | Zero depreciation | — | — | Counterfactual method requires explicit opt-in and method-specific documentation. |
+| `wiodr16v09` | `wiodr16` | `experimental` | `stable` | 2000–2014 | yes | no | no | Standard v0.9 | — | — | Execution deferred beyond Issue 13. Experimental legacy profile with its worker-based ROW completion pinned by a versioned scientific contract. |
+| `zerodep_1` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | no | no | Zero depreciation | — | — | Execution deferred beyond Issue 13. Counterfactual method requires method-specific documentation and scientific validation. |
+| `zerodep_2` | `wiodr16` | `experimental` | `stable` | 2000–2014 | yes | no | no | Zero depreciation | — | — | Execution deferred beyond Issue 13. Counterfactual method requires method-specific documentation and scientific validation. |
 
 ## Sources
 

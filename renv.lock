@@ -2177,24 +2177,6 @@
         "testthat (>= 3.0.0)"
       ]
     },
-    "writexl": {
-      "Package": "writexl",
-      "Version": "2.0.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Suggests": [
-        "grDevices",
-        "graphics",
-        "spelling",
-        "readxl",
-        "nycflights13",
-        "testthat (>= 3.2.0)",
-        "xml2",
-        "bit64",
-        "knitr",
-        "rmarkdown"
-      ]
-    },
     "xml2": {
       "Package": "xml2",
       "Version": "1.6.0",

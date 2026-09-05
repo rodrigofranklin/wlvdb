@@ -546,11 +546,12 @@ wlv_validate_native_scientific_profiles <- function(
     indicators = NULL) {
   methods <- wlv_catalog_method_table(catalog)
   executable <- methods$can_calculate | methods$can_recalculate
-  methods <- methods[executable, , drop = FALSE]
+  active_methods <- methods$method[executable]
+  methods <- methods[methods$status != "disabled", , drop = FALSE]
   mapping <- wlv_native_scientific_profile_map(root)
   if (!setequal(mapping$method, methods$method) ||
       nrow(mapping) != nrow(methods)) {
-    stop("Scientific profile coverage does not exactly match executable methods.",
+    stop("Scientific profile coverage does not exactly match cataloged native methods.",
       call. = FALSE
     )
   }
@@ -635,7 +636,8 @@ wlv_validate_native_scientific_profiles <- function(
     )
   })
   names(profiles) <- methods$method
-  profiles
+  # Validate retained definitions as well, but expose only active profiles.
+  profiles[active_methods]
 }
 
 wlv_native_output_overrides <- function(root, profiles) {
@@ -746,7 +748,8 @@ wlv_native_output_indicators <- function(
 wlv_validate_native_output_profiles <- function(root, catalog) {
   methods <- wlv_catalog_method_table(catalog)
   executable <- methods$can_calculate | methods$can_recalculate
-  methods <- methods[executable, , drop = FALSE]
+  active_methods <- methods$method[executable]
+  methods <- methods[methods$status != "disabled", , drop = FALSE]
   mapping <- wlv_native_output_profile_map(root)
   missing <- setdiff(methods$method, mapping$method)
   extra <- setdiff(mapping$method, methods$method)
@@ -761,9 +764,13 @@ wlv_validate_native_output_profiles <- function(root, catalog) {
     )
   }
   result <- lapply(methods$method, function(method) {
-    registry <- wlv_native_aggregation_registry(root, catalog, method)
+    registry <- if (method %in% active_methods) {
+      wlv_native_aggregation_registry(root, catalog, method)
+    } else {
+      NULL
+    }
     wlv_native_output_indicators(root, catalog, method, registry)
   })
   names(result) <- methods$method
-  result
+  result[active_methods]
 }

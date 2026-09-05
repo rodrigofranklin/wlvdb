@@ -29,7 +29,9 @@ for (path in c(
 
 wlv_test_native_planner_inputs <- function(method) {
   e <- native_planner_environment
-  catalog <- e$wlv_load_catalog(wlv_test_root)
+  catalog <- wlv_test_enable_deferred_methods(
+    e$wlv_load_catalog(wlv_test_root), method
+  )
   methods <- e$wlv_catalog_method_table(catalog)
   record <- methods[methods$method == method, , drop = FALSE]
   stopifnot(nrow(record) == 1L)
@@ -51,12 +53,12 @@ wlv_test_native_planner_inputs <- function(method) {
   )
 }
 
-test_that("all twelve executable methods compile deterministic native DAGs", {
+test_that("the two main executable methods compile deterministic native DAGs", {
   e <- native_planner_environment
   catalog <- e$wlv_load_catalog(wlv_test_root)
   methods <- e$wlv_catalog_method_table(catalog)
   methods <- methods[methods$can_calculate, , drop = FALSE]
-  expect_identical(nrow(methods), 12L)
+  expect_identical(nrow(methods), 2L)
   registry <- e$wlv_native_registry()
 
   plans <- lapply(methods$method, function(method) {
@@ -165,7 +167,7 @@ test_that("native recalculation DAGs compile at public checkpoints", {
   catalog <- e$wlv_load_catalog(wlv_test_root)
   methods <- e$wlv_catalog_method_table(catalog)
   methods <- methods[methods$can_recalculate, , drop = FALSE]
-  expect_identical(nrow(methods), 12L)
+  expect_identical(nrow(methods), 2L)
   registry <- e$wlv_native_registry()
   for (method in methods$method) {
     inputs <- wlv_test_native_planner_inputs(method)

@@ -450,18 +450,22 @@ wlv_validate_executable_module_configs <- function(root) {
     stop("Method catalog lacks fields required by typed module configuration.", call. = FALSE)
   }
   executable <- methods$can_calculate == "TRUE" | methods$can_recalculate == "TRUE"
-  methods <- methods[executable, , drop = FALSE]
-  resolved <- lapply(seq_len(nrow(methods)), function(index) {
-    wlv_resolve_module_config(root, methods$method[[index]], methods$source[[index]])
+  active_methods <- methods[executable, , drop = FALSE]
+  resolved <- lapply(seq_len(nrow(active_methods)), function(index) {
+    wlv_resolve_module_config(
+      root, active_methods$method[[index]], active_methods$source[[index]]
+    )
   })
-  names(resolved) <- methods$method
+  names(resolved) <- active_methods$method
 
+  # Deferred methods retain their declared profiles for later incorporation.
+  # Check those definitions without making them executable.
   mapping <- wlv_read_aggregation_profile_map(root)
   experimental <- methods$method[methods$status == "experimental"]
   stable <- methods$method[methods$status == "stable"]
   if (!setequal(mapping$method, experimental) || any(mapping$method %in% stable)) {
     stop(
-      "Every executable experimental method, and no stable method, must select one explicit historical aggregation profile.",
+      "Every cataloged experimental method, and no stable method, must select one explicit historical aggregation profile.",
       call. = FALSE
     )
   }

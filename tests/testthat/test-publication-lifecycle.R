@@ -926,76 +926,42 @@ test_that("a later native method failure prevents the joint release commit", {
   expect_false(dir.exists(file.path(fixture$root, "results", ".lock-results")))
 })
 
-test_that("paper artifacts are hashed inside the committed release", {
+test_that("committed releases contain no paper artifacts", {
   fixture <- wlv_make_native_publication_fixture(mutable = TRUE)
   on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
   runtime <- fixture$runtime
-  runtime$wlv_run_staged_paper <- function(
-      plan,
-      run_environments,
-      release_staging) {
-    output <- file.path(release_staging, "reduction_problem.xlsx")
-    writeBin(charToRaw("native paper"), output)
-    structure(
-      list(output = output, sheets = list()),
-      class = c("wlv_paper_result", "list")
-    )
-  }
   plan <- wlv_native_test_release_plan(fixture)
-  plan$prepaper <- TRUE
   run <- wlv_native_test_run_environment(fixture, "run-paper")
 
   release <- runtime$wlv_commit_release(plan, list(run))
 
-  paper <- release$manifest$artifacts[vapply(
+  paths <- vapply(
     release$manifest$artifacts,
-    function(artifact) identical(artifact$role, "paper"),
-    logical(1L)
-  )]
-  expect_length(paper, 1L)
-  expect_identical(paper[[1L]]$path, "reduction_problem.xlsx")
+    `[[`,
+    character(1L),
+    "path"
+  )
+  roles <- vapply(
+    release$manifest$artifacts,
+    `[[`,
+    character(1L),
+    "role"
+  )
+  expect_length(release$manifest$artifacts, 2L)
+  expect_identical(
+    setNames(roles, paths)[c("indicators_en.csv", "meta_indicators.csv")],
+    c(
+      indicators_en.csv = "panel_labels",
+      meta_indicators.csv = "panel_metadata"
+    )
+  )
+  expect_false("paper" %in% roles)
   expect_no_error(runtime$wlv_verify_release_manifest(
     release$manifest,
     release$root,
     publication_root = file.path(fixture$root, "results"),
     reject_unlisted = TRUE
   ))
-})
-
-test_that("paper failure leaves the previous release current", {
-  fixture <- wlv_make_native_publication_fixture(mutable = TRUE)
-  on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
-  runtime <- fixture$runtime
-  plan <- wlv_native_test_release_plan(fixture)
-  first <- wlv_native_test_run_environment(fixture, "run-paper-before")
-  runtime$wlv_commit_release(plan, list(first))
-  before <- runtime$wlv_read_current_release(
-    fixture$root,
-    "stable",
-    required = TRUE
-  )
-  markers_before <- runtime$wlv_list_channel_markers(fixture$root, "stable")
-  runtime$wlv_run_staged_paper <- function(...) {
-    stop("injected paper failure", call. = FALSE)
-  }
-  plan$prepaper <- TRUE
-  second <- wlv_native_test_run_environment(fixture, "run-paper-after")
-
-  expect_error(
-    runtime$wlv_commit_release(plan, list(second)),
-    "injected paper failure",
-    fixed = TRUE
-  )
-  after <- runtime$wlv_read_current_release(
-    fixture$root,
-    "stable",
-    required = TRUE
-  )
-  expect_identical(after$manifest$release_id, before$manifest$release_id)
-  expect_identical(
-    runtime$wlv_list_channel_markers(fixture$root, "stable"),
-    markers_before
-  )
 })
 
 test_that("uncommitted native staging is invisible to current-run resolution", {

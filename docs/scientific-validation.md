@@ -242,9 +242,10 @@ além do inventário SHA-256 exato de todos os artefatos. A comparação full ×
 recálculo deve resolver os dois runs por seus manifests e conservar seus IDs
 no registro da auditoria.
 
-A matriz é imediatamente executável para `wiodr13` e `wiodr16` quando suas
-gerações completas publicadas estão disponíveis. `wiodr16v09` e `zerodep_2`
-passam pelos mesmos contratos, mas são métodos experimentais: primeiro é
-necessário criar sua geração completa com `allow_experimental = TRUE` e repetir
-todo o protocolo com essa opção. Não se deve usar o resultado de `wiodr16` como
-substituto de baseline para esses dois métodos.
+A matriz é executável para `wiodr13` e `wiodr16` quando suas gerações completas
+publicadas estão disponíveis. As medições de `wiodr16v09` e `zerodep_2` acima
+são registros históricos de contratos preservados; esses métodos, assim como
+os demais experimentais, estão fora da entrega atual e têm cálculo e recálculo
+bloqueados, inclusive com `allow_experimental = TRUE`. Sua incorporação futura
+exige uma geração própria e a validação integral desses contratos. O resultado
+de `wiodr16` não substitui o baseline desses métodos.

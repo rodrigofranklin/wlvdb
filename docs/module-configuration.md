@@ -32,8 +32,8 @@ including declared `variant` and `source_variable` values.
 
 ## Historical aggregation profiles
 
-The ten executable experimental methods explicitly select one of two shared
-profiles through `config/aggregations/method_profiles.csv`:
+The ten deferred experimental definitions retain one of two shared profiles
+through `config/aggregations/method_profiles.csv`:
 
 - `wiodr13_historical_v1`
 - `wiodr16_historical_v1`
@@ -41,3 +41,7 @@ profiles through `config/aggregations/method_profiles.csv`:
 These profiles preserve the exact pre-v2 `sum`, arithmetic `mean` and formula
 bindings. Formula bindings refer to registered aliases, never script paths.
 There is no runtime fallback from a missing typed aggregation row.
+
+Only `wiodr13` and `wiodr16` currently expose calculation and recalculation
+through the public APIs. Retained configuration is not an execution capability;
+experimental opt-in does not override the catalog capability flags.

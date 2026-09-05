@@ -207,6 +207,14 @@ test_that("repository catalog classifies every method and source explicitly", {
     catalog$methods$method[catalog$methods$status == "stable"],
     c("wiodr13", "wiodr16")
   )
+  expect_setequal(
+    catalog$methods$method[catalog$methods$can_calculate],
+    c("wiodr13", "wiodr16")
+  )
+  expect_setequal(
+    catalog$methods$method[catalog$methods$can_recalculate],
+    c("wiodr13", "wiodr16")
+  )
   expect_false(any(
     catalog$methods$can_calculate[catalog$methods$status == "disabled"]
   ))

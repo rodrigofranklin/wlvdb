@@ -1578,27 +1578,8 @@ wlv_commit_release <- function(plan, run_environments) {
   wlv_write_result_csv(indicators, file.path(staging, "indicators_en.csv"))
   wlv_write_result_csv(metadata, file.path(staging, "meta_indicators.csv"))
 
-  paper_result <- NULL
-  if (isTRUE(plan$prepaper)) {
-    # Papers execute against the staged immutable runs, so bind both sides of
-    # that execution to the preflight inventories. Ordinary calculations do
-    # no work at this boundary and are covered by the release and final checks
-    # below without two redundant full-tree hash passes.
-    wlv_assert_plan_publication_inputs_unchanged(plan, use_receipt = TRUE)
-    paper_result <- wlv_run_staged_paper(plan, run_environments, staging)
-    wlv_assert_plan_publication_inputs_unchanged(plan, use_receipt = TRUE)
-    wlv_assert_run_environments_source_inputs_unchanged(
-      plan,
-      run_environments,
-      use_receipt = TRUE
-    )
-  }
   release_artifacts <- c("indicators_en.csv", "meta_indicators.csv")
   release_roles <- c("panel_labels", "panel_metadata")
-  if (!is.null(paper_result)) {
-    release_artifacts <- c(release_artifacts, basename(paper_result$output))
-    release_roles <- c(release_roles, "paper")
-  }
 
   release <- wlv_build_release_manifest(
     release_root = staging,

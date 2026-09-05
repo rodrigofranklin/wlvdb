@@ -12,6 +12,7 @@ test_that("runtime manifest is explicit, ordered, and excludes legacy executors"
   expect_identical(relative, manifest)
   expect_identical(tail(manifest, 2L), c("R/lib/execution.R", "R/main.R"))
   expect_identical(anyDuplicated(manifest), 0L)
+  expect_false(any(grepl("paper", manifest, ignore.case = TRUE)))
   expect_false(any(grepl(
     paste0(
       "^R/(lib/(computations|re_computations)[.]R|",

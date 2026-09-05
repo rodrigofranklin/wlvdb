@@ -152,6 +152,20 @@ test_that("public APIs enforce catalog maturity before side effects", {
     names(formals(runtime$prepare_wlv)),
     c("methods", "allow_experimental")
   )
+  expect_identical(formals(runtime$get_wlv)$papern, 0)
+  expect_identical(formals(runtime$get_wlv)$prepaper, FALSE)
+  expect_identical(formals(runtime$recalc_wlv)$papern, 0)
+  expect_identical(formals(runtime$recalc_wlv)$prepaper, FALSE)
+  expect_error(
+    runtime$get_wlv("wiodr13", prepaper = TRUE),
+    "Paper tooling has been removed",
+    fixed = TRUE
+  )
+  expect_error(
+    runtime$recalc_wlv("wiodr13", papern = 1L),
+    "Paper tooling has been removed",
+    fixed = TRUE
+  )
 
   expect_error(runtime$get_wlv("alternative_1"), "experimental")
   expect_error(runtime$prepare_wlv("alternative_1"), "experimental")
@@ -171,6 +185,18 @@ test_that("command line entrypoint provides help without project data", {
   expect_true(any(grepl("--channel", output, fixed = TRUE)))
   expect_true(any(grepl("--allow-experimental", output, fixed = TRUE)))
   expect_true(any(grepl("--list-methods", output, fixed = TRUE)))
+  expect_false(any(grepl("--paper", output, fixed = TRUE)))
+  expect_false(any(grepl("--prepaper", output, fixed = TRUE)))
+})
+
+test_that("command line entrypoint rejects removed paper options", {
+  for (option in c("--paper=0", "--paper", "--prepaper", "--prepare-paper")) {
+    output <- run_wlv_cli(option)
+    status <- attr(output, "status", exact = TRUE)
+
+    expect_true(!is.null(status) && status != 0L)
+    expect_true(any(grepl("Paper tooling has been removed", output, fixed = TRUE)))
+  }
 })
 
 test_that("command line activates renv before its first runtime load", {
@@ -238,19 +264,21 @@ test_that("command line entrypoint lists the catalog in all supported formats", 
   expect_identical(wlv_runtime_artifact_inventory(), artifacts_before)
 })
 
-test_that("command line experimental access requires the explicit flag", {
+test_that("command line deferred methods remain non-executable after opt-in", {
   blocked <- run_wlv_cli("--method", "alternative_1", "--check")
   expect_true(!is.null(attr(blocked, "status")) && attr(blocked, "status") != 0L)
   expect_true(any(grepl("experimental", blocked, fixed = TRUE)))
   expect_true(any(grepl("--allow-experimental", blocked, fixed = TRUE)))
 
-  allowed <- run_wlv_cli(
+  opted_in <- run_wlv_cli(
     "--method", "alternative_1", "--allow-experimental", "--check"
   )
-  expect_null(attr(allowed, "status"))
+  expect_true(
+    !is.null(attr(opted_in, "status")) && attr(opted_in, "status") != 0L
+  )
   expect_true(any(grepl(
-    "Environment and arguments are valid",
-    allowed,
+    "does not support operation(s): calculate",
+    opted_in,
     fixed = TRUE
   )))
 })
@@ -266,9 +294,7 @@ test_that("command line disabled methods cannot be enabled by opt-in", {
 
 test_that("command line check does not create or modify runtime artifacts", {
   before <- wlv_runtime_artifact_inventory()
-  output <- run_wlv_cli(
-    "--method", "alternative_1", "--allow-experimental", "--check"
-  )
+  output <- run_wlv_cli("--method", "wiodr13", "--check")
   after <- wlv_runtime_artifact_inventory()
 
   expect_null(attr(output, "status"))

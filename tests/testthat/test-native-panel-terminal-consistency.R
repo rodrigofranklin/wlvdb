@@ -6,7 +6,9 @@ test_that("panel slices equal cleaned terminal indicator generations", {
     at_stage = 1L,
     root = wlv_test_root,
     allow_experimental = TRUE,
-    catalog = runtime$wlv_runtime_catalog()
+    catalog = wlv_test_enable_deferred_methods(
+      runtime$wlv_runtime_catalog(), "alternative_1"
+    )
   )
   years <- c("2000", "2001")
   sectors <- c("A", "B")

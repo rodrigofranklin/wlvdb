@@ -352,6 +352,15 @@ wlv_validate_request <- function(
   workers <- wlv_validate_workers(workers)
   channel <- wlv_validate_release_channel(channel)
   papern <- wlv_validate_integer(papern, "papern", minimum = 0L)
+  if (isTRUE(prepaper) || papern != 0L) {
+    stop(
+      paste0(
+        "Paper tooling has been removed; compatibility arguments must remain ",
+        "`papern = 0` and `prepaper = FALSE`."
+      ),
+      call. = FALSE
+    )
+  }
   requested_operations <- wlv_validate_requested_operations(
     requested_operations,
     mode = mode,
@@ -549,13 +558,6 @@ wlv_validate_request <- function(
       indicators = indicators
     )
   }
-  paper_task <- wlv_validate_paper_request(papern, prepaper)
-  wlv_validate_paper_method_compatibility(
-    paper_task,
-    prepaper = prepaper,
-    methods = method_plan,
-    indicators = indicators
-  )
   wlv_catalog_assert_inputs_unchanged(catalog, force_hash = FALSE)
 
   plan <- structure(
@@ -576,7 +578,6 @@ wlv_validate_request <- function(
       repeat_pp = repeat_pp,
       papern = papern,
       prepaper = prepaper,
-      paper_task = paper_task,
       workers = workers,
       channel = channel,
       at_stage = at_stage,

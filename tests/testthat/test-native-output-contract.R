@@ -60,9 +60,53 @@ wlv_native_scientific_edit <- function(root, name, edit) {
   invisible(path)
 }
 
-test_that("public output profiles preserve the five historical panel orders", {
+# Only this in-memory fixture enables deferred definitions for unit checks.
+# Public entrypoints always use the checked-in catalog's capability flags.
+wlv_test_all_native_profile_catalog <- function() {
+  catalog <- native_output_environment$wlv_load_catalog(wlv_test_root)
+  declared <- catalog$methods$status != "disabled"
+  catalog$methods$can_calculate[declared] <- TRUE
+  catalog$methods$can_recalculate[declared] <- TRUE
+  catalog
+}
+
+test_that("only the two main methods expose executable output and scientific profiles", {
   e <- native_output_environment
   catalog <- e$wlv_load_catalog(wlv_test_root)
+  indicators <- e$wlv_validate_native_output_profiles(wlv_test_root, catalog)
+  profiles <- e$wlv_validate_native_scientific_profiles(
+    wlv_test_root, catalog, indicators
+  )
+  expect_identical(names(indicators), c("wiodr13", "wiodr16"))
+  expect_identical(names(profiles), names(indicators))
+})
+
+test_that("retained output maps cannot hide missing active or unknown methods", {
+  e <- native_output_environment
+  catalog <- e$wlv_load_catalog(wlv_test_root)
+  root <- wlv_native_scientific_fixture()
+  on.exit(unlink(root, recursive = TRUE), add = TRUE)
+  path <- file.path(root, "config", "outputs", "method_profiles.csv")
+  original <- e$wlv_native_output_profile_map(root)
+  invalid <- list(
+    original[original$method != "wiodr13", , drop = FALSE],
+    rbind(original, data.frame(method = "unknown_method", profile = "wiodr13_standard"))
+  )
+  for (mapping in invalid) {
+    utils::write.table(
+      mapping, path, sep = ";", row.names = FALSE, col.names = TRUE,
+      quote = FALSE, fileEncoding = "UTF-8"
+    )
+    expect_error(
+      e$wlv_validate_native_output_profiles(root, catalog),
+      "Output profile coverage is invalid"
+    )
+  }
+})
+
+test_that("retained output profiles preserve the five historical panel orders", {
+  e <- native_output_environment
+  catalog <- wlv_test_all_native_profile_catalog()
   profiles <- e$wlv_validate_native_output_profiles(wlv_test_root, catalog)
   expect_length(profiles, 12L)
 
@@ -93,9 +137,9 @@ test_that("public output profiles preserve the five historical panel orders", {
   )
 })
 
-test_that("all executable methods select explicit orthogonal scientific traits", {
+test_that("retained native definitions select explicit orthogonal scientific traits", {
   e <- native_output_environment
-  catalog <- e$wlv_load_catalog(wlv_test_root)
+  catalog <- wlv_test_all_native_profile_catalog()
   indicators <- e$wlv_validate_native_output_profiles(wlv_test_root, catalog)
   profiles <- e$wlv_validate_native_scientific_profiles(
     wlv_test_root,
@@ -222,7 +266,15 @@ test_that("scientific preflight rejects missing, mismatched and orphan traits", 
   validate(
     "scientific_method_profiles.csv",
     function(value) value[-1L, , drop = FALSE],
-    "coverage does not exactly match executable methods"
+    "coverage does not exactly match cataloged native methods"
+  )
+  validate(
+    "scientific_method_profiles.csv",
+    function(value) {
+      value$method[value$method == "alternative_2"] <- "unknown_method"
+      value
+    },
+    "coverage does not exactly match cataloged native methods"
   )
   validate(
     "scientific_method_profiles.csv",

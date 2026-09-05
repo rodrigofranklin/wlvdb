@@ -64,11 +64,7 @@ wlv_runtime_definition_manifest <- function() {
     "R/preparation/native_wiodr16.R",
     "R/preparation/registry.R",
 
-    # Native paper tasks and static enforcement.
-    "R/lib/paper_tasks.R",
-    "R/utils/papers/paper_0_selection.R",
-    "R/utils/papers/paper_3_selection.R",
-    "R/utils/papers/paper_4_selection.R",
+    # Static enforcement.
     "R/lib/runtime_static_analysis.R",
 
     # Orchestration and the public API are deliberately last.

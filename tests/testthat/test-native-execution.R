@@ -55,7 +55,7 @@ test_that("all executable methods resolve only typed native execution inputs", {
       runtime$wlv_load_run_missingness_policy(plan, record)
     )
   })
-  expect_length(compatibility, 12L)
+  expect_length(compatibility, 2L)
   hashes <- vapply(compatibility, `[[`, character(1L), "sha256")
   expect_true(all(grepl("^[0-9a-f]{64}$", hashes)))
   expect_identical(anyDuplicated(hashes), 0L)
@@ -122,6 +122,7 @@ test_that("all executable methods resolve only typed native execution inputs", {
       "assumption/china_hours_per_worker"
     )
   )
+  expected_assumptions <- expected_assumptions[c("wiodr13", "wiodr16")]
   expect_setequal(names(expected_assumptions), plan$method_names)
 
   for (method in plan$method_names) {
@@ -389,7 +390,9 @@ test_that("alternative 2 preserves the legacy scientific observation metadata", 
     "scale of multipliers of high and medium skilled labour regarding low skilled ",
     "labour (6.25x for high skilled and 2.5x for medium skilled labour)."
   )
-  registry <- native_execution_runtime$wlv_runtime_catalog()
+  registry <- wlv_test_enable_deferred_methods(
+    native_execution_runtime$wlv_runtime_catalog(), "alternative_2"
+  )
   plan <- native_execution_runtime$wlv_validate_request(
     "alternative_2",
     root = wlv_test_root,
@@ -412,7 +415,9 @@ test_that("alternative 2 preserves the legacy scientific observation metadata", 
 
 test_that("run plans reject an in-memory scientific profile substitution", {
   runtime <- native_execution_runtime
-  catalog <- runtime$wlv_runtime_catalog()
+  catalog <- wlv_test_enable_deferred_methods(
+    runtime$wlv_runtime_catalog(), "alternative_1"
+  )
   plan <- runtime$wlv_validate_request(
     "alternative_1",
     root = wlv_test_root,
@@ -447,7 +452,10 @@ test_that("run plans reject an in-memory scientific profile substitution", {
 
 test_that("profiled non-finite coordinates close against normalized source labels", {
   runtime <- native_execution_runtime
-  catalog <- runtime$wlv_runtime_catalog()
+  catalog <- wlv_test_enable_deferred_methods(
+    runtime$wlv_runtime_catalog(),
+    c("alternative_2", "petrovic", "ochoa_1", "ochoa_2", "alternative_1")
+  )
   plan <- runtime$wlv_validate_request(
     c(
       "alternative_2", "petrovic", "ochoa_1", "ochoa_2",
@@ -823,7 +831,9 @@ test_that("profiled non-finite coordinates close against normalized source label
 
 test_that("stage-one anomaly owners match their native module generations", {
   runtime <- native_execution_runtime
-  catalog <- runtime$wlv_runtime_catalog()
+  catalog <- wlv_test_enable_deferred_methods(
+    runtime$wlv_runtime_catalog(), "wiodr13v09"
+  )
   cases <- data.frame(
     method = c("wiodr13v09", "wiodr16"),
     source = c("wiodr13", "wiodr16"),
@@ -911,7 +921,9 @@ test_that("stage-one anomaly owners match their native module generations", {
 
 test_that("stage-four anomaly reset preserves inherited go-price normalization", {
   runtime <- native_execution_runtime
-  catalog <- runtime$wlv_runtime_catalog()
+  catalog <- wlv_test_enable_deferred_methods(
+    runtime$wlv_runtime_catalog(), "ochoa_1"
+  )
   request <- runtime$wlv_validate_request(
     "ochoa_1",
     mode = "recalculate",
@@ -1076,7 +1088,9 @@ test_that("stage-four anomaly reset preserves inherited go-price normalization",
 
 test_that("Leontief exception outputs close against lightweight IO metadata", {
   runtime <- native_execution_runtime
-  catalog <- runtime$wlv_runtime_catalog()
+  catalog <- wlv_test_enable_deferred_methods(
+    runtime$wlv_runtime_catalog(), "alternative_1"
+  )
   plan <- runtime$wlv_validate_request(
     "alternative_1",
     root = wlv_test_root,
@@ -1155,28 +1169,28 @@ test_that("selective recalculation is checked against native checkpoint ranks", 
   ))
 })
 
-test_that("unsupported papers fail before calculation starts", {
+test_that("removed paper options fail before calculation starts", {
   runtime <- native_execution_runtime
   catalog <- runtime$wlv_runtime_catalog()
   expect_error(
     runtime$wlv_validate_request(
       "wiodr13",
-      papern = 3L,
+      papern = 0L,
       prepaper = TRUE,
       root = wlv_test_root,
       catalog = catalog
     ),
-    "Paper `3` is unsupported"
+    "Paper tooling has been removed"
   )
   expect_error(
     runtime$wlv_validate_request(
       "wiodr13",
-      papern = 4L,
+      papern = 1L,
       prepaper = FALSE,
       root = wlv_test_root,
       catalog = catalog
     ),
-    "Paper `4` is unsupported"
+    "Paper tooling has been removed"
   )
 })
 

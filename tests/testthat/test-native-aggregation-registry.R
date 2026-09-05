@@ -14,7 +14,12 @@ for (native_aggregation_file in c(
 rm(native_aggregation_file)
 
 wlv_test_native_aggregation_catalog <- function() {
-  native_aggregation_environment$wlv_load_catalog(wlv_test_root)
+  catalog <- native_aggregation_environment$wlv_load_catalog(wlv_test_root)
+  # Exercise deferred definitions only in this isolated unit-test catalog.
+  declared <- catalog$methods$status != "disabled"
+  catalog$methods$can_calculate[declared] <- TRUE
+  catalog$methods$can_recalculate[declared] <- TRUE
+  catalog
 }
 
 wlv_test_native_aggregation_methods <- c(
@@ -41,7 +46,24 @@ wlv_test_native_aggregation_fixture_root <- function(catalog) {
   list(root = root, catalog = catalog)
 }
 
-test_that("native aggregation registries exactly cover all 12 methods", {
+test_that("deferred methods cannot obtain an executable aggregation registry", {
+  catalog <- native_aggregation_environment$wlv_load_catalog(wlv_test_root)
+  executable <- catalog$methods$method[
+    catalog$methods$can_calculate | catalog$methods$can_recalculate
+  ]
+  expect_setequal(executable, c("wiodr13", "wiodr16"))
+  for (method in setdiff(wlv_test_native_aggregation_methods, executable)) {
+    expect_error(
+      native_aggregation_environment$wlv_native_aggregation_registry(
+        wlv_test_root, catalog, method
+      ),
+      "is not executable",
+      info = method
+    )
+  }
+})
+
+test_that("retained native aggregation definitions exactly cover all 12 methods", {
   catalog <- wlv_test_native_aggregation_catalog()
   executable <- catalog$methods$method[
     catalog$methods$can_calculate | catalog$methods$can_recalculate

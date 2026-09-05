@@ -39,7 +39,7 @@ test_that("request validation rejects invalid scalar inputs before execution", {
   )
 })
 
-test_that("experimental methods require explicit opt-in", {
+test_that("deferred experimental methods remain non-executable after opt-in", {
   runtime <- preflight_environment
   catalog <- runtime$wlv_runtime_catalog()
   expect_error(
@@ -50,14 +50,15 @@ test_that("experimental methods require explicit opt-in", {
     ),
     "experimental"
   )
-  expect_s3_class(
+  expect_error(
     runtime$wlv_validate_request(
       "alternative_1",
       root = wlv_test_root,
       allow_experimental = TRUE,
       catalog = catalog
     ),
-    "wlv_run_plan"
+    "does not support operation(s): calculate",
+    fixed = TRUE
   )
 })
 
@@ -98,7 +99,7 @@ test_that("recalculation checkpoints and selections are validated preflight", {
   )
 })
 
-test_that("the twelve executable methods compile deterministic native DAGs", {
+test_that("the two executable methods compile deterministic native DAGs", {
   runtime <- preflight_environment
   catalog <- runtime$wlv_runtime_catalog()
   methods <- runtime$wlv_catalog_method_table(catalog)
@@ -110,7 +111,7 @@ test_that("the twelve executable methods compile deterministic native DAGs", {
     catalog = catalog
   )
 
-  expect_length(methods, 12L)
+  expect_length(methods, 2L)
   for (method in methods) {
     instances <- runtime$wlv_native_plan_instances(
       registry = plan$native_registry,
@@ -135,87 +136,41 @@ test_that("the twelve executable methods compile deterministic native DAGs", {
   }
 })
 
-test_that("paper support is a native registered preflight decision", {
+test_that("removed paper arguments remain passive only at their defaults", {
   runtime <- preflight_environment
   catalog <- runtime$wlv_runtime_catalog()
-  supported <- runtime$wlv_validate_request(
+  plan <- runtime$wlv_validate_request(
     "wiodr13",
     papern = 0L,
-    prepaper = TRUE,
+    prepaper = FALSE,
     root = wlv_test_root,
     catalog = catalog
   )
-  expect_s3_class(supported$paper_task, "wlv_paper_spec")
-  expect_named(supported$publication_inputs, "wiodr13")
-  expect_no_error(runtime$wlv_assert_plan_publication_inputs_unchanged(supported))
-  for (paper in c(3L, 4L)) {
-    expect_error(
-      runtime$wlv_validate_request(
-        "wiodr13",
-        papern = paper,
-        prepaper = TRUE,
-        root = wlv_test_root,
-        catalog = catalog
-      ),
-      "unsupported"
-    )
-  }
-})
+  expect_identical(plan$papern, 0L)
+  expect_false(plan$prepaper)
+  expect_false("paper_task" %in% names(plan))
+  expect_length(grep("paper", ls(runtime, all.names = TRUE), ignore.case = TRUE), 0L)
 
-test_that("paper 0 rejects incompatible sources and accepts reordered profiles", {
-  runtime <- preflight_environment
-  catalog <- runtime$wlv_runtime_catalog()
   expect_error(
     runtime$wlv_validate_request(
-      c("wiodr13", "wiodr16"),
+      "wiodr13",
       papern = 0L,
       prepaper = TRUE,
       root = wlv_test_root,
       catalog = catalog
     ),
-    "different source contracts",
-    fixed = TRUE
-  )
-
-  compatible <- runtime$wlv_validate_request(
-    c("alternative_1", "zerodep_1"),
-    papern = 0L,
-    prepaper = TRUE,
-    root = wlv_test_root,
-    allow_experimental = TRUE,
-    catalog = catalog
-  )
-  expect_identical(compatible$method_names, c("alternative_1", "zerodep_1"))
-  expect_setequal(
-    compatible$indicators$alternative_1,
-    compatible$indicators$zerodep_1
-  )
-  expect_false(identical(
-    compatible$indicators$alternative_1,
-    compatible$indicators$zerodep_1
-  ))
-
-  expect_error(
-    runtime$wlv_validate_request(
-      "wiodr16",
-      papern = 0L,
-      prepaper = TRUE,
-      root = wlv_test_root,
-      catalog = catalog
-    ),
-    "requires missing output indicator",
+    "Paper tooling has been removed",
     fixed = TRUE
   )
   expect_error(
     runtime$wlv_validate_request(
-      c("wiodr16", "zerodep_2"),
-      papern = 0L,
-      prepaper = TRUE,
+      "wiodr13",
+      papern = 1L,
+      prepaper = FALSE,
       root = wlv_test_root,
-      allow_experimental = TRUE,
       catalog = catalog
     ),
-    "requires missing output indicator",
+    "Paper tooling has been removed",
     fixed = TRUE
   )
 })
