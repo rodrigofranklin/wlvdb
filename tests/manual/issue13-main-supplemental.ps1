@@ -1,7 +1,8 @@
 param(
   [Parameter(Mandatory)][ValidateSet('Initialize', 'Prepare', 'Compare', 'Faults', 'RunAll', 'Status')]
   [string]$Action,
-  [Parameter(Mandatory)][string]$ConfigPath
+  [Parameter(Mandatory)][string]$ConfigPath,
+  [string]$RevisionPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,6 +21,29 @@ function Test-SupplementalPathOverlap([string]$Left, [string]$Right) {
 
 $config = Read-Issue13MainJson $ConfigPath
 $supplementalRoot = Join-Path ([string]$config.control_root) 'supplemental'
+$revision = $null
+if ($RevisionPath) {
+  $revision = Read-Issue13MainJson $RevisionPath
+  if ($revision.schema -cne 'wlv-issue13-main-supplemental-revision/1' -or
+      $revision.campaign_id -cne $config.campaign_id -or
+      [string]$revision.candidate_commit -cnotmatch '^[0-9a-f]{40}$' -or
+      [string]$revision.config_sha256 -cne (Get-Issue13MainSha256 $ConfigPath) -or
+      @($revision.preserved_records).Count -lt 1) {
+    throw 'Invalid supplemental revision binding.'
+  }
+  foreach ($record in $revision.preserved_records) {
+    if ((Get-Issue13MainSha256 ([string]$record.path)) -cne [string]$record.sha256) {
+      throw "Preserved evidence changed: $($record.path)"
+    }
+  }
+  $supplementalRoot = ConvertTo-Issue13MainFullPath ([string]$revision.output_root)
+  foreach ($previous in @([string]$config.control_root, [string]$config.evidence_root) +
+      @($config.supplemental_roots.PSObject.Properties.Value)) {
+    if (Test-SupplementalPathOverlap $supplementalRoot $previous) {
+      throw 'Revised supplemental output must be disjoint from prior evidence and roots.'
+    }
+  }
+}
 $statePath = Join-Path $supplementalRoot 'state.json'
 if ($Action -ceq 'Status') {
   if (Test-Path -LiteralPath $statePath) {
@@ -34,6 +58,19 @@ $null = Assert-Issue13MainConfig $config
 $baseline = Get-Issue13MainArmBinding $config 'baseline'
 $candidate = Get-Issue13MainArmBinding $config 'candidate'
 $roots = $config.supplemental_roots
+$candidateRuntimeCommit = [string]$candidate.commit
+if ($null -ne $revision) {
+  # The scientific binding/seed stays frozen; only preparation/faults use the fix.
+  $candidateRuntimeCommit = [string]$revision.candidate_commit
+  $roots = $revision.roots
+  foreach ($path in @($roots.PSObject.Properties.Value)) {
+    foreach ($previous in @($config.supplemental_roots.PSObject.Properties.Value)) {
+      if (Test-SupplementalPathOverlap $path $previous) {
+        throw 'Revised supplemental worktrees must preserve prior worktrees.'
+      }
+    }
+  }
+}
 $rootPaths = @('baseline_preparation', 'candidate_preparation', 'candidate_fault') |
   ForEach-Object {
     ConvertTo-Issue13MainFullPath ([string]$roots.$_) -RequireExistingDirectory
@@ -45,13 +82,17 @@ for ($index = 0; $index -lt $rootPaths.Count; $index++) {
       throw 'Supplemental worktrees must not overlap.'
     }
   }
-  foreach ($output in @([string]$config.control_root, [string]$config.evidence_root)) {
+  foreach ($output in @([string]$config.control_root, [string]$config.evidence_root,
+      $supplementalRoot)) {
     if (Test-SupplementalPathOverlap $path $output) {
       throw 'Supplemental worktrees must not overlap campaign output directories.'
     }
   }
   foreach ($method in $script:Issue13MainMethods) {
     foreach ($arm in @($baseline, $candidate)) {
+      if (Test-SupplementalPathOverlap $supplementalRoot ([string]$arm.roots.$method)) {
+        throw 'Supplemental output must not overlap scientific worktrees.'
+      }
       if (Test-SupplementalPathOverlap $path ([string]$arm.roots.$method)) {
         throw 'Supplemental worktrees must not overlap scientific worktrees.'
       }
@@ -231,6 +272,7 @@ function Assert-SupplementalBinding {
       [string]$config.harness_manifest, $baseline.binding_path, $candidate.binding_path,
       $PSCommandPath, (Join-Path $PSScriptRoot 'issue13-main-lib.ps1'),
       [string]$config.rscript, [string]$config.sealed_pwsh, [string]$config.git)
+    if ($RevisionPath) { $files += $RevisionPath }
     $records = @($files | ForEach-Object {
       [ordered]@{ path = [IO.Path]::GetFullPath($_); sha256 = Get-Issue13MainSha256 $_ }
     })
@@ -261,10 +303,10 @@ function Get-SupplementalPlan {
       '--baseline-root', [string]$roots.baseline_preparation,
       '--baseline-commit', [string]$baseline.commit,
       '--candidate-root', [string]$roots.candidate_preparation,
-      '--candidate-commit', [string]$candidate.commit,
+      '--candidate-commit', $candidateRuntimeCommit,
       '--fault-root', [string]$roots.candidate_fault,
       '--r-library', [string]$config.r_library,
-      '--channel-prefix', ('i13-main-' + ([string]$candidate.commit).Substring(0, 8) + '-')
+      '--channel-prefix', ('i13-main-' + $candidateRuntimeCommit.Substring(0, 8) + '-')
     )
   }
   $auditPath = Join-Path $planRoot 'plan-audit.json'
@@ -370,7 +412,7 @@ function Invoke-SupplementalComparison {
   if (-not (Test-Path -LiteralPath $reportPath)) {
     Invoke-SupplementalR 'preparation-comparison' (Join-Path $support 'issue13-preparation-compare.R') @(
       [string]$roots.baseline_preparation, [string]$roots.candidate_preparation,
-      $output, [string]$baseline.commit, [string]$candidate.commit, '1000000',
+      $output, [string]$baseline.commit, $candidateRuntimeCommit, '1000000',
       (Join-Path $baseEvidence 'process-metrics.json'), (Join-Path $candEvidence 'process-metrics.json'),
       (Join-Path $baseEvidence 'scenario-result.json'), (Join-Path $candEvidence 'scenario-result.json'),
       [string]$config.r_library, [string]$state.plan_path)
@@ -473,7 +515,7 @@ function Invoke-SupplementalFaults {
       '--seed-project-root', [string]$candidate.roots.wiodr13,
       '--seed-result', $seedResult, '--seed-commit', [string]$candidate.commit,
       '--fault-root', [string]$roots.candidate_fault,
-      '--candidate-commit', [string]$candidate.commit,
+      '--candidate-commit', $candidateRuntimeCommit,
       '--method', 'wiodr13', '--output', $inputRoot)
   }
   $null = Assert-SupplementalPassedFile $importPath 'wlv-issue13-fault-input-import/1'
@@ -503,7 +545,7 @@ function Invoke-SupplementalFaults {
     }
     $seedResult = Assert-SupplementalPassedFile $path 'wlv-issue13-channel-seed-result/1'
     if ([string]$seedResult.scenario_id -cne [string]$seed.scenario_id -or
-        [string]$seedResult.expected_commit -cne [string]$candidate.commit -or
+        [string]$seedResult.expected_commit -cne $candidateRuntimeCommit -or
         [string]$seedResult.expected_seed_commit -cne [string]$seedPlan.seed_commit -or
         [string]$seedResult.channel -cne [string]$seed.channel) {
       throw "Fault seed evidence identity changed: $($seed.scenario_id)"
