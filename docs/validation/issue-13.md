@@ -22,12 +22,13 @@ As preparações usam os mesmos seis caches oficiais: WIOD13 (`WIOTS_in_MATLAB.z
 | Execução nativa, planejador e consistência dos slices terminais | Suítes focadas passaram com fixtures; experimentais habilitados apenas em catálogos de teste em memória. |
 | Catálogo publicado em `docs/methods.md` | Regeneração e `--check` passaram. |
 | Suíte completa de fixtures | 66 arquivos passaram em quatro shards antes do commit `972d9f8`; registros `unit-tests/shard1.json` a `shard4.json`, com 242,865 / 387,4972 / 97,33 / 249,79 segundos. |
-| CI | Execução `33934593144` concluída com sucesso em Ubuntu e Windows. |
+| CI | Execuções `33934593144` (`972d9f8`) e `33936297967` (`ed3fdc0`) concluídas com sucesso. A execução de `a73d344` ainda estava em andamento na última consulta. |
 | Controlador suplementar | Parser passou; smoke de processo verificou captura de logs, erro de processo e escrita atômica de estado. |
 | Ambiente dos filhos | Teste confirmou 35 variáveis removidas e dez definidas; biblioteca R preservada. |
 | Isolamento e retomada do suplemento | Casos de igualdade/ancestralidade de paths e identidade PID + horário de início passaram. |
 | Inicialização suplementar | Plano de 12 registros construído e auditor independente passou. Vínculo do controlador atualizado após sua estabilização, preservando a inicialização provisória. Nenhum cenário de preparação/falha foi executado. |
-| Execução científica real | Revisão v2, tentativa 2: quatro cálculos `workers=1` em execução simultânea, nos braços baseline/candidato de WIOD13/WIOD16, desde 22h23min32 BRT de 2026-09-04. Nenhuma aprovação de paridade inferida do início dos processos. |
+| Execução científica real | Revisão v2, tentativa 2: quatro cálculos `workers=1` iniciados simultaneamente às 22h23min32 BRT de 2026-09-04. WIOD13 baseline/candidato e WIOD16 candidato terminaram com `passed=true`; WIOD16 baseline ainda executava na última consulta. Conclusão de execução não implica paridade. |
+| Comparação antecipada WIOD13 | Parou antes de produzir `comparison.json`: o perfil histórico de metadados contém a geração candidata antiga. Nenhuma divergência científica foi calculada por essa tentativa; correção do vínculo de comparação pendente, preservando os cálculos concluídos. |
 | Paridade real, desempenho, preparação e dez falhas | Gate pendente; execução científica iniciada, demais provas ainda não concluídas. |
 
 A inicialização suplementar provisória terminou em `2026-09-05T01:01:48Z` (2026-09-04 no horário local). Seu plano tem SHA-256 `7fa43b85892dc2b34ccd9113c21d0edfa31a7d0241bb127037101210093732c3`; o auditor, `f08bdc7cafb39136fb1de0de6a77fddffe54052fed0f9376f970f80f7a55a950`.
@@ -43,6 +44,8 @@ Na revisão v2, a tentativa 1 parou no bootstrap em cerca de quatro segundos, an
 A tentativa 2 começou às `2026-09-05T01:23:32Z` (22h23min32 BRT de 2026-09-04), com controlador PID `58912`. O estado das `01:23:34Z` registra os quatro cálculos simultâneos como `running`: WIOD13 e WIOD16, baseline e candidato, todos com `workers=1`. Os logs baseline já alcançaram transformação de dados e Leontief, distinguindo esta execução real dos erros anteriores de bootstrap. O resultado científico ainda precisa terminar e ser comparado.
 
 O canal público permanece intacto: a campanha opera nos seus canais e roots isolados, sem promover os resultados em andamento. A automação existente de acompanhamento foi reativada com o prompt atualizado para o escopo dos dois métodos principais; ela não amplia o escopo do gate nem constitui autorização de merge ou publicação.
+
+A comparação antecipada de WIOD13 (`early/parity/wiodr13/001`), executada de `01:44:49Z` a `01:47:23Z`, preservou comando, entradas e hashes em `early-parity-wiodr13-001/`. O erro `Candidate runtime generation differs from metadata derivation.` veio do perfil V5 derivado em `3ae99a848156a28431ff44cf4d9e619c6de84a83`, que espera geração `4668bf1eadb9ea3ea3f121a889f6b29016c1505f1dbcb3cc27ed3c02ab52c2dd`; o candidato congelado apresenta `600d8cdd2c692fea0b608285b84c3d260b123aac4cf1904ee8b6b997ec988c63`. O diagnóstico integral está em `execution-error.json`. Não houve `comparison.json`, escrita no estado científico ou reinício dos cálculos. O próximo ajuste deve reconstruir e verificar a equivalência dos metadados a partir dos commits congelados, em um vínculo de comparação separado; não basta substituir o hash esperado nem modificar o harness utilizado pelos processos científicos ativos.
 
 O suplemento da revisão v2 foi inicializado e auditado às `2026-09-05T01:18:52Z`, sem executar os cenários de preparação/falha: zero cenários e zero comparações concluídos. SHA-256 do plano: `e4ea4f7c1d575657d30699a9f721502ceeed7c34cb86ff5b76018322bf31dc72`; vínculo do tooling suplementar: `4cd8afad9dfc8b716713583ea500b8f126464c526c33561a9c59138041ac1fa2`. O controle anterior permanece preservado.
 
