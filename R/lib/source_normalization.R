@@ -629,8 +629,14 @@ wlv_publish_normalized_source <- function(
     }
   }, add = TRUE)
 
-  writer(normalized$m_io, file.path(staging, "m_io.fst"))
-  writer(normalized$sea, file.path(staging, "sea.fst"))
+  for (artifact in c("m_io", "sea")) {
+    # The validated in-memory marker is persisted by the contract sidecar,
+    # not as an array attribute. Preserve the caller and reject other attributes.
+    payload <- normalized[[artifact]]
+    attr(payload, wlv_source_normalization_marker_name()) <- NULL
+    writer(payload, file.path(staging, paste0(artifact, ".fst")))
+    rm(payload)
+  }
   copied <- file.copy(
     file.path(source_dir, label_files),
     file.path(staging, label_files),

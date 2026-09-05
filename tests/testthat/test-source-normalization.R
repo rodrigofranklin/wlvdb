@@ -46,7 +46,7 @@ wlv_test_normalized_source_writer <- function(value, path) {
   invisible(path)
 }
 
-wlv_make_source_publication_fixture <- function() {
+wlv_make_source_publication_fixture <- function(source = "wiodr13") {
   root <- tempfile("wlv-normalized-publication-")
   dir.create(root)
   labels <- c(
@@ -67,11 +67,11 @@ wlv_make_source_publication_fixture <- function() {
     contract_paths[[2L]]
   )
   contract <-
-    source_normalization_environment$wlv_source_normalization_contract("wiodr13")
+    source_normalization_environment$wlv_source_normalization_contract(source)
   normalized <- source_normalization_environment$wlv_normalize_source(
     wlv_test_source_m_io(),
     wlv_test_source_sea(contract),
-    "wiodr13",
+    source,
     contract
   )
   list(
@@ -97,7 +97,10 @@ wlv_make_source_publication_fixture <- function() {
   )
 }
 
-wlv_publish_source_fixture <- function(fixture, normalized = fixture$normalized) {
+wlv_publish_source_fixture <- function(
+    fixture,
+    normalized = fixture$normalized,
+    writer = wlv_test_normalized_source_writer) {
   source_normalization_environment$wlv_publish_normalized_source(
     normalized = normalized,
     source_dir = fixture$root,
@@ -106,7 +109,7 @@ wlv_publish_source_fixture <- function(fixture, normalized = fixture$normalized)
     unit_contract_paths = fixture$contract_paths,
     unit_contract_sidecar = fixture$unit_contract_sidecar,
     gfcf_observations = fixture$gfcf,
-    writer = wlv_test_normalized_source_writer
+    writer = writer
   )
 }
 
@@ -421,6 +424,63 @@ test_that("normalized source publication hashes every artifact and contract", {
     "Contract SHA-256 mismatch",
     fixed = TRUE
   )
+})
+
+test_that("normalized publication strips only its marker for the real FST writer", {
+  skip_if_not_installed("fst")
+  skip_if_not_installed("openssl")
+  storage <- new.env(parent = baseenv())
+  sys.source(file.path(wlv_test_root, "R", "lib", "functions.R"), storage)
+  marker_name <- source_normalization_environment$wlv_source_normalization_marker_name()
+
+  for (source in c("wiodr13", "wiodr16")) {
+    fixture <- wlv_make_source_publication_fixture(source)
+    on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+    fixture$normalized$m_io[[1L]] <- NaN
+    fixture$normalized$sea[[1L]] <- NaN
+    original <- serialize(fixture$normalized, NULL, version = 3L)
+    expect_error(
+      storage$write_fst_array(fixture$normalized$m_io, file.path(fixture$root, "direct.fst")),
+      "unsupported FST array attribute", fixed = TRUE
+    )
+    manifest <- wlv_publish_source_fixture(fixture, writer = storage$write_fst_array)
+    for (artifact in c("m_io", "sea")) {
+      expected <- fixture$normalized[[artifact]]
+      attr(expected, marker_name) <- NULL
+      actual <- storage$read_fst_array(
+        file.path(fixture$root, "normalized", paste0(artifact, ".fst"))
+      )
+      expect_identical(actual, expected)
+      expect_identical(is.na(actual), is.na(expected))
+      expect_identical(is.nan(actual), is.nan(expected))
+    }
+    expect_identical(serialize(fixture$normalized, NULL, version = 3L), original)
+    expect_no_error(source_normalization_environment$wlv_verify_source_manifest(
+      manifest, file.path(fixture$root, "normalized"), fixture$contract_paths
+    ))
+    previous <- wlv_test_directory_snapshot(file.path(fixture$root, "normalized"))
+    unmarked <- fixture$normalized
+    attr(unmarked$m_io, marker_name) <- NULL
+    expect_error(
+      wlv_publish_source_fixture(fixture, normalized = unmarked, writer = storage$write_fst_array),
+      "lacks its canonical marker", fixed = TRUE
+    )
+    invalid_marker <- fixture$normalized
+    attr(invalid_marker$m_io, marker_name)$canonical <- FALSE
+    expect_error(
+      wlv_publish_source_fixture(fixture, normalized = invalid_marker, writer = storage$write_fst_array),
+      "lacks its canonical marker", fixed = TRUE
+    )
+    unexpected <- fixture$normalized
+    attr(unexpected$m_io, "undeclared_attribute") <- "must not be discarded"
+    expect_error(
+      wlv_publish_source_fixture(fixture, normalized = unexpected, writer = storage$write_fst_array),
+      "undeclared_attribute", fixed = TRUE
+    )
+    expect_identical(wlv_test_directory_snapshot(file.path(fixture$root, "normalized")), previous)
+    expect_false(any(startsWith(list.files(fixture$root, all.files = TRUE), ".normalized-staging-")))
+    unlink(fixture$root, recursive = TRUE, force = TRUE)
+  }
 })
 
 test_that("failed atomic installation restores the previous normalized generation", {

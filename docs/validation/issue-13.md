@@ -1,6 +1,6 @@
 # Issue 13 — validação do corte principal
 
-Estado em 2026-09-05: **paridade científica aprovada; gate de merge pendente**. A campanha dos dois métodos principais atingiu `science-validated` às `08:35:12Z`; desempenho controlado, preparação e falhas de publicação ainda não estão integralmente aprovados. Os registros anteriores em `run_logs/` e nas campanhas externas permanecem preservados; seus resultados não são convertidos automaticamente em evidência da campanha atual.
+Estado em 2026-09-05: **paridade científica e desempenho aprovados; gate de merge pendente**. A campanha dos dois métodos principais atingiu `science-validated` às `08:35:12Z`; os 14 pares de desempenho passaram às `14:00:20Z`. A preparação baseline passou; a candidata falhou às `14:10:47Z` ao enviar um marcador interno ao gravador FST. A correção localizada passou nos testes de regressão, mas ainda exige nova preparação real, comparação e falhas de publicação. Os registros anteriores em `run_logs/` e nas campanhas externas permanecem preservados; seus resultados não são convertidos automaticamente em evidência da campanha atual.
 
 ## Escopo e referências
 
@@ -12,7 +12,7 @@ Estado em 2026-09-05: **paridade científica aprovada; gate de merge pendente**.
 - Matriz: 14 pares científicos (cálculo, recálculos 1/4/5, seleções 4/5 e `workers=2`), duas preparações e dez falhas. São 40 cenários nessa matriz, além dos seeds auxiliares, e 41 comparações previstas.
 - A ferramenta de papers foi removida no commit `972d9f8`, junto com sua execução e dependências. `papern` e `prepaper` permanecem apenas nos valores padrão por compatibilidade de assinatura; qualquer tentativa de ativação falha no preflight. Não há cenário de papers neste gate.
 
-As preparações usam os mesmos seis caches oficiais: WIOD13 (`WIOTS_in_MATLAB.zip`, `Socio_Economic_Accounts_July14.xlsx`), WIOD16 (`WIOTS_in_R.zip`, `Socio_Economic_Accounts.xlsx`) e EU KLEMS (`Statistical_Capital.rds`, `Statistical_National-Accounts.rds`). A verificação normativa de tamanhos e SHA-256 será executada antes da preparação; a igualdade real ainda não foi atestada por esta campanha.
+As preparações usam os mesmos seis caches oficiais: WIOD13 (`WIOTS_in_MATLAB.zip`, `Socio_Economic_Accounts_July14.xlsx`), WIOD16 (`WIOTS_in_R.zip`, `Socio_Economic_Accounts.xlsx`) e EU KLEMS (`Statistical_Capital.rds`, `Statistical_National-Accounts.rds`). A verificação normativa de tamanhos e SHA-256 passou antes da preparação, com seis registros idênticos por braço: `control-v2/supplemental/raw-cache-equality.json`, SHA-256 `afda6b5e7bf39a71f6e193f49e9b44c67ed98db97ed34f832207c7a868b765f3`. A comparação dos resultados normalizados da preparação permanece pendente.
 
 ## Evidência registrada
 
@@ -22,17 +22,40 @@ As preparações usam os mesmos seis caches oficiais: WIOD13 (`WIOTS_in_MATLAB.z
 | Execução nativa, planejador e consistência dos slices terminais | Suítes focadas passaram com fixtures; experimentais habilitados apenas em catálogos de teste em memória. |
 | Catálogo publicado em `docs/methods.md` | Regeneração e `--check` passaram. |
 | Suíte completa de fixtures | 66 arquivos passaram em quatro shards antes do commit `972d9f8`; registros `unit-tests/shard1.json` a `shard4.json`, com 242,865 / 387,4972 / 97,33 / 249,79 segundos. |
-| CI | Commit `21cf753f6d51b7219539624cd0ca3f8e78028825` aprovado no run `33968224908`: Ubuntu terminou às `13:21:27Z` e Windows às `13:28:42Z`, ambos sem repetição. O commit anterior `a7c19fc` também passou no run `33966570786`. |
+| CI | Commit `ebde11ccbe517349ab611e698d1b1e0b69e997c2` aprovado no run `33969210559`: Ubuntu terminou às `13:43:28Z` e Windows às `13:49:02Z`, ambos sem repetição. O commit anterior `21cf753` também passou no run `33968224908`. |
 | Controlador suplementar | Parser passou; smoke de processo verificou captura de logs, erro de processo e escrita atômica de estado. |
 | Ambiente dos filhos | Teste confirmou 35 variáveis removidas e dez definidas; biblioteca R preservada. |
 | Isolamento e retomada do suplemento | Casos de igualdade/ancestralidade de paths e identidade PID + horário de início passaram. |
-| Inicialização suplementar | Plano de 12 registros construído e auditor independente passou. Vínculo do controlador atualizado após sua estabilização, preservando a inicialização provisória. Nenhum cenário de preparação/falha foi executado. |
+| Inicialização suplementar | Plano de 12 registros construído e auditor independente passou. Vínculo do controlador atualizado após sua estabilização, preservando a inicialização provisória. Preparação iniciada com o plano existente, sem repetir inicialização ou auditor. |
 | Execução científica real | Os 28 cenários passaram; a campanha terminou às `2026-09-05T04:39:53.906680Z`, estado `science-completed`, revisão 103. Todos os registros de processos confirmam cluster encerrado. Isso ainda não constitui paridade integral. |
 | Comparação antecipada WIOD13 | Segunda tentativa passou às `2026-09-05T02:31:28Z`: 21 artefatos, zero diferenças de indicadores e nenhum artefato ausente/excedente. Oito diferenças arquiteturais foram validadas pelas regras explícitas existentes. Sem repetição de cálculo. |
 | Comparação antecipada WIOD16 | Passou às `2026-09-05T02:59:38Z`: 21 artefatos, zero diferenças de indicadores e nenhum artefato ausente/excedente. Oito diferenças arquiteturais foram validadas pelas mesmas regras explícitas. Sem repetição de cálculo. |
-| Desempenho controlado | Onze de 14 pares aprovados em tempo/RSS às `13:26:44Z`, zero reprovados: os seis pares WIOD13 com `workers=1`, WIOD16/cálculo com `workers=1/2` e WIOD16/recálculos completos nos estágios 1/4/5. Todos passam também no limite relativo de 120%. Os quatro certificados de seeds passaram. Restam quatro medições nativas: candidato seletivo WIOD16/estágio 4, os dois seletivos WIOD16/estágio 5 e baseline WIOD13/`workers=2`. O mesmo controlador PID `51444` continua ativo. |
+| Desempenho controlado | **14/14 pares aprovados** em tempo/RSS às `14:00:20Z`, zero reprovados e zero medições pendentes. Todos passam também no limite relativo de 120%, sem precisar da margem absoluta de 600 segundos; todos usam menos RSS que o baseline. Quatro certificados de seeds aprovados. Controlador encerrado, `current=null`, sem processos ou locks remanescentes. |
 | Comparações finais | As 38 execuções terminaram às `08:10:37Z`: 14 paridades, quatro equivalências estritas `workers=2` versus `workers=1` e 20 verificações internas do oráculo. Os dez deltas foram aprovados às `08:35:12Z`: nove `exact-to-full` e um `baseline-known-divergence`, reproduzindo a divergência histórica WIOD13/estágio 4. Estado `science-validated`, revisão 230. |
-| Preparação e dez falhas | Pendentes; serão executadas sem sobreposição com as medições controladas. O PR permanece draft e o canal público não foi alterado. |
+| Preparação e dez falhas | Igualdade dos seis caches oficiais e preparação baseline aprovadas. Preparação candidata reprovada no gravador FST; correção isolada aprovada em testes, pendente de preparação real. Comparação e dez falhas ainda pendentes. O PR permanece draft e o canal público não foi alterado. |
+
+### Desempenho aprovado — resumo dos 14 pares
+
+Tempos em segundos e pico de RSS em GiB, arredondados somente para exibição. O report autenticado conserva os valores integrais e os limites por par. Todos os pares passaram em tempo e RSS.
+
+| Método/cenário | Baseline (s) | Candidato (s) | RSS baseline (GiB) | RSS candidato (GiB) |
+| --- | ---: | ---: | ---: | ---: |
+| WIOD13 cálculo, workers 1 | 864,889 | 426,846 | 6,611 | 4,895 |
+| WIOD13 recálculo 1 | 469,573 | 253,879 | 5,547 | 4,184 |
+| WIOD13 recálculo 4 | 473,574 | 260,611 | 5,550 | 4,921 |
+| WIOD13 recálculo 5 | 126,807 | 131,312 | 5,039 | 0,639 |
+| WIOD13 seletivo 4 | 130,009 | 139,680 | 4,983 | 1,805 |
+| WIOD13 seletivo 5 | 108,405 | 119,794 | 5,618 | 0,579 |
+| WIOD16 cálculo, workers 1 | 2.495,436 | 1.150,968 | 18,718 | 14,475 |
+| WIOD16 recálculo 1 | 1.468,982 | 735,682 | 17,506 | 14,847 |
+| WIOD16 recálculo 4 | 1.419,057 | 664,001 | 15,338 | 13,886 |
+| WIOD16 recálculo 5 | 488,192 | 391,909 | 14,123 | 2,576 |
+| WIOD16 seletivo 4 | 469,212 | 400,411 | 17,941 | 4,427 |
+| WIOD16 seletivo 5 | 419,165 | 384,290 | 14,809 | 2,559 |
+| WIOD13 cálculo, workers 2 | 559,998 | 427,087 | 7,593 | 5,072 |
+| WIOD16 cálculo, workers 2 | 1.661,979 | 1.191,634 | 19,838 | 15,513 |
+
+Snapshots imutáveis em `binding-c2/performance-completed-state.json` e `performance-completed-report.json`, conferidos antes/depois da cópia: SHA-256 `d3654eaf5427af7904473492cf2a35b8290b7d6a1d9ec5679f80b027bc932c6d` e `7b23d40fc5aa098ea7ba61abe6637c44b11a520a1892613703693f6331b09747`. São 25 medições controladas novas e três medições científicas singleton reutilizadas, além dos quatro certificados estritos de seeds. A tentativa interrompida continua inválida; não contribui para os gates aprovados.
 
 A inicialização suplementar provisória terminou em `2026-09-05T01:01:48Z` (2026-09-04 no horário local). Seu plano tem SHA-256 `7fa43b85892dc2b34ccd9113c21d0edfa31a7d0241bb127037101210093732c3`; o auditor, `f08bdc7cafb39136fb1de0de6a77fddffe54052fed0f9376f970f80f7a55a950`.
 
@@ -222,6 +245,24 @@ O baseline WIOD16/estágio 5 completo terminou de `13:09:23.0382926Z` a `13:17:3
 
 O baseline WIOD16/estágio 4/seletivo `gross-output-mv` terminou de `13:18:52.4621649Z` a `13:26:41.6745976Z`, com 469,2124327 segundos e RSS de 19.264.147.456 bytes. Resultado `23c9d9285b7ba115699b4f8dfdf402f4fa273a96561bda86accd4f98aad068fe`; métricas `8c7a882e9f144a9d40046af2b9b98971a739c512c920386e7e989ceb1ffc7248`. O candidato correspondente iniciou às `13:26:45.0029932Z`, worker PID `64688`; sua telemetria está ativa, sem stderr do controlador. O report das `13:26:44.7292324Z` registra 11 pares aprovados, zero reprovados e quatro medições restantes. A checagem não iniciou R auxiliar, preparação ou falhas.
 
+O candidato WIOD16/estágio 4/seletivo `gross-output-mv` terminou de `13:28:03.1193619Z` a `13:34:43.5307987Z`, com 400,4114368 segundos e RSS de 4.753.588.224 bytes, concluindo o 12º par. Limites aprovados: relativo de 563,05491924 segundos, normativo com margem absoluta de 1.069,2124327 segundos e RSS de 21.190.562.201 bytes. Resultado `85d7b7385c6474f11c630c09f712c2b03c1b56da1fb1290fc4e8535059e1c50c`; métricas `9ef0b0f2a23ddb838a7b6384310e88241543fdeeea28937257dc55a4c36ccc9e`. Ambos os braços são controlados e sem sobreposição.
+
+O candidato WIOD16/estágio 5/seletivo `gross-output-du` terminou de `13:36:05.6126754Z` a `13:42:29.9022290Z`, com 384,2895536 segundos e RSS de 2.747.420.672 bytes. Resultado `b0deb8301e44c40eaed9ea5555db96d382d50ebf076b8e2333ef9388f0c6795e`; métricas `105acda9dc3ef6d09a158553f02ded78b95b84890d2519c10288afa731bf308c`. O report das `13:42:33.0629250Z` conserva 12 pares aprovados, zero reprovados e duas medições restantes. O baseline desse seletivo iniciou às `13:42:33.3099427Z`, worker PID `63856`; a consulta das `13:48Z` confirmou telemetria recente, mesma identidade do controlador e stderr vazio. O par depende do baseline; preparação/falhas ainda não iniciaram.
+
+O baseline WIOD16/estágio 5/seletivo `gross-output-du` concluiu o 13º par: de `13:43:52.2507601Z` a `13:50:51.4160797Z`, 419,1653196 segundos e RSS de 15.900.577.792 bytes. Resultado `2b4e9ddff6a12e800fae4aeb1dc865421e390335508c720db65aea23ba041607`; métricas `e0680c6d101ee1a62f35e71ac709c84d9833ffee4deadef13c6f6a04a13d15f0`. O candidato ficou abaixo dos limites relativo de 502,99838352 segundos, normativo de 1.019,1653196 segundos e RSS de 17.490.635.571 bytes.
+
+A medição baseline WIOD13/`workers=2` concluiu o 14º par: `13:50:56.7662724Z` a `14:00:16.7639421Z`, 559,9976697 segundos e RSS de 8.153.292.800 bytes. Resultado `6bf696677881d3c813660912414c5f21f98f0fae43efb536352115880822d909`; métricas `7cef7c11b749b7301bd8cf5bb1b5fc89d184709519638e38e218e3b06cfc3b92`. O candidato singleton já aprovado foi reutilizado, sem nova execução: 427,0874769 segundos e 5.445.861.376 bytes. Limites aprovados: relativo de 671,99720364 segundos, normativo de 1.159,9976697 segundos e RSS de 8.968.622.080 bytes. A auditoria independente confirmou as duas provas finais e seus hashes, seleção exata, ausência de sobreposição e encerramento completo. WIOD13 registrou exatamente dois workers esperados/máximos, quatro processos totais e nenhum PID remanescente.
+
+O controlador C2 encerrou com `passed` às `2026-09-05T14:00:20.0172088Z`: 14 gates de tempo e 14 de RSS aprovados, zero falhas/pendências, 29 registros aprovados (25 medições e quatro certificados). A checagem posterior confirmou `current=null`, ausência do PID `51444`, das locks e de processos próprios da campanha. O estado científico permanece byte-idêntico ao snapshot aprovado. Nenhuma preparação ou falha se sobrepôs às medições.
+
+O suplemento existente iniciou somente `Prepare` às `14:08:20.8940673Z`, controlador PID `39332`; comando e hashes em `D:/Trabalho/Code/wlvdb-issue13-main-054/supplemental-prepare-001.process.json`, SHA-256 `dbd51a04b3bf6cc053568eecba268510a1a746902e89f2600046534af5e2fc01`. Seu executável tem SHA-256 `ea473ae4ef2c8a1b5c5b7a08539c53ae2fa62cfd6bf3e754b5fc863ac5f97a0f`. A igualdade dos seis caches passou. Não houve `Initialize`, reconstrução de plano ou repetição de auditor nessa tentativa.
+
+A preparação baseline passou de `14:08:26.7023116Z` a `14:10:09.9008076Z`: 103,198496 segundos e RSS de 4.594.040.832 bytes. Resultado `133400b7a79964b43524122fa48327db7f9b87db47c21c032d84515876e80f5d`; métricas `0abfaffc8906a23a55da8fce12c340cf60fd6ed7f3e1ad56016a1b9d78434776`. A candidata encerrou com código 1 às `14:10:47.2397045Z`, após 36,461872 segundos, antes de publicar WIOD13: `m has unsupported FST array attribute(s): wlv.source_normalization`. Resultado `1ae87264f4011e85019dff04863a1824893166d61971b8b7b8000f04b7d1f642`. Ambas fecharam seus processos; não ficaram fontes normalizadas parciais, staging, locks ou canal publicado. O estado suplementar reprovado, SHA-256 `3eb3b86cc825f2ce5d0be469d448b93089ec528f40274d283026b5b5dded4f10`, permanece preservado.
+
+A causa é a integração entre normalização e o novo gravador estrito: o publicador validava o marcador canônico em memória e depois o encaminhava ao FST, que corretamente aceita apenas `dim` e `dimnames`. O writer de fixture anterior usava RDS e não reproduzia essa restrição. A correção remove somente o marcador já validado na fronteira de publicação; o contrato lateral conserva a proveniência. Não relaxa o gravador, não remove atributos desconhecidos, não muda fórmulas nem modifica o objeto do chamador.
+
+O teste novo reproduziu primeiro o erro (`run_logs/issue13-preparation-marker-red-001.json`, SHA-256 `9b86fe553546e54d911fe028cdfc1bb130ce347ff8e6077322ddec3463f8238d`). Após a correção, 95 checks passaram para WIOD13/WIOD16, incluindo FST real, valores/dimensões/dimnames, `NA`/`NaN`, imutabilidade do chamador, rejeição de marcador ausente/inválido e atributo desconhecido, manifestos e rollback: `issue13-preparation-marker-green-001.json`, SHA-256 `5b2da5d0b10395e166c1707d059191130c8b72bd99503c1954c2f89410c397ee`. Regressões de integridade FST (124 checks) e tarefas de preparação (47) também passaram; hashes `fd47b72a17328a4011a3000f7832326a4ad099d701d34878faab271f00f8658a` e `0a7225ed54809291245b0aec6d38c7f29099d45ebca78bc5696ffbd2bdc329f3`. Esses testes não substituem a preparação real do commit corrigido. Ciência, comparações, oráculos e desempenho aprovados não serão repetidos; a nova tentativa suplementar terá vínculo separado e preservará a reprovação original.
+
 O smoke do journal executou dois processos PowerShell leves, um com saída zero e outro com erro sete, confirmando registro de ambos, fim real e preservação dos timestamps como strings UTC. Os testes conservaram medições anteriores/posteriores, recusaram a sobreposição efetiva e confirmaram que a atualização posterior do estado não amplia o intervalo histórico. Esse smoke não executou R e não constitui medição científica.
 
 As repetições usam o mesmo worker e os mesmos commits, fontes e seeds autenticados da ciência, em canais e diretórios de tentativa próprios. Não repetem comparações já aprovadas e não alteram o estado da paridade. O roteiro utiliza os locks dos controladores da campanha, sem exigir exclusividade de todos os processos R do computador. Se os resultados adicionais não couberem com a folga prevista, ele bloqueia a execução para coordenação de novos roots vinculados; não remove evidência para liberar espaço.
@@ -249,6 +290,6 @@ $performanceCampaign = 'C:\Users\rodri\AppData\Local\Packages\OpenAI.Codex_2p2nq
 
 A paridade de cálculo/recálculo e a equivalência `workers=1/2` estão aprovadas no snapshot científico acima, incluindo dimensões e dimnames, máscaras de `NA`/`NaN`, estados semânticos, metadados, matrizes, diagnósticos e células não selecionadas. Não há nova tolerância científica. Preservar os vínculos de fontes/artefatos e acrescentar os resultados dos gates restantes ao relatório final.
 
-Executar as medições controladas de tempo e memória. O limite temporal é `max(1,2 × baseline, baseline + 600 segundos)`; o de RSS é `baseline + max(10% do baseline, 512 MiB)`. Tempos coletados sob concorrência científica são observacionais e não fecham esse critério. A revisão operacional 054v2 mantém orçamento de 80 GiB e reservas por job de 8/22/40 GiB (WIOD13, WIOD16 e `workers=2`), com piso ajustado de 24 para 16 GiB livres; o roteiro de desempenho lê os valores vinculados na configuração, sem impor novos limites.
+As medições controladas de tempo e memória estão aprovadas nos snapshots de conclusão acima; não reexecutá-las. O limite temporal permanece `max(1,2 × baseline, baseline + 600 segundos)`; o de RSS, `baseline + max(10% do baseline, 512 MiB)`. Tempos coletados sob concorrência científica permanecem apenas observacionais. A revisão operacional 054v2 preservou orçamento de 80 GiB e reservas por job de 8/22/40 GiB (WIOD13, WIOD16 e `workers=2`), com piso de 16 GiB livres; nenhum limite científico foi alterado.
 
 Anexar a comparação das preparações, os dez resultados de falha com rollback e ausência de release parcial, o encerramento dos clusters, os registros da CI Windows/Ubuntu já aprovada e o resultado agregado final. Até essa evidência estar completa, manter o PR sem aprovação de merge e o #13 aberto.
