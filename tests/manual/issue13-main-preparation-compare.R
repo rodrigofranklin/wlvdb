@@ -1,10 +1,13 @@
-# Reuse the frozen comparator, with only the strict checkpoint envelope fix.
+# Reuse the frozen comparator with strict checkpoint and versioned-sidecar bindings.
 arguments <- commandArgs(trailingOnly = TRUE)
 if (length(arguments) != 13L) stop("Expected upstream comparator and its 12 arguments.")
+stopifnot(identical(arguments[[5L]], "e2f4d6dae9a6d35c966b305fabac52e489faa3e7"),
+  identical(arguments[[6L]], "654959715f9484adb15e16946c27ddbc9648ffa2"))
 upstream <- normalizePath(arguments[[1L]], winslash = "/", mustWork = TRUE)
 wrapper <- normalizePath(sub("^--file=", "", grep("^--file=",
   commandArgs(FALSE), value = TRUE)[[1L]]), winslash = "/", mustWork = TRUE)
 auth <- file.path(dirname(wrapper), "issue13-main-preparation-auth.R")
+equivalence <- file.path(dirname(wrapper), "issue13-main-preparation-equivalence.R")
 hash <- function(path) {
   connection <- file(path, "rb")
   on.exit(close(connection))
@@ -22,6 +25,7 @@ namespace$commandArgs <- local({
   function(trailingOnly = FALSE) if (trailingOnly) cli else file_arg
 })
 sys.source(auth, envir = environment())
+sys.source(equivalence, envir = environment())
 installed <- FALSE
 for (expression in parse(upstream, keep.source = FALSE)) {
   eval(expression, envir = namespace)
@@ -33,6 +37,8 @@ for (expression in parse(upstream, keep.source = FALSE)) {
   if (is.call(expression) && identical(expression[[1L]], as.name("<-")) &&
       identical(expression[[2L]], as.name("request"))) {
     stopifnot(installed)
+    derivation <- wlv13_main_install_preparation_equivalence(namespace,
+      namespace$baseline_root, namespace$candidate_root)
     namespace$request$upstream_producer_path <- upstream
     namespace$request$upstream_producer_sha256 <- hash(upstream)
     namespace$request$upstream_authentication_path <- upstream_auth
@@ -41,5 +47,8 @@ for (expression in parse(upstream, keep.source = FALSE)) {
     namespace$request$producer_sha256 <- hash(wrapper)
     namespace$request$authentication_revision_path <- auth
     namespace$request$authentication_revision_sha256 <- hash(auth)
+    namespace$request$equivalence_revision_path <- equivalence
+    namespace$request$equivalence_revision_sha256 <- hash(equivalence)
+    namespace$request$equivalence_derivation <- derivation
   }
 }
