@@ -57,105 +57,121 @@ wlv_runtime_artifact_inventory <- function() {
   })
 }
 
-test_that("main can be sourced without attaching packages", {
+test_that("bootstrap loads a private runtime without attaching packages", {
   search_before <- search()
-  environment <- new.env(parent = globalenv())
-  old_wd <- setwd(wlv_test_root)
-  on.exit(setwd(old_wd), add = TRUE)
+  working_directory <- getwd()
+  runtime <- wlv_test_load_runtime()
 
-  sys.source(file.path(wlv_test_root, "R", "main.R"), envir = environment)
-
-  expect_true(is.function(environment$prepare_wlv))
-  expect_true(is.function(environment$get_wlv))
-  expect_true(is.function(environment$recalc_wlv))
+  expect_true(is.function(runtime$prepare_wlv))
+  expect_true(is.function(runtime$get_wlv))
+  expect_true(is.function(runtime$recalc_wlv))
+  expect_identical(parent.env(runtime), baseenv())
+  expect_true(environmentIsLocked(runtime))
+  expect_true(bindingIsLocked("get_wlv", runtime))
   expect_identical(search(), search_before)
+  expect_identical(getwd(), working_directory)
 })
 
-test_that("stable source validators load from their catalog declarations", {
-  environment <- new.env(parent = globalenv())
-  old_wd <- setwd(wlv_test_root)
-  on.exit(setwd(old_wd), add = TRUE)
-  sys.source(file.path(wlv_test_root, "R", "main.R"), envir = environment)
+test_that("stable source validators are definitions in the private runtime", {
+  runtime <- wlv_test_load_runtime()
+  catalog <- runtime$wlv_runtime_catalog()
 
   for (method in c("wiodr13", "wiodr16")) {
-    calculate_plan <- environment$wlv_validate_request(
+    calculate_plan <- runtime$wlv_validate_request(
       method,
-      catalog = environment$method_catalog
+      root = wlv_test_root,
+      catalog = catalog
     )
     expect_s3_class(calculate_plan, "wlv_run_plan")
     expect_s3_class(
-      environment$wlv_validate_request(
+      runtime$wlv_validate_request(
         method,
         repeat_pp = TRUE,
         requested_operations = "prepare",
-        catalog = environment$method_catalog
+        root = wlv_test_root,
+        catalog = catalog
       ),
       "wlv_run_plan"
     )
     expect_s3_class(
-      environment$wlv_validate_request(
+      runtime$wlv_validate_request(
         method,
         mode = "recalculate",
-        catalog = environment$method_catalog
+        root = wlv_test_root,
+        catalog = catalog
       ),
       "wlv_run_plan"
     )
-    bundle <- environment$wlv_load_catalog_validator(
+    validator_id <- calculate_plan$methods$validator_id[[1L]]
+    source_id <- calculate_plan$methods$source[[1L]]
+    expect_match(validator_id, paste0("^", source_id, "_prepared_v[0-9]+$"))
+    validator <- runtime$wlv_load_catalog_validator(
       calculate_plan,
       calculate_plan$methods[1L, , drop = FALSE]
     )
-    expect_true(is.function(bundle$validate))
-    expect_identical(parent.env(bundle$environment), baseenv())
-    if (method == "wiodr16") {
-      expect_true(exists(
-        "wlv_wiodr13_validate_labels",
-        envir = bundle$environment,
-        inherits = FALSE
-      ))
-      expect_true(exists(
-        "wlv_wiodr16_expected_negative_source_k",
-        envir = bundle$environment,
-        inherits = FALSE
-      ))
-    }
-    expect_false(exists(
-      calculate_plan$methods$validator_function[[1L]],
-      envir = environment,
-      inherits = FALSE
-    ))
+    expect_identical(validator$validator_id, validator_id)
+    expect_true(is.function(validator$validate))
+    expect_true(is.function(validator$validate_euklems))
   }
+  expect_true(exists(
+    "wlv_wiodr13_validate_labels",
+    envir = runtime,
+    mode = "function",
+    inherits = FALSE
+  ))
+  expect_true(exists(
+    "wlv_wiodr16_expected_negative_source_k",
+    envir = runtime,
+    mode = "function",
+    inherits = FALSE
+  ))
+  expect_identical(
+    environment(runtime$wlv_validate_wiodr16_prepared),
+    runtime
+  )
 })
 
 test_that("public APIs enforce catalog maturity before side effects", {
-  environment <- new.env(parent = globalenv())
-  old_wd <- setwd(wlv_test_root)
-  on.exit(setwd(old_wd), add = TRUE)
-  sys.source(file.path(wlv_test_root, "R", "main.R"), envir = environment)
+  runtime <- wlv_test_load_runtime()
 
   expect_identical(
-    names(formals(environment$get_wlv)),
+    names(formals(runtime$get_wlv)),
     c(
       "methods", "repeat_pp", "papern", "prepaper", "workers",
       "channel", "allow_experimental"
     )
   )
   expect_identical(
-    names(formals(environment$recalc_wlv)),
+    names(formals(runtime$recalc_wlv)),
     c(
       "methods", "at_stage", "sea_vars", "papern", "prepaper", "workers",
       "channel", "allow_experimental"
     )
   )
   expect_identical(
-    names(formals(environment$prepare_wlv)),
+    names(formals(runtime$prepare_wlv)),
     c("methods", "allow_experimental")
   )
-
-  expect_error(environment$get_wlv("alternative_1"), "experimental")
-  expect_error(environment$prepare_wlv("alternative_1"), "experimental")
-  expect_error(environment$recalc_wlv("alternative_1"), "experimental")
+  expect_identical(formals(runtime$get_wlv)$papern, 0)
+  expect_identical(formals(runtime$get_wlv)$prepaper, FALSE)
+  expect_identical(formals(runtime$recalc_wlv)$papern, 0)
+  expect_identical(formals(runtime$recalc_wlv)$prepaper, FALSE)
   expect_error(
-    environment$get_wlv("exiobase395", allow_experimental = TRUE),
+    runtime$get_wlv("wiodr13", prepaper = TRUE),
+    "Paper tooling has been removed",
+    fixed = TRUE
+  )
+  expect_error(
+    runtime$recalc_wlv("wiodr13", papern = 1L),
+    "Paper tooling has been removed",
+    fixed = TRUE
+  )
+
+  expect_error(runtime$get_wlv("alternative_1"), "experimental")
+  expect_error(runtime$prepare_wlv("alternative_1"), "experimental")
+  expect_error(runtime$recalc_wlv("alternative_1"), "experimental")
+  expect_error(
+    runtime$get_wlv("exiobase395", allow_experimental = TRUE),
     "disabled"
   )
 })
@@ -169,6 +185,40 @@ test_that("command line entrypoint provides help without project data", {
   expect_true(any(grepl("--channel", output, fixed = TRUE)))
   expect_true(any(grepl("--allow-experimental", output, fixed = TRUE)))
   expect_true(any(grepl("--list-methods", output, fixed = TRUE)))
+  expect_false(any(grepl("--paper", output, fixed = TRUE)))
+  expect_false(any(grepl("--prepaper", output, fixed = TRUE)))
+})
+
+test_that("command line entrypoint rejects removed paper options", {
+  for (option in c("--paper=0", "--paper", "--prepaper", "--prepare-paper")) {
+    output <- run_wlv_cli(option)
+    status <- attr(output, "status", exact = TRUE)
+
+    expect_true(!is.null(status) && status != 0L)
+    expect_true(any(grepl("Paper tooling has been removed", output, fixed = TRUE)))
+  }
+})
+
+test_that("command line activates renv before its first runtime load", {
+  launcher <- readLines(
+    file.path(wlv_test_root, "scripts", "run_wlv.R"),
+    warn = FALSE,
+    encoding = "UTF-8"
+  )
+  activation <- grep(
+    'source(file.path(project_root, "renv", "activate.R")',
+    launcher,
+    fixed = TRUE
+  )
+  runtime_load <- grep(
+    "wlv_load_runtime(project_root)",
+    launcher,
+    fixed = TRUE
+  )
+
+  expect_length(activation, 1L)
+  expect_gt(length(runtime_load), 0L)
+  expect_lt(activation, min(runtime_load))
 })
 
 test_that("command line entrypoint lists the catalog in all supported formats", {
@@ -214,19 +264,21 @@ test_that("command line entrypoint lists the catalog in all supported formats", 
   expect_identical(wlv_runtime_artifact_inventory(), artifacts_before)
 })
 
-test_that("command line experimental access requires the explicit flag", {
+test_that("command line deferred methods remain non-executable after opt-in", {
   blocked <- run_wlv_cli("--method", "alternative_1", "--check")
   expect_true(!is.null(attr(blocked, "status")) && attr(blocked, "status") != 0L)
   expect_true(any(grepl("experimental", blocked, fixed = TRUE)))
   expect_true(any(grepl("--allow-experimental", blocked, fixed = TRUE)))
 
-  allowed <- run_wlv_cli(
+  opted_in <- run_wlv_cli(
     "--method", "alternative_1", "--allow-experimental", "--check"
   )
-  expect_null(attr(allowed, "status"))
+  expect_true(
+    !is.null(attr(opted_in, "status")) && attr(opted_in, "status") != 0L
+  )
   expect_true(any(grepl(
-    "Environment and arguments are valid",
-    allowed,
+    "does not support operation(s): calculate",
+    opted_in,
     fixed = TRUE
   )))
 })
@@ -242,9 +294,7 @@ test_that("command line disabled methods cannot be enabled by opt-in", {
 
 test_that("command line check does not create or modify runtime artifacts", {
   before <- wlv_runtime_artifact_inventory()
-  output <- run_wlv_cli(
-    "--method", "alternative_1", "--allow-experimental", "--check"
-  )
+  output <- run_wlv_cli("--method", "wiodr13", "--check")
   after <- wlv_runtime_artifact_inventory()
 
   expect_null(attr(output, "status"))

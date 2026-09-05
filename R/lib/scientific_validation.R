@@ -1,8 +1,10 @@
-wlv_scientific_check_columns <- c(
+wlv_scientific_check_columns <- function() {
+  c(
   "method", "check_id", "artifact", "indicator", "scope", "status",
   "observations", "maximum_absolute_error", "maximum_scaled_error",
   "tolerance", "detail"
 )
+}
 
 wlv_empty_scientific_checks <- function() {
   data.frame(
@@ -18,7 +20,7 @@ wlv_empty_scientific_checks <- function() {
     tolerance = character(),
     detail = character(),
     stringsAsFactors = FALSE
-  )[wlv_scientific_check_columns]
+  )[wlv_scientific_check_columns()]
 }
 
 wlv_new_scientific_validation_error <- function(
@@ -97,7 +99,7 @@ wlv_scientific_check_row <- function(
     tolerance = as.character(tolerance),
     detail = as.character(detail),
     stringsAsFactors = FALSE
-  )[wlv_scientific_check_columns]
+  )[wlv_scientific_check_columns()]
 }
 
 wlv_scientific_not_applicable <- function(
@@ -540,8 +542,16 @@ wlv_scientific_md5_lines <- function(value) {
   unname(tools::md5sum(path))
 }
 
-wlv_scientific_wiodr13_signed_sea_pin <- function(value, indicator, method) {
-  positions <- which(value < 0, arr.ind = TRUE)
+wlv_scientific_wiodr13_signed_sea_pin <- function(
+    value,
+    indicator,
+    method,
+    negative_positions = NULL) {
+  positions <- if (is.null(negative_positions)) {
+    which(value < 0, arr.ind = TRUE)
+  } else {
+    negative_positions
+  }
   expected_value <- switch(
     indicator,
     capital_stock.s.us = -75458950528.278488,
@@ -568,8 +578,16 @@ wlv_scientific_wiodr13_signed_sea_pin <- function(value, indicator, method) {
   invisible(TRUE)
 }
 
-wlv_scientific_wiodr13_signed_io_pin <- function(value, indicator, method) {
-  positions <- which(value < 0, arr.ind = TRUE)
+wlv_scientific_wiodr13_signed_io_pin <- function(
+    value,
+    indicator,
+    method,
+    negative_positions = NULL) {
+  positions <- if (is.null(negative_positions)) {
+    which(value < 0, arr.ind = TRUE)
+  } else {
+    negative_positions
+  }
   expected <- switch(
     indicator,
     k_composition = c(
@@ -621,6 +639,82 @@ wlv_scientific_wiodr13_signed_io_pin <- function(value, indicator, method) {
   invisible(TRUE)
 }
 
+wlv_scientific_signed_range_scan <- function(
+    value,
+    minimum,
+    maximum,
+    exact_zero = FALSE,
+    chunk_size = 1048576L) {
+  if (!is.numeric(chunk_size) || length(chunk_size) != 1L ||
+      is.na(chunk_size) || !is.finite(chunk_size) || chunk_size < 1 ||
+      chunk_size != floor(chunk_size) || chunk_size > .Machine$integer.max) {
+    stop("Scientific signed-range chunk size is invalid.", call. = FALSE)
+  }
+  chunk_size <- as.integer(chunk_size)
+  starts <- if (length(value)) {
+    seq.int(1, length(value), by = chunk_size)
+  } else {
+    integer()
+  }
+  negative_chunks <- vector("list", length(starts))
+  observations <- 0L
+  maximum_error <- 0
+
+  for (index in seq_along(starts)) {
+    start <- starts[[index]]
+    end <- min(length(value), start + chunk_size - 1)
+    chunk <- value[seq.int(start, end)]
+    selected <- !is.na(chunk)
+    finite_values <- chunk[selected]
+    if (any(!is.finite(finite_values))) {
+      return(list(
+        nonfinite = TRUE,
+        observations = observations,
+        maximum_error = maximum_error,
+        negative_positions = NULL
+      ))
+    }
+    observations <- observations + length(finite_values)
+    if (length(finite_values)) {
+      current_error <- if (exact_zero) {
+        max(abs(finite_values))
+      } else {
+        max(c(
+          minimum - finite_values,
+          finite_values - maximum,
+          0
+        ))
+      }
+      maximum_error <- max(maximum_error, current_error)
+    }
+    local_negative <- which(chunk < 0)
+    if (length(local_negative)) {
+      negative_chunks[[index]] <- start - 1 + local_negative
+    }
+  }
+
+  negative <- unlist(negative_chunks, use.names = FALSE)
+  if (!length(negative)) {
+    negative <- integer()
+  }
+  negative_positions <- if (is.null(dim(value))) {
+    negative
+  } else {
+    arrayInd(
+      negative,
+      .dim = dim(value),
+      .dimnames = dimnames(value),
+      useNames = TRUE
+    )
+  }
+  list(
+    nonfinite = FALSE,
+    observations = observations,
+    maximum_error = maximum_error,
+    negative_positions = negative_positions
+  )
+}
+
 wlv_scientific_check_range <- function(
     value,
     method,
@@ -630,6 +724,68 @@ wlv_scientific_check_range <- function(
     maximum,
     exact_zero = FALSE,
     scope = "all published cells") {
+  signed_wiodr13 <- identical(method, "wiodr13") &&
+    (
+      identical(artifact, "sea_sectors") &&
+        indicator %in% c("capital_stock.s.us", "capital_depreciation.s.us") ||
+      identical(artifact, "m_io") &&
+        indicator %in% c("k_composition", "k_depreciation")
+    )
+  if (signed_wiodr13) {
+    scanned <- wlv_scientific_signed_range_scan(
+      value,
+      minimum,
+      maximum,
+      exact_zero = exact_zero
+    )
+    if (isTRUE(scanned$nonfinite)) {
+      wlv_abort_scientific_validation(
+        method, "method_range", artifact, indicator, scope,
+        "range contains NaN or infinite values"
+      )
+    }
+    if (identical(artifact, "sea_sectors")) {
+      wlv_scientific_wiodr13_signed_sea_pin(
+        value,
+        indicator,
+        method,
+        negative_positions = scanned$negative_positions
+      )
+    } else {
+      wlv_scientific_wiodr13_signed_io_pin(
+        value,
+        indicator,
+        method,
+        negative_positions = scanned$negative_positions
+      )
+    }
+    tolerance <- if (exact_zero) {
+      "exact zero"
+    } else {
+      sprintf(
+        "[%s,%s];componentwise_roundoff=64*eps*max(1,abs(value),abs(bound))",
+        format(minimum, scientific = TRUE),
+        format(maximum, scientific = TRUE)
+      )
+    }
+    return(wlv_scientific_check_row(
+      method = method,
+      check_id = "method_range",
+      artifact = artifact,
+      indicator = indicator,
+      scope = scope,
+      status = "warning",
+      observations = scanned$observations,
+      maximum_absolute_error = scanned$maximum_error,
+      maximum_scaled_error = 0,
+      tolerance = tolerance,
+      detail = paste0(
+        "Pinned WIOD13/2006/GBR.23 signed-domain exception; all other cells ",
+        "remain nonnegative."
+      )
+    ))
+  }
+
   selected <- !is.na(value)
   finite_values <- value[selected]
   if (any(!is.finite(finite_values))) {
@@ -662,21 +818,6 @@ wlv_scientific_check_range <- function(
       format(maximum, scientific = TRUE)
     )
   }
-  signed_wiodr13 <- identical(method, "wiodr13") &&
-    (
-      identical(artifact, "sea_sectors") &&
-        indicator %in% c("capital_stock.s.us", "capital_depreciation.s.us") ||
-      identical(artifact, "m_io") &&
-        indicator %in% c("k_composition", "k_depreciation")
-    )
-  if (signed_wiodr13) {
-    if (identical(artifact, "sea_sectors")) {
-      wlv_scientific_wiodr13_signed_sea_pin(value, indicator, method)
-    } else {
-      wlv_scientific_wiodr13_signed_io_pin(value, indicator, method)
-    }
-    invalid[] <- FALSE
-  }
   if (any(invalid)) {
     positions <- which(selected)[invalid]
     position <- positions[[1L]]
@@ -704,19 +845,12 @@ wlv_scientific_check_range <- function(
     artifact = artifact,
     indicator = indicator,
     scope = scope,
-    status = if (signed_wiodr13) "warning" else "pass",
+    status = "pass",
     observations = length(finite_values),
     maximum_absolute_error = maximum_error,
     maximum_scaled_error = 0,
     tolerance = tolerance,
-    detail = if (signed_wiodr13) {
-      paste0(
-        "Pinned WIOD13/2006/GBR.23 signed-domain exception; all other cells ",
-        "remain nonnegative."
-      )
-    } else {
-      "Method-versioned physical or methodological range."
-    }
+    detail = "Method-versioned physical or methodological range."
   )
 }
 
@@ -726,8 +860,7 @@ wlv_scientific_validate_result_arrays <- function(
     sea_countries,
     m_countries,
     solutions,
-    aggregations,
-    legacy_aggregations = NULL) {
+    aggregations) {
   rows <- list(
     wlv_scientific_structure_check(sea_sectors, 4L, method, "sea_sectors"),
     wlv_scientific_structure_check(sea_countries, 3L, method, "sea_countries"),
@@ -782,25 +915,12 @@ wlv_scientific_validate_result_arrays <- function(
     "indicator", "level", "strategy", "module", "numerator",
     "denominator", "weight", "zero_denominator"
   )
-  if (is.null(legacy_aggregations)) {
-    legacy_aggregations <- data.frame(
-      indicator = character(),
-      level = character(),
-      strategy = character(),
-      module = character(),
-      numerator = character(),
-      denominator = character(),
-      weight = character(),
-      zero_denominator = character(),
-      stringsAsFactors = FALSE
-    )
-  }
   valid_row_set <- function(value) {
     is.data.frame(value) &&
       all(aggregation_columns %in% names(value)) &&
       !anyNA(value[aggregation_columns])
   }
-  if (!valid_row_set(aggregations) || !valid_row_set(legacy_aggregations)) {
+  if (!valid_row_set(aggregations)) {
     wlv_abort_scientific_validation(
       method,
       "aggregation_contract",
@@ -811,64 +931,45 @@ wlv_scientific_validate_result_arrays <- function(
     )
   }
   aggregations <- aggregations[aggregation_columns]
-  legacy_aggregations <- legacy_aggregations[aggregation_columns]
   aggregation_keys <- paste(
     aggregations$indicator,
     aggregations$level,
     sep = "/"
   )
-  legacy_keys <- paste(
-    legacy_aggregations$indicator,
-    legacy_aggregations$level,
-    sep = "/"
-  )
-  combined_aggregations <- rbind(aggregations, legacy_aggregations)
-  combined_keys <- c(aggregation_keys, legacy_keys)
   valid_coverage <-
-    !anyDuplicated(combined_keys) &&
-    setequal(unique(combined_aggregations$indicator), sector_indicators) &&
+    !anyDuplicated(aggregation_keys) &&
+    setequal(unique(aggregations$indicator), sector_indicators) &&
     all(table(factor(
-      combined_aggregations$indicator,
+      aggregations$indicator,
       levels = sector_indicators
     )) == 2L) &&
     all(vapply(
       split(
-        combined_aggregations$level,
-        combined_aggregations$indicator
+        aggregations$level,
+        aggregations$indicator
       ),
       setequal,
       logical(1L),
       c("sector_to_country", "country_to_world")
     ))
-  routes <- c(
-    rep("typed", nrow(aggregations)),
-    rep("legacy", nrow(legacy_aggregations))
-  )
-  consistent_routes <- all(vapply(
-    split(routes, combined_aggregations$indicator),
-    function(route) length(unique(route)) == 1L,
-    logical(1L)
-  ))
   supported <- c(
     "sum", "mean", "ratio_of_sums", "weighted_mean", "invariant",
     "not_applicable", "formula"
   )
-  valid_strategies <-
-    all(aggregations$strategy %in% supported) &&
-    all(legacy_aggregations$strategy %in% c("sum", "mean", "formula"))
-  if (!valid_coverage || !consistent_routes || !valid_strategies) {
+  valid_strategies <- all(aggregations$strategy %in% supported)
+  if (!valid_coverage || !valid_strategies) {
     wlv_abort_scientific_validation(
       method,
       "aggregation_contract",
       "published_metadata",
       reason = paste0(
-        "typed and legacy routes must be disjoint, supported and cover both ",
-        "levels of every published indicator"
+        "typed routes must be supported and cover both levels of every ",
+        "published indicator"
       )
     )
   }
   references <- unlist(
-    combined_aggregations[c("numerator", "denominator", "weight")],
+    aggregations[c("numerator", "denominator", "weight")],
     use.names = FALSE
   )
   references <- as.character(references)
@@ -886,39 +987,22 @@ wlv_scientific_validate_result_arrays <- function(
     "aggregation_contract",
     "_unit_contract.csv",
     observations = nrow(aggregations),
-    detail = paste0(
-      "Persisted typed aggregation rows are distinct from any legacy adapter ",
-      "route."
-    )
+    detail = "Persisted typed aggregation rows exactly cover the result."
   )
-  if (nrow(legacy_aggregations)) {
-    rows[[length(rows) + 1L]] <- wlv_scientific_check_row(
-      method,
-      "aggregation_legacy_adapter",
-      "_method_solutions.csv",
-      observations = nrow(legacy_aggregations),
-      detail = paste0(
-        "Experimental legacy rows are independently recomputed without being ",
-        "classified as typed unit-contract aggregations."
-      )
-    )
-  }
 
   for (indicator in sector_indicators) {
     country_row <- wlv_scientific_aggregation_row(
-      combined_aggregations,
+      aggregations,
       indicator,
       "sector_to_country",
       method
     )
     world_row <- wlv_scientific_aggregation_row(
-      combined_aggregations,
+      aggregations,
       indicator,
       "country_to_world",
       method
     )
-    legacy_route <- paste(indicator, "sector_to_country", sep = "/") %in%
-      legacy_keys
     country_formula <- identical(
       as.character(country_row$strategy[[1L]]),
       "formula"
@@ -982,15 +1066,10 @@ wlv_scientific_validate_result_arrays <- function(
       check_id = "sector_to_country",
       artifact = "sea_countries",
       indicator = indicator,
-      scope = if (legacy_route) {
-        paste("legacy_adapter", country_strategy, sep = ":")
-      } else {
-        country_strategy
-      },
+      scope = country_strategy,
       detail = sprintf(
-        "Independent `%s` reference aggregation over sectors (%s route).",
-        country_strategy,
-        if (legacy_route) "legacy adapter" else "typed contract"
+        "Independent `%s` typed reference aggregation over sectors.",
+        country_strategy
       )
     )
     if (country_strategy %in% c("sum", "mean")) {
@@ -1023,15 +1102,10 @@ wlv_scientific_validate_result_arrays <- function(
       check_id = "country_to_world",
       artifact = "sea_countries",
       indicator = indicator,
-      scope = if (legacy_route) {
-        paste("legacy_adapter", world_strategy, sep = ":")
-      } else {
-        world_strategy
-      },
+      scope = world_strategy,
       detail = sprintf(
-        "Independent `%s` reference aggregation over countries (%s route).",
-        world_strategy,
-        if (legacy_route) "legacy adapter" else "typed contract"
+        "Independent `%s` typed reference aggregation over countries.",
+        world_strategy
       )
     )
     if (world_strategy %in% c("sum", "mean")) {
@@ -1129,7 +1203,7 @@ wlv_scientific_validate_result_arrays <- function(
 
   result <- do.call(rbind, rows)
   row.names(result) <- NULL
-  result[wlv_scientific_check_columns]
+  result[wlv_scientific_check_columns()]
 }
 
 wlv_scientific_validate_io_array <- function(method, m_io, sea_sectors) {
@@ -1295,13 +1369,13 @@ wlv_scientific_validate_io_array <- function(method, m_io, sea_sectors) {
 
   result <- do.call(rbind, rows)
   row.names(result) <- NULL
-  result[wlv_scientific_check_columns]
+  result[wlv_scientific_check_columns()]
 }
 
 wlv_validate_scientific_check_artifact <- function(value, method) {
   if (
     !is.data.frame(value) ||
-      !identical(names(value), wlv_scientific_check_columns) ||
+      !identical(names(value), wlv_scientific_check_columns()) ||
       !nrow(value) || anyNA(value[c(
         "method", "check_id", "artifact", "indicator", "scope", "status",
         "observations", "tolerance", "detail"
@@ -1320,6 +1394,92 @@ wlv_validate_scientific_check_artifact <- function(value, method) {
     )
   }
   invisible(value)
+}
+
+wlv_read_scientific_check_artifact <- function(path, method) {
+  if (!is.character(path) || length(path) != 1L || is.na(path) ||
+      !file.exists(path) || isTRUE(file.info(path)$isdir)) {
+    stop("Scientific-check sidecar is missing.", call. = FALSE)
+  }
+  value <- tryCatch(
+    utils::read.csv2(
+      path,
+      stringsAsFactors = FALSE,
+      check.names = FALSE,
+      na.strings = "NA",
+      fileEncoding = "UTF-8",
+      colClasses = c(
+        rep("character", 6L),
+        "integer", "numeric", "numeric", "character", "character"
+      )
+    ),
+    error = function(error) {
+      stop(
+        sprintf("Cannot read scientific-check sidecar: %s", conditionMessage(error)),
+        call. = FALSE
+      )
+    }
+  )
+  row.names(value) <- NULL
+  wlv_validate_scientific_check_artifact(value, method)
+  value
+}
+
+wlv_inherited_io_scientific_checks <- function(value, method, io_years) {
+  wlv_validate_scientific_check_artifact(value, method)
+  io_years <- as.character(io_years)
+  if (!length(io_years) || anyNA(io_years) || any(!nzchar(io_years)) ||
+      anyDuplicated(io_years)) {
+    wlv_abort_scientific_validation(
+      method,
+      "inherited_io_checks",
+      "_scientific_checks.csv",
+      reason = "the inherited I/O year coverage is invalid"
+    )
+  }
+  coverage <- value[
+    value$artifact == "m_io" & value$check_id == "io_year_coverage",
+    ,
+    drop = FALSE
+  ]
+  row.names(coverage) <- NULL
+  expected_coverage <- wlv_scientific_check_row(
+    method,
+    "io_year_coverage",
+    "m_io",
+    observations = length(io_years),
+    detail = "Every result year appears in exactly one I/O artifact."
+  )
+  if (!identical(coverage, expected_coverage)) {
+    wlv_abort_scientific_validation(
+      method,
+      "inherited_io_checks",
+      "_scientific_checks.csv",
+      reason = "the authenticated parent has invalid I/O year coverage"
+    )
+  }
+  result <- value[
+    value$artifact == "m_io" & value$check_id != "io_year_coverage",
+    ,
+    drop = FALSE
+  ]
+  keys <- paste(
+    result$check_id,
+    result$artifact,
+    result$indicator,
+    result$scope,
+    sep = "\034"
+  )
+  if (!nrow(result) || anyDuplicated(keys)) {
+    wlv_abort_scientific_validation(
+      method,
+      "inherited_io_checks",
+      "_scientific_checks.csv",
+      reason = "the authenticated parent lacks a unique I/O check inventory"
+    )
+  }
+  row.names(result) <- NULL
+  result[wlv_scientific_check_columns()]
 }
 
 wlv_scientific_validate_lambda_fingerprints <- function(
@@ -1389,12 +1549,152 @@ wlv_scientific_validate_lambda_fingerprints <- function(
   )
 }
 
+wlv_scientific_validate_leontief_signed_profile <- function(
+    leontief,
+    scientific_profile,
+    method) {
+  expected <- scientific_profile$leontief_signed$rows
+  valid <-
+    is.data.frame(leontief) &&
+    all(c(
+      "year", "coefficient_negative_count", "certificate_type"
+    ) %in% names(leontief)) &&
+    identical(as.character(leontief$year), as.character(expected$year)) &&
+    identical(
+      as.integer(leontief$coefficient_negative_count),
+      as.integer(expected$coefficient_negative_count)
+    ) &&
+    identical(
+      as.character(leontief$certificate_type),
+      as.character(expected$certificate_type)
+    )
+  if (!valid) {
+    observed <- if (is.data.frame(leontief) && all(c(
+      "year", "coefficient_negative_count", "certificate_type"
+    ) %in% names(leontief))) {
+      paste(
+        leontief$year,
+        leontief$coefficient_negative_count,
+        leontief$certificate_type,
+        sep = ":"
+      )
+    } else {
+      "invalid-schema"
+    }
+    wlv_abort_scientific_validation(
+      method,
+      "leontief_signed_profile",
+      "_leontief_diagnostics.csv",
+      reason = sprintf(
+        paste0(
+          "signed coefficient profile differs from explicit profile `%s` ",
+          "(observed %s)"
+        ),
+        scientific_profile$leontief_signed$id,
+        paste(observed, collapse = ",")
+      )
+    )
+  }
+  as.character(expected$year[expected$coefficient_negative_count > 0L])
+}
+
+wlv_scientific_validate_nonfinite_resolution <- function(
+    diagnostics,
+    scientific_profile,
+    method) {
+  name <- "_nonfinite_resolution_diagnostics.csv"
+  resolution <- scientific_profile$nonfinite_resolution
+  if (identical(resolution$action, "reject")) {
+    if (name %in% names(diagnostics)) {
+      wlv_abort_scientific_validation(
+        method,
+        "nonfinite_resolution",
+        name,
+        reason = "a strict profile published an undeclared resolution sidecar"
+      )
+    }
+    return(NULL)
+  }
+  if (!name %in% names(diagnostics)) {
+    wlv_abort_scientific_validation(
+      method,
+      "nonfinite_resolution",
+      name,
+      reason = sprintf(
+        "profile `%s` requires the non-finite resolution sidecar",
+        resolution$id
+      )
+    )
+  }
+  observed <- tryCatch(
+    wlv_normalize_nonfinite_resolution_diagnostics(diagnostics[[name]]),
+    error = function(error) {
+      wlv_abort_scientific_validation(
+        method,
+        "nonfinite_resolution",
+        name,
+        reason = conditionMessage(error)
+      )
+    }
+  )
+  expected <- resolution$groups[
+    order(resolution$groups$binding, resolution$groups$kind, method = "radix"),
+    ,
+    drop = FALSE
+  ]
+  keys_match <- identical(observed$binding, expected$binding) &&
+    identical(observed$indicator, expected$indicator) &&
+    identical(observed$kind, expected$kind)
+  values_match <- keys_match &&
+    identical(observed$module, expected$module) &&
+    identical(observed$resolved_count, expected$expected_count) &&
+    identical(observed$coordinate_sha256, expected$coordinate_sha256)
+  identity_match <-
+    all(observed$method == method) &&
+    all(observed$scientific_profile == scientific_profile$id) &&
+    all(observed$nonfinite_resolution_profile == resolution$id) &&
+    all(observed$action == resolution$action)
+  if (!values_match || !identity_match ||
+      sum(observed$resolved_count) != resolution$expected_count) {
+    wlv_abort_scientific_validation(
+      method,
+      "nonfinite_resolution",
+      name,
+      reason = sprintf(
+        "published transitions differ from explicit profile `%s`",
+        resolution$id
+      )
+    )
+  }
+  wlv_scientific_check_row(
+    method,
+    "nonfinite_resolution",
+    name,
+    observations = sum(observed$resolved_count),
+    detail = sprintf(
+      "Profile `%s` closed %s declared historical transition(s).",
+      resolution$id,
+      sum(observed$resolved_count)
+    )
+  )
+}
+
 wlv_scientific_validate_diagnostics <- function(
     diagnostics,
     method,
     source,
     years,
-    sea_sectors) {
+    sea_sectors,
+    scientific_profile) {
+  if (is.null(scientific_profile)) {
+    wlv_abort_scientific_validation(
+      method,
+      "scientific_profile",
+      "config/contracts/scientific_profiles.csv",
+      reason = "an explicit scientific profile is required"
+    )
+  }
+  wlv_assert_scientific_profile(scientific_profile, method, source)
   if (!is.list(diagnostics) || is.null(names(diagnostics))) {
     wlv_abort_scientific_validation(
       method, "diagnostic_inventory", "scientific_sidecars",
@@ -1425,52 +1725,11 @@ wlv_scientific_validate_diagnostics <- function(
     sea_sectors = sea_sectors,
     method = method
   )
-  signed <- leontief$coefficient_negative_count > 0
-  if (identical(method, "wiodr13")) {
-    expected_signed <- leontief$year == "2006"
-    valid_signed_profile <-
-      identical(signed, expected_signed) &&
-      identical(
-        as.integer(leontief$coefficient_negative_count[expected_signed]),
-        397L
-      ) &&
-      all(
-        leontief$certificate_type[expected_signed] ==
-          "absolute_convergence_signed"
-      ) &&
-      all(
-        leontief$certificate_type[!expected_signed] ==
-          "productivity_nonnegative"
-      )
-  } else {
-    valid_signed_profile <-
-      !any(signed) &&
-      all(leontief$certificate_type == "productivity_nonnegative")
-  }
-  if (!valid_signed_profile) {
-    observed <- paste(
-      leontief$year,
-      leontief$coefficient_negative_count,
-      leontief$certificate_type,
-      sep = ":"
-    )
-    wlv_abort_scientific_validation(
-      method,
-      "leontief_signed_profile",
-      leontief_name,
-      reason = sprintf(
-        "signed coefficient profile is not closed for this method (observed %s)",
-        paste(observed, collapse = ",")
-      )
-    )
-  }
-  signed_years <- if (
-    "coefficient_negative_count" %in% names(leontief)
-  ) {
-    as.character(leontief$year[leontief$coefficient_negative_count > 0])
-  } else {
-    character()
-  }
+  signed_years <- wlv_scientific_validate_leontief_signed_profile(
+    leontief,
+    scientific_profile,
+    method
+  )
   rows <- list(fingerprint_check, wlv_scientific_check_row(
     method,
     "leontief_diagnostics",
@@ -1508,6 +1767,14 @@ wlv_scientific_validate_diagnostics <- function(
       observations = nrow(leontief),
       detail = "All nonnegative coefficient systems passed the productivity certificate."
     )
+  }
+  nonfinite_check <- wlv_scientific_validate_nonfinite_resolution(
+    diagnostics,
+    scientific_profile,
+    method
+  )
+  if (!is.null(nonfinite_check)) {
+    rows[[length(rows) + 1L]] <- nonfinite_check
   }
 
   gfcf_names <- c(
@@ -1562,8 +1829,8 @@ wlv_finalize_scientific_checks <- function(
     years,
     io_years,
     diagnostics,
-    require_io,
-    sea_sectors) {
+    sea_sectors,
+    scientific_profile) {
   rows <- checks
   if (length(io_years)) {
     duplicated_years <- unique(io_years[duplicated(io_years)])
@@ -1587,17 +1854,10 @@ wlv_finalize_scientific_checks <- function(
       observations = length(io_years),
       detail = "Every result year appears in exactly one I/O artifact."
     )
-  } else if (require_io) {
+  } else {
     wlv_abort_scientific_validation(
       method, "io_year_coverage", "m_io",
-      reason = "no I/O result array is available for a calculation that requires it"
-    )
-  } else {
-    rows[[length(rows) + 1L]] <- wlv_scientific_not_applicable(
-      method,
-      "io_year_coverage",
-      "m_io",
-      detail = "Later-stage recalculation may preserve a legacy snapshot without I/O arrays."
+      reason = "no I/O result array is available"
     )
   }
 
@@ -1606,7 +1866,8 @@ wlv_finalize_scientific_checks <- function(
     method = method,
     source = source,
     years = years,
-    sea_sectors = sea_sectors
+    sea_sectors = sea_sectors,
+    scientific_profile = scientific_profile
   )
   result <- do.call(rbind, rows)
   result <- result[order(
@@ -1622,5 +1883,5 @@ wlv_finalize_scientific_checks <- function(
 }
 
 wlv_scientific_sidecar_pattern <- function() {
-  "^_(gfcf_|leontief_|scientific_).*[.]csv$"
+  "^_(gfcf_|leontief_|nonfinite_resolution_|scientific_).*[.]csv$"
 }

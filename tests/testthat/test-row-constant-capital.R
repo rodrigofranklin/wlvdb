@@ -4,36 +4,27 @@ sys.source(
   envir = row_capital_environment
 )
 
-test_that("modern and legacy WIOD16 methods resolve the intended ROW assumption", {
-  execution_environment <- new.env(parent = baseenv())
-  sys.source(
-    file.path(wlv_test_root, "R", "lib", "execution.R"),
-    envir = execution_environment
-  )
-  required <- c("names", "computation", "order")
+test_that("WIOD16 configurations resolve the intended native ROW assumption", {
+  runtime <- wlv_test_load_runtime()
   for (method in c("wiodr16", "zerodep_2")) {
-    resolved <- execution_environment$wlv_effective_parameter_group(
-      root = wlv_test_root,
-      method = method,
-      source = "wiodr16",
-      group = "assumptions",
-      required_columns = required
+    resolved <- runtime$wlv_resolve_module_config(
+      wlv_test_root,
+      method,
+      "wiodr16"
     )
     expect_identical(
-      resolved$computation[resolved$names == "row"],
-      "row/row.R"
+      resolved$module_id[resolved$instance_id == "assumption.row"],
+      "assumption.row.standard"
     )
   }
-  legacy <- execution_environment$wlv_effective_parameter_group(
-    root = wlv_test_root,
-    method = "wiodr16v09",
-    source = "wiodr16",
-    group = "assumptions",
-    required_columns = required
+  version_09 <- runtime$wlv_resolve_module_config(
+    wlv_test_root,
+    "wiodr16v09",
+    "wiodr16"
   )
   expect_identical(
-    legacy$computation[legacy$names == "row"],
-    "row/row.old.R"
+    version_09$module_id[version_09$instance_id == "assumption.row"],
+    "assumption.row.v09"
   )
 })
 
@@ -241,7 +232,8 @@ test_that("modern ROW assumptions rebuild and register two years of constant cap
   set_country_indicator("go_price.r.id", "USA", c(1, 1, 1.25, 1.25))
   set_country_indicator("go_price.r.id", "IND", c(1, 1, 1.25, 1.25))
 
-  environment$wlv_contract_runtime <- environment$wlv_new_contract_runtime(
+  environment$wlv_contract_runtime <- wlv_test_contract_runtime(
+    environment,
     method = "synthetic",
     source = "synthetic",
     policy = environment$wlv_strict_missingness_policy(

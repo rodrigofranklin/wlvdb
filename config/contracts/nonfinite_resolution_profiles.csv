@@ -1,0 +1,6 @@
+nonfinite_resolution_profile;action;expected_count
+nonfinite_none_v1;reject;0
+alternative_2_nonfinite_v1;replace_nan_with_zero;405
+petrovic_nonfinite_v1;replace_nan_with_zero;405
+ochoa_1_wage_nonfinite_v1;replace_zero_denominator_with_zero;530
+ochoa_2_wage_nonfinite_v1;replace_zero_denominator_with_zero;530

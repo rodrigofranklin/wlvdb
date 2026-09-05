@@ -10,6 +10,9 @@ script_path <- if (length(script_arg)) {
 }
 repo_root <- normalizePath(file.path(dirname(script_path), "../.."), mustWork = TRUE)
 
+Sys.setenv(RENV_PROJECT = repo_root)
+source(file.path(repo_root, "renv", "activate.R"), local = TRUE)
+
 profile_path <- file.path(repo_root, ".Rprofile")
 project_path <- file.path(repo_root, "worldlabourvalues.Rproj")
 
@@ -36,10 +39,40 @@ stopifnot(
 )
 
 invisible(parse(profile_path, encoding = "UTF-8"))
-invisible(parse(file.path(repo_root, "R/main.R"), encoding = "UTF-8"))
+bootstrap_path <- file.path(repo_root, "R", "bootstrap.R")
+invisible(parse(bootstrap_path, encoding = "UTF-8"))
+bootstrap_environment <- new.env(parent = baseenv())
+sys.source(bootstrap_path, envir = bootstrap_environment)
+definition_files <- bootstrap_environment$wlv_runtime_definition_files(repo_root)
+invisible(lapply(definition_files, parse, encoding = "UTF-8"))
 
-status_before <- system2("git", c("-C", shQuote(repo_root), "status", "--porcelain=v1"),
-                         stdout = TRUE, stderr = TRUE)
+status_before_runtime <- system2(
+  "git",
+  c("-C", shQuote(repo_root), "status", "--porcelain=v1"),
+  stdout = TRUE,
+  stderr = TRUE
+)
+search_before_runtime <- search()
+working_directory_before_runtime <- getwd()
+runtime <- bootstrap_environment$wlv_load_runtime(repo_root)
+status_after_runtime <- system2(
+  "git",
+  c("-C", shQuote(repo_root), "status", "--porcelain=v1"),
+  stdout = TRUE,
+  stderr = TRUE
+)
+stopifnot(
+  identical(status_before_runtime, status_after_runtime),
+  identical(search(), search_before_runtime),
+  identical(getwd(), working_directory_before_runtime),
+  identical(parent.env(runtime), baseenv()),
+  environmentIsLocked(runtime),
+  is.function(runtime$prepare_wlv),
+  is.function(runtime$get_wlv),
+  is.function(runtime$recalc_wlv)
+)
+
+status_before <- status_after_runtime
 source(profile_path, local = new.env(parent = baseenv()), encoding = "UTF-8")
 status_after <- system2("git", c("-C", shQuote(repo_root), "status", "--porcelain=v1"),
                         stdout = TRUE, stderr = TRUE)

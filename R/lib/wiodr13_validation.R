@@ -1,12 +1,3 @@
-if (!exists(
-  "wlv_wiodr_analyze_m_io_negative_gfcf",
-  envir = environment(),
-  mode = "function",
-  inherits = FALSE
-)) {
-  sys.source("R/lib/gfcf_contracts.R", envir = environment())
-}
-
 wlv_wiodr13_validate_labels <- function(values, name) {
   if (!is.character(values) || !length(values)) {
     stop(sprintf("`%s` must be a non-empty character vector.", name), call. = FALSE)

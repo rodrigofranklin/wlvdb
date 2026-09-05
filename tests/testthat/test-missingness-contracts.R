@@ -65,8 +65,75 @@ test_that("WIOD policy factories are pure and expose canonical IDs", {
   expect_identical(nrow(strict$source_rules), 0L)
 })
 
+test_that("contract runtimes require one explicit canonical scientific profile", {
+  e <- missingness_environment
+  policy <- e$wlv_strict_missingness_policy(
+    source = "synthetic",
+    policy_id = "synthetic_strict"
+  )
+  expect_error(
+    e$wlv_new_contract_runtime(
+      method = "synthetic",
+      source = "synthetic",
+      policy = policy
+    ),
+    "must be supplied explicitly",
+    fixed = TRUE
+  )
+  expect_error(
+    e$wlv_new_contract_runtime(
+      method = "synthetic",
+      source = "synthetic",
+      policy = policy,
+      scientific_profile = NULL
+    ),
+    "must be supplied explicitly",
+    fixed = TRUE
+  )
+  profile <- wlv_test_scientific_profile(
+    e,
+    method = "synthetic",
+    source = "synthetic"
+  )
+  runtime <- e$wlv_new_contract_runtime(
+    method = "synthetic",
+    source = "synthetic",
+    policy = policy,
+    scientific_profile = profile
+  )
+  expect_true(is.environment(runtime))
+  expect_identical(runtime$scientific_profile, profile)
+  expect_identical(runtime$semantic_states, stats::setNames(
+    vector("list", 0L),
+    character()
+  ))
+
+  forged <- profile
+  forged$leontief_zero$exception_count <- 1L
+  expect_error(
+    e$wlv_new_contract_runtime(
+      method = "synthetic",
+      source = "synthetic",
+      policy = policy,
+      scientific_profile = forged
+    ),
+    "Invalid Leontief zero-output grouped counts",
+    fixed = TRUE
+  )
+  expect_error(
+    e$wlv_new_contract_runtime(
+      method = "different",
+      source = "synthetic",
+      policy = policy,
+      scientific_profile = profile
+    ),
+    "Invalid or mismatched scientific profile",
+    fixed = TRUE
+  )
+})
+
 test_that("WIOD16 CHN stage-1 derivatives remain structural until assumptions", {
-  runtime <- missingness_environment$wlv_new_contract_runtime(
+  runtime <- wlv_test_contract_runtime(missingness_environment,
     method = "wiodr16",
     source = "wiodr16",
     policy = missingness_environment$wlv_wiodr16_missingness_policy()
@@ -100,7 +167,7 @@ test_that("WIOD16 CHN stage-1 derivatives remain structural until assumptions", 
 })
 
 test_that("WIOD16 employee hours distinguish zero employment from a pinned fallback", {
-  runtime <- missingness_environment$wlv_new_contract_runtime(
+  runtime <- wlv_test_contract_runtime(missingness_environment,
     method = "wiodr16",
     source = "wiodr16",
     policy = missingness_environment$wlv_wiodr16_missingness_policy()
@@ -124,8 +191,12 @@ test_that("WIOD16 employee hours distinguish zero employment from a pinned fallb
     runtime$anomalies$action,
     c("zero_hours_when_persons_engaged_zero", "fallback_to_country_employee_hours")
   )
+  expect_identical(
+    unique(runtime$anomalies$module),
+    "indicator.hours_worked.emp.s.hr.wiodr16"
+  )
 
-  invalid_runtime <- missingness_environment$wlv_new_contract_runtime(
+  invalid_runtime <- wlv_test_contract_runtime(missingness_environment,
     method = "wiodr16",
     source = "wiodr16",
     policy = missingness_environment$wlv_wiodr16_missingness_policy()
@@ -143,7 +214,7 @@ test_that("WIOD16 employee hours distinguish zero employment from a pinned fallb
 })
 
 test_that("WIOD16 ROW capital uses a pinned country-intensity fallback", {
-  runtime <- missingness_environment$wlv_new_contract_runtime(
+  runtime <- wlv_test_contract_runtime(missingness_environment,
     method = "wiodr16",
     source = "wiodr16",
     policy = missingness_environment$wlv_wiodr16_missingness_policy()
@@ -182,7 +253,7 @@ test_that("WIOD16 ROW capital uses a pinned country-intensity fallback", {
 })
 
 test_that("legacy WIOD16 ROW capital keeps its pinned per-worker basis", {
-  runtime <- missingness_environment$wlv_new_contract_runtime(
+  runtime <- wlv_test_contract_runtime(missingness_environment,
     method = "wiodr16v09",
     source = "wiodr16",
     policy = missingness_environment$wlv_wiodr16_missingness_policy()
@@ -227,7 +298,7 @@ test_that("legacy WIOD16 ROW capital keeps its pinned per-worker basis", {
 
 test_that("WIOD16 ROW capital rejects every divergence from its pinned policy", {
   make_runtime <- function() {
-    missingness_environment$wlv_new_contract_runtime(
+    wlv_test_contract_runtime(missingness_environment,
       method = "wiodr16",
       source = "wiodr16",
       policy = missingness_environment$wlv_wiodr16_missingness_policy()
@@ -309,7 +380,7 @@ test_that("WIOD16 ROW capital rejects every divergence from its pinned policy", 
 })
 
 test_that("synthetic ROW capital retains the generic fallback path", {
-  runtime <- missingness_environment$wlv_new_contract_runtime(
+  runtime <- wlv_test_contract_runtime(missingness_environment,
     method = "synthetic",
     source = "synthetic",
     policy = missingness_environment$wlv_strict_missingness_policy(
@@ -335,7 +406,7 @@ test_that("synthetic ROW capital retains the generic fallback path", {
 })
 
 test_that("declared source missingness overrides legacy cleaned zeroes", {
-  runtime <- missingness_environment$wlv_new_contract_runtime(
+  runtime <- wlv_test_contract_runtime(missingness_environment,
     method = "wiodr13",
     source = "wiodr13",
     policy = missingness_environment$wlv_wiodr13_missingness_policy()
@@ -387,7 +458,7 @@ test_that("declared source missingness overrides legacy cleaned zeroes", {
     )
   )
 
-  invalid_runtime <- missingness_environment$wlv_new_contract_runtime(
+  invalid_runtime <- wlv_test_contract_runtime(missingness_environment,
     method = "wiodr13",
     source = "wiodr13",
     policy = missingness_environment$wlv_wiodr13_missingness_policy()
@@ -413,7 +484,7 @@ test_that("declared source missingness overrides legacy cleaned zeroes", {
 })
 
 test_that("dependency states license only the denominator operand", {
-  runtime <- missingness_environment$wlv_new_contract_runtime(
+  runtime <- wlv_test_contract_runtime(missingness_environment,
     method = "synthetic",
     source = "synthetic",
     policy = missingness_environment$wlv_strict_missingness_policy(
@@ -453,7 +524,7 @@ test_that("dependency states license only the denominator operand", {
 })
 
 test_that("registering a finite result clears stale missingness state", {
-  runtime <- missingness_environment$wlv_new_contract_runtime(
+  runtime <- wlv_test_contract_runtime(missingness_environment,
     method = "synthetic",
     source = "synthetic",
     policy = missingness_environment$wlv_strict_missingness_policy(
@@ -482,7 +553,7 @@ test_that("registering a finite result clears stale missingness state", {
 })
 
 test_that("persisted singleton indicator states apply to an array slice", {
-  runtime <- missingness_environment$wlv_new_contract_runtime(
+  runtime <- wlv_test_contract_runtime(missingness_environment,
     method = "synthetic",
     source = "synthetic",
     policy = missingness_environment$wlv_strict_missingness_policy(
@@ -520,7 +591,7 @@ test_that("persisted singleton indicator states apply to an array slice", {
 })
 
 test_that("persisted singleton states cannot be relabelled onto another slice", {
-  runtime <- missingness_environment$wlv_new_contract_runtime(
+  runtime <- wlv_test_contract_runtime(missingness_environment,
     method = "synthetic",
     source = "synthetic",
     policy = missingness_environment$wlv_strict_missingness_policy(
@@ -555,7 +626,7 @@ test_that("persisted singleton states cannot be relabelled onto another slice", 
 })
 
 test_that("registered slice states expand only onto the matching indicator", {
-  runtime <- missingness_environment$wlv_new_contract_runtime(
+  runtime <- wlv_test_contract_runtime(missingness_environment,
     method = "synthetic",
     source = "synthetic",
     policy = missingness_environment$wlv_strict_missingness_policy(
@@ -601,7 +672,7 @@ test_that("registered slice states expand only onto the matching indicator", {
 })
 
 test_that("same-rank registered states reject relabelled coordinates", {
-  runtime <- missingness_environment$wlv_new_contract_runtime(
+  runtime <- wlv_test_contract_runtime(missingness_environment,
     method = "synthetic",
     source = "synthetic",
     policy = missingness_environment$wlv_strict_missingness_policy(
@@ -659,7 +730,7 @@ test_that("persisted non-applicable states survive selective recalculation", {
     source = "synthetic",
     policy_id = "synthetic_strict"
   )
-  runtime <- missingness_environment$wlv_new_contract_runtime(
+  runtime <- wlv_test_contract_runtime(missingness_environment,
     method = "synthetic",
     source = "synthetic",
     policy = policy
@@ -717,7 +788,7 @@ test_that("persisted non-applicable states survive selective recalculation", {
     fixed = TRUE
   )
 
-  restored <- missingness_environment$wlv_new_contract_runtime(
+  restored <- wlv_test_contract_runtime(missingness_environment,
     method = "synthetic",
     source = "synthetic",
     policy = policy
@@ -759,7 +830,7 @@ test_that("persisted non-applicable states survive selective recalculation", {
   utils::write.csv2(corrupt, corrupt_path, row.names = FALSE)
   expect_error(
     missingness_environment$wlv_load_contract_states(
-      missingness_environment$wlv_new_contract_runtime(
+      wlv_test_contract_runtime(missingness_environment,
         method = "synthetic", source = "synthetic", policy = policy
       ),
       corrupt_path,
@@ -770,7 +841,7 @@ test_that("persisted non-applicable states survive selective recalculation", {
   )
   expect_error(
     missingness_environment$wlv_load_contract_states(
-      missingness_environment$wlv_new_contract_runtime(
+      wlv_test_contract_runtime(missingness_environment,
         method = "synthetic", source = "synthetic", policy = policy
       ),
       file.path(root, "missing-states.csv"),
@@ -800,14 +871,14 @@ test_that("successful anomaly reports append repeated recalculation events", {
     context,
     "mark_not_applicable"
   )
-  first <- missingness_environment$wlv_new_contract_runtime(
+  first <- wlv_test_contract_runtime(missingness_environment,
     method = "synthetic", source = "synthetic", policy = policy
   )
   missingness_environment$wlv_contract_record(first, event)
   path <- file.path(root, "_anomalies.csv")
   missingness_environment$wlv_write_contract_report(first, path)
 
-  second <- missingness_environment$wlv_new_contract_runtime(
+  second <- wlv_test_contract_runtime(missingness_environment,
     method = "synthetic", source = "synthetic", policy = policy
   )
   expect_true(missingness_environment$wlv_load_contract_report(second, path))
@@ -1141,14 +1212,14 @@ test_that("array axis titles do not make otherwise aligned values incompatible",
   )
 })
 
-test_that("Leontief nonzero-over-zero exceptions are method- and hash-pinned", {
+test_that("Leontief nonzero-over-zero exceptions are source- and hash-pinned", {
   policy <- missingness_environment$wlv_strict_missingness_policy(
     source = "synthetic", policy_id = "synthetic_strict"
   )
   numerator <- array(1, dim = c(1L, 1L, 1L))
   denominator <- array(0, dim = c(1L, 1L, 1L))
 
-  synthetic_runtime <- missingness_environment$wlv_new_contract_runtime(
+  synthetic_runtime <- wlv_test_contract_runtime(missingness_environment,
     method = "synthetic", source = "synthetic", policy = policy
   )
   expect_error(
@@ -1160,12 +1231,57 @@ test_that("Leontief nonzero-over-zero exceptions are method- and hash-pinned", {
       inputs = "A.X",
       outputs = "A.X"
     ),
-    "undeclared nonzero flow",
-    fixed = TRUE
+    "differ from explicit scientific profile"
   )
 
   wiodr13_runtime <- missingness_environment$wlv_new_contract_runtime(
-    method = "wiodr13", source = "synthetic", policy = policy
+    method = "wiodr13v09",
+    source = "wiodr13",
+    policy = policy,
+    scientific_profile = missingness_environment$
+      wlv_scientific_profile_contract(
+        id = "wiodr13_v09_v1",
+        method = "wiodr13v09",
+        source = "wiodr13",
+        output_profile = "wiodr13_v09",
+        leontief_zero = list(
+          id = "wiodr13_v09_zero_v1",
+          exception_count = 2945L,
+          coordinate_md5 = "3fd6663ca00317b42d3044df5019db4c",
+          counts = data.frame(
+            year = "2000",
+            output = "A.X",
+            exception_count = 2945L,
+            stringsAsFactors = FALSE
+          )
+        ),
+        leontief_signed = list(
+          id = "wiodr13_v09_signed_v1",
+          rows = data.frame(
+            year = "2000",
+            coefficient_negative_count = 0L,
+            certificate_type = "productivity_nonnegative",
+            stringsAsFactors = FALSE
+          )
+        ),
+        nonfinite_resolution = list(
+          id = "nonfinite_none_v1",
+          action = "reject",
+          expected_count = 0L,
+          groups = data.frame(
+            binding = character(), indicator = character(),
+            kind = character(), module = character(),
+            expected_count = integer(), coordinate_sha256 = character(),
+            stringsAsFactors = FALSE
+          ),
+          rules = data.frame(
+            artifact = character(), indicator = character(),
+            year = character(), country = character(),
+            sector = character(), from = character(), to = character(),
+            stringsAsFactors = FALSE
+          )
+        )
+      )
   )
   expect_error(
     missingness_environment$wlv_allowlisted_leontief_zero_output(
@@ -1176,9 +1292,137 @@ test_that("Leontief nonzero-over-zero exceptions are method- and hash-pinned", {
       inputs = "A.X",
       outputs = "A.X"
     ),
-    "differ from the pinned set",
-    fixed = TRUE
+    "differ from explicit scientific profile"
   )
+
+  wrong_source_runtime <- wlv_test_contract_runtime(missingness_environment,
+    method = "wiodr13", source = "synthetic", policy = policy
+  )
+  expect_error(
+    missingness_environment$wlv_allowlisted_leontief_zero_output(
+      wrong_source_runtime,
+      numerator,
+      denominator,
+      years = "2000",
+      inputs = "A.X",
+      outputs = "A.X"
+    ),
+    "differ from explicit scientific profile"
+  )
+})
+
+test_that("persisted Leontief exceptions remain closed under the current profile", {
+  e <- missingness_environment
+  key <- "2000|A.X|B.Y"
+  coordinate_md5 <- unclass(tolower(as.character(openssl::md5(
+    charToRaw(enc2utf8(key))
+  ))))
+  profile <- e$wlv_scientific_profile_contract(
+    id = "persisted_leontief_test_v1",
+    method = "synthetic",
+    source = "synthetic",
+    output_profile = "synthetic_output",
+    leontief_zero = list(
+      id = "persisted_zero_test_v1",
+      exception_count = 1L,
+      coordinate_md5 = coordinate_md5,
+      counts = data.frame(
+        year = "2000",
+        output = "B.Y",
+        exception_count = 1L,
+        stringsAsFactors = FALSE
+      )
+    ),
+    leontief_signed = list(
+      id = "persisted_signed_test_v1",
+      rows = data.frame(
+        year = "2000",
+        coefficient_negative_count = 0L,
+        certificate_type = "productivity_nonnegative",
+        stringsAsFactors = FALSE
+      )
+    ),
+    nonfinite_resolution = list(
+      id = "persisted_nonfinite_none_v1",
+      action = "reject",
+      expected_count = 0L,
+      groups = data.frame(
+        binding = character(), indicator = character(),
+        kind = character(), module = character(),
+        expected_count = integer(), coordinate_sha256 = character(),
+        stringsAsFactors = FALSE
+      ),
+      rules = data.frame(
+        artifact = character(), indicator = character(),
+        year = character(), country = character(), sector = character(),
+        from = character(), to = character(), stringsAsFactors = FALSE
+      )
+    )
+  )
+  runtime <- e$wlv_new_contract_runtime(
+    method = "synthetic",
+    source = "synthetic",
+    policy = e$wlv_strict_missingness_policy(
+      source = "synthetic",
+      policy_id = "synthetic_strict"
+    ),
+    scientific_profile = profile
+  )
+  anomaly <- data.frame(
+    artifact = "m_io",
+    indicator = "leontief_input_ratio",
+    checkpoint = "after_matrices",
+    stage = "3",
+    module = "transformation.R",
+    year = "2000",
+    country = NA_character_,
+    sector = "A.X",
+    output = "B.Y",
+    original_value = "Inf",
+    policy_id = "persisted_zero_test_v1",
+    action = "allowlisted_nonzero_over_zero",
+    stringsAsFactors = FALSE
+  )[e$wlv_contract_anomaly_columns()]
+  expect_invisible(
+    e$wlv_validate_leontief_zero_output_anomalies(runtime, anomaly)
+  )
+
+  tampered_policy <- anomaly
+  tampered_policy$policy_id <- "old_profile_v1"
+  expect_error(
+    e$wlv_validate_leontief_zero_output_anomalies(runtime, tampered_policy),
+    "differ from explicit scientific profile"
+  )
+  tampered_action <- anomaly
+  tampered_action$action <- "replace_both_zero_with_zero"
+  expect_error(
+    e$wlv_validate_leontief_zero_output_anomalies(runtime, tampered_action),
+    "differ from explicit scientific profile"
+  )
+  tampered_coordinate <- anomaly
+  tampered_coordinate$sector <- "A.Z"
+  expect_error(
+    e$wlv_validate_leontief_zero_output_anomalies(runtime, tampered_coordinate),
+    "differ from explicit scientific profile"
+  )
+  expect_error(
+    e$wlv_validate_leontief_zero_output_anomalies(
+      runtime,
+      rbind(anomaly, anomaly)
+    ),
+    "differ from explicit scientific profile"
+  )
+
+  empty_runtime <- wlv_test_contract_runtime(
+    e,
+    method = "synthetic",
+    source = "synthetic",
+    policy = runtime$policy
+  )
+  expect_invisible(e$wlv_validate_leontief_zero_output_anomalies(
+    empty_runtime,
+    e$wlv_empty_contract_table()
+  ))
 })
 
 test_that("streaming Leontief scans preserve the zero-output audit trail", {
@@ -1209,7 +1453,7 @@ test_that("streaming Leontief scans preserve the zero-output audit trail", {
     source = "synthetic",
     policy_id = "synthetic_strict"
   )
-  streaming_runtime <- missingness_environment$wlv_new_contract_runtime(
+  streaming_runtime <- wlv_test_contract_runtime(missingness_environment,
     method = "synthetic",
     source = "synthetic",
     policy = policy
@@ -1235,7 +1479,7 @@ test_that("streaming Leontief scans preserve the zero-output audit trail", {
     dim = dim(full_numerator),
     dimnames = dimnames(full_numerator)
   )
-  legacy_runtime <- missingness_environment$wlv_new_contract_runtime(
+  legacy_runtime <- wlv_test_contract_runtime(missingness_environment,
     method = "synthetic",
     source = "synthetic",
     policy = policy
@@ -1292,7 +1536,7 @@ test_that("streaming Leontief profile validation is atomic", {
     years = "2000",
     inputs = inputs
   )
-  runtime <- missingness_environment$wlv_new_contract_runtime(
+  runtime <- wlv_test_contract_runtime(missingness_environment,
     method = "synthetic",
     source = "synthetic",
     policy = missingness_environment$wlv_strict_missingness_policy(
@@ -1306,8 +1550,7 @@ test_that("streaming Leontief profile validation is atomic", {
       runtime,
       profile
     ),
-    "undeclared nonzero flow",
-    fixed = TRUE
+    "differ from explicit scientific profile"
   )
   expect_identical(nrow(runtime$anomalies), 0L)
 
@@ -1358,6 +1601,489 @@ test_that("streaming Leontief profile validation is atomic", {
       )
     )
   }
+})
+
+test_that("alternative-2 historical 0/0 transitions are closed before storage", {
+  e <- missingness_environment
+  years <- c("2000", "2001")
+  sectors <- c("P", "50")
+  countries <- c("AUS", "CHN")
+  indicators <- c(
+    "hours_worked.empe_hs.r.pc",
+    "hours_worked.empe_ms.r.pc",
+    "hours_worked.empe_ls.r.pc"
+  )
+  coordinates <- data.frame(
+    country = c("AUS", "CHN"),
+    sector = c("P", "50"),
+    stringsAsFactors = FALSE
+  )
+  rules <- do.call(rbind, lapply(indicators, function(indicator) {
+    data.frame(
+      artifact = "sea_sectors",
+      indicator = indicator,
+      year = "*",
+      country = coordinates$country,
+      sector = coordinates$sector,
+      from = "NaN",
+      to = "0",
+      stringsAsFactors = FALSE
+    )
+  }))
+  keys <- sort(unlist(lapply(indicators, function(indicator) {
+    unlist(lapply(seq_len(nrow(coordinates)), function(index) {
+      paste(
+        indicator,
+        years,
+        coordinates$country[[index]],
+        coordinates$sector[[index]],
+        sep = "|"
+      )
+    }), use.names = FALSE)
+  }), use.names = FALSE), method = "radix")
+  group_keys <- sort(unlist(lapply(seq_len(nrow(coordinates)), function(index) {
+    paste(
+      years,
+      coordinates$country[[index]],
+      coordinates$sector[[index]],
+      sep = "|"
+    )
+  }), use.names = FALSE), method = "radix")
+  group_sha256 <- unclass(tolower(as.character(openssl::sha256(
+    charToRaw(enc2utf8(paste(group_keys, collapse = "\n")))
+  ))))
+  scientific_profile <- e$wlv_scientific_profile_contract(
+    id = "alternative_2_test_v1",
+    method = "alternative_2",
+    source = "wiodr13",
+    output_profile = "wiodr13_reduction",
+    leontief_zero = list(
+      id = "test_zero_v1",
+      exception_count = 0L,
+      coordinate_md5 = "d41d8cd98f00b204e9800998ecf8427e",
+      counts = data.frame(
+        year = character(), output = character(),
+        exception_count = integer(), stringsAsFactors = FALSE
+      )
+    ),
+    leontief_signed = list(
+      id = "test_signed_v1",
+      rows = data.frame(
+        year = years,
+        coefficient_negative_count = c(0L, 0L),
+        certificate_type = rep("productivity_nonnegative", 2L),
+        stringsAsFactors = FALSE
+      )
+    ),
+    nonfinite_resolution = list(
+      id = "alternative_2_test_nonfinite_v1",
+      action = "replace_nan_with_zero",
+      expected_count = length(keys),
+      groups = data.frame(
+        binding = indicators,
+        indicator = indicators,
+        kind = rep("NaN", length(indicators)),
+        module = rep("alternative_2_test", length(indicators)),
+        expected_count = rep(length(group_keys), length(indicators)),
+        coordinate_sha256 = rep(group_sha256, length(indicators)),
+        stringsAsFactors = FALSE
+      ),
+      rules = rules
+    )
+  )
+  new_runtime <- function() e$wlv_new_contract_runtime(
+    method = "alternative_2",
+    source = "wiodr13",
+    policy = e$wlv_strict_missingness_policy(
+      source = "wiodr13",
+      policy_id = "test_strict"
+    ),
+    scientific_profile = scientific_profile
+  )
+  dimensions <- c(length(years), length(sectors), length(countries))
+  labels <- list(year = years, sector = sectors, country = countries)
+  denominator <- array(1, dim = dimensions, dimnames = labels)
+  denominator[, "P", "AUS"] <- 0
+  denominator[, "50", "CHN"] <- 0
+  numerators <- stats::setNames(lapply(indicators, function(indicator) {
+    value <- array(1, dim = dimensions, dimnames = labels)
+    value[, "P", "AUS"] <- 0
+    value[, "50", "CHN"] <- 0
+    value
+  }), indicators)
+  raw <- lapply(numerators, function(numerator) numerator / denominator)
+
+  runtime <- new_runtime()
+  resolved <- e$wlv_resolve_profiled_nonfinite(
+    runtime,
+    values = raw,
+    numerators = numerators,
+    denominator = denominator,
+    artifact = "sea_sectors",
+    checkpoint = "after_stage_2",
+    stage = 2L,
+    module = "alternative_2_test",
+    axes = c(year = 1L, sector = 2L, country = 3L)
+  )
+  diagnostic <- e$wlv_normalize_nonfinite_resolution_diagnostics(
+    resolved$diagnostics[["_nonfinite_resolution_diagnostics.csv"]]
+  )
+  expect_identical(sum(diagnostic$resolved_count), length(keys))
+  expect_identical(diagnostic$binding, sort(indicators, method = "radix"))
+  expect_true(all(diagnostic$coordinate_sha256 == group_sha256))
+  expect_true(all(vapply(resolved$values, function(value) {
+    all(is.finite(value)) &&
+      all(value[, "P", "AUS"] == 0) &&
+      all(value[, "50", "CHN"] == 0)
+  }, logical(1L))))
+  expect_identical(nrow(runtime$anomalies), length(keys))
+  expect_true(all(
+    runtime$anomalies$action ==
+      "replace_profiled_historical_nan_with_zero"
+  ))
+  expect_true(all(runtime$anomalies$original_value == "NaN"))
+  expect_true(all(
+    runtime$anomalies$policy_id == "alternative_2_test_nonfinite_v1"
+  ))
+  expect_invisible(e$wlv_validate_nonfinite_resolution_anomalies(
+    runtime,
+    runtime$anomalies
+  ))
+  tampered_values <- list(
+    artifact = "sea_countries",
+    indicator = "wrong.indicator",
+    checkpoint = "after_stage_1",
+    stage = "1",
+    module = "wrong.module",
+    year = "2099",
+    country = "ZZZ",
+    sector = "WRONG",
+    output = "OUT",
+    original_value = "Inf",
+    policy_id = "wrong_policy",
+    action = "wrong_action"
+  )
+  for (field in names(tampered_values)) {
+    tampered <- runtime$anomalies
+    tampered[[field]][[1L]] <- tampered_values[[field]]
+    expect_error(
+      e$wlv_validate_nonfinite_resolution_anomalies(runtime, tampered),
+      "Non-finite anomaly",
+      info = field
+    )
+  }
+  expect_error(
+    e$wlv_validate_nonfinite_resolution_anomalies(
+      runtime,
+      runtime$anomalies[-1L, , drop = FALSE]
+    ),
+    "Non-finite anomaly audit count"
+  )
+  expect_error(
+    e$wlv_validate_nonfinite_resolution_anomalies(
+      runtime,
+      rbind(runtime$anomalies, runtime$anomalies[1L, , drop = FALSE])
+    ),
+    "Non-finite anomaly audit count"
+  )
+
+  reordered <- rev(indicators)
+  reordered_result <- e$wlv_resolve_profiled_nonfinite(
+    new_runtime(),
+    values = raw[reordered],
+    numerators = numerators[reordered],
+    denominator = denominator,
+    artifact = "sea_sectors",
+    checkpoint = "after_stage_2",
+    stage = 2L,
+    module = "alternative_2_test",
+    axes = c(year = 1L, sector = 2L, country = 3L)
+  )
+  expect_identical(names(reordered_result$values), reordered)
+
+  missing_coordinate <- raw
+  missing_coordinate[[1L]]["2000", "P", "AUS"] <- 0
+  mismatch_runtime <- new_runtime()
+  expect_error(
+    e$wlv_resolve_profiled_nonfinite(
+      mismatch_runtime,
+      missing_coordinate,
+      numerators,
+      denominator,
+      "sea_sectors",
+      "after_stage_2",
+      2L,
+      "alternative_2_test",
+      c(year = 1L, sector = 2L, country = 3L)
+    ),
+    "differs from explicit profile"
+  )
+  expect_false(any(
+    mismatch_runtime$anomalies$action ==
+      "replace_profiled_historical_nan_with_zero"
+  ))
+
+  wrong_origin <- numerators
+  wrong_origin[[1L]]["2000", "P", "AUS"] <- 1
+  origin_runtime <- new_runtime()
+  expect_error(
+    e$wlv_resolve_profiled_nonfinite(
+      origin_runtime,
+      raw,
+      wrong_origin,
+      denominator,
+      "sea_sectors",
+      "after_stage_2",
+      2L,
+      "alternative_2_test",
+      c(year = 1L, sector = 2L, country = 3L)
+    ),
+    "0/0 origin",
+    fixed = TRUE
+  )
+})
+
+test_that("profiled zero-denominator resolution pins kinds and coordinates", {
+  e <- missingness_environment
+  hash <- function(keys) {
+    unclass(tolower(as.character(openssl::sha256(
+      charToRaw(enc2utf8(paste(sort(keys, method = "radix"), collapse = "\n")))
+    ))))
+  }
+  nan_key <- "2000|AAA|S1"
+  inf_key <- "2000|AAA|S2"
+  profile <- e$wlv_scientific_profile_contract(
+    id = "ochoa_test_v1",
+    method = "ochoa_1",
+    source = "wiodr13",
+    output_profile = "wiodr13_reduction",
+    leontief_zero = list(
+      id = "test_zero_v1",
+      exception_count = 0L,
+      coordinate_md5 = "d41d8cd98f00b204e9800998ecf8427e",
+      counts = data.frame(
+        year = character(), output = character(),
+        exception_count = integer(), stringsAsFactors = FALSE
+      )
+    ),
+    leontief_signed = list(
+      id = "test_signed_v1",
+      rows = data.frame(
+        year = "2000",
+        coefficient_negative_count = 0L,
+        certificate_type = "productivity_nonnegative",
+        stringsAsFactors = FALSE
+      )
+    ),
+    nonfinite_resolution = list(
+      id = "ochoa_wage_test_v1",
+      action = "replace_zero_denominator_with_zero",
+      expected_count = 2L,
+      groups = data.frame(
+        binding = c("emp", "emp"),
+        indicator = rep("complex_labour_multiplier.emp.r.un", 2L),
+        kind = c("Inf", "NaN"),
+        module = c("ochoa_test", "ochoa_test"),
+        expected_count = c(1L, 1L),
+        coordinate_sha256 = c(hash(inf_key), hash(nan_key)),
+        stringsAsFactors = FALSE
+      ),
+      rules = data.frame(
+        artifact = character(), indicator = character(),
+        year = character(), country = character(), sector = character(),
+        from = character(), to = character(), stringsAsFactors = FALSE
+      )
+    )
+  )
+  runtime <- e$wlv_new_contract_runtime(
+    method = "ochoa_1",
+    source = "wiodr13",
+    policy = e$wlv_strict_missingness_policy(
+      source = "wiodr13", policy_id = "test_strict"
+    ),
+    scientific_profile = profile
+  )
+  labels <- list(year = "2000", sector = c("S1", "S2"), country = "AAA")
+  numerator <- array(c(0, 2), dim = c(1L, 2L, 1L), dimnames = labels)
+  denominator <- array(0, dim = c(1L, 2L, 1L), dimnames = labels)
+  resolved <- e$wlv_resolve_profiled_zero_denominator(
+    runtime,
+    numerator,
+    denominator,
+    binding = "emp",
+    indicator = "complex_labour_multiplier.emp.r.un",
+    artifact = "sea_sectors",
+    checkpoint = "after_stage_2",
+    stage = 2L,
+    module = "ochoa_test",
+    axes = c(year = 1L, sector = 2L, country = 3L)
+  )
+
+  expect_identical(as.vector(resolved$value), c(0, 0))
+  expect_identical(nrow(runtime$anomalies), 2L)
+  expect_true(all(
+    runtime$anomalies$action == "replace_zero_denominator_with_zero"
+  ))
+  diagnostic <- e$wlv_normalize_nonfinite_resolution_diagnostics(
+    resolved$diagnostics[["_nonfinite_resolution_diagnostics.csv"]]
+  )
+  expect_identical(diagnostic$kind, c("Inf", "NaN"))
+  expect_identical(diagnostic$resolved_count, c(1L, 1L))
+  expect_invisible(e$wlv_validate_nonfinite_resolution_anomalies(
+    runtime,
+    runtime$anomalies
+  ))
+  swapped_kind <- runtime$anomalies
+  swapped_kind$original_value[[1L]] <- if (
+    swapped_kind$original_value[[1L]] == "NaN"
+  ) "Inf" else "NaN"
+  expect_error(
+    e$wlv_validate_nonfinite_resolution_anomalies(runtime, swapped_kind),
+    "Non-finite anomaly group"
+  )
+  negative_infinite <- runtime$anomalies
+  negative_infinite$original_value[[1L]] <- "-Inf"
+  expect_error(
+    e$wlv_validate_nonfinite_resolution_anomalies(
+      runtime,
+      negative_infinite
+    ),
+    "Non-finite anomaly group"
+  )
+
+  changed <- numerator
+  changed["2000", "S1", "AAA"] <- 1
+  expect_error(
+    e$wlv_resolve_profiled_zero_denominator(
+      runtime,
+      changed,
+      denominator,
+      binding = "emp",
+      indicator = "complex_labour_multiplier.emp.r.un",
+      artifact = "sea_sectors",
+      checkpoint = "after_stage_2",
+      stage = 2L,
+      module = "ochoa_test",
+      axes = c(year = 1L, sector = 2L, country = 3L)
+    ),
+    "kinds differ"
+  )
+
+  negative <- numerator
+  negative["2000", "S2", "AAA"] <- -2
+  expect_error(
+    e$wlv_resolve_profiled_zero_denominator(
+      runtime,
+      negative,
+      denominator,
+      binding = "emp",
+      indicator = "complex_labour_multiplier.emp.r.un",
+      artifact = "sea_sectors",
+      checkpoint = "after_stage_2",
+      stage = 2L,
+      module = "ochoa_test",
+      axes = c(year = 1L, sector = 2L, country = 3L)
+    ),
+    "differs from explicit profile"
+  )
+})
+
+test_that("an explicit empty Leontief exception profile accepts an empty scan", {
+  e <- missingness_environment
+  policy <- e$wlv_strict_missingness_policy(
+    source = "wiodr16", policy_id = "wiodr16_strict"
+  )
+  profile <- e$wlv_scientific_profile_contract(
+    id = "wiodr16_standard_v1",
+    method = "wiodr16",
+    source = "wiodr16",
+    output_profile = "wiodr16_standard",
+    leontief_zero = list(
+      id = "wiodr16_zero_v1",
+      exception_count = 0L,
+      coordinate_md5 = "d41d8cd98f00b204e9800998ecf8427e",
+      counts = data.frame(
+        year = character(), output = character(),
+        exception_count = integer(), stringsAsFactors = FALSE
+      )
+    ),
+    leontief_signed = list(
+      id = "wiodr16_signed_v1",
+      rows = data.frame(
+        year = "2000",
+        coefficient_negative_count = 0L,
+        certificate_type = "productivity_nonnegative",
+        stringsAsFactors = FALSE
+      )
+    ),
+    nonfinite_resolution = list(
+      id = "nonfinite_none_v1",
+      action = "reject",
+      expected_count = 0L,
+      groups = data.frame(
+        binding = character(), indicator = character(),
+        kind = character(), module = character(),
+        expected_count = integer(), coordinate_sha256 = character(),
+        stringsAsFactors = FALSE
+      ),
+      rules = data.frame(
+        artifact = character(), indicator = character(),
+        year = character(), country = character(),
+        sector = character(), from = character(), to = character(),
+        stringsAsFactors = FALSE
+      )
+    )
+  )
+  runtime <- e$wlv_new_contract_runtime(
+    method = "wiodr16",
+    source = "wiodr16",
+    policy = policy,
+    scientific_profile = profile
+  )
+  expect_invisible(e$wlv_validate_nonfinite_resolution_anomalies(
+    runtime,
+    runtime$anomalies
+  ))
+  forbidden_value <- array(
+    NaN,
+    dim = c(1L, 1L, 1L),
+    dimnames = list(year = "2000", sector = "S1", country = "AAA")
+  )
+  forbidden_context <- e$wlv_contract_context_for(
+    runtime,
+    artifact = "sea_sectors",
+    indicator = "forbidden.indicator",
+    checkpoint = "after_stage_2",
+    stage = 2L,
+    module = "forbidden.module",
+    axes = c(year = 1L, sector = 2L, country = 3L),
+    policy_id = "nonfinite_none_v1"
+  )
+  forbidden <- e$wlv_contract_table(
+    forbidden_value,
+    array(TRUE, dim = dim(forbidden_value), dimnames = dimnames(forbidden_value)),
+    forbidden_context,
+    "replace_profiled_historical_nan_with_zero"
+  )
+  expect_error(
+    e$wlv_validate_nonfinite_resolution_anomalies(runtime, forbidden),
+    "forbidden by profile"
+  )
+  numerator <- array(1, dim = c(1L, 1L, 1L))
+  denominator <- array(1, dim = c(1L, 1L, 1L))
+
+  expect_identical(
+    e$wlv_allowlisted_leontief_zero_output(
+      runtime,
+      numerator,
+      denominator,
+      years = "2000",
+      inputs = "A.X",
+      outputs = "A.X"
+    ),
+    numerator
+  )
+  expect_equal(nrow(runtime$anomalies), 0L)
 })
 
 test_that("safe division never accepts missing or non-finite operands", {

@@ -7,8 +7,7 @@ if (!exists("wlv_current_result_dir", mode = "function", inherits = TRUE)) {
 exiobase_result_dir <- wlv_current_result_dir(
   "exiobase",
   root = ".",
-  channel = getOption("wlv.channel", "stable"),
-  allow_legacy = TRUE
+  channel = getOption("wlv.channel", "stable")
 )
 countries <- read_fst_array(file.path(exiobase_result_dir, "m_countries.fst"))
 countries <- dimnames(countries)[[3]]

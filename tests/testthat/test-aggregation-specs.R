@@ -380,7 +380,7 @@ wlv_aggregation_contract_test_rows <- function() {
   rows
 }
 
-test_that("stable registries take typed contracts over legacy routing strings", {
+test_that("typed registries do not infer behavior from routing metadata", {
   solutions <- data.frame(
     names = c("target", "numerator", "denominator"),
     country_solution = c("mean", "sum", "sum"),
@@ -389,8 +389,7 @@ test_that("stable registries take typed contracts over legacy routing strings", 
   registry <- aggregation_spec_environment$wlv_resolve_aggregation_registry(
     aggregations = wlv_aggregation_contract_test_rows(),
     solutions = solutions,
-    method = "stable_demo",
-    stable = TRUE
+    method = "typed_demo"
   )
   binding <- aggregation_spec_environment$wlv_aggregation_registry_binding(
     registry,
@@ -400,8 +399,6 @@ test_that("stable registries take typed contracts over legacy routing strings", 
   expect_identical(binding$spec$strategy, "ratio_of_sums")
   expect_identical(binding$numerator, "numerator")
   expect_identical(binding$denominator, "denominator")
-  expect_false(binding$legacy)
-  expect_false(registry$legacy)
 
   broken <- wlv_aggregation_contract_test_rows()
   broken$numerator[broken$indicator == "target"] <- "unknown"
@@ -409,10 +406,9 @@ test_that("stable registries take typed contracts over legacy routing strings", 
     aggregation_spec_environment$wlv_resolve_aggregation_registry(
       broken,
       solutions,
-      method = "stable_demo",
-      stable = TRUE
+      method = "typed_demo"
     ),
-    "lacks a valid typed aggregation",
+    "unavailable typed aggregation dependency",
     fixed = TRUE
   )
 
@@ -452,86 +448,14 @@ test_that("stable registries take typed contracts over legacy routing strings", 
           stringsAsFactors = FALSE
         )
       ),
-      method = "stable_demo",
-      stable = TRUE
+      method = "typed_demo"
     ),
     "depends on formula-produced country indicator",
     fixed = TRUE
   )
 })
 
-test_that("experimental legacy aggregation requires opt-in and warns", {
-  aggregations <- wlv_aggregation_contract_test_rows()[FALSE, , drop = FALSE]
-  solutions <- data.frame(
-    names = "legacy_metric",
-    country_solution = "mean",
-    stringsAsFactors = FALSE
-  )
-  expect_error(
-    aggregation_spec_environment$wlv_resolve_aggregation_registry(
-      aggregations,
-      solutions,
-      method = "experimental_demo",
-      stable = FALSE,
-      allow_legacy = FALSE
-    ),
-    "requires explicit opt-in",
-    fixed = TRUE
-  )
-  registry <- NULL
-  expect_warning(
-    registry <- aggregation_spec_environment$wlv_resolve_aggregation_registry(
-      aggregations,
-      solutions,
-      method = "experimental_demo",
-      stable = FALSE,
-      allow_legacy = TRUE
-    ),
-    "adapted legacy aggregations",
-    fixed = TRUE
-  )
-  binding <- aggregation_spec_environment$wlv_aggregation_registry_binding(
-    registry,
-    "legacy_metric",
-    "country_to_world"
-  )
-  expect_identical(binding$spec$strategy, "legacy_mean")
-  expect_true(binding$legacy)
-  expect_true(registry$legacy)
-})
-
-test_that("experimental registries ignore available typed aggregations", {
-  solutions <- data.frame(
-    names = c("target", "numerator", "denominator"),
-    country_solution = c("mean", "sum", "sum"),
-    stringsAsFactors = FALSE
-  )
-  registry <- NULL
-  expect_warning(
-    registry <- aggregation_spec_environment$wlv_resolve_aggregation_registry(
-      wlv_aggregation_contract_test_rows(),
-      solutions,
-      method = "experimental_demo",
-      stable = FALSE,
-      allow_legacy = TRUE
-    ),
-    "adapted legacy aggregations",
-    fixed = TRUE
-  )
-  target <- aggregation_spec_environment$wlv_aggregation_registry_binding(
-    registry,
-    "target",
-    "sector_to_country"
-  )
-  expect_identical(target$contract_strategy, "mean")
-  expect_identical(target$spec$strategy, "legacy_mean")
-  expect_identical(target$numerator, "")
-  expect_identical(target$denominator, "")
-  expect_true(all(aggregation_spec_environment$
-    wlv_aggregation_registry_legacy_flags(registry)))
-})
-
-test_that("stable registry rows exactly match published sidecar rows", {
+test_that("typed registry rows exactly match published sidecar rows", {
   solutions <- data.frame(
     names = c("target", "numerator", "denominator"),
     country_solution = c("mean", "sum", "sum"),
@@ -540,8 +464,7 @@ test_that("stable registry rows exactly match published sidecar rows", {
   registry <- aggregation_spec_environment$wlv_resolve_aggregation_registry(
     wlv_aggregation_contract_test_rows(),
     solutions,
-    method = "stable_demo",
-    stable = TRUE
+    method = "typed_demo"
   )
   published_order <- c(3L, 4L, 1L, 2L, 5L, 6L)
   sidecar <- registry$rows[published_order, , drop = FALSE]
@@ -570,7 +493,7 @@ test_that("stable registry rows exactly match published sidecar rows", {
     na.strings = NULL
   )
   routes <- aggregation_spec_environment$
-    wlv_reconcile_aggregation_registry_sidecar(registry, persisted, TRUE)
+    wlv_reconcile_aggregation_registry_sidecar(registry, persisted)
   expected <- as.data.frame(
     lapply(
       registry$rows[published_order, ][
@@ -581,15 +504,13 @@ test_that("stable registry rows exactly match published sidecar rows", {
     stringsAsFactors = FALSE,
     check.names = FALSE
   )
-  expect_identical(routes$typed, expected)
-  expect_equal(nrow(routes$legacy), 0L)
+  expect_identical(routes, expected)
 
   duplicated <- rbind(sidecar, sidecar[1L, , drop = FALSE])
   expect_error(
     aggregation_spec_environment$wlv_reconcile_aggregation_registry_sidecar(
       registry,
-      duplicated,
-      TRUE
+      duplicated
     ),
     "duplicated",
     fixed = TRUE
@@ -597,8 +518,7 @@ test_that("stable registry rows exactly match published sidecar rows", {
   expect_error(
     aggregation_spec_environment$wlv_reconcile_aggregation_registry_sidecar(
       registry,
-      sidecar[-1L, , drop = FALSE],
-      TRUE
+      sidecar[-1L, , drop = FALSE]
     ),
     "same unique aggregation keys",
     fixed = TRUE
@@ -615,59 +535,13 @@ test_that("stable registry rows exactly match published sidecar rows", {
     expect_error(
       aggregation_spec_environment$wlv_reconcile_aggregation_registry_sidecar(
         registry,
-        corrupted,
-        TRUE
+        corrupted
       ),
       "must exactly equal",
       fixed = TRUE,
       info = field
     )
   }
-})
-
-test_that("experimental sidecars omit only whole legacy indicators", {
-  solutions <- data.frame(
-    names = c("target", "numerator", "denominator"),
-    country_solution = c("mean", "sum", "sum"),
-    stringsAsFactors = FALSE
-  )
-  registry <- suppressWarnings(
-    aggregation_spec_environment$wlv_resolve_aggregation_registry(
-      wlv_aggregation_contract_test_rows(),
-      solutions,
-      method = "experimental_demo",
-      stable = FALSE,
-      allow_legacy = TRUE
-    )
-  )
-  sidecar <- registry$rows[registry$rows$indicator != "target", ]
-  names(sidecar)[names(sidecar) == "notes"] <- "aggregation_notes"
-  routes <- aggregation_spec_environment$
-    wlv_reconcile_aggregation_registry_sidecar(registry, sidecar, FALSE)
-  expect_equal(nrow(routes$published), 4L)
-  expect_equal(nrow(routes$typed), 0L)
-  expected <- as.data.frame(
-    lapply(
-      registry$rows[c(3L, 4L, 5L, 6L, 1L, 2L), ][
-        aggregation_spec_environment$wlv_aggregation_contract_columns()
-      ],
-      as.character
-    ),
-    stringsAsFactors = FALSE,
-    check.names = FALSE
-  )
-  expect_identical(routes$legacy, expected)
-
-  partial <- sidecar[-1L, , drop = FALSE]
-  expect_error(
-    aggregation_spec_environment$wlv_reconcile_aggregation_registry_sidecar(
-      registry,
-      partial,
-      FALSE
-    ),
-    "exactly equal",
-    fixed = TRUE
-  )
 })
 
 test_that("self-referenced ratios and weights share one named input", {

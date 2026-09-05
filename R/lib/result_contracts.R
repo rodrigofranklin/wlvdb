@@ -1,13 +1,313 @@
-wlv_new_contract_runtime <- function(method, source, policy) {
+wlv_scientific_profile_contract <- function(
+    id,
+    method,
+    source,
+    output_profile,
+    leontief_zero,
+    leontief_signed,
+    nonfinite_resolution) {
+  scalar_identifier <- function(value, name, allow_empty = FALSE) {
+    valid <- is.character(value) && length(value) == 1L && !is.na(value) &&
+      (allow_empty && !nzchar(value) ||
+        grepl("^[a-z][a-z0-9_]*$", value))
+    if (!valid) {
+      stop(sprintf("`%s` must be one valid identifier.", name), call. = FALSE)
+    }
+    value
+  }
+  id <- scalar_identifier(id, "id")
+  method <- scalar_identifier(method, "method")
+  source <- scalar_identifier(source, "source")
+  output_profile <- scalar_identifier(output_profile, "output_profile")
+
+  zero_names <- c("id", "exception_count", "coordinate_md5", "counts")
+  if (!is.list(leontief_zero) || !identical(names(leontief_zero), zero_names)) {
+    stop("Invalid Leontief zero-output scientific profile.", call. = FALSE)
+  }
+  leontief_zero$id <- scalar_identifier(
+    leontief_zero$id,
+    "leontief_zero$id"
+  )
+  if (!is.numeric(leontief_zero$exception_count) ||
+      length(leontief_zero$exception_count) != 1L ||
+      is.na(leontief_zero$exception_count) ||
+      !is.finite(leontief_zero$exception_count) ||
+      leontief_zero$exception_count < 0 ||
+      leontief_zero$exception_count != floor(leontief_zero$exception_count)) {
+    stop("Invalid Leontief zero-output exception count.", call. = FALSE)
+  }
+  leontief_zero$exception_count <- as.integer(leontief_zero$exception_count)
+  if (!is.character(leontief_zero$coordinate_md5) ||
+      length(leontief_zero$coordinate_md5) != 1L ||
+      is.na(leontief_zero$coordinate_md5) ||
+      !grepl("^[0-9a-f]{32}$", leontief_zero$coordinate_md5)) {
+    stop("Invalid Leontief zero-output coordinate hash.", call. = FALSE)
+  }
+  zero_count_columns <- c("year", "output", "exception_count")
+  counts <- leontief_zero$counts
+  if (!is.data.frame(counts) || !identical(names(counts), zero_count_columns) ||
+      anyNA(counts) || any(!vapply(counts[c("year", "output")], is.character,
+        logical(1L))) ||
+      !is.numeric(counts$exception_count) ||
+      any(!nzchar(as.matrix(counts[c("year", "output")]))) ||
+      any(!is.finite(counts$exception_count)) ||
+      any(counts$exception_count <= 0) ||
+      any(counts$exception_count != floor(counts$exception_count)) ||
+      anyDuplicated(paste(counts$year, counts$output, sep = "\034")) ||
+      sum(counts$exception_count) != leontief_zero$exception_count) {
+    stop("Invalid Leontief zero-output grouped counts.", call. = FALSE)
+  }
+  counts$exception_count <- as.integer(counts$exception_count)
+  leontief_zero$counts <- counts
+
+  signed_names <- c("id", "rows")
+  if (!is.list(leontief_signed) ||
+      !identical(names(leontief_signed), signed_names)) {
+    stop("Invalid signed Leontief scientific profile.", call. = FALSE)
+  }
+  leontief_signed$id <- scalar_identifier(
+    leontief_signed$id,
+    "leontief_signed$id"
+  )
+  signed_columns <- c(
+    "year", "coefficient_negative_count", "certificate_type"
+  )
+  signed <- leontief_signed$rows
+  valid_certificates <- c(
+    "productivity_nonnegative", "absolute_convergence_signed"
+  )
+  if (!is.data.frame(signed) || !identical(names(signed), signed_columns) ||
+      !nrow(signed) || anyNA(signed) ||
+      !is.character(signed$year) ||
+      !is.numeric(signed$coefficient_negative_count) ||
+      !is.character(signed$certificate_type) ||
+      any(!nzchar(signed$year)) || anyDuplicated(signed$year) ||
+      any(!is.finite(signed$coefficient_negative_count)) ||
+      any(signed$coefficient_negative_count < 0) ||
+      any(signed$coefficient_negative_count !=
+        floor(signed$coefficient_negative_count)) ||
+      any(!signed$certificate_type %in% valid_certificates) ||
+      any((signed$coefficient_negative_count == 0) !=
+        (signed$certificate_type == "productivity_nonnegative"))) {
+    stop("Invalid signed Leontief yearly declarations.", call. = FALSE)
+  }
+  signed$coefficient_negative_count <- as.integer(
+    signed$coefficient_negative_count
+  )
+  leontief_signed$rows <- signed
+
+  resolution_names <- c(
+    "id", "action", "expected_count", "groups", "rules"
+  )
+  if (!is.list(nonfinite_resolution) ||
+      !identical(names(nonfinite_resolution), resolution_names)) {
+    stop("Invalid non-finite resolution scientific profile.", call. = FALSE)
+  }
+  nonfinite_resolution$id <- scalar_identifier(
+    nonfinite_resolution$id,
+    "nonfinite_resolution$id"
+  )
+  valid_resolution_actions <- c(
+    "reject", "replace_nan_with_zero",
+    "replace_zero_denominator_with_zero"
+  )
+  if (!is.character(nonfinite_resolution$action) ||
+      length(nonfinite_resolution$action) != 1L ||
+      is.na(nonfinite_resolution$action) ||
+      !nonfinite_resolution$action %in% valid_resolution_actions ||
+      !is.numeric(nonfinite_resolution$expected_count) ||
+      length(nonfinite_resolution$expected_count) != 1L ||
+      is.na(nonfinite_resolution$expected_count) ||
+      !is.finite(nonfinite_resolution$expected_count) ||
+      nonfinite_resolution$expected_count < 0 ||
+      nonfinite_resolution$expected_count !=
+        floor(nonfinite_resolution$expected_count)) {
+    stop("Invalid non-finite resolution declaration.", call. = FALSE)
+  }
+  nonfinite_resolution$expected_count <- as.integer(
+    nonfinite_resolution$expected_count
+  )
+  group_columns <- c(
+    "binding", "indicator", "kind", "module", "expected_count",
+    "coordinate_sha256"
+  )
+  groups <- nonfinite_resolution$groups
+  if (!is.data.frame(groups) || !identical(names(groups), group_columns) ||
+      anyNA(groups) ||
+      !is.character(groups$binding) || !is.character(groups$indicator) ||
+      !is.character(groups$kind) ||
+      !is.character(groups$module) ||
+      !is.numeric(groups$expected_count) ||
+      !is.character(groups$coordinate_sha256) ||
+      any(!grepl("^[a-z][a-z0-9_.]*$", groups$binding)) ||
+      any(!grepl("^[a-z][a-z0-9_.]*$", groups$indicator)) ||
+      any(!groups$kind %in% c("NaN", "Inf")) ||
+      any(!grepl("^[a-z][a-z0-9_.]*$", groups$module)) ||
+      any(!is.finite(groups$expected_count)) ||
+      any(groups$expected_count <= 0) ||
+      any(groups$expected_count != floor(groups$expected_count)) ||
+      any(!grepl("^[0-9a-f]{64}$", groups$coordinate_sha256)) ||
+      anyDuplicated(paste(groups$binding, groups$kind, sep = "\034")) ||
+      sum(groups$expected_count) != nonfinite_resolution$expected_count) {
+    stop("Invalid non-finite resolution groups.", call. = FALSE)
+  }
+  groups$expected_count <- as.integer(groups$expected_count)
+  nonfinite_resolution$groups <- groups
+  resolution_columns <- c(
+    "artifact", "indicator", "year", "country", "sector", "from", "to"
+  )
+  rules <- nonfinite_resolution$rules
+  if (!is.data.frame(rules) ||
+      !identical(names(rules), resolution_columns) ||
+      anyNA(rules) || any(!vapply(rules, is.character, logical(1L))) ||
+      any(rules$artifact != "sea_sectors") ||
+      any(!grepl("^[a-z][a-z0-9_.]*$", rules$indicator)) ||
+      any(!(rules$year == "*" | grepl("^[0-9]{4}$", rules$year))) ||
+      any(!grepl("^[A-Z0-9._-]+$", rules$country)) ||
+      any(!nzchar(rules$sector)) || any(rules$sector == "*") ||
+      any(rules$from != "NaN") || any(rules$to != "0") ||
+      anyDuplicated(do.call(paste, c(rules, sep = "\034"))) ||
+      (nonfinite_resolution$action == "reject" &&
+        (nrow(groups) != 0L || nrow(rules) != 0L ||
+          nonfinite_resolution$expected_count != 0L)) ||
+      (nonfinite_resolution$action == "replace_nan_with_zero" &&
+        (nrow(groups) == 0L || nrow(rules) == 0L ||
+          any(groups$kind != "NaN") ||
+          any(groups$indicator != groups$binding) ||
+          length(unique(groups$module)) != 1L)) ||
+      (nonfinite_resolution$action ==
+          "replace_zero_denominator_with_zero" &&
+        (nrow(groups) == 0L || nrow(rules) != 0L ||
+          any(vapply(
+            split(groups$module, groups$binding),
+            function(modules) length(unique(modules)) != 1L,
+            logical(1L)
+          )) ||
+          any(vapply(
+            split(groups$indicator, groups$binding),
+            function(indicators) length(unique(indicators)) != 1L,
+            logical(1L)
+          ))))) {
+    stop("Invalid non-finite resolution coordinate rules.", call. = FALSE)
+  }
+  if (nonfinite_resolution$action == "replace_nan_with_zero") {
+    explicit_years <- unique(rules$year[rules$year != "*"])
+    if (any(!explicit_years %in% signed$year)) {
+      stop(
+        "Non-finite resolution rules reference years outside the scientific profile.",
+        call. = FALSE
+      )
+    }
+    if (!setequal(groups$binding, unique(rules$indicator))) {
+      stop("Non-finite resolution groups do not match their rules.",
+        call. = FALSE
+      )
+    }
+    profile_years <- signed$year
+    expanded_all <- character()
+    for (index in seq_len(nrow(groups))) {
+      selected_rules <- rules[rules$indicator == groups$binding[[index]], ,
+        drop = FALSE
+      ]
+      keys <- unlist(lapply(seq_len(nrow(selected_rules)), function(rule) {
+        selected_years <- if (selected_rules$year[[rule]] == "*") {
+          profile_years
+        } else {
+          selected_rules$year[[rule]]
+        }
+        paste(
+          selected_years,
+          selected_rules$country[[rule]],
+          selected_rules$sector[[rule]],
+          sep = "|"
+        )
+      }), use.names = FALSE)
+      keys <- sort(keys, method = "radix")
+      coordinate_sha256 <- wlv_nonfinite_coordinate_sha256(keys)
+      if (anyDuplicated(keys) ||
+          length(keys) != groups$expected_count[[index]] ||
+          !identical(
+            coordinate_sha256,
+            groups$coordinate_sha256[[index]]
+          )) {
+        stop("Non-finite resolution group rules are invalid.", call. = FALSE)
+      }
+      expanded_all <- c(
+        expanded_all,
+        paste(groups$binding[[index]], keys, sep = "|")
+      )
+    }
+    if (anyDuplicated(expanded_all)) {
+      stop("Non-finite resolution rules overlap after year expansion.",
+        call. = FALSE
+      )
+    }
+  }
+  nonfinite_resolution$rules <- rules
+
+  structure(
+    list(
+      id = id,
+      method = method,
+      source = source,
+      output_profile = output_profile,
+      leontief_zero = leontief_zero,
+      leontief_signed = leontief_signed,
+      nonfinite_resolution = nonfinite_resolution
+    ),
+    class = c("wlv_scientific_profile", "list")
+  )
+}
+
+wlv_assert_scientific_profile <- function(
+    profile,
+    method = profile$method,
+    source = profile$source) {
+  if (!inherits(profile, "wlv_scientific_profile") ||
+      !is.list(profile) ||
+      !identical(names(profile), c(
+        "id", "method", "source", "output_profile", "leontief_zero",
+        "leontief_signed", "nonfinite_resolution"
+      )) ||
+      !identical(profile$method, method) ||
+      !identical(profile$source, source)) {
+    stop("Invalid or mismatched scientific profile.", call. = FALSE)
+  }
+  validated <- wlv_scientific_profile_contract(
+    id = profile$id,
+    method = profile$method,
+    source = profile$source,
+    output_profile = profile$output_profile,
+    leontief_zero = profile$leontief_zero,
+    leontief_signed = profile$leontief_signed,
+    nonfinite_resolution = profile$nonfinite_resolution
+  )
+  if (!identical(profile, validated)) {
+    stop("Invalid or non-canonical scientific profile.", call. = FALSE)
+  }
+  invisible(profile)
+}
+
+wlv_new_contract_runtime <- function(
+    method,
+    source,
+    policy,
+    scientific_profile) {
   if (!inherits(policy, "wlv_missingness_policy")) {
     stop("`policy` must be a missingness policy.", call. = FALSE)
   }
+  if (missing(scientific_profile) || is.null(scientific_profile)) {
+    stop("`scientific_profile` must be supplied explicitly.", call. = FALSE)
+  }
+  wlv_assert_scientific_profile(scientific_profile, method, source)
   runtime <- new.env(parent = emptyenv())
   runtime$method <- method
   runtime$source <- source
   runtime$policy <- policy
+  runtime$scientific_profile <- scientific_profile
   runtime$anomalies <- wlv_empty_contract_table()
   runtime$states <- new.env(parent = emptyenv())
+  runtime$semantic_states <- stats::setNames(vector("list", 0L), character())
   runtime
 }
 
@@ -74,6 +374,376 @@ wlv_contract_register_states <- function(runtime, artifact, indicator, states) {
     envir = runtime$states
   )
   invisible(states)
+}
+
+wlv_contract_is_compact_semantic_state <- function(resource) {
+  inherits(resource, "wlv_runtime_semantic_state_codec")
+}
+
+wlv_contract_compact_semantic_state <- function(
+    resource,
+    target_key,
+    axes) {
+  codec <- wlv_runtime_snapshot_state_pack_validated(resource)
+  wlv_runtime_snapshot_state_codec_validate(
+    codec,
+    target_key = target_key,
+    axes = axes,
+    state_key = wlv_semantic_state_key(target_key)
+  )
+  codec
+}
+
+wlv_contract_empty_compact_semantic_state <- function(target_key, axes) {
+  columns <- stats::setNames(
+    rep(list(character()), length(axes) + 1L),
+    c(axes, "state")
+  )
+  resource <- wlv_semantic_new_state_resource(
+    as.data.frame(columns, stringsAsFactors = FALSE),
+    target_key,
+    axes
+  )
+  wlv_contract_compact_semantic_state(resource, target_key, axes)
+}
+
+wlv_contract_compact_semantic_state_filter <- function(resource, labels) {
+  if (!wlv_contract_is_compact_semantic_state(resource) ||
+      !is.list(labels) || is.null(names(labels)) || anyNA(names(labels)) ||
+      any(!nzchar(names(labels))) || anyDuplicated(names(labels)) ||
+      any(!names(labels) %in% resource$axes) ||
+      any(!vapply(labels, is.character, logical(1L))) ||
+      any(vapply(labels, anyNA, logical(1L)))) {
+    stop("Compact contract-state selection is invalid.", call. = FALSE)
+  }
+  wlv_runtime_snapshot_state_codec_validate(resource)
+  if (identical(resource$encoding, "rows")) {
+    rows <- resource$rows
+    selected <- rep(TRUE, nrow(rows))
+    for (axis in names(labels)) {
+      selected <- selected & rows[[axis]] %in% labels[[axis]]
+    }
+    rows <- rows[selected, c(resource$axes, "state"), drop = FALSE]
+    row.names(rows) <- NULL
+    rows <- wlv_semantic_new_state_resource(
+      rows,
+      resource$target_key,
+      resource$axes
+    )
+    return(wlv_contract_compact_semantic_state(
+      rows,
+      resource$target_key,
+      resource$axes
+    ))
+  }
+  selectors <- resource$selectors
+  for (axis in names(labels)) {
+    selectors[[axis]] <- selectors[[axis]][
+      selectors[[axis]] %in% labels[[axis]]
+    ]
+  }
+  if (any(!vapply(selectors, length, integer(1L)))) {
+    return(wlv_contract_empty_compact_semantic_state(
+      resource$target_key,
+      resource$axes
+    ))
+  }
+  result <- wlv_runtime_snapshot_new_state_codec(
+    encoding = "cartesian",
+    target_key = resource$target_key,
+    axes = resource$axes,
+    state_version = resource$state_version,
+    row_count = prod(vapply(selectors, length, double(1L))),
+    selectors = selectors,
+    state = resource$state
+  )
+  wlv_runtime_snapshot_state_codec_validate(result)
+  result
+}
+
+wlv_contract_compact_semantic_state_subset <- function(resource, value) {
+  axes <- resource$axes
+  labels <- dimnames(value)
+  label_axes <- names(labels)
+  if (is.null(labels) || length(labels) != length(axes) ||
+      (!is.null(label_axes) && !identical(label_axes, axes)) ||
+      any(vapply(labels, is.null, logical(1L)))) {
+    stop(
+      "Registered missingness state labels do not match the result array.",
+      call. = FALSE
+    )
+  }
+  names(labels) <- axes
+  wlv_contract_compact_semantic_state_filter(resource, labels)
+}
+
+wlv_contract_semantic_state_position_states <- function(
+    resource,
+    value,
+    positions) {
+  if (!is.numeric(positions) || anyNA(positions) ||
+      any(positions < 1) || any(positions > length(value)) ||
+      any(positions != floor(positions))) {
+    stop("Contract-state positions are invalid.", call. = FALSE)
+  }
+  if (!length(positions) || is.null(resource)) {
+    return(rep(NA_character_, length(positions)))
+  }
+  rows <- if (wlv_contract_is_compact_semantic_state(resource) &&
+      identical(resource$encoding, "rows")) {
+    resource$rows
+  } else if (!wlv_contract_is_compact_semantic_state(resource)) {
+    resource
+  } else {
+    NULL
+  }
+  if (!is.null(rows)) {
+    state_positions <- wlv_semantic_state_linear_indices(rows, value)
+    matched <- match(positions, state_positions)
+    result <- rep(NA_character_, length(positions))
+    present <- !is.na(matched)
+    result[present] <- rows$state[matched[present]]
+    return(result)
+  }
+  wlv_runtime_snapshot_state_codec_validate(resource)
+  labels <- dimnames(value)
+  label_axes <- names(labels)
+  if (is.null(labels) ||
+      (!is.null(label_axes) && !identical(label_axes, resource$axes))) {
+    stop(
+      "Registered missingness state labels do not match the result array.",
+      call. = FALSE
+    )
+  }
+  names(labels) <- resource$axes
+  dimensions <- dim(value)
+  strides <- c(1, cumprod(as.double(dimensions)))[seq_along(dimensions)]
+  selector_positions <- lapply(seq_along(resource$axes), function(index) {
+    matched <- match(resource$selectors[[index]], labels[[index]])
+    if (anyNA(matched)) {
+      stop(
+        "Registered missingness states reference unavailable labels.",
+        call. = FALSE
+      )
+    }
+    matched
+  })
+  offsets <- as.double(positions) - 1
+  covered <- rep(TRUE, length(positions))
+  for (index in seq_along(resource$axes)) {
+    coordinates <- (offsets %/% strides[[index]]) %% dimensions[[index]] + 1
+    covered <- covered & coordinates %in% selector_positions[[index]]
+  }
+  result <- rep(NA_character_, length(positions))
+  result[covered] <- resource$state
+  result
+}
+
+wlv_contract_semantic_state_has_invalid_structural <- function(
+    resource,
+    input_labels) {
+  if (is.null(resource)) {
+    return(FALSE)
+  }
+  rows <- if (wlv_contract_is_compact_semantic_state(resource) &&
+      identical(resource$encoding, "rows")) {
+    resource$rows
+  } else if (!wlv_contract_is_compact_semantic_state(resource)) {
+    resource
+  } else {
+    NULL
+  }
+  if (!is.null(rows)) {
+    structural <- rows$variable %in% wlv_m_io_structural_missing_indicators() &
+      !rows$output %in% input_labels
+    return(any(structural & rows$state != "not_applicable"))
+  }
+  wlv_runtime_snapshot_state_codec_validate(resource)
+  has_structural <- any(
+    resource$selectors$variable %in% wlv_m_io_structural_missing_indicators()
+  ) && any(!resource$selectors$output %in% input_labels)
+  has_structural && !identical(resource$state, "not_applicable")
+}
+
+wlv_contract_register_semantic_states <- function(
+    runtime,
+    artifact,
+    resource,
+    value) {
+  if (!is.character(artifact) || length(artifact) != 1L || is.na(artifact) ||
+      !artifact %in% c("m_io")) {
+    stop("Sparse contract states received an unsupported artifact.", call. = FALSE)
+  }
+  target_key <- paste0("artifact/", artifact)
+  axes <- names(dimnames(value))
+  compact <- if (wlv_runtime_snapshot_is_state_codec(resource)) {
+    wlv_runtime_snapshot_state_codec_validate(
+      resource,
+      target_key = target_key,
+      axes = axes,
+      state_key = wlv_semantic_state_key(target_key),
+      target_value = value
+    )
+    resource
+  } else {
+    wlv_runtime_snapshot_state_cartesian_pack(
+      resource,
+      target_key = target_key,
+      axes = axes,
+      state_key = wlv_semantic_state_key(target_key),
+      target_value = value,
+      return_commitment = FALSE
+    )
+  }
+  if (is.null(compact)) {
+    wlv_semantic_state_validate(
+      resource,
+      value = value,
+      target_key = target_key,
+      axes = axes,
+      state_key = wlv_semantic_state_key(target_key)
+    )
+    compact <- wlv_contract_compact_semantic_state(
+      resource,
+      target_key,
+      axes
+    )
+  }
+  resource <- compact
+  semantic_states <- runtime$semantic_states
+  if (is.null(semantic_states)) {
+    semantic_states <- stats::setNames(vector("list", 0L), character())
+  }
+  if (!is.list(semantic_states) || is.null(names(semantic_states)) ||
+      anyNA(names(semantic_states)) || any(!nzchar(names(semantic_states))) ||
+      anyDuplicated(names(semantic_states))) {
+    stop("Contract runtime sparse states are not canonical.", call. = FALSE)
+  }
+  # The validation runtime only needs membership and state lookups. Keep the
+  # canonical compact codec instead of retaining the assembler's potentially
+  # enormous Cartesian coordinate table.
+  semantic_states[[target_key]] <- resource
+  runtime$semantic_states <- semantic_states
+  invisible(resource)
+}
+
+wlv_contract_semantic_states <- function(runtime, artifact) {
+  semantic_states <- runtime$semantic_states
+  if (is.null(semantic_states)) {
+    return(NULL)
+  }
+  if (!is.list(semantic_states) || is.null(names(semantic_states)) ||
+      anyNA(names(semantic_states)) || any(!nzchar(names(semantic_states))) ||
+      anyDuplicated(names(semantic_states))) {
+    stop("Contract runtime sparse states are not canonical.", call. = FALSE)
+  }
+  target_key <- paste0("artifact/", artifact)
+  resource <- semantic_states[[target_key]]
+  if (is.null(resource)) {
+    return(NULL)
+  }
+  valid <- if (wlv_contract_is_compact_semantic_state(resource)) {
+    tryCatch({
+      wlv_runtime_snapshot_state_codec_validate(
+        resource,
+        target_key = target_key,
+        state_key = wlv_semantic_state_key(target_key)
+      )
+      TRUE
+    }, error = function(error) FALSE)
+  } else {
+    is.data.frame(resource) && inherits(resource, "wlv_semantic_state") &&
+      identical(attr(resource, "target_key", exact = TRUE), target_key)
+  }
+  if (!isTRUE(valid)) {
+    stop("Contract runtime sparse state binding is invalid.", call. = FALSE)
+  }
+  resource
+}
+
+wlv_contract_semantic_state_filter <- function(resource, selected) {
+  if (!is.logical(selected) || length(selected) != nrow(resource) || anyNA(selected)) {
+    stop("Sparse contract-state selection is invalid.", call. = FALSE)
+  }
+  if (all(selected)) {
+    return(resource)
+  }
+  axes <- attr(resource, "axes", exact = TRUE)
+  target_key <- attr(resource, "target_key", exact = TRUE)
+  result <- resource[selected, c(axes, "state"), drop = FALSE]
+  row.names(result) <- NULL
+  class(result) <- c("wlv_semantic_state", "data.frame")
+  attr(result, "target_key") <- target_key
+  attr(result, "axes") <- axes
+  attr(result, "version") <- wlv_semantic_state_version()
+  result
+}
+
+wlv_contract_semantic_state_subset <- function(runtime, artifact, value) {
+  resource <- wlv_contract_semantic_states(runtime, artifact)
+  if (is.null(resource)) {
+    return(NULL)
+  }
+  if (wlv_contract_is_compact_semantic_state(resource)) {
+    return(wlv_contract_compact_semantic_state_subset(resource, value))
+  }
+  axes <- attr(resource, "axes", exact = TRUE)
+  labels <- dimnames(value)
+  label_axes <- names(labels)
+  if (is.null(labels) || length(labels) != length(axes) ||
+      (!is.null(label_axes) && !identical(label_axes, axes))) {
+    stop(
+      "Registered missingness state labels do not match the result array.",
+      call. = FALSE
+    )
+  }
+  retains_all <- all(vapply(seq_along(axes), function(index) {
+    all(unique(resource[[axes[[index]]]]) %in% labels[[index]])
+  }, logical(1L)))
+  if (retains_all) {
+    return(resource)
+  }
+  selected <- rep(TRUE, nrow(resource))
+  for (index in seq_along(axes)) {
+    selected <- selected & resource[[axes[[index]]]] %in% labels[[index]]
+  }
+  wlv_contract_semantic_state_filter(resource, selected)
+}
+
+wlv_contract_semantic_state_slice <- function(
+    runtime,
+    artifact,
+    indicator,
+    value) {
+  resource <- wlv_contract_semantic_state_subset(runtime, artifact, value)
+  if (is.null(resource)) {
+    return(NULL)
+  }
+  if (wlv_contract_is_compact_semantic_state(resource)) {
+    axes <- resource$axes
+    labels <- dimnames(value)
+    if (length(axes) < 2L || !identical(labels[[2L]], indicator)) {
+      stop(
+        "Registered missingness state labels do not match the result slice.",
+        call. = FALSE
+      )
+    }
+    selected <- wlv_contract_compact_semantic_state_filter(
+      resource,
+      stats::setNames(list(indicator), axes[[2L]])
+    )
+    return(wlv_runtime_snapshot_state_unpack(selected))
+  }
+  axes <- attr(resource, "axes", exact = TRUE)
+  labels <- dimnames(value)
+  if (length(axes) < 2L || !identical(labels[[2L]], indicator)) {
+    stop(
+      "Registered missingness state labels do not match the result slice.",
+      call. = FALSE
+    )
+  }
+  selected <- resource[[axes[[2L]]]] == indicator
+  wlv_contract_semantic_state_filter(resource, selected)
 }
 
 wlv_contract_copy_indicator_states <- function(
@@ -315,18 +985,21 @@ wlv_validate_leontief_zero_output_profile <- function(runtime, profile) {
   if (!inherits(profile, "wlv_leontief_zero_output_profile")) {
     stop("Invalid streaming Leontief zero-output profile.", call. = FALSE)
   }
-  method <- if (is.null(runtime)) "" else runtime$method
+  if (!is.environment(runtime) || is.null(runtime$scientific_profile)) {
+    stop(
+      "Leontief validation requires an explicit scientific runtime.",
+      call. = FALSE
+    )
+  }
+  method <- runtime$method
   invalid <- profile$invalid
-  if (!nrow(invalid)) {
-    if (identical(method, "wiodr13")) {
-      stop("The pinned WIOD13 Leontief exception set is unexpectedly empty.", call. = FALSE)
-    }
-    profile$validated_method <- method
-    return(profile)
-  }
-  if (!identical(method, "wiodr13")) {
-    stop("Leontief inputs contain an undeclared nonzero flow over zero output.", call. = FALSE)
-  }
+  scientific_profile <- runtime$scientific_profile
+  wlv_assert_scientific_profile(
+    scientific_profile,
+    runtime$method,
+    runtime$source
+  )
+  expected <- scientific_profile$leontief_zero
   observed_years <- profile$years[invalid$year_index]
   observed_inputs <- profile$inputs[invalid$input_index]
   observed_outputs <- profile$outputs[invalid$output_index]
@@ -334,41 +1007,122 @@ wlv_validate_leontief_zero_output_profile <- function(runtime, profile) {
     paste(observed_years, observed_inputs, observed_outputs, sep = "|"),
     method = "radix"
   )
-  hash_file <- tempfile("wlv-leontief-", fileext = ".txt")
-  on.exit(unlink(hash_file), add = TRUE)
-  connection <- file(hash_file, open = "wb")
-  writeBin(charToRaw(enc2utf8(paste(keys, collapse = "\n"))), connection)
-  close(connection)
-  observed_hash <- unname(tools::md5sum(hash_file))
+  observed_hash <- unclass(tolower(as.character(openssl::md5(
+    charToRaw(enc2utf8(paste(keys, collapse = "\n")))
+  ))))
   observed_counts <- table(paste(observed_years, observed_outputs, sep = "|"))
-  expected_counts <- c(
-    "2005|CYP.23" = 781L,
-    "2006|CYP.23" = 776L,
-    "2007|CYP.23" = 786L,
-    "2005|MLT.23" = 807L
+  expected_counts <- stats::setNames(
+    expected$counts$exception_count,
+    paste(expected$counts$year, expected$counts$output, sep = "|")
   )
-  expected_hash <- "f66341eea44e71728bbda6f8e25765ba"
-  counts_match <-
+  counts_match <- if (!length(expected_counts)) {
+    !length(observed_counts)
+  } else {
     identical(sort(names(observed_counts)), sort(names(expected_counts))) &&
-    identical(
-      as.integer(observed_counts[names(expected_counts)]),
-      as.integer(expected_counts)
-    )
-  if (length(keys) != 3150L || !counts_match || !identical(observed_hash, expected_hash)) {
+      identical(
+        as.integer(observed_counts[names(expected_counts)]),
+        as.integer(expected_counts)
+      )
+  }
+  if (length(keys) != expected$exception_count || !counts_match ||
+      !identical(observed_hash, expected$coordinate_md5)) {
     stop(
       sprintf(
         paste0(
-          "WIOD13 Leontief exceptions differ from the pinned set ",
-          "(count=%s, md5=%s)."
+          "Leontief exceptions differ from explicit scientific profile `%s` ",
+          "(observed_count=%s, expected_count=%s, observed_md5=%s)."
         ),
+        expected$id,
         length(keys),
+        expected$exception_count,
         observed_hash
       ),
       call. = FALSE
     )
   }
   profile$validated_method <- method
+  profile$validated_scientific_profile <- scientific_profile$id
   profile
+}
+
+wlv_validate_leontief_zero_output_anomalies <- function(runtime, anomalies) {
+  if (!is.environment(runtime) || is.null(runtime$scientific_profile)) {
+    stop(
+      "Leontief anomaly validation requires an explicit scientific runtime.",
+      call. = FALSE
+    )
+  }
+  wlv_assert_scientific_profile(
+    runtime$scientific_profile,
+    runtime$method,
+    runtime$source
+  )
+  if (!is.data.frame(anomalies) ||
+      !identical(names(anomalies), wlv_contract_anomaly_columns())) {
+    stop("Leontief anomaly validation received an invalid audit trail.",
+      call. = FALSE
+    )
+  }
+  expected <- runtime$scientific_profile$leontief_zero
+  observed <- anomalies[
+    !is.na(anomalies$action) &
+      anomalies$action == "allowlisted_nonzero_over_zero",
+    ,
+    drop = FALSE
+  ]
+  context_matches <-
+    observed$artifact == "m_io" &
+    observed$indicator == "leontief_input_ratio" &
+    observed$checkpoint == "after_matrices" &
+    observed$stage == "3" &
+    observed$module == "transformation.R" &
+    observed$policy_id == expected$id &
+    observed$original_value %in% c("Inf", "-Inf") &
+    !is.na(observed$year) & nzchar(observed$year) &
+    !is.na(observed$sector) & nzchar(observed$sector) &
+    !is.na(observed$output) & nzchar(observed$output) &
+    (is.na(observed$country) | !nzchar(observed$country))
+  keys <- sort(
+    paste(observed$year, observed$sector, observed$output, sep = "|"),
+    method = "radix"
+  )
+  coordinate_md5 <- unclass(tolower(as.character(openssl::md5(
+    charToRaw(enc2utf8(paste(keys, collapse = "\n")))
+  ))))
+  observed_counts <- table(paste(observed$year, observed$output, sep = "|"))
+  expected_counts <- stats::setNames(
+    expected$counts$exception_count,
+    paste(expected$counts$year, expected$counts$output, sep = "|")
+  )
+  counts_match <- if (!length(expected_counts)) {
+    !length(observed_counts)
+  } else {
+    identical(sort(names(observed_counts)), sort(names(expected_counts))) &&
+      identical(
+        as.integer(observed_counts[names(expected_counts)]),
+        as.integer(expected_counts)
+      )
+  }
+  valid <-
+    nrow(observed) == expected$exception_count &&
+    all(context_matches) &&
+    !anyDuplicated(keys) &&
+    counts_match &&
+    identical(coordinate_md5, expected$coordinate_md5)
+  if (!valid) {
+    stop(sprintf(
+      paste0(
+        "Published Leontief exceptions differ from explicit scientific ",
+        "profile `%s` (observed_count=%s, expected_count=%s, ",
+        "observed_md5=%s)."
+      ),
+      expected$id,
+      nrow(observed),
+      expected$exception_count,
+      coordinate_md5
+    ), call. = FALSE)
+  }
+  invisible(TRUE)
 }
 
 wlv_leontief_zero_output_contract_table <- function(
@@ -397,7 +1151,7 @@ wlv_leontief_zero_output_contract_table <- function(
     module = "transformation.R",
     axes = c(year = 1L, sector = 2L, output = 3L),
     policy_id = if (allowlisted) {
-      "wiodr13_leontief_zero_output_v1"
+      runtime$scientific_profile$leontief_zero$id
     } else {
       runtime$policy$policy_id
     }
@@ -424,7 +1178,7 @@ wlv_leontief_zero_output_contract_table <- function(
       nrow(positions)
     ),
     stringsAsFactors = FALSE
-  )[wlv_contract_anomaly_columns]
+  )[wlv_contract_anomaly_columns()]
 }
 
 wlv_record_leontief_zero_output_profile <- function(
@@ -434,7 +1188,11 @@ wlv_record_leontief_zero_output_profile <- function(
   if (
     !inherits(profile, "wlv_leontief_zero_output_profile") ||
     is.null(profile$validated_method) ||
-    !identical(profile$validated_method, runtime$method)
+    !identical(profile$validated_method, runtime$method) ||
+    !identical(
+      profile$validated_scientific_profile,
+      runtime$scientific_profile$id
+    )
   ) {
     stop("Leontief zero-output profile must be validated before recording.", call. = FALSE)
   }
@@ -518,6 +1276,664 @@ wlv_contract_context_for <- function(
   )
 }
 
+wlv_nonfinite_resolution_diagnostic_columns <- function() {
+  c(
+    "method", "scientific_profile", "nonfinite_resolution_profile",
+    "action", "module", "binding", "indicator", "kind", "resolved_count",
+    "coordinate_sha256"
+  )
+}
+
+wlv_nonfinite_resolution_diagnostic_row <- function(
+    runtime,
+    module,
+    binding,
+    indicator,
+    kind,
+    resolved_count,
+    coordinate_sha256) {
+  profile <- runtime$scientific_profile
+  data.frame(
+    method = runtime$method,
+    scientific_profile = profile$id,
+    nonfinite_resolution_profile = profile$nonfinite_resolution$id,
+    action = profile$nonfinite_resolution$action,
+    module = module,
+    binding = binding,
+    indicator = indicator,
+    kind = kind,
+    resolved_count = as.integer(resolved_count),
+    coordinate_sha256 = coordinate_sha256,
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )[wlv_nonfinite_resolution_diagnostic_columns()]
+}
+
+wlv_normalize_nonfinite_resolution_diagnostics <- function(value) {
+  columns <- wlv_nonfinite_resolution_diagnostic_columns()
+  character_columns <- setdiff(columns, "resolved_count")
+  if (!is.data.frame(value) || !identical(names(value), columns) ||
+      !nrow(value) || anyNA(value) ||
+      any(!vapply(value[character_columns], is.character, logical(1L)))) {
+    stop("Non-finite resolution diagnostics have an invalid schema.",
+      call. = FALSE
+    )
+  }
+  resolved_count <- suppressWarnings(as.integer(value$resolved_count))
+  canonical_count <- if (is.character(value$resolved_count)) {
+    value$resolved_count == as.character(resolved_count)
+  } else {
+    is.numeric(value$resolved_count) &
+      value$resolved_count == resolved_count
+  }
+  if (anyNA(resolved_count) || any(!canonical_count) ||
+      any(resolved_count <= 0L) ||
+      any(!nzchar(as.matrix(value[character_columns]))) ||
+      any(!grepl("^[0-9a-f]{64}$", value$coordinate_sha256)) ||
+      anyDuplicated(paste(
+        value$binding,
+        value$indicator,
+        value$kind,
+        sep = "\034"
+      ))) {
+    stop("Non-finite resolution diagnostics are invalid.", call. = FALSE)
+  }
+  value$resolved_count <- resolved_count
+  value <- value[order(value$binding, value$kind, method = "radix"), , drop = FALSE]
+  row.names(value) <- NULL
+  value
+}
+
+wlv_read_nonfinite_resolution_diagnostics <- function(path) {
+  if (!file.exists(path) || isTRUE(file.info(path)$isdir)) {
+    stop(sprintf(
+      "Non-finite resolution diagnostic does not exist: `%s`.",
+      path
+    ), call. = FALSE)
+  }
+  value <- utils::read.csv2(
+    path,
+    stringsAsFactors = FALSE,
+    colClasses = "character",
+    check.names = FALSE,
+    na.strings = NULL,
+    fileEncoding = "UTF-8"
+  )
+  wlv_normalize_nonfinite_resolution_diagnostics(value)
+}
+
+wlv_validate_nonfinite_resolution_anomalies <- function(runtime, anomalies) {
+  if (!is.environment(runtime) || is.null(runtime$scientific_profile)) {
+    stop("Non-finite anomaly validation requires a scientific runtime.",
+      call. = FALSE
+    )
+  }
+  wlv_assert_scientific_profile(
+    runtime$scientific_profile,
+    runtime$method,
+    runtime$source
+  )
+  if (!is.data.frame(anomalies) ||
+      !identical(names(anomalies), wlv_contract_anomaly_columns())) {
+    stop("Non-finite anomaly validation received an invalid audit trail.",
+      call. = FALSE
+    )
+  }
+  resolution <- runtime$scientific_profile$nonfinite_resolution
+  reserved_nan_action <- "replace_profiled_historical_nan_with_zero"
+  if (identical(resolution$action, "reject")) {
+    claimed <- (!is.na(anomalies$policy_id) &
+      anomalies$policy_id == resolution$id) |
+      (!is.na(anomalies$action) &
+        anomalies$action == reserved_nan_action)
+    if (any(claimed)) {
+      stop(sprintf(
+        "Audit trail claims non-finite transitions forbidden by profile `%s`.",
+        resolution$id
+      ), call. = FALSE)
+    }
+    return(invisible(TRUE))
+  }
+
+  groups <- resolution$groups
+  expected_action <- if (identical(
+      resolution$action,
+      "replace_nan_with_zero"
+    )) {
+    reserved_nan_action
+  } else {
+    "replace_zero_denominator_with_zero"
+  }
+  expected_indicators <- unique(groups$indicator)
+  expected_modules <- unique(groups$module)
+  expected_scope <- !is.na(anomalies$artifact) &
+    anomalies$artifact == "sea_sectors" &
+    !is.na(anomalies$checkpoint) &
+    anomalies$checkpoint == "after_stage_2" &
+    !is.na(anomalies$stage) &
+    anomalies$stage == "2"
+  claimed <- (!is.na(anomalies$policy_id) &
+    anomalies$policy_id == resolution$id) |
+    (!is.na(anomalies$action) &
+      anomalies$action == reserved_nan_action) |
+    (!is.na(anomalies$action) &
+      anomalies$action == expected_action &
+      !is.na(anomalies$indicator) &
+      anomalies$indicator %in% expected_indicators &
+      expected_scope) |
+    (!is.na(anomalies$module) &
+      anomalies$module %in% expected_modules &
+      !is.na(anomalies$indicator) &
+      anomalies$indicator %in% expected_indicators &
+      expected_scope)
+  observed <- anomalies[claimed, , drop = FALSE]
+  if (nrow(observed) != resolution$expected_count) {
+    stop(sprintf(
+      paste0(
+        "Non-finite anomaly audit count differs from profile `%s` ",
+        "(expected=%s; observed=%s)."
+      ),
+      resolution$id,
+      resolution$expected_count,
+      nrow(observed)
+    ), call. = FALSE)
+  }
+
+  matched <- rep(FALSE, nrow(observed))
+  for (index in seq_len(nrow(groups))) {
+    group <- groups[index, , drop = FALSE]
+    selected <- !is.na(observed$indicator) &
+      !is.na(observed$module) &
+      !is.na(observed$original_value) &
+      observed$indicator == group$indicator[[1L]] &
+      observed$module == group$module[[1L]] &
+      observed$original_value == group$kind[[1L]]
+    rows <- observed[selected, , drop = FALSE]
+    context_matches <-
+      rows$artifact == "sea_sectors" &
+      rows$checkpoint == "after_stage_2" &
+      rows$stage == "2" &
+      rows$policy_id == resolution$id &
+      rows$action == expected_action &
+      !is.na(rows$year) & nzchar(rows$year) &
+      !is.na(rows$country) & nzchar(rows$country) &
+      !is.na(rows$sector) & nzchar(rows$sector) &
+      (is.na(rows$output) | !nzchar(rows$output))
+    keys <- sort(
+      paste(rows$year, rows$country, rows$sector, sep = "|"),
+      method = "radix"
+    )
+    coordinate_sha256 <- wlv_nonfinite_coordinate_sha256(keys)
+    if (nrow(rows) != group$expected_count[[1L]] ||
+        !isTRUE(all(context_matches)) || anyDuplicated(keys) ||
+        !identical(
+          coordinate_sha256,
+          group$coordinate_sha256[[1L]]
+        )) {
+      stop(sprintf(
+        "Non-finite anomaly group `%s/%s` differs from profile `%s`.",
+        group$binding[[1L]],
+        group$kind[[1L]],
+        resolution$id
+      ), call. = FALSE)
+    }
+    matched <- matched | selected
+  }
+  if (any(!matched)) {
+    stop(sprintf(
+      "Non-finite anomaly audit contains an undeclared group for profile `%s`.",
+      resolution$id
+    ), call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
+wlv_nonfinite_coordinate_keys <- function(value, mask, context) {
+  positions <- which(mask)
+  if (!length(positions)) {
+    return(character())
+  }
+  coordinates <- arrayInd(
+    positions,
+    .dim = dim(value),
+    .dimnames = dimnames(value)
+  )
+  resolved_axes <- wlv_context_axes(context, value)
+  labels <- dimnames(value)
+  sort(paste(
+    labels[[resolved_axes[["year"]]]][coordinates[, resolved_axes[["year"]]]],
+    labels[[resolved_axes[["country"]]]][coordinates[, resolved_axes[["country"]]]],
+    labels[[resolved_axes[["sector"]]]][coordinates[, resolved_axes[["sector"]]]],
+    sep = "|"
+  ), method = "radix")
+}
+
+wlv_nonfinite_coordinate_sha256 <- function(keys) {
+  unclass(tolower(as.character(openssl::sha256(
+    charToRaw(enc2utf8(paste(keys, collapse = "\n")))
+  ))))
+}
+
+wlv_resolve_profiled_zero_denominator <- function(
+    runtime,
+    numerator,
+    denominator,
+    binding,
+    indicator,
+    artifact,
+    checkpoint,
+    stage,
+    module,
+    axes) {
+  if (!is.environment(runtime) || is.null(runtime$scientific_profile)) {
+    stop("Profiled zero-denominator resolution requires a scientific runtime.",
+      call. = FALSE
+    )
+  }
+  wlv_assert_scientific_profile(
+    runtime$scientific_profile,
+    runtime$method,
+    runtime$source
+  )
+  resolution <- runtime$scientific_profile$nonfinite_resolution
+  if (!identical(
+      resolution$action,
+      "replace_zero_denominator_with_zero"
+    )) {
+    stop(sprintf(
+      "Scientific profile `%s` declares no profiled zero-denominator resolution.",
+      runtime$scientific_profile$id
+    ), call. = FALSE)
+  }
+  groups <- resolution$groups[
+    resolution$groups$binding == binding,
+    ,
+    drop = FALSE
+  ]
+  if (!nrow(groups)) {
+    stop(sprintf(
+      "Non-finite resolution profile `%s` does not cover binding `%s`.",
+      resolution$id,
+      binding
+    ), call. = FALSE)
+  }
+  if (any(groups$module != module)) {
+    stop(sprintf(
+      "Non-finite resolution profile `%s` does not authorize module `%s`.",
+      resolution$id,
+      module
+    ), call. = FALSE)
+  }
+  if (any(groups$indicator != indicator)) {
+    stop(sprintf(
+      "Non-finite resolution profile `%s` does not authorize indicator `%s`.",
+      resolution$id,
+      indicator
+    ), call. = FALSE)
+  }
+  wlv_assert_conformable_numeric(numerator, denominator)
+  if (anyNA(numerator) || anyNA(denominator) ||
+      any(is.infinite(numerator)) || any(is.infinite(denominator))) {
+    stop("Profiled zero-denominator operands must be finite.", call. = FALSE)
+  }
+  context <- wlv_contract_context_for(
+    runtime,
+    artifact = artifact,
+    indicator = indicator,
+    checkpoint = checkpoint,
+    stage = stage,
+    module = module,
+    axes = axes,
+    policy_id = resolution$id
+  )
+  raw <- numerator / denominator
+  negative_infinite <- is.infinite(raw) & raw < 0
+  observed <- stats::setNames(
+    list(is.nan(raw), is.infinite(raw) & raw > 0),
+    c("NaN", "Inf")
+  )
+  ordinary_missing <- is.na(raw) & !is.nan(raw)
+  special <- observed[["NaN"]] | observed[["Inf"]]
+  expected_special <- denominator == 0
+  mismatch <- ordinary_missing | negative_infinite |
+    xor(special, expected_special)
+  if (any(mismatch)) {
+    anomalies <- wlv_contract_table(
+      raw,
+      mismatch,
+      context,
+      "abort_zero_denominator_profile_mismatch"
+    )
+    wlv_contract_record(runtime, anomalies)
+    wlv_abort_contract(
+      context,
+      anomalies,
+      sprintf(
+        "zero-denominator transition differs from explicit profile `%s`",
+        resolution$id
+      )
+    )
+  }
+  diagnostics <- list()
+  expected_kinds <- groups$kind
+  observed_kinds <- names(observed)[vapply(observed, any, logical(1L))]
+  if (!setequal(observed_kinds, expected_kinds)) {
+    stop(sprintf(
+      "Zero-denominator kinds differ from explicit profile `%s`.",
+      resolution$id
+    ), call. = FALSE)
+  }
+  for (kind in sort(expected_kinds, method = "radix")) {
+    expected <- groups[groups$kind == kind, , drop = FALSE]
+    keys <- wlv_nonfinite_coordinate_keys(raw, observed[[kind]], context)
+    coordinate_sha256 <- wlv_nonfinite_coordinate_sha256(keys)
+    if (length(keys) != expected$expected_count[[1L]] ||
+        !identical(coordinate_sha256, expected$coordinate_sha256[[1L]])) {
+      stop(sprintf(
+        paste0(
+          "Zero-denominator group `%s/%s` differs from profile `%s` ",
+          "(count=%s, sha256=%s)."
+        ),
+        binding,
+        kind,
+        resolution$id,
+        length(keys),
+        coordinate_sha256
+      ), call. = FALSE)
+    }
+    diagnostics[[kind]] <- wlv_nonfinite_resolution_diagnostic_row(
+      runtime,
+      module,
+      binding,
+      indicator,
+      kind,
+      length(keys),
+      coordinate_sha256
+    )
+  }
+  result <- wlv_contract_capture(
+    runtime,
+    wlv_safe_divide(
+      numerator,
+      denominator,
+      zero = "zero_if_denominator_zero",
+      context = context
+    )
+  )
+  wlv_contract_record(runtime, attr(result, "wlv_actions", exact = TRUE))
+  attr(result, "wlv_state") <- NULL
+  attr(result, "wlv_actions") <- NULL
+  list(
+    value = result,
+    diagnostics = list(
+      `_nonfinite_resolution_diagnostics.csv` = do.call(rbind, diagnostics)
+    )
+  )
+}
+
+wlv_profiled_nonfinite_mask <- function(
+    runtime,
+    value,
+    artifact,
+    indicator,
+    axes) {
+  profile <- runtime$scientific_profile
+  if (is.null(profile)) {
+    stop("A profiled non-finite transition requires a scientific profile.",
+      call. = FALSE
+    )
+  }
+  wlv_assert_scientific_profile(profile, runtime$method, runtime$source)
+  resolution <- profile$nonfinite_resolution
+  if (!identical(resolution$action, "replace_nan_with_zero")) {
+    stop(sprintf(
+      "Scientific profile `%s` declares no non-finite replacement.",
+      profile$id
+    ), call. = FALSE)
+  }
+  rules <- resolution$rules[
+    resolution$rules$artifact == artifact &
+      resolution$rules$indicator == indicator,
+    ,
+    drop = FALSE
+  ]
+  if (!nrow(rules)) {
+    stop(sprintf(
+      "Non-finite resolution profile `%s` does not cover `%s/%s`.",
+      resolution$id,
+      artifact,
+      indicator
+    ), call. = FALSE)
+  }
+  if (!is.numeric(value) || is.null(dim(value)) ||
+      is.null(dimnames(value))) {
+    stop("Profiled non-finite resolution requires a labelled numeric array.",
+      call. = FALSE
+    )
+  }
+  context <- wlv_contract_context(
+    artifact = artifact,
+    indicator = indicator,
+    checkpoint = "profile_resolution",
+    policy_id = resolution$id,
+    axes = axes
+  )
+  resolved_axes <- wlv_context_axes(context, value)
+  required_axes <- c("year", "country", "sector")
+  if (!all(required_axes %in% names(resolved_axes))) {
+    stop("Non-finite resolution requires year, country and sector axes.",
+      call. = FALSE
+    )
+  }
+  mask <- array(FALSE, dim = dim(value), dimnames = dimnames(value))
+  for (index in seq_len(nrow(rules))) {
+    selected <- rep(list(TRUE), length(dim(value)))
+    for (role in required_axes) {
+      axis <- resolved_axes[[role]]
+      labels <- dimnames(value)[[axis]]
+      declared <- rules[[role]][[index]]
+      positions <- if (identical(declared, "*")) {
+        seq_along(labels)
+      } else {
+        match(declared, labels)
+      }
+      if (!length(positions) || anyNA(positions)) {
+        stop(sprintf(
+          "Non-finite resolution profile `%s` references unavailable %s `%s`.",
+          resolution$id,
+          role,
+          declared
+        ), call. = FALSE)
+      }
+      selected[[axis]] <- positions
+    }
+    mask <- do.call(
+      `[<-`,
+      c(list(mask), selected, list(value = TRUE))
+    )
+  }
+  mask
+}
+
+wlv_resolve_profiled_nonfinite <- function(
+    runtime,
+    values,
+    numerators,
+    denominator,
+    artifact,
+    checkpoint,
+    stage,
+    module,
+    axes) {
+  if (!is.environment(runtime) || is.null(runtime$scientific_profile)) {
+    stop("Profiled non-finite resolution requires a scientific runtime.",
+      call. = FALSE
+    )
+  }
+  wlv_assert_scientific_profile(
+    runtime$scientific_profile,
+    runtime$method,
+    runtime$source
+  )
+  resolution <- runtime$scientific_profile$nonfinite_resolution
+  profile_id <- resolution$id
+  expected_indicators <- unique(resolution$groups$binding)
+  valid_lists <- is.list(values) && is.list(numerators) &&
+    !is.null(names(values)) && !is.null(names(numerators)) &&
+    !anyDuplicated(names(values)) && !anyDuplicated(names(numerators)) &&
+    setequal(names(values), expected_indicators) &&
+    setequal(names(numerators), expected_indicators)
+  if (!valid_lists || !identical(resolution$action, "replace_nan_with_zero")) {
+    stop(sprintf(
+      "Non-finite resolution profile `%s` received incompatible outputs.",
+      profile_id
+    ), call. = FALSE)
+  }
+  reference <- values[[1L]]
+  if (!is.numeric(denominator) ||
+      !wlv_same_shape_and_labels(denominator, reference) ||
+      anyNA(denominator) || any(is.infinite(denominator))) {
+    stop("Profiled non-finite resolution requires one finite denominator.",
+      call. = FALSE
+    )
+  }
+
+  masks <- list()
+  actions <- list()
+  diagnostics <- list()
+  keys <- character()
+  for (indicator in sort(expected_indicators, method = "radix")) {
+    value <- values[[indicator]]
+    numerator <- numerators[[indicator]]
+    if (!is.numeric(value) || !is.numeric(numerator) ||
+        !wlv_same_shape_and_labels(value, reference) ||
+        !wlv_same_shape_and_labels(numerator, reference) ||
+        anyNA(numerator) || any(is.infinite(numerator))) {
+      stop(sprintf(
+        "Profiled non-finite inputs are invalid for `%s`.",
+        indicator
+      ), call. = FALSE)
+    }
+    expected <- wlv_profiled_nonfinite_mask(
+      runtime,
+      value,
+      artifact,
+      indicator,
+      axes
+    )
+    context <- wlv_contract_context_for(
+      runtime,
+      artifact = artifact,
+      indicator = indicator,
+      checkpoint = checkpoint,
+      stage = stage,
+      module = module,
+      axes = axes,
+      policy_id = profile_id
+    )
+    observed_nan <- is.nan(value)
+    observed_other_special <-
+      (is.na(value) & !is.nan(value)) | is.infinite(value)
+    mismatch <- xor(observed_nan, expected) | observed_other_special
+    if (any(mismatch)) {
+      anomalies <- wlv_contract_table(
+        value,
+        mismatch,
+        context,
+        "abort_nonfinite_resolution_profile_mismatch"
+      )
+      wlv_contract_record(runtime, anomalies)
+      wlv_abort_contract(
+        context,
+        anomalies,
+        sprintf(
+          "non-finite transition differs from explicit profile `%s`",
+          profile_id
+        )
+      )
+    }
+    invalid_origin <- expected & (numerator != 0 | denominator != 0)
+    if (any(invalid_origin)) {
+      anomalies <- wlv_contract_table(
+        value,
+        invalid_origin,
+        context,
+        "abort_nonfinite_resolution_origin_mismatch"
+      )
+      wlv_contract_record(runtime, anomalies)
+      wlv_abort_contract(
+        context,
+        anomalies,
+        "profiled NaN transition is not produced by the declared 0/0 origin"
+      )
+    }
+
+    group_keys <- wlv_nonfinite_coordinate_keys(value, expected, context)
+    group_sha256 <- wlv_nonfinite_coordinate_sha256(group_keys)
+    group <- resolution$groups[
+      resolution$groups$binding == indicator &
+        resolution$groups$kind == "NaN",
+      ,
+      drop = FALSE
+    ]
+    if (nrow(group) != 1L ||
+        !identical(group$indicator[[1L]], indicator) ||
+        !identical(group$module[[1L]], module) ||
+        length(group_keys) != group$expected_count[[1L]] ||
+        !identical(group_sha256, group$coordinate_sha256[[1L]])) {
+      stop(sprintf(
+        "Non-finite resolution group `%s/NaN` differs from profile `%s`.",
+        indicator,
+        profile_id
+      ), call. = FALSE)
+    }
+    keys <- c(keys, paste(indicator, group_keys, sep = "|"))
+    masks[[indicator]] <- expected
+    actions[[indicator]] <- wlv_contract_table(
+      value,
+      expected,
+      context,
+      "replace_profiled_historical_nan_with_zero"
+    )
+    diagnostics[[indicator]] <- wlv_nonfinite_resolution_diagnostic_row(
+      runtime,
+      module,
+      indicator,
+      indicator,
+      "NaN",
+      length(group_keys),
+      group_sha256
+    )
+  }
+
+  keys <- sort(keys, method = "radix")
+  if (length(keys) != resolution$expected_count) {
+    stop(sprintf(
+      "Non-finite transition differs from profile `%s` (count=%s).",
+      profile_id,
+      length(keys)
+    ), call. = FALSE)
+  }
+
+  result <- values
+  for (indicator in expected_indicators) {
+    result[[indicator]][masks[[indicator]]] <- 0
+    if (anyNA(result[[indicator]]) || any(is.infinite(result[[indicator]]))) {
+      stop("Profiled non-finite resolution did not produce finite outputs.",
+        call. = FALSE
+      )
+    }
+  }
+  wlv_contract_record(runtime, do.call(wlv_bind_contract_tables, actions))
+  wlv_contract_clear_states(runtime, artifact, expected_indicators)
+  list(
+    values = result,
+    diagnostics = list(
+      `_nonfinite_resolution_diagnostics.csv` = do.call(rbind, diagnostics)
+    )
+  )
+}
+
 wlv_source_missing_indicators <- function(policy) {
   policy$result_source_missing$row_indicators
 }
@@ -549,6 +1965,10 @@ wlv_contract_slice_registered_states <- function(registered, value) {
   }
   sliced <- do.call(`[`, c(list(registered), selected, list(drop = FALSE)))
   array(as.vector(sliced), dim = dim(value), dimnames = value_labels)
+}
+
+wlv_m_io_structural_missing_indicators <- function() {
+  c("k_composition", "k_depreciation", "consumption_basket")
 }
 
 wlv_contract_declared_states <- function(
@@ -605,13 +2025,47 @@ wlv_contract_declared_states <- function(
 
   if (
     artifact == "m_io" && length(dimensions) == 4L &&
-    indicator %in% c("k_composition", "k_depreciation", "consumption_basket")
+    indicator %in% wlv_m_io_structural_missing_indicators()
   ) {
     inputs <- labels[[3L]]
     outputs <- labels[[4L]]
     if (!is.null(inputs) && !is.null(outputs)) {
       states[, , , !outputs %in% inputs] <- "not_applicable"
     }
+  }
+
+  semantic <- wlv_contract_semantic_state_slice(
+    runtime,
+    artifact,
+    indicator,
+    value
+  )
+  if (!is.null(semantic) && nrow(semantic)) {
+    positions <- wlv_semantic_state_linear_indices(semantic, value)
+    registered <- semantic$state
+    conflict <- !is.na(states[positions]) & states[positions] != registered
+    if (any(conflict)) {
+      conflicts <- unique(data.frame(
+        declared = states[positions][conflict],
+        registered = registered[conflict],
+        stringsAsFactors = FALSE
+      ))
+      stop(
+        sprintf(
+          paste0(
+            "Conflicting missingness states were registered for `%s/%s`: %s."
+          ),
+          artifact,
+          indicator,
+          paste(
+            paste(conflicts$declared, conflicts$registered, sep = " -> "),
+            collapse = ", "
+          )
+        ),
+        call. = FALSE
+      )
+    }
+    states[positions] <- registered
   }
 
   key <- wlv_contract_state_key(artifact, indicator)
@@ -810,7 +2264,10 @@ wlv_validate_sea_stage <- function(
   invisible(sea_sectors)
 }
 
-wlv_validate_m_io_contract <- function(runtime, value, checkpoint = "after_matrices") {
+wlv_validate_m_io_contract_detailed <- function(
+    runtime,
+    value,
+    checkpoint = "after_matrices") {
   indicators <- dimnames(value)[[2L]]
   for (indicator in indicators) {
     indicator_value <- value[, indicator, , , drop = FALSE]
@@ -839,6 +2296,213 @@ wlv_validate_m_io_contract <- function(runtime, value, checkpoint = "after_matri
     )
   }
   invisible(value)
+}
+
+wlv_contract_has_registered_m_io_states <- function(runtime, indicators) {
+  keys <- wlv_contract_state_key("m_io", indicators)
+  any(vapply(
+    keys,
+    exists,
+    logical(1L),
+    envir = runtime$states,
+    inherits = FALSE
+  ))
+}
+
+wlv_can_validate_m_io_contract_sparse <- function(value) {
+  dimensions <- dim(value)
+  labels <- dimnames(value)
+  is.double(value) &&
+    !is.object(value) &&
+    length(dimensions) == 4L &&
+    length(labels) == 4L &&
+    all(vapply(seq_len(4L), function(axis) {
+      axis_labels <- labels[[axis]]
+      !is.null(axis_labels) &&
+        length(axis_labels) == dimensions[[axis]] &&
+        !anyNA(axis_labels) &&
+        !anyDuplicated(axis_labels) &&
+        all(nzchar(axis_labels))
+    }, logical(1L)))
+}
+
+wlv_m_io_nonfinite_positions <- function(value, chunk_values = 2^20) {
+  if (!is.double(value) || !is.numeric(chunk_values) ||
+      length(chunk_values) != 1L || is.na(chunk_values) ||
+      !is.finite(chunk_values) || chunk_values < 1L) {
+    stop("Sparse m_io scan received invalid inputs.", call. = FALSE)
+  }
+  chunk_values <- as.integer(chunk_values)
+  total <- length(value)
+  if (!total) {
+    return(integer())
+  }
+  positions <- vector("list", ceiling(total / chunk_values))
+  index <- 0L
+  for (start in seq.int(1L, total, by = chunk_values)) {
+    end <- min(total, start + chunk_values - 1L)
+    current <- which(!is.finite(value[start:end]))
+    if (length(current)) {
+      index <- index + 1L
+      positions[[index]] <- as.integer(current + start - 1L)
+    }
+  }
+  if (!index) {
+    return(integer())
+  }
+  as.integer(unlist(positions[seq_len(index)], use.names = FALSE))
+}
+
+wlv_validate_m_io_contract_compact_chunks <- function(
+    value,
+    semantic,
+    chunk_values = 2^20) {
+  if (!wlv_can_validate_m_io_contract_sparse(value) ||
+      !(is.null(semantic) || (
+        wlv_contract_is_compact_semantic_state(semantic) &&
+          identical(semantic$encoding, "cartesian")
+      )) || !is.numeric(chunk_values) || length(chunk_values) != 1L ||
+      is.na(chunk_values) || !is.finite(chunk_values) || chunk_values < 1L ||
+      chunk_values > .Machine$integer.max) {
+    stop("Compact m_io validation received invalid inputs.", call. = FALSE)
+  }
+  chunk_values <- as.integer(chunk_values)
+  dimensions <- dim(value)
+  labels <- dimnames(value)
+  indicators <- labels[[2L]]
+  special_indicators <- wlv_m_io_structural_missing_indicators()
+  year_count <- dimensions[[1L]]
+  indicator_count <- dimensions[[2L]]
+  input_count <- dimensions[[3L]]
+  total <- length(value)
+  if (!total) {
+    return(TRUE)
+  }
+  for (start in seq.int(1L, total, by = chunk_values)) {
+    end <- min(total, start + chunk_values - 1L)
+    current <- value[start:end]
+    local_positions <- which(!is.finite(current))
+    if (!length(local_positions)) {
+      next
+    }
+    observed <- current[local_positions]
+    if (any(is.nan(observed) | is.infinite(observed))) {
+      return(FALSE)
+    }
+    positions <- as.double(start) + local_positions - 1
+    offsets <- positions - 1
+    indicator_indices <- (offsets %/% year_count) %% indicator_count + 1
+    output_indices <-
+      offsets %/% (year_count * indicator_count * input_count) + 1
+    allowed <- indicators[indicator_indices] %in% special_indicators &
+      !labels[[4L]][output_indices] %in% labels[[3L]]
+    unresolved <- !allowed
+    if (!is.null(semantic) && any(unresolved)) {
+      registered <- wlv_contract_semantic_state_position_states(
+        semantic,
+        value,
+        positions[unresolved]
+      )
+      allowed[unresolved] <- !is.na(registered)
+    }
+    if (any(!allowed)) {
+      return(FALSE)
+    }
+  }
+  TRUE
+}
+
+wlv_validate_m_io_contract_sparse <- function(
+    runtime,
+    value,
+    checkpoint = "after_matrices") {
+  if (!wlv_can_validate_m_io_contract_sparse(value)) {
+    return(wlv_validate_m_io_contract_detailed(runtime, value, checkpoint))
+  }
+
+  dimensions <- dim(value)
+  labels <- dimnames(value)
+  indicators <- labels[[2L]]
+  if (wlv_contract_has_registered_m_io_states(runtime, indicators)) {
+    return(wlv_validate_m_io_contract_detailed(runtime, value, checkpoint))
+  }
+  semantic <- wlv_contract_semantic_state_subset(runtime, "m_io", value)
+  if (wlv_contract_semantic_state_has_invalid_structural(
+        semantic,
+        labels[[3L]]
+      )) {
+    return(wlv_validate_m_io_contract_detailed(runtime, value, checkpoint))
+  }
+  if (length(indicators)) {
+    wlv_contract_context_for(
+      runtime,
+      artifact = "m_io",
+      indicator = indicators[[1L]],
+      checkpoint = checkpoint,
+      stage = 4L,
+      axes = c(year = 1L, sector = 3L, output = 4L)
+    )
+  }
+  compact_scan <- is.null(semantic) || (
+    wlv_contract_is_compact_semantic_state(semantic) &&
+      identical(semantic$encoding, "cartesian")
+  )
+  if (compact_scan) {
+    if (!wlv_validate_m_io_contract_compact_chunks(value, semantic)) {
+      return(wlv_validate_m_io_contract_detailed(runtime, value, checkpoint))
+    }
+    return(invisible(value))
+  }
+  nonfinite_positions <- wlv_m_io_nonfinite_positions(value)
+  if (!length(nonfinite_positions)) {
+    return(invisible(value))
+  }
+
+  semantic_states <- wlv_contract_semantic_state_position_states(
+    semantic,
+    value,
+    nonfinite_positions
+  )
+
+  offsets <- nonfinite_positions - 1
+  year_count <- dimensions[[1L]]
+  indicator_count <- dimensions[[2L]]
+  input_count <- dimensions[[3L]]
+  indicator_indices <- (offsets %/% year_count) %% indicator_count + 1
+  output_indices <-
+    offsets %/% (year_count * indicator_count * input_count) + 1
+  nonfinite_values <- value[nonfinite_positions]
+  special_indicators <- wlv_m_io_structural_missing_indicators()
+
+  for (indicator_index in seq_along(indicators)) {
+    selected <- indicator_indices == indicator_index
+    if (!any(selected)) {
+      next
+    }
+    indicator <- indicators[[indicator_index]]
+    observed <- nonfinite_values[selected]
+    selected_outputs <- output_indices[selected]
+    invalid_numeric <- is.nan(observed) | is.infinite(observed)
+    ordinary_missing <- is.na(observed) & !is.nan(observed)
+    allowed_missing <- rep(FALSE, length(observed))
+    if (
+      indicator %in% special_indicators &&
+        !is.null(labels[[3L]]) && !is.null(labels[[4L]])
+    ) {
+      allowed_missing <- !labels[[4L]][selected_outputs] %in% labels[[3L]]
+    }
+    registered <- semantic_states[selected]
+    allowed_missing <- allowed_missing | !is.na(registered)
+    unexpected_missing <- ordinary_missing & !allowed_missing
+    if (any(invalid_numeric) || any(unexpected_missing)) {
+      return(wlv_validate_m_io_contract_detailed(runtime, value, checkpoint))
+    }
+  }
+  invisible(value)
+}
+
+wlv_validate_m_io_contract <- function(runtime, value, checkpoint = "after_matrices") {
+  wlv_validate_m_io_contract_sparse(runtime, value, checkpoint)
 }
 
 wlv_validate_m_countries_contract <- function(
@@ -1655,7 +3319,7 @@ wlv_wiodr16_hours_worked_runtime <- function(
     employees,
     persons_engaged,
     indicator = "hours_worked.emp.s.hr",
-    module = "wiodr16/hours_worked.emp.s.hr.R") {
+    module = "indicator.hours_worked.emp.s.hr.wiodr16") {
   wlv_assert_conformable_numeric(employee_hours, employees)
   wlv_assert_conformable_numeric(employee_hours, persons_engaged)
   if (length(dim(employee_hours)) != 3L) {
@@ -2148,11 +3812,11 @@ wlv_exchange_rate_by_country <- function(
   value
 }
 
-wlv_exchange_rate_by_sector_legacy <- function(
+wlv_exchange_rate_by_sector_v09 <- function(
     numerator,
     denominator,
     runtime = NULL,
-    module = "wiodr13/exchange.r.us.v09.R") {
+    module = "indicator.exchange.r.us.v09") {
   wlv_assert_conformable_numeric(numerator, denominator)
   if (length(dim(numerator)) != 3L || is.null(dimnames(numerator))) {
     stop("Exchange-rate inputs must be year-sector-country arrays.", call. = FALSE)
@@ -2246,6 +3910,19 @@ wlv_write_contract_report <- function(runtime, path) {
   invisible(path)
 }
 
+wlv_validate_contract_report_records <- function(records) {
+  if (!is.data.frame(records) ||
+      !all(vapply(records, is.character, logical(1L)))) {
+    stop("Contract report records must be a character data frame.", call. = FALSE)
+  }
+  if (!identical(names(records), wlv_contract_anomaly_columns())) {
+    stop("Contract report has an invalid schema.", call. = FALSE)
+  }
+  records <- records[wlv_contract_anomaly_columns()]
+  row.names(records) <- NULL
+  records
+}
+
 wlv_read_contract_report <- function(path) {
   if (!file.exists(path)) {
     stop(sprintf("Contract report does not exist: %s.", path), call. = FALSE)
@@ -2254,6 +3931,8 @@ wlv_read_contract_report <- function(path) {
   if (any(grepl("\ufffd", encoded, fixed = TRUE))) {
     stop("Contract report contains invalid UTF-8 text.", call. = FALSE)
   }
+  rm(encoded)
+  invisible(gc(full = FALSE))
   records <- utils::read.csv2(
     path,
     colClasses = "character",
@@ -2262,32 +3941,37 @@ wlv_read_contract_report <- function(path) {
     na.strings = "",
     fileEncoding = "UTF-8"
   )
-  if (!identical(names(records), wlv_contract_anomaly_columns)) {
-    stop("Contract report has an invalid schema.", call. = FALSE)
+  wlv_validate_contract_report_records(records)
+}
+
+wlv_load_contract_records <- function(runtime, records) {
+  records <- wlv_validate_contract_report_records(records)
+  if (!nrow(runtime$anomalies)) {
+    runtime$anomalies <- records
+  } else {
+    runtime$anomalies <- wlv_bind_contract_tables(runtime$anomalies, records)
   }
-  records <- records[wlv_contract_anomaly_columns]
-  row.names(records) <- NULL
-  records
+  invisible(TRUE)
 }
 
 wlv_load_contract_report <- function(runtime, path) {
   if (!file.exists(path)) {
     return(invisible(FALSE))
   }
-  previous <- wlv_read_contract_report(path)
-  runtime$anomalies <- wlv_bind_contract_tables(runtime$anomalies, previous)
-  invisible(TRUE)
+  wlv_load_contract_records(runtime, wlv_read_contract_report(path))
 }
 
-wlv_contract_state_columns <- c(
+wlv_contract_state_columns <- function() {
+  c(
   "artifact", "indicator", "year", "country", "sector", "output", "state"
 )
+}
 
 wlv_empty_contract_states <- function() {
   as.data.frame(
     stats::setNames(
-      rep(list(character()), length(wlv_contract_state_columns)),
-      wlv_contract_state_columns
+      rep(list(character()), length(wlv_contract_state_columns())),
+      wlv_contract_state_columns()
     ),
     stringsAsFactors = FALSE
   )
@@ -2357,7 +4041,7 @@ wlv_collect_contract_states <- function(runtime, artifact, value) {
       output = coordinates$output,
       state = as.vector(states)[as.vector(selected)],
       stringsAsFactors = FALSE
-    )[wlv_contract_state_columns]
+    )[wlv_contract_state_columns()]
   }
   result <- do.call(rbind, rows)
   row.names(result) <- NULL
@@ -2413,11 +4097,11 @@ wlv_read_contract_states <- function(path) {
     check.names = FALSE,
     fileEncoding = "UTF-8"
   )
-  if (!identical(names(records), wlv_contract_state_columns)) {
+  if (!identical(names(records), wlv_contract_state_columns())) {
     stop("Persisted missingness states have an invalid schema.", call. = FALSE)
   }
   records[is.na(records)] <- ""
-  records <- records[wlv_contract_state_columns]
+  records <- records[wlv_contract_state_columns()]
   row.names(records) <- NULL
   records
 }
@@ -2425,7 +4109,7 @@ wlv_read_contract_states <- function(path) {
 wlv_normalize_contract_states <- function(records) {
   records[] <- lapply(records, as.character)
   records[is.na(records)] <- ""
-  records <- records[wlv_contract_state_columns]
+  records <- records[wlv_contract_state_columns()]
   row.names(records) <- NULL
   records
 }
@@ -2466,7 +4150,7 @@ wlv_load_contract_states <- function(runtime, path, values) {
   ) {
     stop("Persisted missingness states contain an invalid artifact or state.", call. = FALSE)
   }
-  key <- do.call(paste, c(records[wlv_contract_state_columns[-7L]], sep = "\034"))
+  key <- do.call(paste, c(records[wlv_contract_state_columns()[-7L]], sep = "\034"))
   if (anyDuplicated(key)) {
     stop("Persisted missingness states contain duplicate coordinates.", call. = FALSE)
   }
@@ -2757,6 +4441,104 @@ wlv_validate_method_result_metadata <- function(staging, expected) {
   invisible(TRUE)
 }
 
+wlv_expected_staged_result_artifacts <- function(
+    expected_metadata,
+    expected_io_artifacts) {
+  if (!is.list(expected_metadata) || !is.list(expected_metadata$csv) ||
+      !is.data.frame(expected_metadata$meta_indicators)) {
+    stop("Invalid expected method result metadata.", call. = FALSE)
+  }
+  expected_io_artifacts <- chartr("\\", "/", expected_io_artifacts)
+  valid_io <- is.character(expected_io_artifacts) &&
+    length(expected_io_artifacts) && !anyNA(expected_io_artifacts) &&
+    all(nzchar(expected_io_artifacts)) &&
+    all(basename(expected_io_artifacts) == expected_io_artifacts) &&
+    all(grepl("^m_io.*[.]fst$", expected_io_artifacts)) &&
+    !anyDuplicated(expected_io_artifacts)
+  if (!valid_io) {
+    stop(
+      "Expected m_io artifacts must be unique FST basenames.",
+      call. = FALSE
+    )
+  }
+  sort(unique(c(
+    "m_countries.fst", "m_countries.fst.meta",
+    "sea_sectors.fst", "sea_sectors.fst.meta",
+    "sea_countries.fst", "sea_countries.fst.meta",
+    expected_io_artifacts,
+    paste0(expected_io_artifacts, ".meta"),
+    names(expected_metadata$csv),
+    "meta_indicators.RDS", "_states.csv", "_anomalies.csv",
+    wlv_runtime_snapshot_filename(),
+    "_scientific_checks.csv"
+  )), method = "radix")
+}
+
+wlv_assert_staged_result_artifact_allowlist <- function(
+    staging,
+    expected_artifacts,
+    require_scientific_checks) {
+  expected_artifacts <- wlv_publication_normalize_relative_paths(
+    expected_artifacts,
+    "expected staged artifacts"
+  )
+  observed <- wlv_publication_list_files(
+    staging,
+    exclude = wlv_run_manifest_filename()
+  )
+  required <- if (isTRUE(require_scientific_checks)) {
+    expected_artifacts
+  } else {
+    setdiff(expected_artifacts, "_scientific_checks.csv")
+  }
+  missing <- setdiff(required, observed)
+  unexpected <- setdiff(observed, expected_artifacts)
+  if (length(missing) || length(unexpected)) {
+    details <- c(
+      if (length(missing)) {
+        paste0("missing: ", paste(missing, collapse = ", "))
+      },
+      if (length(unexpected)) {
+        paste0("unexpected: ", paste(unexpected, collapse = ", "))
+      }
+    )
+    stop(sprintf(
+      "Staged result artifact allowlist mismatch (%s).",
+      paste(details, collapse = "; ")
+    ), call. = FALSE)
+  }
+  invisible(observed)
+}
+
+wlv_runtime_snapshot_receipt_io_bundles <- function(
+    receipt,
+    expected_io_artifacts) {
+  if (!inherits(receipt, "wlv_runtime_snapshot_receipt") ||
+      !is.list(receipt) || !is.data.frame(receipt$files) ||
+      !identical(names(receipt$files), c("path", "sha256")) ||
+      !is.character(expected_io_artifacts) || !length(expected_io_artifacts) ||
+      anyNA(expected_io_artifacts) || any(!nzchar(expected_io_artifacts)) ||
+      anyDuplicated(expected_io_artifacts)) {
+    stop("Authenticated runtime I/O bundle inventory is invalid.", call. = FALSE)
+  }
+  data_rows <- match(expected_io_artifacts, receipt$files$path)
+  metadata_rows <- match(paste0(expected_io_artifacts, ".meta"), receipt$files$path)
+  if (anyNA(data_rows) || anyNA(metadata_rows)) {
+    stop(
+      "Runtime snapshot receipt lacks an expected I/O bundle.",
+      call. = FALSE
+    )
+  }
+  bundles <- lapply(seq_along(expected_io_artifacts), function(index) {
+    list(
+      sha256 = receipt$files$sha256[[data_rows[[index]]]],
+      meta_sha256 = receipt$files$sha256[[metadata_rows[[index]]]]
+    )
+  })
+  names(bundles) <- expected_io_artifacts
+  bundles
+}
+
 wlv_validate_staged_results <- function(
     staging,
     method,
@@ -2764,19 +4546,50 @@ wlv_validate_staged_results <- function(
     runtime,
     expected_metadata,
     aggregation_registry,
-    stable_aggregations,
+    expected_io_artifacts,
     at_stage = NULL,
-    reader = read_fst_array) {
+    reader = read_fst_array,
+    runtime_snapshot_receipt = NULL,
+    inherited_scientific_checks = NULL,
+    inherited_io_validation = NULL) {
   if (!is.function(reader)) {
     stop("`reader` must be an array reader.", call. = FALSE)
   }
+  reuse_inherited_io_validation <- !is.null(inherited_io_validation)
+  if (reuse_inherited_io_validation && !identical(mode, "recalculate")) {
+    stop("Inherited I/O validation request is invalid.", call. = FALSE)
+  }
+  inherit_io_checks <- !is.null(inherited_scientific_checks)
+  authenticated_stage_4 <- identical(mode, "recalculate") &&
+    identical(at_stage, 4L) && reuse_inherited_io_validation
+  authorized_inheritance <- identical(mode, "recalculate") &&
+    (identical(at_stage, 5L) || isTRUE(authenticated_stage_4))
+  if (inherit_io_checks && !isTRUE(authorized_inheritance)) {
+    stop(
+      paste0(
+        "Inherited I/O scientific checks require stage-5 or authenticated ",
+        "stage-4 recalculation."
+      ),
+      call. = FALSE
+    )
+  }
+  if (is.null(runtime$scientific_profile)) {
+    stop("Staged result validation requires an explicit scientific profile.",
+      call. = FALSE
+    )
+  }
+  wlv_assert_scientific_profile(
+    runtime$scientific_profile,
+    runtime$method,
+    runtime$source
+  )
   required <- c(
     "m_countries.fst", "m_countries.fst.meta",
     "sea_sectors.fst", "sea_sectors.fst.meta",
     "sea_countries.fst", "sea_countries.fst.meta",
     "meta_indicators.RDS", "_parameters.csv", "_method_assumptions.csv",
     "_method_matrices.csv", "_method_solutions.csv", "_sectors.csv",
-    "_states.csv", "_anomalies.csv"
+    "_states.csv", "_anomalies.csv", wlv_runtime_snapshot_filename()
   )
   missing <- required[!file.exists(file.path(staging, required))]
   if (length(missing)) {
@@ -2785,6 +4598,65 @@ wlv_validate_staged_results <- function(
       call. = FALSE
     )
   }
+  runtime_partitions <- vapply(
+    file.path(staging, expected_io_artifacts),
+    wlv_native_io_partition,
+    character(1L)
+  )
+  if (reuse_inherited_io_validation) {
+    wlv_runtime_snapshot_io_inheritance_proof_assert(
+      inherited_io_validation,
+      method = method,
+      source = runtime$source,
+      partitions = runtime_partitions,
+      receipt = runtime_snapshot_receipt
+    )
+  }
+  expected_artifacts <- wlv_expected_staged_result_artifacts(
+    expected_metadata,
+    expected_io_artifacts
+  )
+  wlv_assert_staged_result_artifact_allowlist(
+    staging,
+    expected_artifacts,
+    require_scientific_checks = FALSE
+  )
+  pre_validation_artifacts <- wlv_capture_validated_run_artifacts(staging)
+  snapshot_bindings <- NULL
+  snapshot_io_artifacts <- NULL
+  if (is.null(runtime_snapshot_receipt)) {
+    wlv_runtime_snapshot_read(
+      staging,
+      method = method,
+      source = runtime$source,
+      partitions = runtime_partitions
+    )
+  } else {
+    snapshot_bindings <- wlv_runtime_snapshot_receipt_assert(
+      runtime_snapshot_receipt,
+      method = method,
+      source = runtime$source,
+      partitions = runtime_partitions,
+      artifacts = pre_validation_artifacts,
+      staging = staging
+    )
+    if (isTRUE(reuse_inherited_io_validation)) {
+      snapshot_io_artifacts <- wlv_runtime_snapshot_receipt_io_bundles(
+        runtime_snapshot_receipt,
+        expected_io_artifacts
+      )
+    }
+  }
+  if (inherit_io_checks && identical(at_stage, 4L)) {
+    wlv_runtime_snapshot_io_scientific_inheritance_proof_assert(
+      inherited_io_validation,
+      snapshot_bindings,
+      runtime_snapshot_receipt
+    )
+  }
+  rm(inherited_io_validation)
+  rm(runtime_snapshot_receipt)
+  invisible(gc(full = FALSE))
 
   solutions <- expected_metadata$csv[["_method_solutions.csv"]]
   sea_sectors <- reader(file.path(staging, "sea_sectors.fst"))
@@ -2797,6 +4669,32 @@ wlv_validate_staged_results <- function(
   )
   sea_countries <- reader(file.path(staging, "sea_countries.fst"))
   wlv_validate_sea_countries_contract(runtime, sea_countries, "post_roundtrip")
+  if (!is.null(snapshot_bindings)) {
+    wlv_runtime_snapshot_validate_materialized_panel(
+      snapshot_bindings,
+      "sea_sectors",
+      sea_sectors
+    )
+    wlv_runtime_snapshot_validate_materialized_panel(
+      snapshot_bindings,
+      "sea_countries",
+      sea_countries
+    )
+  }
+  snapshot_io_bindings <- if (is.null(snapshot_bindings)) {
+    NULL
+  } else {
+    wlv_runtime_snapshot_io_binding_expectations(snapshot_bindings)
+  }
+  if (isTRUE(reuse_inherited_io_validation) &&
+      (is.null(snapshot_io_bindings) || is.null(snapshot_io_artifacts))) {
+    stop(
+      "Inherited I/O validation requires authenticated snapshot bindings.",
+      call. = FALSE
+    )
+  }
+  rm(snapshot_bindings)
+  invisible(gc(full = TRUE))
   m_countries <- reader(file.path(staging, "m_countries.fst"))
   wlv_validate_m_countries_contract(runtime, m_countries, "post_roundtrip")
   unit_contract_path <- file.path(staging, "_unit_contract.csv")
@@ -2822,10 +4720,9 @@ wlv_validate_staged_results <- function(
   } else {
     NULL
   }
-  aggregation_routes <- wlv_reconcile_aggregation_registry_sidecar(
+  aggregation_rows <- wlv_reconcile_aggregation_registry_sidecar(
     aggregation_registry,
-    persisted_unit_contract,
-    stable = stable_aggregations
+    persisted_unit_contract
   )
   scientific_check_parts <- list(wlv_scientific_validate_result_arrays(
     method = method,
@@ -2833,8 +4730,7 @@ wlv_validate_staged_results <- function(
     sea_countries = sea_countries,
     m_countries = m_countries,
     solutions = solutions,
-    aggregations = aggregation_routes$typed,
-    legacy_aggregations = aggregation_routes$legacy
+    aggregations = aggregation_rows
   ))
   scientific_io_years <- character()
 
@@ -2846,37 +4742,88 @@ wlv_validate_staged_results <- function(
   if (!identical(persisted_report, expected_report)) {
     stop("Persisted anomaly report differs from the in-memory audit trail.", call. = FALSE)
   }
+  wlv_validate_leontief_zero_output_anomalies(runtime, persisted_report)
+  wlv_validate_nonfinite_resolution_anomalies(runtime, persisted_report)
 
   io_files <- sort(list.files(staging, pattern = "^m_io.*\\.fst$", full.names = TRUE))
-  io_required <- !identical(mode, "recalculate") ||
-    is.null(at_stage) || at_stage <= 4L
-  if (!length(io_files) && io_required) {
+  if (!length(io_files)) {
     stop(sprintf("Staged results for `%s` contain no m_io array.", method), call. = FALSE)
   }
-  for (path in io_files) {
-    io_value <- reader(path)
-    wlv_validate_m_io_contract(
-      runtime,
-      io_value,
-      checkpoint = "post_roundtrip"
+  if (inherit_io_checks) {
+    if (is.null(snapshot_io_bindings)) {
+      stop(
+        "Stage-5 I/O inheritance requires authenticated snapshot bindings.",
+        call. = FALSE
+      )
+    }
+    scientific_io_years <- unlist(
+      lapply(io_files, wlv_native_io_years),
+      use.names = FALSE
     )
     scientific_check_parts[[length(scientific_check_parts) + 1L]] <-
-      wlv_scientific_validate_io_array(
-        method = method,
-        m_io = io_value,
-        sea_sectors = sea_sectors
+      wlv_inherited_io_scientific_checks(
+        inherited_scientific_checks,
+        method,
+        scientific_io_years
       )
-    scientific_io_years <- c(
-      scientific_io_years,
-      dimnames(io_value)[[1L]]
-    )
-    rm(io_value)
-    gc()
+  } else {
+    for (path in io_files) {
+      io_artifact <- basename(path)
+      io_value <- if (isTRUE(reuse_inherited_io_validation)) {
+        expected_bundle <- snapshot_io_artifacts[[io_artifact]]
+        if (is.null(expected_bundle)) {
+          stop(
+            sprintf(
+              "Authenticated runtime I/O bundle `%s` is missing.",
+              io_artifact
+            ),
+            call. = FALSE
+          )
+        }
+        wlv_runtime_snapshot_read_authenticated_materialized_io(
+          snapshot_io_bindings,
+          wlv_native_io_partition(path),
+          path,
+          expected_sha256 = expected_bundle$sha256,
+          expected_metadata_sha256 = expected_bundle$meta_sha256
+        )
+      } else {
+        reader(path)
+      }
+      if (!isTRUE(reuse_inherited_io_validation)) {
+        wlv_validate_m_io_contract(
+          runtime,
+          io_value,
+          checkpoint = "post_roundtrip"
+        )
+        if (!is.null(snapshot_io_bindings)) {
+          wlv_runtime_snapshot_validate_materialized_io(
+            snapshot_io_bindings,
+            wlv_native_io_partition(path),
+            io_value
+          )
+        }
+      }
+      scientific_check_parts[[length(scientific_check_parts) + 1L]] <-
+        wlv_scientific_validate_io_array(
+          method = method,
+          m_io = io_value,
+          sea_sectors = sea_sectors
+        )
+      scientific_io_years <- c(
+        scientific_io_years,
+        dimnames(io_value)[[1L]]
+      )
+      rm(io_value)
+      gc()
+    }
   }
+  rm(snapshot_io_bindings, snapshot_io_artifacts)
   persisted_runtime <- wlv_new_contract_runtime(
     method = runtime$method,
     source = runtime$source,
-    policy = runtime$policy
+    policy = runtime$policy,
+    scientific_profile = runtime$scientific_profile
   )
   persisted_states <- wlv_read_contract_states(
     file.path(staging, "_states.csv")
@@ -2910,11 +4857,7 @@ wlv_validate_staged_results <- function(
     checkpoint = "post_roundtrip_persisted"
   )
   scientific_names <- grep(
-    if (exists("wlv_scientific_sidecar_pattern", mode = "function")) {
-      wlv_scientific_sidecar_pattern()
-    } else {
-      "^_(gfcf_|leontief_|scientific_).*[.]csv$"
-    },
+    wlv_scientific_sidecar_pattern(),
     names(expected_metadata$csv),
     value = TRUE
   )
@@ -2927,209 +4870,50 @@ wlv_validate_staged_results <- function(
     years = dimnames(sea_sectors)[[1L]],
     io_years = scientific_io_years,
     diagnostics = scientific_diagnostics,
-    require_io = io_required,
-    sea_sectors = sea_sectors
+    sea_sectors = sea_sectors,
+    scientific_profile = runtime$scientific_profile
   )
   wlv_write_result_csv(
     scientific_checks,
     file.path(staging, "_scientific_checks.csv")
   )
+  written_scientific_checks <- wlv_publication_file_record(
+    file.path(staging, "_scientific_checks.csv")
+  )
   expected_metadata$csv[["_scientific_checks.csv"]] <- scientific_checks
   wlv_validate_method_result_metadata(staging, expected_metadata)
+  wlv_assert_staged_result_artifact_allowlist(
+    staging,
+    expected_artifacts,
+    require_scientific_checks = TRUE
+  )
+  validated_artifacts <- wlv_capture_validated_run_artifacts(staging)
+  validated_paths <- vapply(
+    validated_artifacts,
+    `[[`,
+    character(1L),
+    "path"
+  )
+  scientific_index <- match("_scientific_checks.csv", validated_paths)
+  validated_scientific_checks <- if (!is.na(scientific_index)) {
+    validated_artifacts[[scientific_index]][c("size_bytes", "sha256")]
+  } else {
+    NULL
+  }
+  if (!identical(validated_scientific_checks, written_scientific_checks)) {
+    stop(
+      paste0(
+        "Staged scientific checks changed while their semantic contract ",
+        "was being validated."
+      ),
+      call. = FALSE
+    )
+  }
+  wlv_assert_staged_validation_snapshot(
+    pre_validation_artifacts,
+    validated_artifacts
+  )
+  attr(scientific_checks, "wlv_validated_run_artifacts") <-
+    validated_artifacts
   invisible(scientific_checks)
-}
-
-wlv_prepare_global_metadata <- function(run_environment, results_root) {
-  indicators <- get0(
-    "wlv_pending_indicators_en",
-    envir = run_environment,
-    inherits = FALSE
-  )
-  metadata <- get0(
-    "wlv_pending_meta_indicators",
-    envir = run_environment,
-    inherits = FALSE
-  )
-  values <- list(
-    indicators_en.csv = indicators,
-    meta_indicators.csv = metadata
-  )
-  values <- values[!vapply(values, is.null, logical(1L))]
-  if (!length(values)) {
-    return(data.frame(
-      target = character(), temporary = character(), backup = character(),
-      had_target = logical(), installed = logical(), stringsAsFactors = FALSE
-    ))
-  }
-
-  transaction <- data.frame(
-    target = file.path(results_root, names(values)),
-    temporary = character(length(values)),
-    backup = character(length(values)),
-    had_target = file.exists(file.path(results_root, names(values))),
-    installed = rep(FALSE, length(values)),
-    stringsAsFactors = FALSE
-  )
-  prepared <- FALSE
-  on.exit({
-    if (!prepared) {
-      unlink(transaction$temporary[nzchar(transaction$temporary)], force = TRUE)
-    }
-  }, add = TRUE)
-  for (index in seq_along(values)) {
-    target <- transaction$target[[index]]
-    temporary <- tempfile(
-      pattern = paste0(".metadata-", basename(target), "-"),
-      tmpdir = results_root
-    )
-    utils::write.csv2(
-      values[[index]],
-      temporary,
-      row.names = FALSE,
-      fileEncoding = "UTF-8"
-    )
-    encoded <- readLines(temporary, warn = FALSE, encoding = "UTF-8")
-    if (any(grepl("\ufffd", encoded, fixed = TRUE))) {
-      stop(sprintf("Global metadata `%s` failed UTF-8 verification.", target), call. = FALSE)
-    }
-    transaction$temporary[[index]] <- temporary
-  }
-  prepared <- TRUE
-  transaction
-}
-
-wlv_rollback_global_metadata <- function(transaction) {
-  if (is.null(transaction) || !nrow(transaction)) {
-    return(invisible(transaction))
-  }
-  new_backups <- rep("", nrow(transaction))
-  moved_new <- rep(FALSE, nrow(transaction))
-  restored_old <- rep(FALSE, nrow(transaction))
-
-  restore_new_generation <- function() {
-    for (index in rev(which(restored_old & moved_new))) {
-      target <- transaction$target[[index]]
-      backup <- transaction$backup[[index]]
-      if (file.exists(target) && !file.exists(backup)) {
-        file.rename(target, backup)
-      }
-    }
-    for (index in which(moved_new)) {
-      target <- transaction$target[[index]]
-      recovery <- new_backups[[index]]
-      if (file.exists(recovery) && !file.exists(target)) {
-        file.rename(recovery, target)
-      }
-    }
-    invisible(NULL)
-  }
-
-  for (index in seq_len(nrow(transaction))) {
-    target <- transaction$target[[index]]
-    if (transaction$installed[[index]] && file.exists(target)) {
-      recovery <- tempfile(
-        pattern = paste0(".rollback-new-metadata-", basename(target), "-"),
-        tmpdir = dirname(target)
-      )
-      if (!file.rename(target, recovery)) {
-        restore_new_generation()
-        stop(
-          sprintf("Could not retain new global metadata `%s` for rollback.", target),
-          call. = FALSE
-        )
-      }
-      new_backups[[index]] <- recovery
-      moved_new[[index]] <- TRUE
-    }
-  }
-
-  for (index in seq_len(nrow(transaction))) {
-    target <- transaction$target[[index]]
-    backup <- transaction$backup[[index]]
-    if (nzchar(backup)) {
-      if (!file.exists(backup) || file.exists(target) ||
-          !file.rename(backup, target)) {
-        restore_new_generation()
-        stop(
-          sprintf(
-            paste0(
-              "Could not restore prior global metadata `%s`; the new ",
-              "metadata generation was retained where recovery succeeded."
-            ),
-            target
-          ),
-          call. = FALSE
-        )
-      }
-      restored_old[[index]] <- TRUE
-    } else if (transaction$had_target[[index]] && !file.exists(target)) {
-      restore_new_generation()
-      stop(
-        sprintf(
-          "Prior global metadata `%s` is missing and has no rollback backup.",
-          target
-        ),
-        call. = FALSE
-      )
-    }
-  }
-
-  unlink(new_backups[nzchar(new_backups)], force = TRUE)
-  if (any(file.exists(new_backups[nzchar(new_backups)]))) {
-    message("Global metadata rollback succeeded, but a new-generation backup remains.")
-  }
-  temporary <- transaction$temporary[nzchar(transaction$temporary)]
-  unlink(temporary, force = TRUE)
-  if (any(file.exists(temporary))) {
-    message("Global metadata rollback succeeded, but a temporary metadata file remains.")
-  }
-  invisible(transaction)
-}
-
-wlv_begin_global_metadata_transaction <- function(run_environment, results_root) {
-  transaction <- wlv_prepare_global_metadata(run_environment, results_root)
-  if (!nrow(transaction)) {
-    return(transaction)
-  }
-  installed <- FALSE
-  on.exit({
-    if (!installed) {
-      wlv_rollback_global_metadata(transaction)
-    }
-  }, add = TRUE)
-  for (index in seq_len(nrow(transaction))) {
-    target <- transaction$target[[index]]
-    if (transaction$had_target[[index]]) {
-      backup <- tempfile(
-        pattern = paste0(".backup-metadata-", basename(target), "-"),
-        tmpdir = results_root
-      )
-      if (!file.rename(target, backup)) {
-        stop(sprintf("Could not back up global metadata `%s`.", target), call. = FALSE)
-      }
-      transaction$backup[[index]] <- backup
-    }
-    if (!file.rename(transaction$temporary[[index]], target)) {
-      stop(sprintf("Could not publish global metadata `%s`.", target), call. = FALSE)
-    }
-    transaction$temporary[[index]] <- ""
-    transaction$installed[[index]] <- TRUE
-  }
-  installed <- TRUE
-  transaction
-}
-
-wlv_finalize_global_metadata <- function(transaction) {
-  backups <- transaction$backup[nzchar(transaction$backup)]
-  if (length(backups)) {
-    unlink(backups, force = TRUE)
-    remaining <- backups[file.exists(backups)]
-    if (length(remaining)) {
-      warning(
-        sprintf("Could not remove global metadata backup(s): %s.", paste(remaining, collapse = ", ")),
-        call. = FALSE
-      )
-    }
-  }
-  invisible(transaction)
 }

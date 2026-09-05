@@ -279,7 +279,8 @@ test_that("WIOD16 stock modules preserve structural missing values before assump
     file.path(wlv_test_root, "R", "lib", "gfcf_contracts.R"),
     envir = environment
   )
-  environment$wlv_contract_runtime <- environment$wlv_new_contract_runtime(
+  environment$wlv_contract_runtime <- wlv_test_contract_runtime(
+    environment,
     method = "wiodr16",
     source = "wiodr16",
     policy = environment$wlv_wiodr16_missingness_policy()

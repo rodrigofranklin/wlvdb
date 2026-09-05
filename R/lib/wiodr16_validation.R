@@ -1,21 +1,3 @@
-if (!exists(
-  "wlv_validate_wiodr13_euklems",
-  envir = environment(),
-  mode = "function",
-  inherits = FALSE
-)) {
-  sys.source("R/lib/wiodr13_validation.R", envir = environment())
-}
-
-if (!exists(
-  "wlv_wiodr16_validate_source_negative_k",
-  envir = environment(),
-  mode = "function",
-  inherits = FALSE
-)) {
-  sys.source("R/lib/wiodr16_allocation.R", envir = environment())
-}
-
 wlv_wiodr16_assert_count <- function(value, expected, name) {
   if (
     length(expected) != 1L ||

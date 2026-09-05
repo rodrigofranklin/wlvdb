@@ -338,6 +338,51 @@ test_that("run verification detects corruption, missing files, and extras", {
   unlink(extra)
 })
 
+test_that("manifest artifact subsets authenticate only declared preflight inputs", {
+  fixture <- wlv_make_publication_fixture()
+  on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
+  manifest <- wlv_build_publication_fixture_run(fixture)
+  selected <- "diagnostics/audit.csv"
+
+  expect_no_error(
+    publication_manifest_environment$wlv_verify_run_manifest_artifact_subset(
+      manifest,
+      fixture$run_root,
+      selected,
+      label = "preflight artifact"
+    )
+  )
+  wlv_publication_write_fixture(
+    file.path(fixture$run_root, "arrays", "labour_values.fst"),
+    "corrupt but outside the requested subset"
+  )
+  expect_no_error(
+    publication_manifest_environment$wlv_verify_run_manifest_artifact_subset(
+      manifest,
+      fixture$run_root,
+      selected,
+      label = "preflight artifact"
+    )
+  )
+  expect_error(
+    publication_manifest_environment$wlv_verify_run_manifest(manifest, fixture$run_root),
+    "mismatch for run artifact"
+  )
+  wlv_publication_write_fixture(
+    file.path(fixture$run_root, selected),
+    "corrupt selected artifact"
+  )
+  expect_error(
+    publication_manifest_environment$wlv_verify_run_manifest_artifact_subset(
+      manifest,
+      fixture$run_root,
+      selected,
+      label = "preflight artifact"
+    ),
+    "mismatch for preflight artifact"
+  )
+})
+
 test_that("publication paths are contained and FST sidecars are inseparable", {
   fixture <- wlv_make_publication_fixture()
   on.exit(unlink(fixture$root, recursive = TRUE, force = TRUE), add = TRUE)
@@ -408,7 +453,7 @@ test_that("release and channel marker verify the complete publication chain", {
   )
   expect_identical(
     names(run_reference),
-    publication_manifest_environment$wlv_publication_run_reference_fields
+    publication_manifest_environment$wlv_publication_run_reference_fields()
   )
 
   release_root <- file.path(fixture$root, "releases", "release-001")

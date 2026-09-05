@@ -1,0 +1,2 @@
+instance_id;module_id;action;replaces;variant;source_variable;args_json
+assumption.row;assumption.row.none;replace;assumption.row;none;;"{""source"":""wiodr13""}"

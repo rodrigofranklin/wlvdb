@@ -516,8 +516,7 @@ wlv_aggregation_contract_field <- function(row, name) {
 
 wlv_aggregation_binding_from_row <- function(
     row,
-    missing = "available",
-    legacy = FALSE) {
+    missing = "available") {
   required <- c(
     "indicator", "level", "strategy", "module", "numerator",
     "denominator", "weight", "zero_denominator"
@@ -597,8 +596,7 @@ wlv_aggregation_binding_from_row <- function(
       module = fields$module,
       numerator = fields$numerator,
       denominator = fields$denominator,
-      weight = fields$weight,
-      legacy = isTRUE(legacy)
+      weight = fields$weight
     ),
     class = "wlv_aggregation_binding"
   )
@@ -610,7 +608,7 @@ wlv_validate_aggregation_binding <- function(binding) {
   }
   expected <- c(
     "indicator", "level", "contract_strategy", "spec", "module",
-    "numerator", "denominator", "weight", "legacy"
+    "numerator", "denominator", "weight"
   )
   if (!identical(names(binding), expected)) {
     stop("Invalid `wlv_aggregation_binding` fields.", call. = FALSE)
@@ -629,62 +627,10 @@ wlv_validate_aggregation_binding <- function(binding) {
   invisible(binding)
 }
 
-wlv_aggregation_legacy_row <- function(indicator, level, solution) {
-  formula <- grepl("[.][Rr]$", solution)
-  strategy <- if (formula) {
-    "formula"
-  } else if (solution %in% c("sum", "mean")) {
-    solution
-  } else {
-    stop(
-      sprintf("Legacy aggregation string `%s` cannot be adapted.", solution),
-      call. = FALSE
-    )
-  }
-  data.frame(
-    indicator = indicator,
-    level = level,
-    strategy = strategy,
-    module = if (formula) solution else "",
-    numerator = "",
-    denominator = "",
-    weight = "",
-    zero_denominator = "",
-    notes = "Experimental legacy aggregation adapter.",
-    stringsAsFactors = FALSE
-  )
-}
-
-wlv_aggregation_contract_row_is_compatible <- function(
-    row,
-    solution,
-    indicators) {
-  if (!nrow(row)) {
-    return(FALSE)
-  }
-  strategy <- wlv_aggregation_contract_field(row, "strategy")
-  module <- wlv_aggregation_contract_field(row, "module")
-  formula <- grepl("[.][Rr]$", solution)
-  solution_matches <- if (formula) {
-    identical(strategy, "formula") && identical(module, solution)
-  } else {
-    !identical(strategy, "formula")
-  }
-  references <- unlist(
-    row[c("numerator", "denominator", "weight")],
-    use.names = FALSE
-  )
-  references <- as.character(references)
-  references <- references[!is.na(references) & nzchar(references)]
-  solution_matches && all(references %in% indicators)
-}
-
 wlv_resolve_aggregation_registry <- function(
     aggregations,
     solutions,
     method,
-    stable,
-    allow_legacy = FALSE,
     missing = "available") {
   required_aggregations <- c(
     "indicator", "level", "strategy", "module", "numerator",
@@ -704,87 +650,44 @@ wlv_resolve_aggregation_registry <- function(
       !nzchar(method)) {
     stop("`method` must be one non-empty string.", call. = FALSE)
   }
-  if (!is.logical(stable) || length(stable) != 1L || is.na(stable) ||
-      !is.logical(allow_legacy) || length(allow_legacy) != 1L ||
-      is.na(allow_legacy)) {
-    stop("`stable` and `allow_legacy` must be explicit flags.", call. = FALSE)
-  }
   wlv_aggregation_scalar_character(
     missing,
     "missing",
     wlv_aggregation_missing_policies()
   )
 
-  # Experimental methods deliberately remain on their historical execution
-  # path. Unit definitions still describe their inputs and outputs, but typed
-  # aggregation rows become authoritative only when a method is stable.
-  if (!stable) {
-    aggregations <- aggregations[FALSE, , drop = FALSE]
-  }
-
   indicators <- as.character(solutions$names)
   levels <- wlv_aggregation_levels()
-  rows <- vector("list", length(indicators) * length(levels))
-  legacy <- logical(length(rows))
-  position <- 0L
-  for (indicator_index in seq_along(indicators)) {
-    indicator <- indicators[[indicator_index]]
-    solution <- as.character(solutions$country_solution[[indicator_index]])
-    for (level in levels) {
-      position <- position + 1L
-      selected <- aggregations$indicator == indicator &
-        aggregations$level == level
-      row <- aggregations[selected, , drop = FALSE]
-      compatible <- nrow(row) == 1L &&
-        wlv_aggregation_contract_row_is_compatible(
-          row,
-          solution,
-          indicators
-        )
-      if (!compatible) {
-        if (stable) {
-          stop(
-            sprintf(
-              paste0(
-                "Stable method `%s` lacks a valid typed aggregation for ",
-                "`%s/%s` (legacy string: `%s`)."
-              ),
-              method,
-              indicator,
-              level,
-              solution
-            ),
-            call. = FALSE
-          )
-        }
-        if (!allow_legacy) {
-          stop(
-            sprintf(
-              paste0(
-                "Experimental method `%s` requires explicit opt-in to adapt ",
-                "legacy aggregation `%s` for `%s/%s`."
-              ),
-              method,
-              solution,
-              indicator,
-              level
-            ),
-            call. = FALSE
-          )
-        }
-        row <- wlv_aggregation_legacy_row(indicator, level, solution)
-        legacy[[position]] <- TRUE
-      }
-      rows[[position]] <- row
-    }
+  expected <- as.vector(outer(indicators, levels, paste, sep = "\034"))
+  observed <- wlv_aggregation_binding_key(
+    as.character(aggregations$indicator),
+    as.character(aggregations$level)
+  )
+  if (anyDuplicated(observed) || length(observed) != length(expected) ||
+      !setequal(observed, expected)) {
+    stop(
+      sprintf("Method `%s` lacks complete typed aggregation coverage.", method),
+      call. = FALSE
+    )
   }
-  rows <- do.call(rbind, rows)
+  rows <- aggregations[match(expected, observed), , drop = FALSE]
   row.names(rows) <- NULL
+  references <- unlist(
+    rows[c("numerator", "denominator", "weight")],
+    use.names = FALSE
+  )
+  references <- as.character(references)
+  references <- references[!is.na(references) & nzchar(references)]
+  if (any(!references %in% indicators)) {
+    stop(
+      sprintf("Method `%s` has an unavailable typed aggregation dependency.", method),
+      call. = FALSE
+    )
+  }
   bindings <- lapply(seq_len(nrow(rows)), function(index) {
     wlv_aggregation_binding_from_row(
       rows[index, , drop = FALSE],
-      missing = missing,
-      legacy = legacy[[index]]
+      missing = missing
     )
   })
   names(bindings) <- vapply(
@@ -855,30 +758,11 @@ wlv_resolve_aggregation_registry <- function(
       }
     }
   }
-  if (any(legacy)) {
-    adapted <- paste(
-      rows$indicator[legacy],
-      rows$level[legacy],
-      sep = "/"
-    )
-    warning(
-      sprintf(
-        paste0(
-          "Experimental method `%s` adapted legacy aggregations: %s. ",
-          "Rows without unit definitions are omitted from _unit_contract.csv."
-        ),
-        method,
-        paste(adapted, collapse = ", ")
-      ),
-      call. = FALSE
-    )
-  }
   structure(
     list(
       method = method,
       bindings = bindings,
-      rows = rows,
-      legacy = any(legacy)
+      rows = rows
     ),
     class = "wlv_aggregation_registry"
   )
@@ -886,29 +770,13 @@ wlv_resolve_aggregation_registry <- function(
 
 wlv_validate_aggregation_registry <- function(registry) {
   if (!inherits(registry, "wlv_aggregation_registry") || !is.list(registry) ||
-      !identical(names(registry), c("method", "bindings", "rows", "legacy")) ||
+      !identical(names(registry), c("method", "bindings", "rows")) ||
       !is.list(registry$bindings) || !length(registry$bindings) ||
       is.null(names(registry$bindings)) || anyDuplicated(names(registry$bindings))) {
     stop("Invalid `wlv_aggregation_registry` object.", call. = FALSE)
   }
   invisible(lapply(registry$bindings, wlv_validate_aggregation_binding))
   invisible(registry)
-}
-
-wlv_aggregation_registry_legacy_flags <- function(registry) {
-  wlv_validate_aggregation_registry(registry)
-  row_keys <- wlv_aggregation_binding_key(
-    as.character(registry$rows$indicator),
-    as.character(registry$rows$level)
-  )
-  if (!identical(row_keys, names(registry$bindings))) {
-    stop("Aggregation registry rows and bindings are not aligned.", call. = FALSE)
-  }
-  vapply(
-    registry$bindings,
-    function(binding) isTRUE(binding$legacy),
-    logical(1L)
-  )
 }
 
 wlv_aggregation_sidecar_rows <- function(sidecar) {
@@ -947,12 +815,8 @@ wlv_aggregation_sidecar_rows <- function(sidecar) {
 
 wlv_reconcile_aggregation_registry_sidecar <- function(
     registry,
-    sidecar,
-    stable) {
+    sidecar) {
   wlv_validate_aggregation_registry(registry)
-  if (!is.logical(stable) || length(stable) != 1L || is.na(stable)) {
-    stop("`stable` must be TRUE or FALSE.", call. = FALSE)
-  }
   columns <- wlv_aggregation_contract_columns()
   resolved <- registry$rows
   if (!is.data.frame(resolved) || any(!columns %in% names(resolved))) {
@@ -969,7 +833,6 @@ wlv_reconcile_aggregation_registry_sidecar <- function(
   if (anyNA(resolved)) {
     stop("Aggregation registry rows must not contain NA.", call. = FALSE)
   }
-  legacy <- wlv_aggregation_registry_legacy_flags(registry)
   published <- wlv_aggregation_sidecar_rows(sidecar)
   resolved_keys <- wlv_aggregation_binding_key(
     resolved$indicator,
@@ -987,73 +850,29 @@ wlv_reconcile_aggregation_registry_sidecar <- function(
       call. = FALSE
     )
   }
-  published_match <- match(published_keys, resolved_keys)
-  resolved_published <- resolved[published_match, , drop = FALSE]
-  row.names(resolved_published) <- NULL
-
-  if (stable) {
-    same_keys <- length(published_keys) == length(resolved_keys) &&
-      setequal(published_keys, resolved_keys)
-    if (any(legacy) || !same_keys) {
-      stop(
-        paste0(
-          "Stable aggregation registry and _unit_contract.csv must contain ",
-          "the same unique aggregation keys."
-        ),
-        call. = FALSE
-      )
-    }
-    if (!identical(published, resolved_published)) {
-      stop(
-        paste0(
-          "Stable aggregation registry fields must exactly equal the ",
-          "_unit_contract.csv rows with the same keys."
-        ),
-        call. = FALSE
-      )
-    }
-  } else {
-    published_indicators <- unique(published$indicator)
-    expected_published_keys <- resolved_keys[
-      resolved$indicator %in% published_indicators
-    ]
-    same_keys <- length(published_keys) == length(expected_published_keys) &&
-      setequal(published_keys, expected_published_keys)
-    if (!same_keys || !identical(published, resolved_published)) {
-      stop(
-        paste0(
-          "Experimental _unit_contract.csv aggregation rows must exactly ",
-          "equal the resolved rows for indicators with unit definitions."
-        ),
-        call. = FALSE
-      )
-    }
-    omitted <- !resolved_keys %in% published_keys
-    if (any(omitted & !legacy)) {
-      stop(
-        paste0(
-          "Experimental sidecars may omit only complete indicators routed ",
-          "through the legacy adapter."
-        ),
-        call. = FALSE
-      )
-    }
+  same_keys <- length(published_keys) == length(resolved_keys) &&
+    setequal(published_keys, resolved_keys)
+  if (!same_keys) {
+    stop(
+      paste0(
+        "Aggregation registry and _unit_contract.csv must contain ",
+        "the same unique aggregation keys."
+      ),
+      call. = FALSE
+    )
   }
-
-  published_legacy <- legacy[published_match]
-  omitted <- !resolved_keys %in% published_keys
-  typed <- published[!published_legacy, , drop = FALSE]
-  legacy_rows <- rbind(
-    published[published_legacy, , drop = FALSE],
-    resolved[omitted & legacy, , drop = FALSE]
-  )
-  row.names(typed) <- NULL
-  row.names(legacy_rows) <- NULL
-  list(
-    published = published,
-    typed = typed,
-    legacy = legacy_rows
-  )
+  resolved_published <- resolved[match(published_keys, resolved_keys), , drop = FALSE]
+  row.names(resolved_published) <- NULL
+  if (!identical(published, resolved_published)) {
+    stop(
+      paste0(
+        "Aggregation registry fields must exactly equal the ",
+        "_unit_contract.csv rows with the same keys."
+      ),
+      call. = FALSE
+    )
+  }
+  published
 }
 
 wlv_aggregation_registry_binding <- function(registry, indicator, level) {

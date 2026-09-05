@@ -345,7 +345,9 @@ cnames <- function(a,b) {
   match(a$names,b$names)
 }
 
-wlv_fst_sidecar_schema_version <- "1"
+wlv_fst_sidecar_schema_version <- function() {
+  "1"
+}
 
 wlv_fst_file_sha256 <- function(path) {
   if (
@@ -502,7 +504,7 @@ wlv_fst_parse_sidecar <- function(metadata, file_name) {
       call. = FALSE
     )
   }
-  if (!identical(extra[[1L]], wlv_fst_sidecar_schema_version)) {
+  if (!identical(extra[[1L]], wlv_fst_sidecar_schema_version())) {
     stop(
       sprintf(
         "Unsupported FST sidecar schema version for `%s`: %s.",
@@ -540,12 +542,40 @@ wlv_fst_parse_sidecar <- function(metadata, file_name) {
   )
 }
 
-wlv_fst_read_bundle <- function(file_name) {
+wlv_fst_read_bundle <- function(
+    file_name,
+    expected_sha256 = NULL,
+    expected_metadata_sha256 = NULL) {
   if (
     !is.character(file_name) || length(file_name) != 1L ||
     is.na(file_name) || !nzchar(file_name)
   ) {
     stop("`file_name` must be one non-empty path.", call. = FALSE)
+  }
+  authenticated <- !is.null(expected_sha256) ||
+    !is.null(expected_metadata_sha256)
+  valid_expected_sha256 <- is.character(expected_sha256) &&
+    length(expected_sha256) == 1L && !is.na(expected_sha256) &&
+    grepl("^[0-9a-f]{64}$", expected_sha256)
+  valid_expected_metadata_sha256 <-
+    is.character(expected_metadata_sha256) &&
+    length(expected_metadata_sha256) == 1L &&
+    !is.na(expected_metadata_sha256) &&
+    grepl("^[0-9a-f]{64}$", expected_metadata_sha256)
+  if (isTRUE(authenticated) &&
+      (!isTRUE(valid_expected_sha256) ||
+        !isTRUE(valid_expected_metadata_sha256))) {
+    stop(
+      paste0(
+        "`expected_sha256` and `expected_metadata_sha256` must both be ",
+        "lowercase SHA-256 hashes when authenticating an FST bundle."
+      ),
+      call. = FALSE
+    )
+  }
+  if (isTRUE(authenticated)) {
+    expected_sha256 <- unname(expected_sha256)
+    expected_metadata_sha256 <- unname(expected_metadata_sha256)
   }
   if (!file.exists(file_name) || isTRUE(file.info(file_name)$isdir)) {
     stop(sprintf("FST array file does not exist: %s", file_name), call. = FALSE)
@@ -557,6 +587,17 @@ wlv_fst_read_bundle <- function(file_name) {
       sprintf(
         "FST array sidecar metadata is missing: %s",
         metadata_path
+      ),
+      call. = FALSE
+    )
+  }
+  metadata_sha256_before <- wlv_fst_file_sha256(metadata_path)
+  if (isTRUE(authenticated) &&
+      !identical(metadata_sha256_before, expected_metadata_sha256)) {
+    stop(
+      sprintf(
+        "FST bundle `%s` differs from its authenticated snapshot (sidecar SHA-256).",
+        file_name
       ),
       call. = FALSE
     )
@@ -574,11 +615,28 @@ wlv_fst_read_bundle <- function(file_name) {
       )
     }
   )
+  metadata_sha256_after <- wlv_fst_file_sha256(metadata_path)
+  if (!identical(metadata_sha256_after, metadata_sha256_before)) {
+    stop(
+      sprintf("FST sidecar metadata changed while it was read: %s", metadata_path),
+      call. = FALSE
+    )
+  }
   contract <- wlv_fst_parse_sidecar(metadata, file_name)
 
+  data_sha256_before <- wlv_fst_file_sha256(file_name)
+  if (isTRUE(authenticated) &&
+      !identical(data_sha256_before, expected_sha256)) {
+    stop(
+      sprintf(
+        "FST bundle `%s` differs from its authenticated snapshot (data SHA-256).",
+        file_name
+      ),
+      call. = FALSE
+    )
+  }
   if (!is.null(contract$fst_sha256)) {
-    actual_sha256 <- wlv_fst_file_sha256(file_name)
-    if (!identical(actual_sha256, contract$fst_sha256)) {
+    if (!identical(data_sha256_before, contract$fst_sha256)) {
       stop(
         sprintf(
           paste0(
@@ -587,7 +645,7 @@ wlv_fst_read_bundle <- function(file_name) {
           ),
           file_name,
           contract$fst_sha256,
-          actual_sha256
+          data_sha256_before
         ),
         call. = FALSE
       )
@@ -607,6 +665,20 @@ wlv_fst_read_bundle <- function(file_name) {
       )
     }
   )
+  data_sha256_after <- wlv_fst_file_sha256(file_name)
+  metadata_sha256_final <- wlv_fst_file_sha256(metadata_path)
+  if (!identical(data_sha256_after, data_sha256_before)) {
+    stop(
+      sprintf("FST array data changed while it was read: %s", file_name),
+      call. = FALSE
+    )
+  }
+  if (!identical(metadata_sha256_final, metadata_sha256_before)) {
+    stop(
+      sprintf("FST sidecar metadata changed while its data was read: %s", metadata_path),
+      call. = FALSE
+    )
+  }
   if (!is.data.frame(table) || ncol(table) != 1L) {
     stop(
       sprintf(
@@ -639,13 +711,30 @@ wlv_fst_read_bundle <- function(file_name) {
   value
 }
 
-read_fst_array <- function(file_name) {
-  wlv_fst_read_bundle(file_name)
+read_fst_array <- function(
+    file_name,
+    expected_sha256 = NULL,
+    expected_metadata_sha256 = NULL) {
+  wlv_fst_read_bundle(
+    file_name,
+    expected_sha256 = expected_sha256,
+    expected_metadata_sha256 = expected_metadata_sha256
+  )
 }
 
-wlv_fst_sidecar <- function(value, fst_sha256) {
+wlv_fst_sidecar <- function(value, fst_sha256, drop_axis_names = FALSE) {
+  if (!is.logical(drop_axis_names) || length(drop_axis_names) != 1L ||
+      is.na(drop_axis_names)) {
+    stop("`drop_axis_names` must be TRUE or FALSE.", call. = FALSE)
+  }
   dimensions <- dim(value)
   array_dimnames <- dimnames(value)
+  if (isTRUE(drop_axis_names) && !is.null(array_dimnames)) {
+    # The names belong to the (small) dimnames list, not to the numeric array.
+    # Dropping them here preserves the public sidecar contract without forcing
+    # a second copy of a potentially multi-gigabyte array.
+    names(array_dimnames) <- NULL
+  }
   legacy_dimnames <- if (is.null(array_dimnames)) {
     rep(list(NULL), length(dimensions))
   } else {
@@ -662,24 +751,282 @@ wlv_fst_sidecar <- function(value, fst_sha256) {
   c(
     metadata,
     list(
-      schema_version = wlv_fst_sidecar_schema_version,
+      schema_version = wlv_fst_sidecar_schema_version(),
       fst_sha256 = fst_sha256,
       array_dimnames = array_dimnames
     )
   )
 }
 
-wlv_fst_arrays_identical <- function(actual, expected) {
+wlv_fst_arrays_identical <- function(
+    actual,
+    expected,
+    drop_axis_names = FALSE) {
+  actual_dimnames <- dimnames(actual)
+  expected_dimnames <- dimnames(expected)
+  if (isTRUE(drop_axis_names) && !is.null(expected_dimnames)) {
+    names(expected_dimnames) <- NULL
+  }
   identical(dim(actual), dim(expected)) &&
-    identical(dimnames(actual), dimnames(expected)) &&
+    identical(actual_dimnames, expected_dimnames) &&
+    identical(typeof(actual), typeof(expected)) &&
     identical(as.vector(actual), as.vector(expected))
+}
+
+wlv_fst_validate_array_storage <- function(value, name) {
+  if (!is.array(value)) {
+    stop(sprintf("`%s` must be an array or matrix.", name), call. = FALSE)
+  }
+  attribute_names <- names(attributes(value))
+  unsupported_attributes <- setdiff(
+    attribute_names,
+    c("dim", "dimnames")
+  )
+  if (length(unsupported_attributes)) {
+    stop(
+      sprintf(
+        paste0(
+          "`%s` has unsupported FST array attribute(s): %s. ",
+          "Only `dim` and optional `dimnames` are supported."
+        ),
+        name,
+        paste(unsupported_attributes, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  if (is.object(value)) {
+    stop(
+      sprintf("`%s` must be an unclassed base array or matrix.", name),
+      call. = FALSE
+    )
+  }
+  storage <- typeof(value)
+  supported <- c("logical", "integer", "double", "character", "raw")
+  if (!storage %in% supported) {
+    stop(
+      sprintf(
+        "`%s` has unsupported FST array storage type `%s`.",
+        name,
+        storage
+      ),
+      call. = FALSE
+    )
+  }
+  invisible(value)
+}
+
+wlv_fst_array_column_table <- function(value) {
+  wlv_fst_validate_array_storage(value, "value")
+
+  # `fst` consumes each data-frame column as one linear atomic vector. Build
+  # that one-column envelope directly so the array remains the column's backing
+  # object; `as.vector()` would duplicate the complete payload merely to remove
+  # attributes that `fst` does not persist.
+  structure(
+    list(Data = value),
+    class = "data.frame",
+    row.names = .set_row_names(length(value))
+  )
+}
+
+wlv_fst_verify_bundle_chunks <- function(
+    file_name,
+    expected,
+    drop_axis_names = FALSE,
+    chunk_size = 1048576L) {
+  wlv_fst_validate_array_storage(expected, "expected")
+  if (
+    !is.character(file_name) || length(file_name) != 1L ||
+    is.na(file_name) || !nzchar(file_name)
+  ) {
+    stop("`file_name` must be one non-empty path.", call. = FALSE)
+  }
+  if (!file.exists(file_name) || isTRUE(file.info(file_name)$isdir)) {
+    stop(sprintf("FST array file does not exist: %s", file_name), call. = FALSE)
+  }
+  if (!is.logical(drop_axis_names) || length(drop_axis_names) != 1L ||
+      is.na(drop_axis_names)) {
+    stop("`drop_axis_names` must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (
+    !is.numeric(chunk_size) || length(chunk_size) != 1L ||
+    is.na(chunk_size) || !is.finite(chunk_size) || chunk_size < 1 ||
+    chunk_size != floor(chunk_size) || chunk_size > .Machine$integer.max
+  ) {
+    stop("`chunk_size` must be one positive integer.", call. = FALSE)
+  }
+  chunk_size <- as.integer(chunk_size)
+
+  metadata_path <- paste0(file_name, ".meta")
+  if (!file.exists(metadata_path) || isTRUE(file.info(metadata_path)$isdir)) {
+    stop(
+      sprintf("FST array sidecar metadata is missing: %s", metadata_path),
+      call. = FALSE
+    )
+  }
+  metadata <- tryCatch(
+    readRDS(metadata_path),
+    error = function(error) {
+      stop(
+        sprintf(
+          "Cannot read FST sidecar metadata `%s`: %s",
+          metadata_path,
+          conditionMessage(error)
+        ),
+        call. = FALSE
+      )
+    }
+  )
+  contract <- wlv_fst_parse_sidecar(metadata, file_name)
+
+  expected_dimnames <- dimnames(expected)
+  if (isTRUE(drop_axis_names) && !is.null(expected_dimnames)) {
+    names(expected_dimnames) <- NULL
+  }
+  if (
+    !identical(contract$dimensions, dim(expected)) ||
+    !identical(contract$dimnames, expected_dimnames) ||
+    !identical(contract$expected_length, as.double(length(expected)))
+  ) {
+    stop(
+      sprintf(
+        paste0(
+          "FST array bundle failed streaming validation for `%s`: ",
+          "dimensions or dimnames changed."
+        ),
+        file_name
+      ),
+      call. = FALSE
+    )
+  }
+
+  if (!is.null(contract$fst_sha256)) {
+    actual_sha256 <- wlv_fst_file_sha256(file_name)
+    if (!identical(actual_sha256, contract$fst_sha256)) {
+      stop(
+        sprintf(
+          paste0(
+            "FST array SHA-256 mismatch for `%s`: expected %s, found %s. ",
+            "The data file and its sidecar do not form a valid bundle."
+          ),
+          file_name,
+          contract$fst_sha256,
+          actual_sha256
+        ),
+        call. = FALSE
+      )
+    }
+  }
+
+  physical_metadata <- tryCatch(
+    fst::metadata_fst(file_name),
+    error = function(error) {
+      stop(
+        sprintf(
+          "Cannot inspect FST array data `%s`: %s",
+          file_name,
+          conditionMessage(error)
+        ),
+        call. = FALSE
+      )
+    }
+  )
+  physical_rows <- physical_metadata$nrOfRows
+  physical_columns <- length(physical_metadata$columnNames)
+  if (
+    !is.numeric(physical_rows) || length(physical_rows) != 1L ||
+    is.na(physical_rows) || !is.finite(physical_rows) || physical_rows < 0 ||
+    !is.numeric(physical_columns) || length(physical_columns) != 1L ||
+    is.na(physical_columns) || !is.finite(physical_columns) ||
+    physical_columns != 1
+  ) {
+    stop(
+      sprintf(
+        "Invalid FST array data `%s`: expected exactly one column.",
+        file_name
+      ),
+      call. = FALSE
+    )
+  }
+  if (!identical(as.double(physical_rows), contract$expected_length)) {
+    stop(
+      sprintf(
+        paste0(
+          "FST array length mismatch for `%s`: sidecar dimensions require ",
+          "%s values, found %s."
+        ),
+        file_name,
+        format(contract$expected_length, scientific = FALSE),
+        format(physical_rows, scientific = FALSE)
+      ),
+      call. = FALSE
+    )
+  }
+
+  from <- 1
+  while (from <= contract$expected_length) {
+    to <- min(contract$expected_length, from + chunk_size - 1)
+    table <- tryCatch(
+      fst::read_fst(
+        file_name,
+        from = from,
+        to = to,
+        as.data.table = FALSE
+      ),
+      error = function(error) {
+        stop(
+          sprintf(
+            "Cannot read FST array data `%s` rows %s-%s: %s",
+            file_name,
+            format(from, scientific = FALSE),
+            format(to, scientific = FALSE),
+            conditionMessage(error)
+          ),
+          call. = FALSE
+        )
+      }
+    )
+    expected_count <- as.integer(to - from + 1)
+    if (
+      !is.data.frame(table) || ncol(table) != 1L ||
+      nrow(table) != expected_count ||
+      !identical(
+        table[[1L]],
+        expected[seq.int(from, to)]
+      )
+    ) {
+      stop(
+        sprintf(
+          paste0(
+            "FST array bundle failed streaming validation for `%s` rows ",
+            "%s-%s: values changed."
+          ),
+          file_name,
+          format(from, scientific = FALSE),
+          format(to, scientific = FALSE)
+        ),
+        call. = FALSE
+      )
+    }
+    from <- to + 1
+  }
+
+  invisible(TRUE)
 }
 
 wlv_fst_install_bundle <- function(
     temporary_data,
     temporary_metadata,
     destination_data,
-    expected_sha256) {
+    expected_sha256,
+    expected_metadata_sha256) {
+  expected_hashes <- c(expected_sha256, expected_metadata_sha256)
+  if (!is.character(expected_hashes) || length(expected_hashes) != 2L ||
+      anyNA(expected_hashes) ||
+      any(!grepl("^[0-9a-f]{64}$", expected_hashes))) {
+    stop("Expected FST bundle hashes are invalid.", call. = FALSE)
+  }
   destination_metadata <- paste0(destination_data, ".meta")
   destinations <- c(destination_data, destination_metadata)
   temporary_paths <- c(temporary_data, temporary_metadata)
@@ -791,10 +1138,15 @@ wlv_fst_install_bundle <- function(
     wlv_fst_file_sha256(destination_data),
     error = function(error) NA_character_
   )
+  installed_metadata_sha256 <- tryCatch(
+    wlv_fst_file_sha256(destination_metadata),
+    error = function(error) NA_character_
+  )
   if (
     is.null(installed_contract) ||
     !identical(installed_contract$fst_sha256, expected_sha256) ||
-    !identical(installed_sha256, expected_sha256)
+    !identical(installed_sha256, expected_sha256) ||
+    !identical(installed_metadata_sha256, expected_metadata_sha256)
   ) {
     stop(
       sprintf(
@@ -819,15 +1171,17 @@ wlv_fst_install_bundle <- function(
   invisible(destination_data)
 }
 
-write_fst_array <- function(m, file_name) {
-  if (!is.array(m)) {
-    stop("`m` must be an array or matrix.", call. = FALSE)
-  }
+write_fst_array <- function(m, file_name, drop_axis_names = FALSE) {
+  wlv_fst_validate_array_storage(m, "m")
   if (
     !is.character(file_name) || length(file_name) != 1L ||
     is.na(file_name) || !nzchar(file_name)
   ) {
     stop("`file_name` must be one non-empty path.", call. = FALSE)
+  }
+  if (!is.logical(drop_axis_names) || length(drop_axis_names) != 1L ||
+      is.na(drop_axis_names)) {
+    stop("`drop_axis_names` must be TRUE or FALSE.", call. = FALSE)
   }
   destination_directory <- dirname(file_name)
   if (!dir.exists(destination_directory)) {
@@ -860,10 +1214,10 @@ write_fst_array <- function(m, file_name) {
     }
   }, add = TRUE)
 
-  values <- as.vector(m)
+  table <- wlv_fst_array_column_table(m)
   tryCatch(
     fst::write_fst(
-      data.frame(Data = values, check.names = FALSE),
+      table,
       temporary_data
     ),
     error = function(error) {
@@ -877,7 +1231,7 @@ write_fst_array <- function(m, file_name) {
       )
     }
   )
-  rm(values)
+  rm(table)
   if (
     !file.exists(temporary_data) || is.na(file.info(temporary_data)$size) ||
     file.info(temporary_data)$size <= 0
@@ -889,7 +1243,11 @@ write_fst_array <- function(m, file_name) {
   }
 
   fst_sha256 <- wlv_fst_file_sha256(temporary_data)
-  metadata <- wlv_fst_sidecar(m, fst_sha256)
+  metadata <- wlv_fst_sidecar(
+    m,
+    fst_sha256,
+    drop_axis_names = drop_axis_names
+  )
   tryCatch(
     saveRDS(metadata, temporary_metadata, version = 3L),
     error = function(error) {
@@ -903,41 +1261,20 @@ write_fst_array <- function(m, file_name) {
       )
     }
   )
+  metadata_sha256 <- wlv_fst_file_sha256(temporary_metadata)
 
-  round_trip <- wlv_fst_read_bundle(temporary_data)
-  if (!wlv_fst_arrays_identical(round_trip, m)) {
-    stop(
-      sprintf(
-        paste0(
-          "Temporary FST array bundle failed round-trip validation for `%s`: ",
-          "values, dimensions, or dimnames changed."
-        ),
-        file_name
-      ),
-      call. = FALSE
-    )
-  }
-  rm(round_trip)
+  wlv_fst_verify_bundle_chunks(
+    temporary_data,
+    m,
+    drop_axis_names = drop_axis_names
+  )
 
   wlv_fst_install_bundle(
     temporary_data = temporary_data,
     temporary_metadata = temporary_metadata,
     destination_data = file_name,
-    expected_sha256 = fst_sha256
+    expected_sha256 = fst_sha256,
+    expected_metadata_sha256 = metadata_sha256
   )
   invisible(file_name)
-}
-
-convert_array_RDS <- function(nomebase) {
-  nrds <- paste0(nomebase,".rds")
-  print(paste("Converting",nrds))
-  t <- readRDS(nrds)
-  if(class(t) == "array"){
-    print("This is an array object")
-  write_fst_array(t,paste0(nomebase,".fst"))
-  } else {
-    write_fst(t,paste0(nomebase,".fst"))
-  }
-  rm(t)
-  gc()
 }

@@ -108,8 +108,9 @@ test_that("parallel errors preserve the original condition and stop once", {
   expect_identical(stops, 1L)
 })
 
-test_that("a failing stopper does not hide the computation error", {
+test_that("a transient stopper failure is retried without hiding computation error", {
   stops <- 0L
+  stopped <- FALSE
   original <- simpleError("original computation failure")
 
   caught <- suppressWarnings(tryCatch(
@@ -119,14 +120,18 @@ test_that("a failing stopper does not hide the computation error", {
       make_cluster = function(workers) structure(list(), class = "wlv_test_cluster"),
       stop_cluster = function(cluster) {
         stops <<- stops + 1L
-        stop("cleanup failure")
+        if (stops == 1L) {
+          stop("cleanup failure")
+        }
+        stopped <<- TRUE
       }
     ),
     error = identity
   ))
 
   expect_identical(caught, original)
-  expect_identical(stops, 1L)
+  expect_identical(stops, 2L)
+  expect_true(stopped)
 })
 
 test_that("a failing stopper is reported after successful computation", {
@@ -145,7 +150,7 @@ test_that("a failing stopper is reported after successful computation", {
     "cleanup failure",
     fixed = TRUE
   )
-  expect_identical(stops, 1L)
+  expect_identical(stops, 2L)
 })
 
 test_that("cluster cleanup leaves unrelated connections open", {
@@ -164,161 +169,14 @@ test_that("cluster cleanup leaves unrelated connections open", {
   expect_identical(captured_output, "still open")
 })
 
-test_that("run environments keep execution state out of the global environment", {
-  global_names <- c("my.cluster", "method_version")
-  global_was_present <- vapply(
-    global_names,
-    exists,
-    logical(1),
-    envir = .GlobalEnv,
-    inherits = FALSE
-  )
-  global_values <- if (any(global_was_present)) {
-    mget(global_names[global_was_present], envir = .GlobalEnv, inherits = FALSE)
-  } else {
-    list()
-  }
 
-  on.exit({
-    created <- global_names[vapply(
-      global_names,
-      exists,
-      logical(1),
-      envir = .GlobalEnv,
-      inherits = FALSE
-    )]
-    if (length(created)) {
-      rm(list = created, envir = .GlobalEnv)
-    }
-    if (length(global_values)) {
-      list2env(global_values, envir = .GlobalEnv)
-    }
-  }, add = TRUE)
-
-  if (any(global_was_present)) {
-    rm(list = global_names[global_was_present], envir = .GlobalEnv)
-  }
-
-  fake_cluster <- structure(list(id = "isolated"), class = "wlv_test_cluster")
-  run_environment <- execution_environment$wlv_new_run_environment(
-    values = list(
-      my.cluster = fake_cluster,
-      method_version = "demo"
-    )
-  )
-
-  expect_identical(run_environment$my.cluster, fake_cluster)
-  expect_identical(run_environment$method_version, "demo")
-  expect_false(exists("my.cluster", envir = .GlobalEnv, inherits = FALSE))
-  expect_false(exists("method_version", envir = .GlobalEnv, inherits = FALSE))
+test_that("the atomic runtime exposes no script executor or shared run environment", {
+  expect_false(exists("wlv_run_script", envir = execution_environment, inherits = FALSE))
+  expect_false(exists("wlv_new_run_environment", envir = execution_environment, inherits = FALSE))
 })
 
-test_that("two script runs are isolated and never create a started sentinel", {
-  global_names <- c("my.cluster", "method_version")
-  global_was_present <- vapply(
-    global_names,
-    exists,
-    logical(1),
-    envir = .GlobalEnv,
-    inherits = FALSE
-  )
-  global_values <- if (any(global_was_present)) {
-    mget(global_names[global_was_present], envir = .GlobalEnv, inherits = FALSE)
-  } else {
-    list()
-  }
-  on.exit({
-    created <- global_names[vapply(
-      global_names,
-      exists,
-      logical(1),
-      envir = .GlobalEnv,
-      inherits = FALSE
-    )]
-    if (length(created)) {
-      rm(list = created, envir = .GlobalEnv)
-    }
-    if (length(global_values)) {
-      list2env(global_values, envir = .GlobalEnv)
-    }
-  }, add = TRUE)
-  if (any(global_was_present)) {
-    rm(list = global_names[global_was_present], envir = .GlobalEnv)
-  }
-
-  sandbox <- tempfile("wlv-lifecycle-")
-  dir.create(sandbox)
-  on.exit(unlink(sandbox, recursive = TRUE, force = TRUE), add = TRUE)
-
-  script <- file.path(sandbox, "run.R")
-  writeLines(
-    c(
-      "stopifnot(exists('method_version', inherits = FALSE))",
-      "stopifnot(exists('my.cluster', inherits = FALSE))",
-      "method_version <- paste0(method_version, '-mutated')",
-      "my.cluster <- 'mutated'"
-    ),
-    script
-  )
-
-  seen_environments <- list()
-  runner <- function(script, envir) {
-    sys.source(script, envir = envir)
-    seen_environments[[length(seen_environments) + 1L]] <<- envir
-    invisible(NULL)
-  }
-  fake_cluster <- structure(list(id = "run"), class = "wlv_test_cluster")
-
-  old_wd <- setwd(sandbox)
-  on.exit(setwd(old_wd), add = TRUE)
-  for (iteration in seq_len(2L)) {
-    execution_environment$wlv_run_script(
-      script = script,
-      values = list(method_version = "demo"),
-      cluster = fake_cluster,
-      runner = runner
-    )
-  }
-
-  expect_length(seen_environments, 2L)
-  expect_false(identical(seen_environments[[1]], seen_environments[[2]]))
-  expect_identical(seen_environments[[1]]$method_version, "demo-mutated")
-  expect_identical(seen_environments[[2]]$method_version, "demo-mutated")
-  expect_false(file.exists(file.path(sandbox, "started")))
-  expect_false(exists("my.cluster", envir = .GlobalEnv, inherits = FALSE))
-  expect_false(exists("method_version", envir = .GlobalEnv, inherits = FALSE))
-})
-
-test_that("preamble and nested sources share the run environment and root", {
-  sandbox <- tempfile("wlv-script-root-")
-  outside <- tempfile("wlv-script-outside-")
-  dir.create(sandbox)
-  dir.create(outside)
-  on.exit(unlink(c(sandbox, outside), recursive = TRUE, force = TRUE), add = TRUE)
-
-  preamble <- file.path(sandbox, "preamble.R")
-  nested <- file.path(sandbox, "nested.R")
-  script <- file.path(sandbox, "run.R")
-  writeLines("helper <- function(value) paste0(value, '-ready')", preamble)
-  writeLines(
-    c(
-      "result <- helper(method_version)",
-      "observed_wd <- normalizePath(getwd())"
-    ),
-    nested
-  )
-  writeLines("source('nested.R')", script)
-
-  old_wd <- setwd(outside)
-  on.exit(setwd(old_wd), add = TRUE)
-  run_environment <- execution_environment$wlv_run_script(
-    script = script,
-    values = list(method_version = "demo"),
-    preamble = preamble,
-    root = sandbox
-  )
-
-  expect_identical(run_environment$result, "demo-ready")
-  expect_identical(run_environment$observed_wd, normalizePath(sandbox))
-  expect_identical(normalizePath(getwd()), normalizePath(outside))
+test_that("the native sequential apply service is deterministic", {
+  service <- execution_environment$wlv_native_year_apply_service(NULL)
+  value <- array(1:12, dim = c(3L, 4L))
+  expect_identical(service(value, 1L, sum), base::apply(value, 1L, sum))
 })

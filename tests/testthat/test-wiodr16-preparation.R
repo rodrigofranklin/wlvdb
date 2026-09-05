@@ -87,7 +87,7 @@ wlv_make_wiodr16_wiot_fixture <- function() {
 }
 
 test_that("WIOD16 official download manifest is pinned", {
-  manifest <- wiodr16_preparation_environment$wiodr16_download_manifest
+  manifest <- wiodr16_preparation_environment$wiodr16_download_manifest()
 
   expect_identical(manifest$wiots$size, 641578409)
   expect_identical(
@@ -100,7 +100,7 @@ test_that("WIOD16 official download manifest is pinned", {
     "821bba29c42f3a42009eb1b14dbdaa2922d01236"
   )
   expect_identical(
-    wiodr16_preparation_environment$wiodr16_rdata_members,
+    wiodr16_preparation_environment$wiodr16_rdata_members(),
     sprintf("WIOT%d_October16_ROW.RData", 2000:2014)
   )
 })
@@ -108,7 +108,7 @@ test_that("WIOD16 official download manifest is pinned", {
 test_that("WIOD16 WIOT archive validator enforces the exact non-empty members", {
   validate <-
     wiodr16_preparation_environment$wlv_validate_wiodr16_wiots_archive
-  members <- wiodr16_preparation_environment$wiodr16_rdata_members
+  members <- wiodr16_preparation_environment$wiodr16_rdata_members()
   listing <- data.frame(
     Name = rev(members),
     Length = seq_along(members),

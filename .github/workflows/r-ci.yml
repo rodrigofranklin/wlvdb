@@ -27,8 +27,6 @@ jobs:
         with:
           r-version: "4.6.1"
           use-public-rspm: true
-      - name: Validate the method catalog and generated support matrix
-        run: Rscript --vanilla scripts/render_method_catalog.R --check
       - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v4
         with:
           path: |
@@ -38,6 +36,8 @@ jobs:
           restore-keys: renv-${{ runner.os }}-R-4.6.1-
       - name: Verify the explicit bootstrap
         run: Rscript --vanilla scripts/bootstrap.R
+      - name: Validate the method catalog and generated support matrix
+        run: Rscript --vanilla scripts/render_method_catalog.R --check
       - name: Check safe startup
         run: Rscript --vanilla tests/smoke/startup.R
       - name: Check the entrypoint from outside the checkout
@@ -55,11 +55,15 @@ jobs:
           source("renv/activate.R")
           files <- list.files("R", pattern = "\\.[Rr]$", recursive = TRUE, full.names = TRUE)
           invisible(lapply(files, parse))
-          source("R/main.R")
+          bootstrap <- new.env(parent = baseenv())
+          sys.source("R/bootstrap.R", envir = bootstrap)
+          runtime <- bootstrap$wlv_load_runtime(".")
           stopifnot(
-            is.function(prepare_wlv),
-            is.function(get_wlv),
-            is.function(recalc_wlv)
+            is.function(runtime$prepare_wlv),
+            is.function(runtime$get_wlv),
+            is.function(runtime$recalc_wlv),
+            identical(parent.env(runtime), baseenv()),
+            environmentIsLocked(runtime)
           )
       - name: Run unit and synthetic integration tests
         shell: Rscript {0}

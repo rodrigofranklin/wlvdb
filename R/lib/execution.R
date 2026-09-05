@@ -156,137 +156,30 @@ wlv_assert_catalog_access <- function(
   invisible(methods)
 }
 
-wlv_effective_parameter_group <- function(
-    root,
-    method,
-    source,
-    group,
-    required_columns) {
-  paths <- c(
-    file.path(root, "methods", method, sprintf("_method_%s.csv", group)),
-    file.path(root, "parameters", source, sprintf("_source_%s.csv", group)),
-    file.path(root, "parameters", "common_ground", sprintf("_common_%s.csv", group))
-  )
-  paths <- paths[file.exists(paths)]
-  if (!length(paths)) {
-    stop(
-      sprintf("No `%s` parameter fragments exist for method `%s`.", group, method),
-      call. = FALSE
-    )
-  }
-
-  pieces <- lapply(paths, function(path) {
-    value <- tryCatch(
-      utils::read.csv2(path, stringsAsFactors = FALSE),
-      error = function(error) {
-        stop(
-          sprintf("Cannot read parameter fragment `%s`: %s", path, conditionMessage(error)),
-          call. = FALSE
-        )
-      }
-    )
-    missing_columns <- setdiff(required_columns, names(value))
-    if (length(missing_columns)) {
-      stop(
-        sprintf(
-          "Parameter fragment `%s` lacks: %s",
-          path,
-          paste(missing_columns, collapse = ", ")
-        ),
-        call. = FALSE
-      )
-    }
-    value[required_columns]
-  })
-
-  value <- do.call(rbind, pieces)
-  invalid_names <- is.na(value$names) | !nzchar(value$names)
-  if (any(invalid_names)) {
-    stop(
-      sprintf("The `%s` parameters for method `%s` contain an empty name.", group, method),
-      call. = FALSE
-    )
-  }
-  value[!duplicated(value$names), , drop = FALSE]
-}
-
-wlv_safe_module_reference <- function(reference) {
-  is.character(reference) &&
-    length(reference) == 1L &&
-    !is.na(reference) &&
-    nzchar(reference) &&
-    !grepl("^([A-Za-z]:|[/\\\\])", reference) &&
-    !grepl("(^|[/\\\\])\\.\\.($|[/\\\\])", reference)
-}
-
 wlv_validate_method_references <- function(root, method, source, mode) {
-  specifications <- list(
-    assumptions = c("names", "computation", "order"),
-    matrices = c("names", "computation", "order"),
-    reduced_matrices = c("names", "computation"),
-    solutions = c("names", "sector_solution", "country_solution", "stage", "order")
-  )
-  groups <- lapply(names(specifications), function(group) {
-    wlv_effective_parameter_group(
-      root = root,
-      method = method,
-      source = source,
-      group = group,
-      required_columns = specifications[[group]]
-    )
-  })
-  names(groups) <- names(specifications)
-
-  references <- character()
-  if (mode == "calculate") {
-    references <- c(
-      file.path("R", "modules", "assumptions", groups$assumptions$computation),
-      file.path("R", "modules", "matrices", groups$matrices$computation),
-      file.path(
-        "R", "modules", "reduced_matrices", groups$reduced_matrices$computation
-      )
-    )
-  }
-
-  solution_references <- c(
-    groups$solutions$sector_solution,
-    groups$solutions$country_solution
-  )
-  solution_references <- solution_references[
-    grepl("\\.[Rr]$", solution_references)
-  ]
-  references <- c(references, file.path("R", "modules", "variables", solution_references))
-  references <- unique(unlist(references, use.names = FALSE))
-
-  unsafe <- references[!vapply(references, wlv_safe_module_reference, logical(1))]
-  if (length(unsafe)) {
-    stop(
-      sprintf(
-        "Method `%s` contains unsafe module references: %s",
-        method,
-        paste(unsafe, collapse = ", ")
-      ),
-      call. = FALSE
-    )
-  }
-  wlv_require_files(
-    file.path(root, references),
-    sprintf("parameter-referenced scripts for method `%s`", method)
-  )
-  groups
+  mode <- match.arg(mode, c("calculate", "recalculate"))
+  configuration <- wlv_resolve_module_config(root, method, source)
+  registry <- wlv_native_registry()
+  wlv_native_assert_registry_covers_config(registry, configuration)
+  configuration
 }
 
 wlv_validate_recalculation_selection <- function(
     configuration,
     at_stage,
-    sea_vars) {
+    sea_vars,
+    indicators = NULL) {
   if (is.null(sea_vars)) {
     return(invisible(NULL))
   }
 
   for (method in names(configuration)) {
-    solutions <- configuration[[method]]$solutions
-    unknown <- setdiff(sea_vars, solutions$names)
+    available <- if (is.null(indicators)) {
+      character()
+    } else {
+      indicators[[method]]
+    }
+    unknown <- setdiff(sea_vars, available)
     if (length(unknown)) {
       stop(
         sprintf(
@@ -298,40 +191,6 @@ wlv_validate_recalculation_selection <- function(
       )
     }
 
-    selected <- match(sea_vars, solutions$names)
-    stages <- suppressWarnings(as.integer(as.character(
-      solutions$stage[selected]
-    )))
-    if (anyNA(stages)) {
-      stop(
-        sprintf(
-          "Method `%s` has invalid stages for selected `sea_vars`.",
-          method
-        ),
-        call. = FALSE
-      )
-    }
-    unavailable <- stages < at_stage
-    if (any(unavailable)) {
-      details <- paste0(
-        sea_vars[unavailable],
-        " (stage ",
-        stages[unavailable],
-        ")"
-      )
-      stop(
-        sprintf(
-          paste0(
-            "Selected `sea_vars` cannot be recalculated from checkpoint ",
-            "stage %d for method `%s`: %s."
-          ),
-          at_stage,
-          method,
-          paste(details, collapse = ", ")
-        ),
-        call. = FALSE
-      )
-    }
   }
 
   invisible(sea_vars)
@@ -369,6 +228,105 @@ wlv_validate_release_channel <- function(value) {
   value
 }
 
+wlv_runtime_definition_sha256_file <- function(path) {
+  connection <- file(path, open = "rb")
+  on.exit(close(connection), add = TRUE)
+  as.character(openssl::sha256(connection))
+}
+
+wlv_runtime_definition_generation <- function(sha256) {
+  if (
+    !is.character(sha256) || !length(sha256) || is.null(names(sha256)) ||
+      anyNA(sha256) || any(!nzchar(names(sha256))) ||
+      anyDuplicated(names(sha256)) || any(!grepl("^[0-9a-f]{64}$", sha256))
+  ) {
+    stop("Runtime generation received an invalid SHA-256 inventory.", call. = FALSE)
+  }
+  payload <- paste(
+    c(
+      "wlv-runtime-definitions/1",
+      paste(names(sha256), sha256, sep = "\034")
+    ),
+    collapse = "\035"
+  )
+  as.character(openssl::sha256(charToRaw(enc2utf8(payload))))
+}
+
+wlv_assert_loaded_runtime_unchanged <- function() {
+  paths <- .wlv_runtime_definition_paths()
+  expected_md5 <- .wlv_runtime_definition_md5()
+  expected_sha256 <- .wlv_runtime_definition_sha256()
+  expected_compatibility_sha256 <-
+    .wlv_runtime_definition_compatibility_sha256()
+  expected_generation <- .wlv_runtime_generation()
+  compatibility_generation <- .wlv_runtime_compatibility_generation()
+  if (
+    !is.character(paths) || !length(paths) || is.null(names(paths)) ||
+      !is.character(expected_md5) ||
+      !identical(names(expected_md5), names(paths)) ||
+      !is.character(expected_sha256) ||
+      !identical(names(expected_sha256), names(paths)) ||
+      !is.character(expected_compatibility_sha256) ||
+      !identical(names(expected_compatibility_sha256), names(paths)) ||
+      !is.character(expected_generation) || length(expected_generation) != 1L ||
+      is.na(expected_generation) ||
+      !grepl("^[0-9a-f]{64}$", expected_generation) ||
+      !is.character(compatibility_generation) ||
+      length(compatibility_generation) != 1L ||
+      is.na(compatibility_generation) ||
+      !grepl("^[0-9a-f]{64}$", compatibility_generation) ||
+      anyNA(expected_compatibility_sha256) ||
+      any(!grepl("^[0-9a-f]{64}$", expected_compatibility_sha256)) ||
+      !identical(
+        compatibility_generation,
+        wlv_runtime_definition_generation(expected_compatibility_sha256)
+      ) ||
+      anyNA(paths) || anyNA(expected_md5) || anyNA(expected_sha256) ||
+      any(!file.exists(paths)) ||
+      !identical(
+        expected_generation,
+        wlv_runtime_definition_generation(expected_sha256)
+      )
+  ) {
+    stop("The loaded runtime lacks a valid definition inventory.", call. = FALSE)
+  }
+  capture <- function() {
+    list(
+      md5 = stats::setNames(
+        unname(tools::md5sum(unname(paths))),
+        names(paths)
+      ),
+      sha256 = stats::setNames(
+        vapply(unname(paths), wlv_runtime_definition_sha256_file, character(1L)),
+        names(paths)
+      )
+    )
+  }
+  current <- capture()
+  if (
+    !identical(expected_md5, current$md5) ||
+      !identical(expected_sha256, current$sha256) ||
+      !identical(
+        expected_generation,
+        wlv_runtime_definition_generation(current$sha256)
+      ) ||
+      !identical(current, capture())
+  ) {
+    changed <- names(paths)[vapply(names(paths), function(path) {
+      !identical(expected_md5[[path]], current$md5[[path]]) ||
+        !identical(expected_sha256[[path]], current$sha256[[path]])
+    }, logical(1L))]
+    stop(
+      sprintf(
+        "Runtime definitions changed after bootstrap: %s.",
+        paste(changed, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
 wlv_validate_request <- function(
     methods,
     repeat_pp = FALSE,
@@ -383,6 +341,7 @@ wlv_validate_request <- function(
     allow_experimental = FALSE,
     requested_operations = NULL,
     catalog = NULL) {
+  wlv_assert_loaded_runtime_unchanged()
   mode <- match.arg(mode)
   repeat_pp <- wlv_validate_flag(repeat_pp, "repeat_pp")
   prepaper <- wlv_validate_flag(prepaper, "prepaper")
@@ -393,6 +352,15 @@ wlv_validate_request <- function(
   workers <- wlv_validate_workers(workers)
   channel <- wlv_validate_release_channel(channel)
   papern <- wlv_validate_integer(papern, "papern", minimum = 0L)
+  if (isTRUE(prepaper) || papern != 0L) {
+    stop(
+      paste0(
+        "Paper tooling has been removed; compatibility arguments must remain ",
+        "`papern = 0` and `prepaper = FALSE`."
+      ),
+      call. = FALSE
+    )
+  }
   requested_operations <- wlv_validate_requested_operations(
     requested_operations,
     mode = mode,
@@ -451,6 +419,7 @@ wlv_validate_request <- function(
       stop("`catalog` belongs to a different project root.", call. = FALSE)
     }
   }
+  wlv_catalog_assert_inputs_unchanged(catalog, force_hash = TRUE)
   catalog_methods <- wlv_catalog_method_table(catalog)
   unknown <- setdiff(methods, catalog_methods$method)
   if (length(unknown)) {
@@ -491,7 +460,7 @@ wlv_validate_request <- function(
     }
 
     parameters <- tryCatch(
-      utils::read.csv2(parameter_file, stringsAsFactors = FALSE),
+      wlv_native_read_semicolon(parameter_file),
       error = function(error) {
         stop(
           sprintf("Cannot read parameters for method `%s`: %s", method, conditionMessage(error)),
@@ -517,23 +486,21 @@ wlv_validate_request <- function(
         call. = FALSE
       )
     }
-    preparer <- source_record$preparer[[1L]]
-    preparer <- if (nzchar(preparer)) file.path(root, preparer) else ""
-
     data.frame(
       method = method,
       source = source_record$source[[1L]],
+      year_start = source_record$year_start[[1L]],
+      year_end = source_record$year_end[[1L]],
       parameter_set = parameter_set,
       method_dir = method_dir,
       source_dir = file.path(root, source_record$data_dir[[1L]]),
       parameter_file = parameter_file,
       sectors_file = sectors_file,
-      preparer = preparer,
-      validator_script = source_record$validator_script[[1L]],
-      validator_function = source_record$validator_function[[1L]],
+      validator_id = source_record$validator_id[[1L]],
       artifact_profile = source_record$artifact_profile[[1L]],
       missingness_policy = source_record$missingness_policy[[1L]],
       unit_contract = source_record$unit_contract[[1L]],
+      validation_id = selected$validation_id[[1L]],
       status = selected$status[[1L]],
       source_status = selected$source_status[[1L]],
       can_prepare = selected$can_prepare[[1L]],
@@ -548,23 +515,50 @@ wlv_validate_request <- function(
     wlv_validate_method_references(
       root = root,
       method = method_plan$method[[index]],
-      source = method_plan$parameter_set[[index]],
+      source = method_plan$source[[index]],
       mode = mode
     )
   })
   names(configuration) <- method_plan$method
+  native_registry <- wlv_native_registry()
+  unit_definitions <- lapply(seq_len(nrow(method_plan)), function(index) {
+    wlv_catalog_unit_contract(
+      catalog,
+      method_plan$unit_contract[[index]]
+    )$units
+  })
+  names(unit_definitions) <- method_plan$method
+  aggregation_registries <- lapply(method_plan$method, function(method) {
+    wlv_native_aggregation_registry(
+      root = root,
+      catalog = catalog,
+      method = method
+    )
+  })
+  names(aggregation_registries) <- method_plan$method
+  indicators <- lapply(method_plan$method, function(method) {
+    wlv_native_output_indicators(
+      root,
+      catalog,
+      method,
+      aggregation_registries[[method]]
+    )
+  })
+  names(indicators) <- method_plan$method
+  scientific_profiles <- wlv_validate_native_scientific_profiles(
+    root,
+    catalog,
+    indicators
+  )
   if (mode == "recalculate") {
     wlv_validate_recalculation_selection(
       configuration,
       at_stage = at_stage,
-      sea_vars = sea_vars
+      sea_vars = sea_vars,
+      indicators = indicators
     )
   }
-
-  paper_script <- file.path(root, "R", "utils", "papers", sprintf("paper_%s_selection.R", papern))
-  if (prepaper && !file.exists(paper_script)) {
-    stop(sprintf("Paper script does not exist: %s", paper_script), call. = FALSE)
-  }
+  wlv_catalog_assert_inputs_unchanged(catalog, force_hash = FALSE)
 
   plan <- structure(
     list(
@@ -573,13 +567,17 @@ wlv_validate_request <- function(
       requested_operations = requested_operations,
       allow_experimental = allow_experimental,
       catalog = catalog,
+      native_registry = native_registry,
       methods = method_plan,
       configuration = configuration,
+      unit_definitions = unit_definitions,
+      indicators = indicators,
+      scientific_profiles = scientific_profiles,
+      aggregation_registries = aggregation_registries,
       method_names = method_plan$method,
       repeat_pp = repeat_pp,
       papern = papern,
       prepaper = prepaper,
-      paper_script = paper_script,
       workers = workers,
       channel = channel,
       at_stage = at_stage,
@@ -587,15 +585,91 @@ wlv_validate_request <- function(
     ),
     class = c("wlv_run_plan", "list")
   )
-  aggregation_registries <- lapply(seq_len(nrow(method_plan)), function(index) {
-    wlv_method_aggregation_registry(
-      plan,
-      method_plan[index, , drop = FALSE]
-    )
-  })
-  names(aggregation_registries) <- method_plan$method
-  plan$aggregation_registries <- aggregation_registries
+  plan$publication_inputs <- wlv_capture_plan_publication_inputs(plan)
+  wlv_catalog_assert_inputs_unchanged(catalog, force_hash = TRUE)
+  for (method in plan$method_names) {
+    wlv_assert_plan_scientific_profile_inventory(plan, method)
+  }
   plan
+}
+
+wlv_assert_plan_scientific_profile_inventory <- function(plan, method) {
+  if (!inherits(plan, "wlv_run_plan") ||
+      !is.character(method) || length(method) != 1L || is.na(method) ||
+      !method %in% plan$method_names) {
+    stop("Scientific profile verification received an invalid run plan/method.",
+      call. = FALSE
+    )
+  }
+  wlv_assert_plan_publication_inputs_unchanged(
+    plan,
+    method,
+    use_receipt = TRUE
+  )
+  wlv_catalog_assert_inputs_unchanged(plan$catalog, force_hash = FALSE)
+  snapshot_root <- wlv_authenticated_scientific_snapshot(plan, method)
+  on.exit(unlink(snapshot_root, recursive = TRUE, force = TRUE), add = TRUE)
+  expected <- wlv_native_scientific_profile(
+    snapshot_root,
+    plan$catalog,
+    method,
+    plan$indicators[[method]]
+  )
+  wlv_catalog_assert_inputs_unchanged(plan$catalog, force_hash = FALSE)
+  wlv_assert_plan_publication_inputs_unchanged(
+    plan,
+    method,
+    use_receipt = TRUE
+  )
+  observed <- plan$scientific_profiles[[method]]
+  if (!identical(observed, expected)) {
+    stop(sprintf(
+      paste0(
+        "Run plan scientific profile for method `%s` no longer matches ",
+        "the authenticated contract inventory."
+      ),
+      method
+    ), call. = FALSE)
+  }
+  invisible(observed)
+}
+
+wlv_authenticated_scientific_snapshot <- function(plan, method) {
+  inventory <- wlv_plan_publication_input_inventory(plan, method)
+  relative <- vapply(inventory, `[[`, character(1L), "path")
+  selected <- startsWith(relative, "config/")
+  inventory <- inventory[selected]
+  relative <- relative[selected]
+  if (!length(inventory) || anyDuplicated(relative)) {
+    stop("Authenticated scientific configuration inventory is incomplete.",
+      call. = FALSE
+    )
+  }
+  snapshot_root <- tempfile("wlv-scientific-snapshot-")
+  dir.create(snapshot_root, recursive = TRUE)
+  complete <- FALSE
+  on.exit({
+    if (!complete) unlink(snapshot_root, recursive = TRUE, force = TRUE)
+  }, add = TRUE)
+  for (index in seq_along(inventory)) {
+    source <- file.path(plan$root, relative[[index]])
+    destination <- file.path(snapshot_root, relative[[index]])
+    dir.create(dirname(destination), recursive = TRUE, showWarnings = FALSE)
+    copied <- file.copy(source, destination, overwrite = FALSE, copy.mode = TRUE)
+    observed <- if (isTRUE(copied)) {
+      wlv_publication_file_sha256(destination)
+    } else {
+      NA_character_
+    }
+    if (!identical(observed, inventory[[index]]$sha256)) {
+      stop(sprintf(
+        "Authenticated scientific input changed while snapshotting `%s`.",
+        relative[[index]]
+      ), call. = FALSE)
+    }
+  }
+  complete <- TRUE
+  normalizePath(snapshot_root, winslash = "/", mustWork = TRUE)
 }
 
 wlv_require_files <- function(paths, context) {
@@ -613,10 +687,24 @@ wlv_list_io_files <- function(path) {
   sort(list.files(path, pattern = "^m_io.*\\.fst$", full.names = TRUE))
 }
 
+wlv_native_validator_registry <- function() {
+  list(
+    wiodr13_prepared_v1 = list(
+      source = "wiodr13",
+      validate = wlv_validate_wiodr13_prepared,
+      validate_euklems = wlv_validate_wiodr13_euklems
+    ),
+    wiodr16_prepared_v1 = list(
+      source = "wiodr16",
+      validate = wlv_validate_wiodr16_prepared,
+      validate_euklems = wlv_validate_wiodr16_euklems
+    )
+  )
+}
+
 wlv_load_catalog_validator <- function(plan, method) {
-  script <- method$validator_script[[1L]]
-  function_name <- method$validator_function[[1L]]
-  if (!nzchar(script) || !nzchar(function_name)) {
+  validator_id <- method$validator_id[[1L]]
+  if (!nzchar(validator_id)) {
     stop(
       sprintf(
         "Source `%s` has no catalog-declared validator.",
@@ -626,48 +714,23 @@ wlv_load_catalog_validator <- function(plan, method) {
     )
   }
 
-  validator_environment <- new.env(
-    parent = baseenv()
-  )
-  previous_directory <- getwd()
-  on.exit(setwd(previous_directory), add = TRUE)
-  setwd(plan$root)
-  tryCatch(
-    sys.source(
-      file.path(plan$root, script),
-      envir = validator_environment,
-      chdir = FALSE
-    ),
-    error = function(error) {
-      stop(
-        sprintf(
-          "Cannot load validator `%s` for source `%s`: %s",
-          script,
-          method$source[[1L]],
-          conditionMessage(error)
-        ),
-        call. = FALSE
-      )
-    }
-  )
-  validator <- get0(
-    function_name,
-    envir = validator_environment,
-    mode = "function",
-    inherits = FALSE
-  )
-  if (!is.function(validator)) {
+  source <- method$source[[1L]]
+  entry <- wlv_native_validator_registry()[[validator_id]]
+  if (is.null(entry) || !identical(entry$source, source) ||
+      !is.function(entry$validate) || !is.function(entry$validate_euklems)) {
     stop(
       sprintf(
-        "Validator `%s` does not define catalog function `%s`.",
-        script,
-        function_name
+        paste0(
+          "Validator `%s` for source `%s` does not match the explicit ",
+          "native validator registry."
+        ),
+        validator_id,
+        source
       ),
       call. = FALSE
     )
   }
-
-  list(validate = validator, environment = validator_environment)
+  c(list(validator_id = validator_id), entry)
 }
 
 wlv_resolve_source_artifacts <- function(plan, method, needs_io) {
@@ -799,59 +862,11 @@ wlv_method_unit_contract_paths <- function(plan, method) {
 }
 
 wlv_method_aggregation_registry <- function(plan, method) {
-  contract_id <- method$unit_contract[[1L]]
-  contract <- if (nzchar(contract_id)) {
-    wlv_catalog_unit_contract(plan$catalog, contract_id)
-  } else {
-    NULL
-  }
-  aggregations <- if (is.null(contract)) {
-    data.frame(
-      indicator = character(),
-      level = character(),
-      strategy = character(),
-      module = character(),
-      numerator = character(),
-      denominator = character(),
-      weight = character(),
-      zero_denominator = character(),
-      notes = character(),
-      stringsAsFactors = FALSE
-    )
-  } else {
-    contract$aggregations
-  }
-  method_name <- method$method[[1L]]
-  stable <- identical(method$status[[1L]], "stable")
-  registry <- wlv_resolve_aggregation_registry(
-    aggregations = aggregations,
-    solutions = plan$configuration[[method_name]]$solutions,
-    method = method_name,
-    stable = stable,
-    allow_legacy = !stable && isTRUE(plan$allow_experimental),
-    missing = "available"
+  wlv_native_aggregation_registry(
+    root = plan$root,
+    catalog = plan$catalog,
+    method = method$method[[1L]]
   )
-  if (!is.null(contract)) {
-    legacy <- vapply(
-      registry$bindings,
-      function(binding) isTRUE(binding$legacy),
-      logical(1L)
-    )
-    dimension_rows <- registry$rows[
-      !legacy & registry$rows$indicator %in% contract$units$indicator,
-      ,
-      drop = FALSE
-    ]
-    wlv_validate_aggregation_dimensions(
-      contract$units,
-      dimension_rows,
-      strict_cross_country = !identical(
-        as.character(contract$metadata$schema_version[[1L]]),
-        "1"
-      )
-    )
-  }
-  registry
 }
 
 wlv_method_unit_definitions <- function(plan, method) {
@@ -862,10 +877,69 @@ wlv_method_unit_definitions <- function(plan, method) {
   wlv_catalog_unit_contract(plan$catalog, contract_id)$units
 }
 
+wlv_method_source_input_paths <- function(
+    plan,
+    method,
+    artifacts,
+    manifest,
+    additional_paths = character()) {
+  if (!is.list(artifacts) || is.null(artifacts$manifest) ||
+      is.null(artifacts$required)) {
+    stop("Resolved source artifacts are required.", call. = FALSE)
+  }
+  if (is.null(additional_paths)) additional_paths <- character()
+  if (!is.character(additional_paths) || anyNA(additional_paths) ||
+      any(!nzchar(additional_paths))) {
+    stop("Additional source inputs must be file paths.", call. = FALSE)
+  }
+  wlv_validate_source_manifest(manifest)
+  contract <- wlv_method_unit_contract_paths(plan, method)
+  normalized_root <- dirname(artifacts$manifest)
+  manifest_artifacts <- wlv_source_resolve_artifacts(
+    normalized_root,
+    manifest$artifact
+  )
+  paths <- c(
+    artifacts$manifest,
+    artifacts$required,
+    contract$paths,
+    manifest_artifacts,
+    additional_paths
+  )
+  wlv_require_files(
+    unique(paths),
+    sprintf("source inputs for method `%s`", method$method[[1L]])
+  )
+  paths <- normalizePath(paths, winslash = "/", mustWork = TRUE)
+  if (any(file.info(paths, extra_cols = FALSE)$isdir %in% TRUE)) {
+    stop("Method source inputs must be files.", call. = FALSE)
+  }
+  sort(unique(paths), method = "radix")
+}
+
 wlv_validate_method_source_manifest <- function(plan, method, artifacts) {
   contract <- wlv_method_unit_contract_paths(plan, method)
   normalized_root <- dirname(artifacts$manifest)
   manifest <- wlv_read_source_manifest(artifacts$manifest)
+  source_input_paths <- wlv_method_source_input_paths(
+    plan,
+    method,
+    artifacts,
+    manifest
+  )
+  source_input_stamps <- wlv_publication_input_path_stamps(source_input_paths)
+  stable_manifest <- wlv_read_source_manifest(artifacts$manifest)
+  stable_paths <- wlv_method_source_input_paths(
+    plan,
+    method,
+    artifacts,
+    stable_manifest
+  )
+  if (!identical(manifest, stable_manifest) ||
+      !identical(source_input_paths, stable_paths)) {
+    stop("Source inputs changed before manifest verification.", call. = FALSE)
+  }
+  manifest <- stable_manifest
   wlv_verify_source_manifest(
     manifest,
     source_root = normalized_root,
@@ -873,6 +947,21 @@ wlv_validate_method_source_manifest <- function(plan, method, artifacts) {
     expected_contract_id = contract$id,
     expected_contract_version = contract$version
   )
+  final_source_input_paths <- wlv_method_source_input_paths(
+    plan,
+    method,
+    artifacts,
+    manifest
+  )
+  final_source_input_stamps <- wlv_publication_input_path_stamps(
+    final_source_input_paths
+  )
+  if (!identical(source_input_paths, final_source_input_paths) ||
+      !identical(source_input_stamps, final_source_input_stamps)) {
+    stop("Source inputs changed while their manifest was being verified.",
+      call. = FALSE
+    )
+  }
   normalized_root_path <- normalizePath(
     normalized_root,
     winslash = "/",
@@ -916,23 +1005,164 @@ wlv_validate_method_source_manifest <- function(plan, method, artifacts) {
     manifest = manifest,
     provenance = wlv_source_provenance(manifest, method$source[[1L]]),
     normalized_root = normalized_root,
-    gfcf_observations = file.path(normalized_root, "_gfcf_canonical.rds")
+    gfcf_observations = file.path(normalized_root, "_gfcf_canonical.rds"),
+    source_input_paths = final_source_input_paths,
+    source_input_stamps = final_source_input_stamps
   )
 }
 
-wlv_assert_method_source_inputs_unchanged <- function(plan, method, run_data) {
-  if (!is.list(run_data) || is.null(run_data$source_provenance)) {
+wlv_source_input_receipt <- function(plan, method, run_data, paths, stamps) {
+  inventory <- run_data$source_provenance_input_inventory
+  valid_inventory <- is.list(inventory) && all(vapply(
+    inventory,
+    function(record) {
+      is.list(record) &&
+        identical(names(record), c("path", "size_bytes", "sha256")) &&
+        is.character(record$path) && length(record$path) == 1L &&
+        !is.na(record$path) && nzchar(record$path) &&
+        is.numeric(record$size_bytes) && length(record$size_bytes) == 1L &&
+        !is.na(record$size_bytes) && record$size_bytes >= 0 &&
+        is.character(record$sha256) && length(record$sha256) == 1L &&
+        grepl("^[0-9a-f]{64}$", record$sha256)
+    },
+    logical(1L)
+  ))
+  stamp_paths <- tryCatch(
+    vapply(stamps, `[[`, character(1L), "path"),
+    error = function(error) character()
+  )
+  if (!inherits(plan, "wlv_run_plan") ||
+      !is.data.frame(method) || nrow(method) != 1L ||
+      is.null(run_data$source_manifest) ||
+      is.null(run_data$source_provenance) || !valid_inventory ||
+      !is.character(paths) || anyNA(paths) || any(!nzchar(paths)) ||
+      anyDuplicated(paths) || !is.list(stamps) ||
+      !identical(length(paths), length(stamps)) ||
+      !identical(stamp_paths, paths)) {
+    stop("Source input receipt values are invalid.", call. = FALSE)
+  }
+  wlv_validate_source_manifest(run_data$source_manifest)
+  wlv_validate_source_provenance(run_data$source_provenance)
+  receipt <- new.env(parent = emptyenv())
+  receipt$schema <- "wlv-source-input-receipt/1.0.0"
+  receipt$root <- normalizePath(plan$root, winslash = "/", mustWork = TRUE)
+  receipt$method <- method$method[[1L]]
+  receipt$source <- method$source[[1L]]
+  receipt$artifact_profile <- method$artifact_profile[[1L]]
+  receipt$unit_contract <- method$unit_contract[[1L]]
+  receipt$source_manifest_sha256 <-
+    wlv_source_manifest_sha256(run_data$source_manifest)
+  receipt$source_provenance <- run_data$source_provenance
+  receipt$source_provenance_input_inventory <- inventory
+  receipt$paths <- paths
+  receipt$stamps <- stamps
+  lockEnvironment(receipt, bindings = TRUE)
+  receipt
+}
+
+wlv_source_input_receipt_is_current <- function(plan, method, run_data) {
+  receipt <- run_data$source_input_receipt
+  tryCatch({
+    fields <- if (is.environment(receipt)) {
+      sort(ls(receipt, all.names = TRUE), method = "radix")
+    } else {
+      character()
+    }
+    required <- sort(c(
+      "schema", "root", "method", "source", "artifact_profile",
+      "unit_contract", "source_manifest_sha256", "source_provenance",
+      "source_provenance_input_inventory", "paths", "stamps"
+    ), method = "radix")
+    if (!is.environment(receipt) ||
+        !identical(parent.env(receipt), emptyenv()) ||
+        !environmentIsLocked(receipt) || !identical(fields, required) ||
+        !all(vapply(fields, bindingIsLocked, logical(1L), env = receipt)) ||
+        any(vapply(fields, bindingIsActive, logical(1L), env = receipt)) ||
+        !identical(receipt$schema, "wlv-source-input-receipt/1.0.0") ||
+        !identical(
+          receipt$root,
+          normalizePath(plan$root, winslash = "/", mustWork = TRUE)
+        ) || !identical(receipt$method, method$method[[1L]]) ||
+        !identical(receipt$source, method$source[[1L]]) ||
+        !identical(receipt$artifact_profile, method$artifact_profile[[1L]]) ||
+        !identical(receipt$unit_contract, method$unit_contract[[1L]]) ||
+        !identical(
+          receipt$source_manifest_sha256,
+          wlv_source_manifest_sha256(run_data$source_manifest)
+        ) || !identical(receipt$source_provenance, run_data$source_provenance) ||
+        !identical(
+          receipt$source_provenance_input_inventory,
+          run_data$source_provenance_input_inventory
+        )) {
+      return(FALSE)
+    }
+    artifacts <- wlv_resolve_source_artifacts(plan, method, needs_io = TRUE)
+    paths <- wlv_method_source_input_paths(
+      plan,
+      method,
+      artifacts,
+      run_data$source_manifest,
+      additional_paths = run_data$source_provenance_inputs
+    )
+    stamps <- wlv_publication_input_path_stamps(paths)
+    identical(paths, receipt$paths) && identical(stamps, receipt$stamps)
+  }, error = function(error) FALSE)
+}
+
+wlv_assert_method_source_inputs_unchanged <- function(
+    plan,
+    method,
+    run_data,
+    use_receipt = FALSE) {
+  if (!is.list(run_data) || is.null(run_data$source_manifest) ||
+      is.null(run_data$source_provenance) ||
+      is.null(run_data$source_provenance_input_inventory)) {
     stop("The validated run data lack source provenance.", call. = FALSE)
   }
+  if (!is.logical(use_receipt) || length(use_receipt) != 1L ||
+      is.na(use_receipt)) {
+    stop("Source input receipt flag is invalid.", call. = FALSE)
+  }
+  wlv_validate_source_provenance(run_data$source_provenance)
+  if (isTRUE(use_receipt) &&
+      wlv_source_input_receipt_is_current(plan, method, run_data)) {
+    return(invisible(run_data$source_provenance))
+  }
   artifacts <- wlv_resolve_source_artifacts(plan, method, needs_io = TRUE)
+  first_paths <- wlv_method_source_input_paths(
+    plan,
+    method,
+    artifacts,
+    run_data$source_manifest,
+    additional_paths = run_data$source_provenance_inputs
+  )
+  first_stamps <- wlv_publication_input_path_stamps(first_paths)
   current <- wlv_validate_method_source_manifest(plan, method, artifacts)
   current_provenance <- wlv_source_provenance(
     current$manifest,
     method$source[[1L]],
     additional_paths = run_data$source_provenance_inputs
   )
-  wlv_validate_source_provenance(run_data$source_provenance)
-  if (!identical(current_provenance, run_data$source_provenance)) {
+  current_inventory <- wlv_publication_source_input_inventory(
+    plan$root,
+    run_data$source_provenance_inputs
+  )
+  final_paths <- wlv_method_source_input_paths(
+    plan,
+    method,
+    artifacts,
+    current$manifest,
+    additional_paths = run_data$source_provenance_inputs
+  )
+  final_stamps <- wlv_publication_input_path_stamps(final_paths)
+  if (!identical(first_paths, final_paths) ||
+      !identical(first_stamps, final_stamps) ||
+      !identical(current$manifest, run_data$source_manifest) ||
+      !identical(current_provenance, run_data$source_provenance) ||
+      !identical(
+        current_inventory,
+        run_data$source_provenance_input_inventory
+      )) {
     stop(
       paste0(
         "Source inputs changed after preflight validation; the result was not ",
@@ -942,6 +1172,84 @@ wlv_assert_method_source_inputs_unchanged <- function(plan, method, run_data) {
     )
   }
   invisible(current_provenance)
+}
+
+wlv_assert_run_environments_source_inputs_unchanged <- function(
+    plan,
+    run_environments,
+    use_receipt = FALSE) {
+  if (!inherits(plan, "wlv_run_plan")) {
+    return(invisible(TRUE))
+  }
+  if (!is.logical(use_receipt) || length(use_receipt) != 1L ||
+      is.na(use_receipt)) {
+    stop("Source input receipt flag is invalid.", call. = FALSE)
+  }
+  if (!is.list(run_environments) || !length(run_environments)) {
+    stop("Published runs are required for source-input verification.", call. = FALSE)
+  }
+  records <- lapply(seq_along(run_environments), function(run_index) {
+    run_environment <- run_environments[[run_index]]
+    if (!is.environment(run_environment) ||
+        is.null(run_environment$wlv_run_manifest$method) ||
+        is.null(run_environment$wlv_source_provenance) ||
+        is.null(run_environment$wlv_source_provenance_inputs) ||
+        is.null(run_environment$wlv_source_provenance_input_inventory)) {
+      stop(
+        "A promoted run lacks its immutable source-input snapshot.",
+        call. = FALSE
+      )
+    }
+    method <- run_environment$wlv_run_manifest$method
+    method_index <- match(method, plan$methods$method)
+    if (is.na(method_index)) {
+      stop("A promoted run is absent from its run plan.", call. = FALSE)
+    }
+    inventory <- run_environment$wlv_source_provenance_input_inventory
+    inventory_key <- if (length(inventory)) {
+      paste(vapply(inventory, function(record) {
+        paste(record$path, record$sha256, sep = "=")
+      }, character(1L)), collapse = "|")
+    } else {
+      ""
+    }
+    provenance <- run_environment$wlv_source_provenance
+    key <- paste(
+      provenance$source,
+      provenance$source_generation_id,
+      provenance$contract_sha256,
+      provenance$manifest_sha256,
+      inventory_key,
+      sep = "\034"
+    )
+    if (isTRUE(use_receipt)) {
+      # Every transient receipt must validate independently. Content hashing at
+      # the strong final boundary may still be deduplicated by source snapshot.
+      key <- paste(key, run_index, sep = "\034")
+    }
+    list(
+      key = key,
+      method = plan$methods[method_index, , drop = FALSE],
+      run_data = list(
+        source_manifest = run_environment$wlv_source_manifest,
+        source_provenance = provenance,
+        source_provenance_inputs =
+          run_environment$wlv_source_provenance_inputs,
+        source_provenance_input_inventory = inventory,
+        source_input_receipt = run_environment$wlv_source_input_receipt
+      )
+    )
+  })
+  keys <- vapply(records, `[[`, character(1L), "key")
+  for (index in which(!duplicated(keys))) {
+    wlv_assert_method_source_inputs_unchanged(
+      plan,
+      records[[index]]$method,
+      records[[index]]$run_data,
+      use_receipt = use_receipt
+    )
+  }
+  invisible(TRUE)
 }
 
 wlv_io_years <- function(path) {
@@ -969,14 +1277,14 @@ wlv_io_period_key <- function(path) {
   paste(wlv_io_years(path), collapse = "\034")
 }
 
-wlv_euklems_files <- function(root, source_io, matrix_scripts) {
+wlv_euklems_files <- function(root, source_io, matrix_modules) {
   depreciation_offsets <- c(
-    "wiodr13/euklems.R" = 1L,
-    "wiodr13/euklems-reduction_problem.R" = 0L,
-    "wiodr16/euklems.R" = 1L
+    "matrix.capital.wiodr13" = 1L,
+    "matrix.capital.reduction_problem" = 0L,
+    "matrix.capital.wiodr16" = 1L
   )
   depreciation_offsets <- unname(
-    depreciation_offsets[intersect(names(depreciation_offsets), matrix_scripts)]
+    depreciation_offsets[intersect(names(depreciation_offsets), matrix_modules)]
   )
   if (!length(depreciation_offsets)) {
     return(character())
@@ -1005,7 +1313,679 @@ wlv_euklems_files <- function(root, source_io, matrix_scripts) {
   )
 }
 
-wlv_wiodr13_euklems_files <- wlv_euklems_files
+wlv_wiodr13_euklems_files <- function(root, source_io, matrix_modules) {
+  wlv_euklems_files(root, source_io, matrix_modules)
+}
+
+# Native graph and data preflight. Every graph is resolved before any FST
+# payload is deserialized.
+wlv_native_metadata_years <- function(path) {
+  metadata_path <- paste0(path, ".meta")
+  metadata <- tryCatch(
+    readRDS(metadata_path),
+    error = function(error) {
+      stop(
+        sprintf(
+          "Cannot read array metadata `%s`: %s",
+          metadata_path,
+          conditionMessage(error)
+        ),
+        call. = FALSE
+      )
+    }
+  )
+  years <- metadata[[2L]]
+  if (is.null(years) || !length(years) || anyNA(years) ||
+      any(!nzchar(as.character(years)))) {
+    stop(
+      sprintf("Array metadata `%s` does not declare valid years.", metadata_path),
+      call. = FALSE
+    )
+  }
+  as.character(years)
+}
+
+wlv_native_metadata_outputs <- function(path) {
+  metadata_path <- paste0(path, ".meta")
+  metadata <- tryCatch(
+    readRDS(metadata_path),
+    error = function(error) {
+      stop(sprintf(
+        "Cannot read array metadata `%s`: %s",
+        metadata_path,
+        conditionMessage(error)
+      ), call. = FALSE)
+    }
+  )
+  dimensions <- metadata[[1L]]
+  if (!is.numeric(dimensions) || length(dimensions) != 3L) {
+    stop(sprintf(
+      "Normalized source IO metadata `%s` must be three-dimensional.",
+      metadata_path
+    ), call. = FALSE)
+  }
+  outputs <- metadata[[4L]]
+  if (is.null(outputs) || !length(outputs) || anyNA(outputs) ||
+      any(!nzchar(as.character(outputs))) || anyDuplicated(outputs)) {
+    stop(sprintf(
+      "Array metadata `%s` does not declare valid outputs.",
+      metadata_path
+    ), call. = FALSE)
+  }
+  as.character(outputs)
+}
+
+wlv_native_validate_leontief_zero_source_coordinates <- function(
+    scientific_profile,
+    source_io,
+    method) {
+  wlv_assert_scientific_profile(
+    scientific_profile,
+    method,
+    scientific_profile$source
+  )
+  counts <- scientific_profile$leontief_zero$counts
+  if (!nrow(counts)) {
+    return(invisible(TRUE))
+  }
+  metadata <- lapply(source_io, function(path) {
+    list(
+      years = wlv_native_metadata_years(path),
+      outputs = wlv_native_metadata_outputs(path)
+    )
+  })
+  invalid <- vapply(seq_len(nrow(counts)), function(index) {
+    matching <- which(vapply(metadata, function(entry) {
+      counts$year[[index]] %in% entry$years
+    }, logical(1L)))
+    length(matching) != 1L ||
+      !counts$output[[index]] %in% metadata[[matching[[1L]]]]$outputs
+  }, logical(1L))
+  if (any(invalid)) {
+    coordinates <- paste(
+      counts$year[invalid],
+      counts$output[invalid],
+      sep = "|"
+    )
+    stop(sprintf(
+      paste0(
+        "Leontief zero-output profile for method `%s` references unknown ",
+        "source coordinates: %s."
+      ),
+      method,
+      paste(utils::head(coordinates, 5L), collapse = ",")
+    ), call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
+wlv_native_validate_partition_coverage <- function(source_io, source_sea) {
+  period_years <- lapply(source_io, wlv_native_metadata_years)
+  observed <- unlist(period_years, use.names = FALSE)
+  expected <- wlv_native_metadata_years(source_sea)
+  duplicated_years <- unique(observed[duplicated(observed)])
+  if (length(duplicated_years) || !identical(observed, expected)) {
+    stop(
+      sprintf(
+        paste0(
+          "Input-output periods do not exactly cover the SEA years ",
+          "(duplicates=%s; expected=%s; observed=%s)."
+        ),
+        paste(duplicated_years, collapse = ","),
+        paste(expected, collapse = ","),
+        paste(observed, collapse = ",")
+      ),
+      call. = FALSE
+    )
+  }
+  invisible(expected)
+}
+
+wlv_native_indicator_stage_map <- function(
+    registry,
+    configuration,
+    aggregation_registry,
+    indicators,
+    partitions) {
+  instances <- wlv_native_plan_instances(
+    registry = registry,
+    config = configuration,
+    aggregation_registry = aggregation_registry,
+    indicators = indicators,
+    partitions = partitions,
+    mode = "calculate"
+  )
+  resolved <- wlv_native_resolved_instances(
+    registry,
+    instances,
+    partitions,
+    operation = "calculate"
+  )
+  stages <- stats::setNames(rep(NA_integer_, length(indicators)), indicators)
+  for (module in resolved) {
+    rank <- wlv_runtime_checkpoint_rank(
+      module$checkpoint,
+      wlv_default_checkpoint_order()
+    )
+    for (output in module$provides) {
+      prefix <- "sea/sector/"
+      key <- output$ref$key
+      if (!startsWith(key, prefix)) next
+      indicator <- substring(key, nchar(prefix) + 1L)
+      if (indicator %in% indicators &&
+          (is.na(stages[[indicator]]) || rank > stages[[indicator]])) {
+        stages[[indicator]] <- rank
+      }
+    }
+  }
+  if (anyNA(stages)) {
+    stop(
+      sprintf(
+        "Native graph has no sector producer for indicator(s): %s.",
+        paste(names(stages)[is.na(stages)], collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  stages
+}
+
+wlv_native_validate_selected_stages <- function(stages, sea_vars, at_stage, method) {
+  if (is.null(sea_vars)) return(invisible(NULL))
+  unknown <- setdiff(sea_vars, names(stages))
+  if (length(unknown)) {
+    stop(
+      sprintf(
+        "Unknown `sea_vars` for method `%s`: %s.",
+        method,
+        paste(unknown, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  selected <- stages[sea_vars]
+  unavailable <- selected < at_stage
+  if (any(unavailable)) {
+    details <- paste0(
+      names(selected)[unavailable],
+      " (stage ",
+      unname(selected[unavailable]),
+      ")"
+    )
+    stop(
+      sprintf(
+        paste0(
+          "Selected `sea_vars` cannot be recalculated from checkpoint ",
+          "stage %d for method `%s`: %s."
+        ),
+        at_stage,
+        method,
+        paste(details, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  invisible(selected)
+}
+
+wlv_native_parent_scientific_receipt <- function(
+    plan,
+    method_record,
+    parent_manifest) {
+  method <- method_record$method[[1L]]
+  source <- method_record$source[[1L]]
+  profile <- plan$scientific_profiles[[method]]
+  wlv_assert_scientific_profile(profile, method, source)
+  parent_manifest <- wlv_publication_as_run_manifest(parent_manifest)
+  manifest_paths <- vapply(
+    parent_manifest$artifacts,
+    `[[`,
+    character(1L),
+    "path"
+  )
+  nonfinite_name <- "_nonfinite_resolution_diagnostics.csv"
+  artifact_paths <- c(
+    "_anomalies.csv",
+    if (source %in% c("wiodr13", "wiodr16")) {
+      c("_gfcf_negative_cells.csv", "_gfcf_negative_summary.csv")
+    },
+    "_leontief_diagnostics.csv",
+    if (nonfinite_name %in% manifest_paths) nonfinite_name,
+    "_scientific_checks.csv"
+  )
+  artifact_records <- wlv_run_manifest_artifact_subset(
+    parent_manifest,
+    artifact_paths,
+    label = "parent scientific artifact"
+  )
+  receipt <- new.env(parent = emptyenv())
+  receipt$schema <- "wlv-parent-scientific-receipt/1.0.0"
+  receipt$method <- method
+  receipt$source <- source
+  receipt$run_id <- parent_manifest$run_id
+  receipt$result_id <- parent_manifest$result_id
+  receipt$artifacts <- artifact_records
+  lockEnvironment(receipt, bindings = TRUE)
+  receipt
+}
+
+wlv_native_assert_parent_scientific_receipt <- function(
+    receipt,
+    method_record,
+    parent_manifest) {
+  fields <- c(
+    "schema", "method", "source", "run_id", "result_id", "artifacts"
+  )
+  receipt_fields <- if (is.environment(receipt)) {
+    sort(ls(receipt, all.names = TRUE), method = "radix")
+  } else {
+    character()
+  }
+  if (!is.environment(receipt) ||
+      !identical(parent.env(receipt), emptyenv()) ||
+      !environmentIsLocked(receipt) ||
+      !all(vapply(receipt_fields, bindingIsLocked, logical(1L), env = receipt)) ||
+      any(vapply(receipt_fields, bindingIsActive, logical(1L), env = receipt)) ||
+      !identical(receipt_fields, sort(fields, method = "radix")) ||
+      !identical(receipt$schema, "wlv-parent-scientific-receipt/1.0.0")) {
+    stop("Parent scientific receipt has an invalid schema.", call. = FALSE)
+  }
+  parent_manifest <- wlv_publication_as_run_manifest(parent_manifest)
+  method <- method_record$method[[1L]]
+  source <- method_record$source[[1L]]
+  if (!identical(receipt$method, method) ||
+      !identical(receipt$source, source) ||
+      !identical(receipt$run_id, parent_manifest$run_id) ||
+      !identical(receipt$result_id, parent_manifest$result_id)) {
+    stop("Parent scientific receipt identity changed after preflight.", call. = FALSE)
+  }
+  artifact_paths <- vapply(receipt$artifacts, `[[`, character(1L), "path")
+  manifest_paths <- vapply(
+    parent_manifest$artifacts,
+    `[[`,
+    character(1L),
+    "path"
+  )
+  artifact_indexes <- match(artifact_paths, manifest_paths)
+  if (anyNA(artifact_indexes) ||
+      !identical(receipt$artifacts, parent_manifest$artifacts[artifact_indexes])) {
+    stop(
+      "Parent scientific receipt differs from the authenticated run manifest.",
+      call. = FALSE
+    )
+  }
+  receipt
+}
+
+wlv_native_validate_parent_scientific_profile <- function(
+    plan,
+    method_record,
+    result_dir,
+    source_sea,
+    parent_manifest,
+    receipt) {
+  receipt <- wlv_native_assert_parent_scientific_receipt(
+    receipt,
+    method_record,
+    parent_manifest
+  )
+  method <- method_record$method[[1L]]
+  source <- method_record$source[[1L]]
+  profile <- plan$scientific_profiles[[method]]
+  wlv_assert_scientific_profile(profile, method, source)
+  artifact_paths <- vapply(receipt$artifacts, `[[`, character(1L), "path")
+  scientific_checks_name <- "_scientific_checks.csv"
+  diagnostic_paths <- setdiff(
+    artifact_paths,
+    c("_anomalies.csv", scientific_checks_name)
+  )
+  nonfinite_name <- "_nonfinite_resolution_diagnostics.csv"
+  runtime <- wlv_new_contract_runtime(
+    method = method,
+    source = source,
+    policy = wlv_load_run_missingness_policy(plan, method_record),
+    scientific_profile = profile
+  )
+  anomalies <- wlv_read_contract_report(
+    file.path(result_dir, "_anomalies.csv")
+  )
+  wlv_validate_leontief_zero_output_anomalies(runtime, anomalies)
+  wlv_validate_nonfinite_resolution_anomalies(runtime, anomalies)
+
+  diagnostics <- if (source %in% c("wiodr13", "wiodr16")) {
+    wlv_load_gfcf_diagnostic_artifacts(result_dir, method = source)
+  } else {
+    list()
+  }
+  diagnostics[["_leontief_diagnostics.csv"]] <-
+    wlv_load_leontief_diagnostic_artifact(
+      result_dir,
+      method = method,
+      expected_years = wlv_native_metadata_years(source_sea)
+    )
+  nonfinite_path <- file.path(result_dir, nonfinite_name)
+  if (nonfinite_name %in% artifact_paths) {
+    diagnostics[[nonfinite_name]] <-
+      wlv_read_nonfinite_resolution_diagnostics(nonfinite_path)
+  }
+  wlv_scientific_validate_leontief_signed_profile(
+    diagnostics[["_leontief_diagnostics.csv"]],
+    profile,
+    method
+  )
+  wlv_scientific_validate_nonfinite_resolution(
+    diagnostics,
+    profile,
+    method
+  )
+  scientific_checks <- wlv_read_scientific_check_artifact(
+    file.path(result_dir, scientific_checks_name),
+    method
+  )
+  if (!identical(diagnostic_paths, names(diagnostics)) ||
+      !identical(
+        artifact_paths,
+        c("_anomalies.csv", names(diagnostics), scientific_checks_name)
+      )) {
+    stop(
+      "Parent scientific diagnostics differ from their manifest inventory.",
+      call. = FALSE
+    )
+  }
+  # The private parent staging was fully authenticated immediately before this
+  # reader. Rechecking the consumed subset closes the read window without
+  # keeping multi-million-row diagnostic payloads alive in the run plan.
+  wlv_verify_run_manifest_artifact_subset(
+    parent_manifest,
+    result_dir,
+    artifact_paths,
+    label = "parent scientific artifact"
+  )
+  list(
+    anomalies = anomalies,
+    diagnostics = diagnostics,
+    scientific_checks = scientific_checks
+  )
+}
+
+wlv_native_validate_nonfinite_source_coordinates <- function(
+    scientific_profile,
+    source_validation,
+    method) {
+  wlv_assert_scientific_profile(
+    scientific_profile,
+    method,
+    scientific_profile$source
+  )
+  rules <- scientific_profile$nonfinite_resolution$rules
+  if (!nrow(rules)) {
+    return(invisible(TRUE))
+  }
+  countries <- source_validation$countries
+  sectors <- source_validation$sectors
+  if (is.null(countries) || is.null(sectors)) {
+    stop(sprintf(
+      "Normalized source dimensions cannot validate method `%s` scientific rules.",
+      method
+    ), call. = FALSE)
+  }
+  unknown_countries <- setdiff(
+    unique(rules$country),
+    as.character(countries)
+  )
+  unknown_sectors <- setdiff(
+    unique(rules$sector),
+    as.character(sectors)
+  )
+  if (length(unknown_countries) || length(unknown_sectors)) {
+    stop(sprintf(
+      paste0(
+        "Scientific non-finite rules for method `%s` reference ",
+        "unknown normalized source coordinates (countries=%s; sectors=%s)."
+      ),
+      method,
+      if (length(unknown_countries)) {
+        paste(sort(unknown_countries, method = "radix"), collapse = ",")
+      } else {
+        "none"
+      },
+      if (length(unknown_sectors)) {
+        paste(sort(unknown_sectors, method = "radix"), collapse = ",")
+      } else {
+        "none"
+      }
+    ), call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
+wlv_native_validate_nonfinite_module_bindings <- function(
+    scientific_profile,
+    module_plan,
+    method) {
+  wlv_assert_scientific_profile(
+    scientific_profile,
+    method,
+    scientific_profile$source
+  )
+  groups <- scientific_profile$nonfinite_resolution$groups
+  if (!nrow(groups)) {
+    return(invisible(TRUE))
+  }
+  if (!inherits(module_plan, "wlv_module_plan") ||
+      !is.environment(module_plan)) {
+    stop("Scientific module bindings require a compiled native plan.",
+      call. = FALSE
+    )
+  }
+  for (index in seq_len(nrow(groups))) {
+    group <- groups[index, , drop = FALSE]
+    resource_key <- paste0("sea/sector/", group$indicator[[1L]])
+    providers <- Filter(function(module) {
+      identical(module$module_id, group$module[[1L]]) &&
+        any(vapply(module$provides, function(output) {
+          identical(output$ref$key, resource_key)
+        }, logical(1L)))
+    }, module_plan$modules)
+    if (!length(providers)) {
+      stop(sprintf(
+        paste0(
+          "Scientific non-finite group `%s/%s` for method `%s` is not ",
+          "produced by declared module `%s`."
+        ),
+        group$binding[[1L]],
+        group$kind[[1L]],
+        method,
+        group$module[[1L]]
+      ), call. = FALSE)
+    }
+  }
+  invisible(TRUE)
+}
+
+wlv_native_scientific_binding_preflight <- function(
+    registry,
+    configuration,
+    aggregation_registry,
+    indicators,
+    partitions,
+    source) {
+  instances <- wlv_native_plan_instances(
+    registry = registry,
+    config = configuration,
+    aggregation_registry = aggregation_registry,
+    indicators = indicators,
+    partitions = partitions,
+    mode = "calculate"
+  )
+  wlv_native_preflight_plan(
+    registry,
+    instances,
+    partitions,
+    mode = "calculate",
+    source = source,
+    indicators = indicators
+  )
+}
+
+wlv_native_prepared_label_projection <- function(normalized_root) {
+  tables <- list(
+    countries = wlv_native_read_semicolon(
+      file.path(normalized_root, "countries.csv")
+    ),
+    sectors = wlv_native_read_semicolon(
+      file.path(normalized_root, "sectors.csv")
+    ),
+    demands = wlv_native_read_semicolon(
+      file.path(normalized_root, "demand.csv")
+    )
+  )
+  columns <- c(
+    countries = "country.source",
+    sectors = "sector.source",
+    demands = "demand"
+  )
+  labels <- lapply(names(tables), function(name) {
+    column <- columns[[name]]
+    table <- tables[[name]]
+    if (!column %in% names(table)) {
+      stop(
+        sprintf("Normalized `%s` labels lack `%s`.", name, column),
+        call. = FALSE
+      )
+    }
+    value <- as.character(table[[column]])
+    if (!length(value) || anyNA(value) || any(!nzchar(value)) ||
+        anyDuplicated(value)) {
+      stop(
+        sprintf("Normalized `%s` labels must be non-missing and unique.", name),
+        call. = FALSE
+      )
+    }
+    value
+  })
+  names(labels) <- names(tables)
+  labels
+}
+
+wlv_validate_method_prepared_artifacts <- function(
+    plan,
+    method_record,
+    artifacts,
+    source_io,
+    configuration,
+    scientific_validation = NULL,
+    validator_override = NULL,
+    euklems_files = NULL,
+    validate_payloads = TRUE) {
+  if (!is.logical(validate_payloads) || length(validate_payloads) != 1L ||
+      is.na(validate_payloads)) {
+    stop("Prepared payload-validation flag must be TRUE or FALSE.",
+      call. = FALSE
+    )
+  }
+  method <- method_record$method[[1L]]
+  source <- method_record$source[[1L]]
+  manifest <- wlv_validate_method_source_manifest(
+    plan,
+    method_record,
+    artifacts
+  )
+
+  if (is.null(scientific_validation)) {
+    scientific_validation <- if (isTRUE(validate_payloads)) {
+      validator_bundle <- wlv_load_catalog_validator(plan, method_record)
+      validator <- validator_override
+      if (!is.function(validator)) validator <- validator_bundle$validate
+      validator(manifest$normalized_root)
+    } else {
+      # Stage 5 consumes only terminal panel resources from the authenticated
+      # parent.  The normalized generation is still fully manifest-verified,
+      # while this label projection avoids deserializing source IO that cannot
+      # be reached by the checkpoint-specific DAG.
+      wlv_native_prepared_label_projection(manifest$normalized_root)
+    }
+  }
+  method_sectors <- wlv_native_read_semicolon(
+    method_record$sectors_file[[1L]]
+  )
+  validated_sectors <- scientific_validation$sectors
+  if (!is.null(validated_sectors) && !identical(
+    as.character(validated_sectors),
+    as.character(method_sectors$sector.source)
+  )) {
+    stop(
+      sprintf(
+        "Normalized source sectors do not match method `%s`.",
+        method
+      ),
+      call. = FALSE
+    )
+  }
+  wlv_native_validate_nonfinite_source_coordinates(
+    plan$scientific_profiles[[method]],
+    scientific_validation,
+    method
+  )
+
+  capital_modules <- configuration$module_id[
+    startsWith(configuration$module_id, "matrix.capital.")
+  ]
+  expected_euklems <- wlv_euklems_files(
+    plan$root,
+    source_io,
+    capital_modules
+  )
+  if (is.null(euklems_files)) {
+    euklems_files <- expected_euklems
+  } else if (!is.character(euklems_files) || anyNA(euklems_files) ||
+      !identical(basename(euklems_files), basename(expected_euklems))) {
+    stop(
+      sprintf("Staged EU KLEMS coverage differs for method `%s`.", method),
+      call. = FALSE
+    )
+  }
+  if (length(euklems_files)) {
+    wlv_require_files(
+      euklems_files,
+      sprintf("WIOD EU KLEMS data for method `%s`", method)
+    )
+    required_sector_columns <- c("euklems.capital", "euklems.sector")
+    missing_sector_columns <- setdiff(
+      required_sector_columns,
+      names(method_sectors)
+    )
+    if (length(missing_sector_columns)) {
+      stop(
+        sprintf(
+          "Method `%s` lacks EU KLEMS sector columns: %s.",
+          method,
+          paste(missing_sector_columns, collapse = ", ")
+        ),
+        call. = FALSE
+      )
+    }
+    if (isTRUE(validate_payloads)) {
+      validator_bundle <- if (exists("validator_bundle", inherits = FALSE)) {
+        validator_bundle
+      } else {
+        wlv_load_catalog_validator(plan, method_record)
+      }
+      validator_bundle$validate_euklems(
+        euklems_files,
+        required_variables = method_sectors$euklems.capital,
+        required_sectors = method_sectors$euklems.sector
+      )
+    }
+  }
+
+  list(
+    manifest = manifest,
+    scientific_validation = scientific_validation,
+    method_sectors = method_sectors,
+    euklems_files = euklems_files
+  )
+}
 
 wlv_validate_data <- function(
     plan,
@@ -1017,257 +1997,310 @@ wlv_validate_data <- function(
 
   data_plan <- vector("list", nrow(plan$methods))
   names(data_plan) <- plan$method_names
-  source_names <- unique(plan$methods$source)
-  scientific_validations <- stats::setNames(
-    vector("list", length(source_names)),
-    source_names
-  )
   validator_overrides <- list(
     wiodr13 = wiodr13_validator,
     wiodr16 = wiodr16_validator
   )
-  validator_environments <- stats::setNames(
-    vector("list", length(source_names)),
-    source_names
-  )
+  scientific_validations <- list()
 
   for (index in seq_len(nrow(plan$methods))) {
-    method <- plan$methods[index, , drop = FALSE]
-    needs_io <- plan$mode == "calculate" || plan$at_stage <= 4L
-    source_artifacts <- wlv_resolve_source_artifacts(
+    method_record <- plan$methods[index, , drop = FALSE]
+    method <- method_record$method[[1L]]
+    source <- method_record$source[[1L]]
+    wlv_assert_plan_scientific_profile_inventory(plan, method)
+    artifacts <- wlv_resolve_source_artifacts(
       plan,
-      method,
-      needs_io = needs_io
+      method_record,
+      needs_io = TRUE
     )
-    source_manifest <- wlv_validate_method_source_manifest(
-      plan,
-      method,
-      source_artifacts
-    )
-    method_data <- list(
-      source_manifest = source_manifest$manifest,
-      source_provenance = source_manifest$provenance,
-      source_sea = source_artifacts$socioeconomic,
-      gfcf_observations = if (file.exists(source_manifest$gfcf_observations)) {
-        source_manifest$gfcf_observations
-      } else {
-        NULL
-      }
-    )
-    if (needs_io) {
-      source_io <- source_artifacts$input_output
-      if (!length(source_io)) {
-        stop(
-          sprintf(
-            "Artifact profile `%s` declares no input-output array for method `%s`.",
-            method$artifact_profile[[1L]],
-            method$method[[1L]]
-          ),
-          call. = FALSE
-        )
-      }
-      source_name <- method$source
-      scientific_validator <- validator_overrides[[source_name]]
-      validator_function <- method$validator_function
-      has_scientific_validator <- is.function(scientific_validator) ||
-        nzchar(validator_function)
-      if (has_scientific_validator) {
-        source_label <- toupper(sub("r", "", source_name, fixed = TRUE))
-        if (is.null(scientific_validations[[source_name]])) {
-          validator_bundle <- if (is.function(scientific_validator)) {
-            list(
-              validate = scientific_validator,
-              environment = environment(scientific_validator)
-            )
-          } else {
-            wlv_load_catalog_validator(plan, method)
-          }
-          scientific_validator <- validator_bundle$validate
-          validator_environments[[source_name]] <- validator_bundle$environment
-          scientific_validations[[source_name]] <- scientific_validator(
-            source_manifest$normalized_root
-          )
-        }
-
-        method_sectors <- utils::read.csv2(
-          method$sectors_file,
-          stringsAsFactors = FALSE
-        )
-        if (!"sector.source" %in% names(method_sectors)) {
-          stop(
-            sprintf("%s method `%s` does not declare `sector.source`.", source_label, method$method),
-            call. = FALSE
-          )
-        }
-        method_sector_labels <- as.character(method_sectors$sector.source)
-        validated_sectors <- scientific_validations[[source_name]]$sectors
-        if (
-          !is.null(validated_sectors) &&
-          !identical(validated_sectors, method_sector_labels)
-        ) {
-          stop(
-            sprintf(
-              paste0(
-                "%s source sectors do not match method `%s`; ",
-                "source: %s; method: %s."
-              ),
-              source_label,
-              method$method,
-              paste(validated_sectors, collapse = ", "),
-              paste(method_sector_labels, collapse = ", ")
-            ),
-            call. = FALSE
-          )
-        }
-      }
-      matrices <- plan$configuration[[method$method]]$matrices$computation
-      euklems_files <- if (plan$mode == "calculate") {
-        wlv_euklems_files(plan$root, source_io, matrices)
-      } else {
-        character()
-      }
-      if (length(euklems_files)) {
-        wlv_require_files(
-          euklems_files,
-          sprintf("WIOD EUKLEMS data for method `%s`", method$method)
-        )
-        if (!is.null(scientific_validations[[source_name]])) {
-          source_label <- toupper(sub("r", "", source_name, fixed = TRUE))
-          required_sector_columns <- c("euklems.capital", "euklems.sector")
-          missing_sector_columns <- setdiff(required_sector_columns, names(method_sectors))
-          if (length(missing_sector_columns)) {
-            stop(
-              sprintf(
-                "%s method `%s` lacks EU KLEMS sector columns: %s.",
-                source_label,
-                method$method,
-                paste(missing_sector_columns, collapse = ", ")
-              ),
-              call. = FALSE
-            )
-          }
-          euklems_validator <- get0(
-            sprintf("wlv_validate_%s_euklems", method$source),
-            envir = validator_environments[[source_name]],
-            mode = "function",
-            inherits = TRUE
-          )
-          if (!is.function(euklems_validator)) {
-            euklems_validator <- get0(
-              sprintf("wlv_validate_%s_euklems", method$source),
-              mode = "function",
-              inherits = TRUE
-            )
-          }
-          if (!is.function(euklems_validator)) {
-            stop(
-              sprintf("The %s EU KLEMS validator is not loaded.", source_label),
-              call. = FALSE
-            )
-          }
-          euklems_validator(
-            euklems_files,
-            required_variables = method_sectors$euklems.capital,
-            required_sectors = method_sectors$euklems.sector
-          )
-        }
-      }
-      method_data$source_io <- source_io
-    }
-
-    matrices <- plan$configuration[[method$method]]$matrices$computation
-    effective_euklems_files <- wlv_euklems_files(
-      plan$root,
-      source_artifacts$input_output,
-      matrices
-    )
-    if (length(effective_euklems_files)) {
-      wlv_require_files(
-        effective_euklems_files,
-        sprintf("WIOD EUKLEMS provenance inputs for method `%s`", method$method)
+    source_io <- artifacts$input_output
+    if (!length(source_io)) {
+      stop(
+        sprintf("Native method `%s` has no input-output artifact.", method),
+        call. = FALSE
       )
     }
-    method_data$source_provenance <- wlv_source_provenance(
-      source_manifest$manifest,
-      method$source[[1L]],
-      additional_paths = effective_euklems_files
+    wlv_native_validate_partition_coverage(
+      source_io,
+      artifacts$socioeconomic
     )
-    method_data$source_provenance_inputs <- effective_euklems_files
+    wlv_native_validate_leontief_zero_source_coordinates(
+      plan$scientific_profiles[[method]],
+      source_io,
+      method
+    )
+    partitions <- unname(vapply(
+      source_io,
+      wlv_native_io_partition,
+      character(1L)
+    ))
+    if (anyDuplicated(partitions)) {
+      stop(
+        sprintf("Native method `%s` has duplicate IO partitions.", method),
+        call. = FALSE
+      )
+    }
 
-    if (plan$mode == "recalculate") {
-      parent_run <- wlv_resolve_current_method_run(
+    aggregation_registry <- plan$aggregation_registries[[method]]
+    indicators <- plan$indicators[[method]]
+    configuration <- plan$configuration[[method]]
+    stages <- wlv_native_indicator_stage_map(
+      plan$native_registry,
+      configuration,
+      aggregation_registry,
+      indicators,
+      partitions
+    )
+    if (identical(plan$mode, "recalculate")) {
+      wlv_native_validate_selected_stages(
+        stages,
+        plan$sea_vars,
+        plan$at_stage,
+        method
+      )
+    }
+    instances <- wlv_native_plan_instances(
+      registry = plan$native_registry,
+      config = configuration,
+      aggregation_registry = aggregation_registry,
+      indicators = indicators,
+      partitions = partitions,
+      mode = plan$mode,
+      at_stage = plan$at_stage,
+      sea_vars = plan$sea_vars
+    )
+    preflight <- wlv_native_preflight_plan(
+      plan$native_registry,
+      instances,
+      partitions,
+      plan$mode,
+      source = source,
+      at_stage = plan$at_stage,
+      indicators = indicators
+    )
+    # Producer declarations describe the effective scientific composition, not
+    # the checkpoint-specific recalculation subgraph.  Always prove them
+    # against the complete calculation DAG; inherited diagnostics are checked
+    # separately against the immutable parent run below.
+    scientific_binding_preflight <- if (identical(plan$mode, "calculate")) {
+      preflight
+    } else {
+      wlv_native_scientific_binding_preflight(
+        registry = plan$native_registry,
+        configuration = configuration,
+        aggregation_registry = aggregation_registry,
+        indicators = indicators,
+        partitions = partitions,
+        source = source
+      )
+    }
+    wlv_native_validate_nonfinite_module_bindings(
+      plan$scientific_profiles[[method]],
+      scientific_binding_preflight,
+      method
+    )
+
+    # Compile and validate the complete native graph before hashing or reading
+    # the normalized scientific payloads.  Source existence and lightweight
+    # partition metadata are sufficient to determine the graph.
+    prepared <- wlv_validate_method_prepared_artifacts(
+      plan = plan,
+      method_record = method_record,
+      artifacts = artifacts,
+      source_io = source_io,
+      configuration = configuration,
+      scientific_validation = scientific_validations[[source]],
+      validator_override = validator_overrides[[source]],
+      validate_payloads = identical(plan$mode, "calculate") ||
+        plan$at_stage <= 4L
+    )
+    manifest <- prepared$manifest
+    scientific_validations[[source]] <- prepared$scientific_validation
+    method_sectors <- prepared$method_sectors
+    euklems_files <- prepared$euklems_files
+
+    method_data <- list(
+      source_manifest = manifest$manifest,
+      source_provenance = manifest$provenance,
+      source_sea = artifacts$socioeconomic,
+      source_io = source_io,
+      gfcf_observations = if (file.exists(manifest$gfcf_observations)) {
+        manifest$gfcf_observations
+      } else {
+        NULL
+      },
+      partitions = partitions,
+      indicator_stages = stages,
+      native_instances = instances,
+      native_preflight = preflight,
+      runtime_compatibility = wlv_native_runtime_compatibility(
+        plan,
+        method_record,
+        wlv_load_run_missingness_policy(plan, method_record)
+      )
+    )
+
+    source_input_paths <- wlv_method_source_input_paths(
+      plan,
+      method_record,
+      artifacts,
+      manifest$manifest,
+      additional_paths = euklems_files
+    )
+    source_input_stamps <- wlv_publication_input_path_stamps(
+      source_input_paths
+    )
+    manifest_path_indexes <- match(
+      manifest$source_input_paths,
+      source_input_paths
+    )
+    if (anyNA(manifest_path_indexes) || !identical(
+          source_input_stamps[manifest_path_indexes],
+          manifest$source_input_stamps
+        )) {
+      stop(
+        sprintf(
+          "Source inputs changed while method `%s` was being validated.",
+          method
+        ),
+        call. = FALSE
+      )
+    }
+    first_input_inventory <- wlv_publication_source_input_inventory(
+      plan$root,
+      euklems_files
+    )
+    method_data$source_provenance <- wlv_source_provenance(
+      manifest$manifest,
+      source,
+      additional_paths = euklems_files
+    )
+    second_input_inventory <- wlv_publication_source_input_inventory(
+      plan$root,
+      euklems_files
+    )
+    final_source_input_paths <- wlv_method_source_input_paths(
+      plan,
+      method_record,
+      artifacts,
+      manifest$manifest,
+      additional_paths = euklems_files
+    )
+    final_source_input_stamps <- wlv_publication_input_path_stamps(
+      final_source_input_paths
+    )
+    if (!identical(first_input_inventory, second_input_inventory) ||
+        !identical(source_input_paths, final_source_input_paths) ||
+        !identical(source_input_stamps, final_source_input_stamps)) {
+      stop(
+        sprintf(
+          "Source inputs changed while method `%s` was being validated.",
+          method
+        ),
+        call. = FALSE
+      )
+    }
+    method_data$source_provenance_inputs <- euklems_files
+    method_data$source_provenance_input_inventory <- first_input_inventory
+    method_data$source_input_receipt <- wlv_source_input_receipt(
+      plan,
+      method_record,
+      method_data,
+      paths = final_source_input_paths,
+      stamps = final_source_input_stamps
+    )
+
+    if (identical(plan$mode, "recalculate")) {
+      parent_run <- wlv_resolve_current_method_run_reference(
         plan$root,
-        method$method[[1L]],
-        channel = plan$channel,
-        allow_legacy = TRUE
+        method,
+        channel = plan$channel
       )
       result_dir <- parent_run$path
       method_data$parent_result_dir <- result_dir
       method_data$parent_run_id <- parent_run$run_id
       method_data$parent_result_id <- parent_run$result_id
       method_data$parent_release_id <- parent_run$release_id
-      method_data$parent_legacy <- parent_run$legacy
-      method_data$parent_provenance_complete <- if (isTRUE(parent_run$legacy)) {
-        FALSE
-      } else {
-        isTRUE(parent_run$manifest$result$provenance$complete)
+      method_data$parent_manifest <- parent_run$manifest
+      # Reject an incompatible parent from its authenticated manifest before
+      # reading any parent sidecar, diagnostic, snapshot, panel or IO value.
+      wlv_runtime_manifest_assert_compatible(
+        parent_run$manifest,
+        method_data$runtime_compatibility
+      )
+      if (!isTRUE(parent_run$manifest$result$provenance$complete)) {
+        stop(
+          sprintf(
+            "Parent run for method `%s` lacks complete provenance.",
+            method
+          ),
+          call. = FALSE
+        )
       }
+      provenance_record <- wlv_run_manifest_artifact_subset(
+        parent_run$manifest,
+        wlv_source_provenance_filename(),
+        label = "parent source-provenance artifact"
+      )[[1L]]
       wlv_assert_recalculation_source_provenance(
         result_dir,
-        current_manifest = source_manifest$manifest,
-        source = method$source[[1L]],
-        additional_paths = effective_euklems_files
+        current_manifest = manifest$manifest,
+        source = source,
+        additional_paths = euklems_files,
+        expected_sha256 = provenance_record$sha256
       )
-      result_required <- file.path(
+      required <- file.path(
         result_dir,
         c(
           "m_countries.fst", "m_countries.fst.meta",
-          "sea_sectors.fst", "sea_sectors.fst.meta"
+          "sea_sectors.fst", "sea_sectors.fst.meta",
+          "sea_countries.fst", "sea_countries.fst.meta",
+          "_states.csv", "_anomalies.csv"
         )
       )
-      wlv_require_files(result_required, sprintf("results for method `%s`", method$method))
-
-      optional_country <- file.path(result_dir, "sea_countries.fst")
-      if (file.exists(optional_country)) {
-        wlv_require_files(
-          paste0(optional_country, ".meta"),
-          sprintf("country result metadata for method `%s`", method$method)
+      wlv_require_files(required, sprintf("parent results for method `%s`", method))
+      method_data$parent_scientific_receipt <-
+        wlv_native_parent_scientific_receipt(
+          plan,
+          method_record,
+          parent_run$manifest
         )
-      }
 
       if (plan$at_stage <= 4L) {
         result_io <- wlv_list_io_files(result_dir)
         if (!length(result_io)) {
           stop(
-            sprintf("No result m_io*.fst files exist for method `%s`.", method$method),
+            sprintf("No parent m_io files exist for method `%s`.", method),
             call. = FALSE
           )
         }
         wlv_require_files(
           paste0(result_io, ".meta"),
-          sprintf("result matrix metadata for method `%s`", method$method)
+          sprintf("parent matrix metadata for method `%s`", method)
         )
-        source_keys <- vapply(source_io, wlv_io_period_key, character(1))
-        result_keys <- vapply(result_io, wlv_io_period_key, character(1))
-        if (anyDuplicated(source_keys) || anyDuplicated(result_keys)) {
-          stop(
-            sprintf("Matrix periods are duplicated for method `%s`.", method$method),
-            call. = FALSE
-          )
-        }
+        source_keys <- vapply(source_io, wlv_io_period_key, character(1L))
+        result_keys <- vapply(result_io, wlv_io_period_key, character(1L))
         source_order <- match(result_keys, source_keys)
-        if (anyNA(source_order) || length(source_keys) != length(result_keys)) {
+        if (anyDuplicated(source_keys) || anyDuplicated(result_keys) ||
+            anyNA(source_order) || length(source_keys) != length(result_keys)) {
           stop(
-            sprintf("Source and result matrix years do not correspond for method `%s`.", method$method),
+            sprintf(
+              "Source and parent matrix periods do not correspond for method `%s`.",
+              method
+            ),
             call. = FALSE
           )
         }
         method_data$source_io <- source_io[source_order]
         method_data$result_io <- result_io
+        method_data$partitions <- unname(vapply(
+          method_data$source_io,
+          wlv_native_io_partition,
+          character(1L)
+        ))
       }
     }
-
-    data_plan[[index]] <- method_data
+    data_plan[[method]] <- method_data
   }
 
   plan$data <- data_plan
@@ -1293,11 +2326,17 @@ wlv_with_cluster <- function(
     if (!cluster_open) {
       return(invisible(NULL))
     }
-    cluster_open <<- FALSE
     if (silent) {
-      try(stop_cluster(cluster), silent = TRUE)
+      stopped <- !inherits(
+        try(stop_cluster(cluster), silent = TRUE),
+        "try-error"
+      )
+      if (stopped) {
+        cluster_open <<- FALSE
+      }
     } else {
       stop_cluster(cluster)
+      cluster_open <<- FALSE
     }
     invisible(NULL)
   }
@@ -1314,93 +2353,135 @@ wlv_with_cluster <- function(
   result
 }
 
-wlv_new_run_environment <- function(
-    values = list(),
-    parent = parent.env(globalenv())) {
-  if (!is.list(values) || (length(values) && is.null(names(values)))) {
-    stop("`values` must be a named list.", call. = FALSE)
+wlv_validate_staged_preparation <- function(plan, source, result) {
+  if (!inherits(plan, "wlv_run_plan")) {
+    stop("`plan` must be produced by wlv_validate_request().", call. = FALSE)
+  }
+  if (!is.character(source) || length(source) != 1L || is.na(source) ||
+      !nzchar(source)) {
+    stop("Staged preparation validation requires one source.", call. = FALSE)
+  }
+  if (!inherits(result, "wlv_preparation_result")) {
+    stop("Staged preparation validation requires a preparation result.",
+      call. = FALSE
+    )
+  }
+  source_indexes <- which(plan$methods$source == source)
+  if (!length(source_indexes)) {
+    stop(sprintf("Prepared source `%s` is absent from the run plan.", source),
+      call. = FALSE
+    )
   }
 
-  run_environment <- new.env(parent = parent)
-  if (length(values)) {
-    list2env(values, envir = run_environment)
-  }
-  run_environment$source <- local({
-    target <- run_environment
-    function(file, ...) {
-      arguments <- list(...)
-      arguments$local <- target
-      do.call(base::source, c(list(file = file), arguments))
-    }
-  })
-  run_environment
-}
-
-wlv_run_script <- function(
-    script,
-    values = list(),
-    cluster = NULL,
-    runner = sys.source,
-    preamble = character(),
-    root = NULL) {
-  # Preserve the binding on the sequential path: `$<- NULL` would remove it.
-  values["my.cluster"] <- list(cluster)
-  run_environment <- wlv_new_run_environment(values)
-  label <- if (!is.null(values$method_version)) {
-    sprintf("Method `%s`", values$method_version)
-  } else {
-    sprintf("Script `%s`", script)
-  }
-
-  tryCatch(
-    {
-      if (!is.null(root)) {
-        old_working_directory <- setwd(root)
-        on.exit(setwd(old_working_directory), add = TRUE)
-      }
-      for (preamble_script in preamble) {
-        sys.source(preamble_script, envir = run_environment)
-      }
-      runner(script, envir = run_environment)
-      run_environment
-    },
-    error = function(error) {
-      if (inherits(error, "wlv_contract_error")) {
-        stop(error)
-      }
-      wrapped <- simpleError(
-        sprintf("%s failed: %s", label, conditionMessage(error)),
-        call = conditionCall(error)
+  scientific_validation <- NULL
+  for (index in source_indexes) {
+    method_record <- plan$methods[index, , drop = FALSE]
+    method <- method_record$method[[1L]]
+    normalized_destination <- file.path(
+      method_record$source_dir[[1L]],
+      "normalized"
+    )
+    staged_normalized <- wlv_preparation_staged_path(
+      result,
+      normalized_destination
+    )
+    staged_method_record <- method_record
+    staged_method_record$source_dir[[1L]] <- dirname(staged_normalized)
+    artifacts <- wlv_resolve_source_artifacts(
+      plan,
+      staged_method_record,
+      needs_io = TRUE
+    )
+    source_io <- artifacts$input_output
+    if (!length(source_io)) {
+      stop(
+        sprintf("Prepared source for method `%s` has no input-output artifact.", method),
+        call. = FALSE
       )
-      attr(wrapped, "parent") <- error
-      stop(wrapped)
     }
+    wlv_native_validate_partition_coverage(
+      source_io,
+      artifacts$socioeconomic
+    )
+    wlv_native_validate_leontief_zero_source_coordinates(
+      plan$scientific_profiles[[method]],
+      source_io,
+      method
+    )
+
+    configuration <- plan$configuration[[method]]
+    capital_modules <- configuration$module_id[
+      startsWith(configuration$module_id, "matrix.capital.")
+    ]
+    expected_euklems <- wlv_euklems_files(
+      plan$root,
+      source_io,
+      capital_modules
+    )
+    staged_euklems <- if (length(expected_euklems)) {
+      unname(vapply(
+        expected_euklems,
+        function(path) wlv_preparation_staged_path(result, path),
+        character(1L)
+      ))
+    } else {
+      character()
+    }
+    prepared <- wlv_validate_method_prepared_artifacts(
+      plan = plan,
+      method_record = staged_method_record,
+      artifacts = artifacts,
+      source_io = source_io,
+      configuration = configuration,
+      scientific_validation = scientific_validation,
+      euklems_files = staged_euklems
+    )
+    scientific_validation <- prepared$scientific_validation
+  }
+  wlv_assert_plan_publication_inputs_unchanged(
+    plan,
+    methods = plan$methods$method[source_indexes],
+    stabilize = TRUE
   )
+  invisible(TRUE)
 }
 
 wlv_prepare_sources <- function(plan) {
+  if (!inherits(plan, "wlv_run_plan")) {
+    stop("`plan` must be produced by wlv_validate_request().", call. = FALSE)
+  }
+  registry <- wlv_default_preparation_registry()
+  services <- wlv_default_preparation_services()
   source_indexes <- which(!duplicated(plan$methods$source))
-  preamble <- file.path(
-    plan$root,
-    "R",
-    "lib",
-    c(
-      "catalog.R", "functions.R", "gfcf_contracts.R",
-      "source_manifest.R", "source_normalization.R"
+  executions <- lapply(source_indexes, function(index) {
+    method_record <- plan$methods[index, , drop = FALSE]
+    source <- method_record$source[[1L]]
+    source_record <- wlv_catalog_source(plan$catalog, source)
+    preparation_task <- source_record$preparation_task[[1L]]
+    if (!identical(preparation_task, source)) {
+      stop(
+        sprintf(
+          "Source `%s` does not match its native preparation task `%s`.",
+          source,
+          preparation_task
+        ),
+        call. = FALSE
+      )
+    }
+    wlv_prepare_registered_source(
+      registry = registry,
+      source = preparation_task,
+      root = plan$root,
+      catalog = plan$catalog,
+      source_record = source_record,
+      services = services,
+      validate_staged = function(result, context) {
+        wlv_validate_staged_preparation(plan, context$source, result)
+      }
     )
-  )
-  invisible(lapply(source_indexes, function(index) {
-    source_record <- plan$methods[index, , drop = FALSE]
-    wlv_run_script(
-      source_record$preparer[[1L]],
-      values = list(
-        wlv_catalog = plan$catalog,
-        wlv_source_record = source_record
-      ),
-      preamble = preamble,
-      root = plan$root
-    )
-  }))
+  })
+  names(executions) <- plan$methods$source[source_indexes]
+  invisible(executions)
 }
 
 wlv_result_path_is_within <- function(path, parent) {
@@ -1515,195 +2596,6 @@ wlv_remove_result_staging <- function(staging, results_root) {
   invisible(NULL)
 }
 
-wlv_publish_result_staging <- function(staging, final, results_root) {
-  if (!dir.exists(staging) || !wlv_result_path_is_within(staging, results_root)) {
-    stop("Result staging directory is missing or unsafe.", call. = FALSE)
-  }
-  final_parent <- dirname(final)
-  if (!identical(
-    normalizePath(final_parent, winslash = "/", mustWork = TRUE),
-    normalizePath(results_root, winslash = "/", mustWork = TRUE)
-  )) {
-    stop("Refusing to publish results outside the results directory.", call. = FALSE)
-  }
-
-  backup <- tempfile(
-    pattern = sprintf(".backup-%s-", basename(final)),
-    tmpdir = results_root
-  )
-  had_final <- dir.exists(final)
-  if (had_final && !file.rename(final, backup)) {
-    stop(sprintf("Could not move existing results `%s` to a backup.", final), call. = FALSE)
-  }
-
-  installed <- FALSE
-  complete <- FALSE
-  on.exit({
-    if (!complete) {
-      recovery_failures <- character()
-      if (installed && dir.exists(final) && !dir.exists(staging)) {
-        if (!file.rename(final, staging)) {
-          recovery_failures <- c(
-            recovery_failures,
-            sprintf("new result remains at `%s`", final)
-          )
-        }
-      }
-      if (had_final && dir.exists(backup) && !dir.exists(final)) {
-        if (!file.rename(backup, final)) {
-          recovery_failures <- c(
-            recovery_failures,
-            sprintf("prior result remains at `%s`", backup)
-          )
-        }
-      }
-      if (length(recovery_failures)) {
-        stop(
-          sprintf(
-            paste0(
-              "Result promotion failed and automatic restoration did not ",
-              "complete; manual recovery required: %s."
-            ),
-            paste(recovery_failures, collapse = "; ")
-          ),
-          call. = FALSE
-        )
-      }
-    }
-  }, add = TRUE)
-  if (!file.rename(staging, final)) {
-    restored <- !had_final ||
-      (dir.exists(backup) && !dir.exists(final) && file.rename(backup, final))
-    complete <- TRUE
-    if (!restored) {
-      stop(
-        sprintf(
-          paste0(
-            "Result promotion failed and automatic restoration did not ",
-            "complete; manual recovery required: prior result remains at `%s`."
-          ),
-          backup
-        ),
-        call. = FALSE
-      )
-    }
-    stop(sprintf("Could not promote staged results to `%s`.", final), call. = FALSE)
-  }
-  installed <- TRUE
-  transaction <- list(
-    staging = staging,
-    final = final,
-    backup = backup,
-    had_final = had_final,
-    installed = installed,
-    results_root = results_root
-  )
-  complete <- TRUE
-  transaction
-}
-
-wlv_rollback_result_staging <- function(transaction) {
-  if (is.null(transaction)) {
-    return(invisible(NULL))
-  }
-  staging <- transaction$staging
-  final <- transaction$final
-  backup <- transaction$backup
-  results_root <- transaction$results_root
-  if (!wlv_result_path_is_within(final, results_root) ||
-      !wlv_result_path_is_within(staging, results_root) ||
-      !wlv_result_path_is_within(backup, results_root)) {
-    stop("Refusing to roll back unsafe result paths.", call. = FALSE)
-  }
-  if (isTRUE(transaction$installed) && dir.exists(final)) {
-    if (dir.exists(staging) || !file.rename(final, staging)) {
-      stop(
-        sprintf(
-          "Could not move new results `%s` back to staging; the new results remain published.",
-          final
-        ),
-        call. = FALSE
-      )
-    }
-  }
-  if (isTRUE(transaction$had_final) && dir.exists(backup)) {
-    if (dir.exists(final) || !file.rename(backup, final)) {
-      recovered_new <- !dir.exists(final) && dir.exists(staging) &&
-        file.rename(staging, final)
-      stop(
-        sprintf(
-          paste0(
-            "Could not restore prior results `%s`; %s."
-          ),
-          final,
-          if (recovered_new) {
-            "the new results were restored to keep the published generation coherent"
-          } else {
-            "manual recovery is required before another run"
-          }
-        ),
-        call. = FALSE
-      )
-    }
-  }
-  invisible(transaction)
-}
-
-wlv_reinstate_new_result_staging <- function(transaction) {
-  if (is.null(transaction)) {
-    return(invisible(NULL))
-  }
-  staging <- transaction$staging
-  final <- transaction$final
-  backup <- transaction$backup
-  results_root <- transaction$results_root
-  if (!wlv_result_path_is_within(final, results_root) ||
-      !wlv_result_path_is_within(staging, results_root) ||
-      !wlv_result_path_is_within(backup, results_root)) {
-    stop("Refusing to reinstate unsafe result paths.", call. = FALSE)
-  }
-  if (!dir.exists(staging)) {
-    stop("The new result staging directory is unavailable for recovery.", call. = FALSE)
-  }
-  moved_prior <- FALSE
-  complete <- FALSE
-  on.exit({
-    if (!complete && moved_prior && dir.exists(backup) && !dir.exists(final)) {
-      file.rename(backup, final)
-    }
-  }, add = TRUE)
-  if (dir.exists(final)) {
-    if (dir.exists(backup) || !file.rename(final, backup)) {
-      stop("Could not retain prior results while reinstating the new generation.", call. = FALSE)
-    }
-    moved_prior <- TRUE
-  }
-  if (!file.rename(staging, final)) {
-    stop("Could not reinstate the new result generation.", call. = FALSE)
-  }
-  complete <- TRUE
-  invisible(transaction)
-}
-
-wlv_finalize_result_staging <- function(transaction) {
-  if (is.null(transaction) || !isTRUE(transaction$had_final)) {
-    return(invisible(transaction))
-  }
-  backup <- transaction$backup
-  results_root <- transaction$results_root
-  if (dir.exists(backup)) {
-    if (!wlv_result_path_is_within(backup, results_root) ||
-        !startsWith(basename(backup), ".backup-")) {
-      stop(sprintf("Refusing to remove unsafe backup path `%s`.", backup), call. = FALSE)
-    }
-    unlink(backup, recursive = TRUE, force = TRUE)
-    if (dir.exists(backup)) {
-      warning(sprintf("Could not remove old result backup `%s`.", backup), call. = FALSE)
-    }
-  }
-  invisible(transaction)
-}
-
 wlv_load_run_missingness_policy <- function(plan, method) {
   policy_id <- if ("missingness_policy" %in% names(method)) {
     method$missingness_policy[[1L]]
@@ -1718,14 +2610,18 @@ wlv_load_run_missingness_policy <- function(plan, method) {
   }
 
   record <- wlv_catalog_missingness_policy(plan$catalog, policy_id)
-  script <- file.path(plan$root, record$script[[1L]])
-  factory_name <- record$factory[[1L]]
-  policy_environment <- new.env(parent = environment(wlv_load_run_missingness_policy))
-  sys.source(script, envir = policy_environment)
-  factory <- get0(factory_name, envir = policy_environment, mode = "function", inherits = TRUE)
-  if (!is.function(factory)) {
+  factories <- list(
+    wiodr13_v1 = wlv_wiodr13_missingness_policy,
+    wiodr16_v1 = wlv_wiodr16_missingness_policy
+  )
+  factory <- factories[[policy_id]]
+  if (is.null(factory) || !is.function(factory) ||
+      !identical(record$policy[[1L]], policy_id)) {
     stop(
-      sprintf("Missingness policy `%s` factory `%s` is unavailable.", policy_id, factory_name),
+      sprintf(
+        "Missingness policy `%s` does not match the explicit native registry.",
+        policy_id
+      ),
       call. = FALSE
     )
   }
@@ -1734,195 +2630,1759 @@ wlv_load_run_missingness_policy <- function(plan, method) {
       !identical(policy$policy_id, policy_id) ||
       !identical(policy$source, method$source[[1L]])) {
     stop(
-      sprintf("Missingness policy factory `%s` returned an incompatible policy.", factory_name),
+      sprintf(
+        "Missingness policy `%s` returned an incompatible native policy.",
+        policy_id
+      ),
       call. = FALSE
     )
   }
   policy
 }
 
-wlv_run_method <- function(plan, method, cluster = NULL) {
-  method_record <- plan$methods[match(method, plan$methods$method), , drop = FALSE]
-  results_root <- file.path(plan$root, "results")
-  run_data <- plan$data[[method]]
-  existing_result_dir <- if (plan$mode == "recalculate") {
-    run_data$parent_result_dir
-  } else {
-    NULL
+wlv_native_compatibility_canonical_value <- function(value) {
+  if (!is.list(value) || is.data.frame(value)) {
+    return(value)
   }
+  value_names <- names(value)
+  if (!is.null(value_names)) {
+    if (anyNA(value_names) || any(!nzchar(value_names)) ||
+        anyDuplicated(value_names)) {
+      stop("Runtime compatibility received non-canonical named arguments.",
+        call. = FALSE
+      )
+    }
+    value <- value[order(value_names, method = "radix")]
+  }
+  lapply(value, wlv_native_compatibility_canonical_value)
+}
+
+wlv_native_configuration_descriptor <- function(configuration, registry) {
+  if (!inherits(registry, "wlv_module_registry") || !is.environment(registry)) {
+    stop("Runtime compatibility requires the sealed native registry.",
+      call. = FALSE
+    )
+  }
+  instances <- wlv_runtime_instances(configuration)
+  if (length(instances)) {
+    ordering <- order(vapply(
+      instances,
+      `[[`,
+      character(1L),
+      "instance_id"
+    ), method = "radix")
+    instances <- instances[ordering]
+  }
+  descriptors <- lapply(instances, function(instance) {
+    if (!is.null(instance$partition)) {
+      stop("Effective module configuration cannot contain bound partitions.",
+        call. = FALSE
+      )
+    }
+    spec <- wlv_registry_module(registry, instance$module_id)
+    args <- wlv_runtime_resolve_arguments(spec, instance)
+    variant <- if ("variant" %in% names(args)) args$variant else ""
+    source_variable <- if ("source_variable" %in% names(args)) {
+      args$source_variable
+    } else {
+      ""
+    }
+    if (!is.character(variant) || length(variant) != 1L || is.na(variant) ||
+        !is.character(source_variable) || length(source_variable) != 1L ||
+        is.na(source_variable)) {
+      stop("Typed configuration aliases are not canonical scalars.", call. = FALSE)
+    }
+    args[c("variant", "source_variable")] <- NULL
+    list(
+      instance_id = instance$instance_id,
+      module_id = instance$module_id,
+      variant = variant,
+      source_variable = source_variable,
+      args = wlv_native_compatibility_canonical_value(args)
+    )
+  })
+  list(
+    version = "wlv-effective-module-configuration/1.0.0",
+    instances = descriptors
+  )
+}
+
+wlv_native_runtime_compatibility <- function(plan, method_record, policy) {
+  if (!inherits(plan, "wlv_run_plan") || !is.data.frame(method_record) ||
+      nrow(method_record) != 1L || !inherits(policy, "wlv_missingness_policy")) {
+    stop("Native runtime compatibility received invalid run inputs.",
+      call. = FALSE
+    )
+  }
+  method <- method_record$method[[1L]]
+  source <- method_record$source[[1L]]
+  indicators <- plan$indicators[[method]]
+  unit_contract_id <- method_record$unit_contract[[1L]]
+  unit_sidecar <- wlv_catalog_unit_contract_sidecar(
+    plan$catalog,
+    unit_contract_id,
+    indicators = indicators,
+    resolved_aggregations = plan$aggregation_registries[[method]]$rows
+  )
+  configuration <- plan$configuration[[method]]
+  if (!is.data.frame(configuration) || !"instance_id" %in% names(configuration)) {
+    stop("Native runtime compatibility lacks effective module configuration.",
+      call. = FALSE
+    )
+  }
+  configuration <- wlv_native_configuration_descriptor(
+    configuration,
+    plan$native_registry
+  )
+  method_parameters <- wlv_native_method_parameters(plan$root, method)
+  wlv_runtime_compatibility(
+    method = method,
+    source = source,
+    runtime_generation_sha256 = .wlv_runtime_compatibility_generation(),
+    method_parameters_sha256 = wlv_runtime_snapshot_value_sha256(
+      method_parameters$parameters
+    ),
+    method_sectors_sha256 = wlv_runtime_snapshot_value_sha256(
+      method_parameters$sectors
+    ),
+    indicators = indicators,
+    unit_contract_id = unit_contract_id,
+    unit_sidecar_sha256 = wlv_runtime_snapshot_value_sha256(unit_sidecar),
+    unit_definitions_sha256 = wlv_runtime_snapshot_value_sha256(
+      plan$unit_definitions[[method]]
+    ),
+    missingness_policy_id = policy$policy_id,
+    missingness_policy_sha256 = wlv_runtime_snapshot_value_sha256(policy),
+    aggregation_registry_sha256 = wlv_runtime_snapshot_value_sha256(
+      plan$aggregation_registries[[method]]
+    ),
+    scientific_profile_sha256 = wlv_runtime_snapshot_value_sha256(
+      plan$scientific_profiles[[method]]
+    ),
+    configuration_sha256 = wlv_runtime_snapshot_value_sha256(configuration)
+  )
+}
+
+wlv_native_year_apply_service <- function(cluster = NULL) {
+  if (is.null(cluster)) {
+    return(function(X, MARGIN, FUN, ...) {
+      base::apply(X, MARGIN, FUN, ...)
+    })
+  }
+  force(cluster)
+  function(X, MARGIN, FUN, ...) {
+    parallel::parApply(
+      cl = cluster,
+      X = X,
+      MARGIN = MARGIN,
+      FUN = FUN,
+      ...
+    )
+  }
+}
+
+wlv_native_artifact_value <- function(store, name, axes) {
+  wlv_store_read(
+    store,
+    wlv_resource_ref(
+      paste0("artifact/", name),
+      wlv_native_artifact_array_contract(name, axes)
+    )
+  )
+}
+
+wlv_native_store_value <- function(store, key, contract) {
+  wlv_store_read(store, wlv_resource_ref(key, contract))
+}
+
+wlv_native_configuration_sidecars <- function(
+    plan,
+    method,
+    run_data) {
+  configuration <- plan$configuration[[method]]
+  ordered <- configuration[order(configuration$instance_id, method = "radix"), , drop = FALSE]
+  assumptions <- ordered[startsWith(ordered$instance_id, "assumption."), , drop = FALSE]
+  matrices <- ordered[startsWith(ordered$instance_id, "matrix."), , drop = FALSE]
+  sidecar <- function(value) {
+    data.frame(
+      names = as.character(value$instance_id),
+      computation = as.character(value$module_id),
+      order = seq_len(nrow(value)),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+  }
+
+  registry <- plan$native_registry
+  aggregation_registry <- plan$aggregation_registries[[method]]
+  indicators <- plan$indicators[[method]]
+  instances <- wlv_native_plan_instances(
+    registry = registry,
+    config = configuration,
+    aggregation_registry = aggregation_registry,
+    indicators = indicators,
+    partitions = run_data$partitions,
+    mode = "calculate"
+  )
+  resolved <- wlv_native_resolved_instances(
+    registry,
+    instances,
+    run_data$partitions,
+    operation = "calculate"
+  )
+  candidates <- stats::setNames(vector("list", length(indicators)), indicators)
+  prefix <- "sea/sector/"
+  for (module in resolved) {
+    rank <- wlv_runtime_checkpoint_rank(
+      module$checkpoint,
+      wlv_default_checkpoint_order()
+    )
+    for (output in module$provides) {
+      key <- output$ref$key
+      if (!startsWith(key, prefix)) next
+      indicator <- substring(key, nchar(prefix) + 1L)
+      if (!indicator %in% indicators) next
+      candidates[[indicator]][[length(candidates[[indicator]]) + 1L]] <- list(
+        rank = rank,
+        instance_id = module$instance_id,
+        module_id = module$module_id
+      )
+    }
+  }
+  selected <- lapply(indicators, function(indicator) {
+    available <- candidates[[indicator]]
+    if (!length(available)) {
+      stop(
+        sprintf("No native solution metadata exists for `%s`.", indicator),
+        call. = FALSE
+      )
+    }
+    ranks <- vapply(available, `[[`, integer(1L), "rank")
+    available <- available[ranks == max(ranks)]
+    ids <- vapply(available, `[[`, character(1L), "instance_id")
+    available[[order(ids, method = "radix")[[length(ids)]]]]
+  })
+  aggregation <- wlv_native_aggregation_solutions(
+    plan$unit_definitions[[method]],
+    aggregation_registry$rows
+  )
+  aggregation <- aggregation[match(indicators, aggregation$names), , drop = FALSE]
+  solutions <- data.frame(
+    names = indicators,
+    sector_solution = vapply(selected, `[[`, character(1L), "module_id"),
+    country_solution = as.character(aggregation$country_solution),
+    stage = vapply(selected, `[[`, integer(1L), "rank"),
+    order = seq_along(indicators),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  list(
+    assumptions = sidecar(assumptions),
+    matrices = sidecar(matrices),
+    solutions = solutions
+  )
+}
+
+wlv_native_panel_metadata <- function(parameters, metadata) {
+  indicator_names <- metadata[, c("code", "name"), drop = FALSE]
+  descriptions <- metadata[, c("code", "description"), drop = FALSE]
+  descriptions$code <- paste0("desc.", descriptions$code)
+  observations <- metadata[, c("code", "observation"), drop = FALSE]
+  observations$code <- paste0(
+    "obs.",
+    parameters$code[[1L]],
+    ".",
+    observations$code
+  )
+  observations <- observations[!is.na(observations$observation), , drop = FALSE]
+  group_values <- unique(as.character(metadata$group))
+  group_values <- group_values[!is.na(group_values)]
+  groups <- data.frame(
+    code = paste0("group.", group_values),
+    label = group_values,
+    stringsAsFactors = FALSE
+  )
+  names(indicator_names) <- names(descriptions) <- names(observations) <-
+    names(groups) <- c("cod_label", "label")
+  indicators <- rbind(indicator_names, descriptions, observations, groups)
+  panel <- metadata[, c("code", "group", "type", "reverted"), drop = FALSE]
+  names(panel) <- c("value", "groups", "type", "reverted")
+  list(
+    `_panel_indicators.csv` = indicators,
+    `_panel_meta_indicators.csv` = panel
+  )
+}
+
+wlv_native_result_locator_ids <- function(module_plan) {
+  if (!inherits(module_plan, "wlv_module_plan") ||
+      !is.environment(module_plan) || !environmentIsLocked(module_plan)) {
+    stop(
+      "Native result retention requires a locked compiled module plan.",
+      call. = FALSE
+    )
+  }
+  catalog <- module_plan$terminal_catalog
+  required <- c("locator_id", "key", "role")
+  if (!is.data.frame(catalog) || !all(required %in% names(catalog)) ||
+      anyNA(catalog[required]) || any(!nzchar(catalog$locator_id)) ||
+      any(!nzchar(catalog$key)) || any(!nzchar(catalog$role)) ||
+      anyDuplicated(catalog$locator_id)) {
+    stop("The compiled module terminal catalog is invalid.", call. = FALSE)
+  }
+
+  retained_roles <- c("anomaly", "diagnostic", "metadata")
+  retained_keys <- c(
+    "configuration/parameters",
+    "configuration/sectors",
+    "metadata/indicators",
+    "intermediate/lambda",
+    "semantic_state/intermediate/lambda"
+  )
+  retained_prefixes <- c(
+    "artifact/",
+    "semantic_state/artifact/",
+    "io/",
+    "semantic_state/io/",
+    "sea/sector/",
+    "sea/country/",
+    "semantic_state/sea/sector/",
+    "semantic_state/sea/country/"
+  )
+  prefix_match <- Reduce(
+    `|`,
+    lapply(retained_prefixes, function(prefix) {
+      startsWith(catalog$key, prefix)
+    }),
+    init = rep(FALSE, nrow(catalog))
+  )
+  retain <- catalog$role %in% retained_roles |
+    catalog$key %in% retained_keys |
+    prefix_match
+  unname(catalog$locator_id[retain])
+}
+
+wlv_native_role_contributions <- function(run_result, role) {
+  if (!inherits(run_result, "wlv_run_result") || !is.environment(run_result)) {
+    stop("Native role collection requires a completed module run.", call. = FALSE)
+  }
+  role <- match.arg(role, c("anomaly", "diagnostic"))
+  entries <- run_result$store$entries
+  trace <- run_result$trace
+  collected <- list()
+  visited <- character()
+  for (index in seq_len(nrow(trace))) {
+    partition <- trace$partition[[index]]
+    matching <- names(entries)[vapply(entries, function(entry) {
+      entry_partition <- if (is.null(entry$partition)) "" else entry$partition
+      identical(entry$producer, trace$instance_id[[index]]) &&
+        identical(entry_partition, partition) &&
+        identical(entry$contract$role, role)
+    }, logical(1L))]
+    if (length(matching) != 1L) {
+      stop(
+        sprintf(
+          "Module `%s` published %d `%s` resources; expected exactly one.",
+          trace$node_id[[index]],
+          length(matching),
+          role
+        ),
+        call. = FALSE
+      )
+    }
+    entry <- entries[[matching[[1L]]]]
+    collected[[trace$node_id[[index]]]] <- list(
+      node_id = trace$node_id[[index]],
+      instance_id = trace$instance_id[[index]],
+      module_id = trace$module_id[[index]],
+      partition = trace$partition[[index]],
+      key = entry$key,
+      value = entry$value
+    )
+    visited <- c(visited, matching)
+  }
+  produced <- names(entries)[vapply(entries, function(entry) {
+    identical(entry$contract$role, role) &&
+      !identical(entry$producer, wlv_runtime_seed_producer())
+  }, logical(1L))]
+  if (!setequal(visited, produced)) {
+    stop(
+      sprintf("Native `%s` resource collection is incomplete.", role),
+      call. = FALSE
+    )
+  }
+  collected
+}
+
+wlv_native_role_resources <- function(run_result, role) {
+  contributions <- wlv_native_role_contributions(run_result, role)
+  result <- lapply(contributions, function(contribution) contribution$value)
+  names(result) <- names(contributions)
+  result
+}
+
+wlv_native_module_anomalies <- function(run_result) {
+  resources <- wlv_native_role_resources(run_result, "anomaly")
+  if (!length(resources)) {
+    return(wlv_empty_contract_table())
+  }
+  merged <- wlv_semantic_anomaly_merge(resources)
+  wlv_semantic_plain_data_frame(
+    merged,
+    wlv_semantic_anomaly_columns()
+  )
+}
+
+wlv_native_diagnostic_contract <- function(
+    id,
+    visibility = c("published", "internal"),
+    owner_rule = c("exact", "self"),
+    owners = character()) {
+  id <- wlv_runtime_scalar_character(id, "diagnostic id")
+  visibility <- match.arg(visibility)
+  owner_rule <- match.arg(owner_rule)
+  if (!is.character(owners) || anyNA(owners) || any(!nzchar(owners)) ||
+      anyDuplicated(owners) ||
+      any(!grepl(wlv_runtime_module_pattern(), owners))) {
+    stop("Diagnostic contract owners must be unique module IDs.", call. = FALSE)
+  }
+  owners <- sort(owners, method = "radix")
+  if ((identical(owner_rule, "exact") && !length(owners)) ||
+      (identical(owner_rule, "self") && length(owners))) {
+    stop("Diagnostic contract ownership is not canonical.", call. = FALSE)
+  }
+  structure(
+    list(
+      id = id,
+      visibility = visibility,
+      owner_rule = owner_rule,
+      owners = owners
+    ),
+    class = "wlv_native_diagnostic_contract"
+  )
+}
+
+wlv_native_diagnostic_contract_assert <- function(value) {
+  if (!inherits(value, "wlv_native_diagnostic_contract") ||
+      !is.list(value) || !identical(
+        names(value),
+        c("id", "visibility", "owner_rule", "owners")
+      )) {
+    stop("Native diagnostic contract is invalid.", call. = FALSE)
+  }
+  rebuilt <- wlv_native_diagnostic_contract(
+    value$id,
+    value$visibility,
+    value$owner_rule,
+    value$owners
+  )
+  if (!identical(value, rebuilt)) {
+    stop("Native diagnostic contract is not canonical.", call. = FALSE)
+  }
+  invisible(value)
+}
+
+wlv_native_diagnostic_contract_registry <- function() {
+  capital_owners <- c(
+    "matrix.capital.wiodr13",
+    "matrix.capital.wiodr16",
+    "matrix.capital.reduction_problem"
+  )
+  contracts <- list(
+    wlv_native_diagnostic_contract(
+      "_leontief_diagnostics.csv",
+      "published",
+      "exact",
+      "matrix.transformation"
+    ),
+    wlv_native_diagnostic_contract(
+      "_nonfinite_resolution_diagnostics.csv",
+      "published",
+      "self"
+    ),
+    wlv_native_diagnostic_contract(
+      "_gfcf_negative_cells.csv",
+      "published",
+      "exact",
+      capital_owners
+    ),
+    wlv_native_diagnostic_contract(
+      "_gfcf_negative_summary.csv",
+      "published",
+      "exact",
+      capital_owners
+    ),
+    wlv_native_diagnostic_contract(
+      "indicator_count",
+      "internal",
+      "exact",
+      "aggregation.direct"
+    ),
+    wlv_native_diagnostic_contract(
+      "direct_count",
+      "internal",
+      "exact",
+      "aggregation.direct"
+    ),
+    wlv_native_diagnostic_contract(
+      "formula_count",
+      "internal",
+      "exact",
+      "aggregation.direct"
+    ),
+    wlv_native_diagnostic_contract(
+      "row_constant_capital_zeroes",
+      "internal",
+      "exact",
+      "assumption.row.standard"
+    )
+  )
+  lapply(contracts, wlv_native_diagnostic_contract_assert)
+  ids <- vapply(contracts, `[[`, character(1L), "id")
+  if (anyDuplicated(ids)) {
+    stop("Native diagnostic registry repeats an ID.", call. = FALSE)
+  }
+  stats::setNames(contracts, ids)
+}
+
+wlv_native_published_diagnostic_ids <- function() {
+  registry <- wlv_native_diagnostic_contract_registry()
+  names(registry)[vapply(registry, function(contract) {
+    identical(contract$visibility, "published")
+  }, logical(1L))]
+}
+
+wlv_native_diagnostic_owner_registry <- function() {
+  registry <- wlv_native_diagnostic_contract_registry()
+  exact <- registry[vapply(registry, function(contract) {
+    identical(contract$owner_rule, "exact")
+  }, logical(1L))]
+  lapply(exact, `[[`, "owners")
+}
+
+wlv_native_validate_diagnostic_contribution_owner <- function(contribution) {
+  if (!is.list(contribution) || !is.character(contribution$module_id) ||
+      length(contribution$module_id) != 1L || is.na(contribution$module_id) ||
+      !is.list(contribution$value)) {
+    stop("Diagnostic contribution provenance is invalid.", call. = FALSE)
+  }
+  module_id <- contribution$module_id
+  bundle <- contribution$value
+  wlv_semantic_diagnostic_bundle_validate(bundle)
+  registry <- wlv_native_diagnostic_contract_registry()
+  unknown <- setdiff(names(bundle), names(registry))
+  if (length(unknown)) {
+    stop(
+      sprintf(
+        "Module `%s` emitted undeclared diagnostic ID(s): %s.",
+        module_id,
+        paste(sort(unknown, method = "radix"), collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  for (diagnostic_id in names(bundle)) {
+    contract <- registry[[diagnostic_id]]
+    if (identical(contract$owner_rule, "exact") &&
+        !module_id %in% contract$owners) {
+      stop(
+        sprintf(
+          "Module `%s` is not an owner of diagnostic `%s`.",
+          module_id,
+          diagnostic_id
+        ),
+        call. = FALSE
+      )
+    }
+    if (identical(contract$visibility, "published") &&
+        !is.data.frame(bundle[[diagnostic_id]])) {
+      stop(
+        sprintf("Published diagnostic `%s` is not a data frame.", diagnostic_id),
+        call. = FALSE
+      )
+    }
+  }
+  nonfinite <- "_nonfinite_resolution_diagnostics.csv"
+  if (nonfinite %in% names(bundle)) {
+    value <- bundle[[nonfinite]]
+    if (!is.data.frame(value) || !"module" %in% names(value) ||
+        anyNA(value$module) || any(!nzchar(as.character(value$module)))) {
+      stop(
+        sprintf("Module `%s` published invalid non-finite provenance.", module_id),
+        call. = FALSE
+      )
+    }
+    foreign <- unique(as.character(value$module)[value$module != module_id])
+    if (length(foreign)) {
+      stop(
+        sprintf(
+          paste0(
+            "Module `%s` published non-finite diagnostics owned by: %s."
+          ),
+          module_id,
+          paste(foreign, collapse = ", ")
+        ),
+        call. = FALSE
+      )
+    }
+  }
+  invisible(contribution)
+}
+
+wlv_native_gfcf_contribution <- function(bundle, source = NULL, node_id = NULL) {
+  ids <- c("_gfcf_negative_cells.csv", "_gfcf_negative_summary.csv")
+  present <- ids %in% names(bundle)
+  if (!any(present)) {
+    return(NULL)
+  }
+  label <- if (is.null(node_id)) "A diagnostic contribution" else {
+    sprintf("Diagnostic contribution `%s`", node_id)
+  }
+  if (!all(present)) {
+    stop(sprintf("%s contains an incomplete negative-GFCF family.", label),
+      call. = FALSE
+    )
+  }
+  cells <- bundle[[ids[[1L]]]]
+  summary <- bundle[[ids[[2L]]]]
+  if (!is.data.frame(cells) || !is.data.frame(summary)) {
+    stop(sprintf("%s contains invalid negative-GFCF payloads.", label),
+      call. = FALSE
+    )
+  }
+  methods <- unique(c(as.character(cells$method), as.character(summary$method)))
+  methods <- methods[!is.na(methods) & nzchar(methods)]
+  selected_method <- if (length(methods) == 1L) {
+    methods[[1L]]
+  } else if (!length(methods) && is.character(source) && length(source) == 1L &&
+      !is.na(source) && nzchar(source)) {
+    source
+  } else {
+    stop(sprintf("%s does not identify one negative-GFCF method.", label),
+      call. = FALSE
+    )
+  }
+  observed <- data.frame(
+    year = as.character(cells$year),
+    input = as.character(cells$input),
+    output = as.character(cells$output),
+    value = as.numeric(cells$original_million_usd),
+    policy_id = as.character(cells$policy_id),
+    action = as.character(cells$action),
+    stringsAsFactors = FALSE
+  )
+  rebuilt <- wlv_gfcf_diagnostic_artifacts(
+    observed,
+    method = selected_method,
+    input_unit = "million_usd"
+  )
+  if (!identical(rebuilt[[ids[[1L]]]], cells) ||
+      !identical(rebuilt[[ids[[2L]]]], summary)) {
+    stop(sprintf("%s is not internally reproducible from its GFCF cells.", label),
+      call. = FALSE
+    )
+  }
+  list(method = selected_method, cells = cells)
+}
+
+wlv_native_merge_gfcf_contributions <- function(contributions, source = NULL) {
+  if (!length(contributions)) {
+    return(list())
+  }
+  cells <- do.call(rbind, lapply(contributions, `[[`, "cells"))
+  row.names(cells) <- NULL
+  if (nrow(cells)) {
+    key <- paste(cells$method, cells$year, cells$input, cells$output, sep = "\034")
+    groups <- split(seq_len(nrow(cells)), key)
+    keep <- integer(length(groups))
+    comparison_columns <- setdiff(names(cells), "absolute_rank")
+    for (index in seq_along(groups)) {
+      rows <- groups[[index]]
+      reference <- cells[rows[[1L]], comparison_columns, drop = FALSE]
+      row.names(reference) <- NULL
+      matches <- vapply(rows, function(row) {
+        candidate <- cells[row, comparison_columns, drop = FALSE]
+        row.names(candidate) <- NULL
+        identical(candidate, reference)
+      }, logical(1L))
+      if (!all(matches)) {
+        stop(
+          sprintf(
+            "Negative-GFCF contributions conflict at key `%s`.",
+            names(groups)[[index]]
+          ),
+          call. = FALSE
+        )
+      }
+      keep[[index]] <- rows[[1L]]
+    }
+    cells <- cells[keep, , drop = FALSE]
+  }
+  methods <- unique(vapply(contributions, `[[`, character(1L), "method"))
+  if (length(methods) != 1L) {
+    stop("Negative-GFCF contributions disagree on their method.", call. = FALSE)
+  }
+  observed <- data.frame(
+    year = as.character(cells$year),
+    input = as.character(cells$input),
+    output = as.character(cells$output),
+    value = as.numeric(cells$original_million_usd),
+    policy_id = as.character(cells$policy_id),
+    action = as.character(cells$action),
+    stringsAsFactors = FALSE
+  )
+  result <- wlv_gfcf_diagnostic_artifacts(
+    observed,
+    method = methods[[1L]],
+    input_unit = "million_usd"
+  )
+  if (!is.null(source)) {
+    wlv_validate_gfcf_diagnostic_artifacts(result, source)
+  }
+  result
+}
+
+wlv_native_csv_diagnostics <- function(
+    run_result,
+    method = NULL,
+    source = NULL,
+    expected_years = NULL) {
+  contributions <- wlv_native_role_contributions(run_result, "diagnostic")
+  collected <- list()
+  gfcf_contributions <- list()
+  published <- wlv_native_published_diagnostic_ids()
+  gfcf_ids <- c("_gfcf_negative_cells.csv", "_gfcf_negative_summary.csv")
+  for (contribution in contributions) {
+    bundle <- contribution$value
+    wlv_semantic_diagnostic_bundle_validate(bundle)
+    wlv_native_validate_diagnostic_contribution_owner(contribution)
+    gfcf <- wlv_native_gfcf_contribution(
+      bundle,
+      source = source,
+      node_id = contribution$node_id
+    )
+    if (!is.null(gfcf)) {
+      gfcf_contributions[[length(gfcf_contributions) + 1L]] <- gfcf
+    }
+    for (diagnostic_id in intersect(names(bundle), published)) {
+      if (diagnostic_id %in% gfcf_ids) {
+        next
+      }
+      value <- bundle[[diagnostic_id]]
+      if (!is.data.frame(value)) {
+        stop(
+          sprintf(
+            "Published diagnostic `%s` is not a data frame.",
+            diagnostic_id
+          ),
+          call. = FALSE
+        )
+      }
+      collected[[diagnostic_id]] <- c(collected[[diagnostic_id]], list(list(
+        node_id = contribution$node_id,
+        instance_id = contribution$instance_id,
+        module_id = contribution$module_id,
+        partition = contribution$partition,
+        value = value
+      )))
+    }
+  }
+  result <- lapply(collected, function(items) {
+    value <- do.call(rbind, lapply(items, `[[`, "value"))
+    row.names(value) <- NULL
+    value
+  })
+  leontief <- "_leontief_diagnostics.csv"
+  if (leontief %in% names(result)) {
+    result[[leontief]] <- result[[leontief]][order(
+      result[[leontief]]$method,
+      result[[leontief]]$year,
+      method = "radix"
+    ), , drop = FALSE]
+    row.names(result[[leontief]]) <- NULL
+    wlv_validate_leontief_diagnostic_artifact(
+      result[[leontief]],
+      method = method,
+      expected_years = expected_years
+    )
+  }
+  nonfinite <- "_nonfinite_resolution_diagnostics.csv"
+  if (nonfinite %in% names(result)) {
+    result[[nonfinite]] <- wlv_normalize_nonfinite_resolution_diagnostics(
+      result[[nonfinite]]
+    )
+  }
+  if (length(gfcf_contributions)) {
+    result <- c(
+      result,
+      wlv_native_merge_gfcf_contributions(gfcf_contributions, source)
+    )
+  }
+  result[intersect(published, names(result))]
+}
+
+wlv_native_register_artifact_states <- function(
+    runtime,
+    store,
+    name,
+    axes) {
+  target_key <- paste0("artifact/", name)
+  target_contract <- wlv_native_artifact_array_contract(name, axes)
+  value <- wlv_native_store_value(store, target_key, target_contract)
+  state <- wlv_native_store_value(
+    store,
+    wlv_semantic_state_key(target_key),
+    wlv_native_semantic_state_contract(target_contract)
+  )
+  indicator_axis <- match(
+    if (name %in% c("sea_sectors", "sea_countries")) "indicator" else "variable",
+    axes
+  )
+  labels <- dimnames(value)[[indicator_axis]]
+  indicator_axis_name <- axes[[indicator_axis]]
+  if (identical(name, "m_io")) {
+    wlv_contract_clear_states(runtime, name, labels)
+    wlv_contract_register_semantic_states(runtime, name, state, value)
+    return(invisible(runtime))
+  }
+  wlv_semantic_state_validate(
+    state,
+    value = value,
+    target_key = target_key,
+    axes = axes,
+    state_key = wlv_semantic_state_key(target_key)
+  )
+  slice_dimensions <- dim(value)
+  slice_dimensions[[indicator_axis]] <- 1L
+  slice_dimnames <- dimnames(value)
+  wlv_contract_clear_states(runtime, name, labels)
+  for (label in labels) {
+    slice_dimnames[[indicator_axis]] <- label
+    current <- array(
+      "finite",
+      dim = slice_dimensions,
+      dimnames = slice_dimnames
+    )
+    selected <- state[
+      state[[indicator_axis_name]] == label,
+      c(axes, "state"),
+      drop = FALSE
+    ]
+    selected <- wlv_semantic_new_state_resource(
+      selected,
+      target_key,
+      axes
+    )
+    if (nrow(selected)) {
+      current[wlv_semantic_state_linear_indices(selected, current)] <-
+        selected$state
+    }
+    wlv_contract_register_states(runtime, name, label, current)
+    rm(current, selected)
+  }
+  invisible(runtime)
+}
+
+wlv_native_hydrate_validation_runtime <- function(runtime, run_result) {
+  artifacts <- list(
+    sea_sectors = c("year", "indicator", "sector", "country"),
+    sea_countries = c("year", "indicator", "country"),
+    m_io = c("year", "variable", "input", "output")
+  )
+  available_keys <- vapply(
+    run_result$store$entries,
+    function(entry) entry$key,
+    character(1L)
+  )
+  for (name in names(artifacts)) {
+    if (paste0("artifact/", name) %in% available_keys) {
+      wlv_native_register_artifact_states(
+        runtime,
+        run_result$store,
+        name,
+        artifacts[[name]]
+      )
+    }
+  }
+  wlv_contract_record(runtime, wlv_native_module_anomalies(run_result))
+  invisible(runtime)
+}
+
+wlv_native_normalize_scientific_diagnostics <- function(
+    diagnostics,
+    method,
+    source,
+    expected_years,
+    context) {
+  if (!is.list(diagnostics) || (length(diagnostics) && (
+    is.null(names(diagnostics)) || anyNA(names(diagnostics)) ||
+      any(!nzchar(names(diagnostics))) || anyDuplicated(names(diagnostics))
+  ))) {
+    stop(sprintf("%s scientific diagnostics must be a uniquely named list.", context),
+      call. = FALSE
+    )
+  }
+  if (!length(diagnostics)) {
+    return(list())
+  }
+  published <- wlv_native_published_diagnostic_ids()
+  unknown <- setdiff(names(diagnostics), published)
+  if (length(unknown)) {
+    stop(
+      sprintf(
+        "%s scientific diagnostics contain undeclared artifact(s): %s.",
+        context,
+        paste(unknown, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  if (any(!vapply(diagnostics, is.data.frame, logical(1L)))) {
+    stop(sprintf("%s scientific diagnostics must be data frames.", context),
+      call. = FALSE
+    )
+  }
+
+  leontief <- "_leontief_diagnostics.csv"
+  if (leontief %in% names(diagnostics)) {
+    wlv_validate_leontief_diagnostic_artifact(
+      diagnostics[[leontief]],
+      method = method,
+      expected_years = expected_years
+    )
+  }
+
+  nonfinite <- "_nonfinite_resolution_diagnostics.csv"
+  if (nonfinite %in% names(diagnostics)) {
+    diagnostics[[nonfinite]] <-
+      wlv_normalize_nonfinite_resolution_diagnostics(diagnostics[[nonfinite]])
+    if (any(diagnostics[[nonfinite]]$method != method)) {
+      stop(sprintf("%s non-finite diagnostics do not match the method.", context),
+        call. = FALSE
+      )
+    }
+  }
+
+  gfcf <- c("_gfcf_negative_cells.csv", "_gfcf_negative_summary.csv")
+  present_gfcf <- gfcf %in% names(diagnostics)
+  if (any(present_gfcf) && !all(present_gfcf)) {
+    stop(sprintf("%s negative-GFCF diagnostics are incomplete.", context),
+      call. = FALSE
+    )
+  }
+  if (all(present_gfcf)) {
+    wlv_validate_gfcf_diagnostic_artifacts(diagnostics[gfcf], source)
+  }
+
+  diagnostics
+}
+
+wlv_native_recalculation_module_ids <- function(module_plan) {
+  if (!inherits(module_plan, "wlv_module_plan") ||
+      !is.environment(module_plan) || !environmentIsLocked(module_plan)) {
+    stop("Diagnostic reconciliation requires a compiled native plan.",
+      call. = FALSE
+    )
+  }
+  unique(vapply(
+    module_plan$modules,
+    function(module) module$module_id,
+    character(1L)
+  ))
+}
+
+wlv_native_can_inherit_io_scientific_checks <- function(module_plan) {
+  if (!inherits(module_plan, "wlv_module_plan") ||
+      !is.environment(module_plan) || !environmentIsLocked(module_plan)) {
+    stop("I/O scientific inheritance requires a compiled native plan.",
+      call. = FALSE
+    )
+  }
+  provided <- unique(unlist(lapply(module_plan$modules, function(module) {
+    vapply(module$provides, function(output) output$ref$key, character(1L))
+  }), use.names = FALSE))
+  io_dependencies <- c(
+    "artifact/m_io",
+    "sea/sector/capital_stock.s.us",
+    "sea/sector/capital_depreciation.s.us",
+    "sea/sector/gross_output.s.mv"
+  )
+  !any(startsWith(provided, "io/")) &&
+    !any(provided %in% io_dependencies)
+}
+
+wlv_native_can_reuse_inherited_io_validation <- function(module_plan) {
+  if (!inherits(module_plan, "wlv_module_plan") ||
+      !is.environment(module_plan) || !environmentIsLocked(module_plan)) {
+    stop("Inherited I/O validation requires a compiled native plan.",
+      call. = FALSE
+    )
+  }
+  provided <- unique(unlist(lapply(module_plan$modules, function(module) {
+    vapply(module$provides, function(output) output$ref$key, character(1L))
+  }), use.names = FALSE))
+  provided_targets <- sub("^semantic_state/", "", provided)
+  !any(startsWith(provided_targets, "io/")) &&
+    !any(provided_targets %in% c("artifact/m_io", "intermediate/lambda"))
+}
+
+wlv_native_merge_recalculation_diagnostics <- function(
+    run_data,
+    current,
+    module_plan,
+    method,
+    source) {
+  inherited <- run_data$parent_scientific_diagnostics
+  if (!is.list(inherited) || is.null(names(inherited))) {
+    stop("Recalculation lacks preflighted parent scientific diagnostics.",
+      call. = FALSE
+    )
+  }
+  expected_years <- wlv_native_metadata_years(run_data$source_sea)
+  parent <- inherited
+  inherited <- wlv_native_normalize_scientific_diagnostics(
+    inherited,
+    method,
+    source,
+    expected_years,
+    "Parent"
+  )
+  if (!identical(inherited, parent)) {
+    stop("Parent scientific diagnostics are not in canonical persisted form.",
+      call. = FALSE
+    )
+  }
+  current <- wlv_native_normalize_scientific_diagnostics(
+    current,
+    method,
+    source,
+    expected_years,
+    "Recalculated"
+  )
+  active_modules <- wlv_native_recalculation_module_ids(module_plan)
+  replaces_public <- "matrix.transformation" %in% active_modules ||
+    any(startsWith(active_modules, "matrix.capital.")) ||
+    (!is.null(inherited[["_nonfinite_resolution_diagnostics.csv"]]) &&
+      any(inherited[["_nonfinite_resolution_diagnostics.csv"]]$module %in%
+        active_modules)) ||
+    length(current)
+  if (!replaces_public) {
+    return(parent)
+  }
+  merged <- inherited
+
+  leontief <- "_leontief_diagnostics.csv"
+  replaces_leontief <- "matrix.transformation" %in% active_modules
+  if (leontief %in% names(current) && !replaces_leontief) {
+    stop(
+      "Recalculation published Leontief diagnostics without their owning module.",
+      call. = FALSE
+    )
+  }
+  if (replaces_leontief) {
+    if (!leontief %in% names(current)) {
+      stop("The recalculated Leontief module omitted its diagnostic artifact.",
+        call. = FALSE
+      )
+    }
+    merged[[leontief]] <- current[[leontief]]
+  }
+
+  gfcf <- c("_gfcf_negative_cells.csv", "_gfcf_negative_summary.csv")
+  replaces_gfcf <- any(startsWith(active_modules, "matrix.capital."))
+  if (any(gfcf %in% names(current)) && !replaces_gfcf) {
+    stop(
+      "Recalculation published negative-GFCF diagnostics without their owning module.",
+      call. = FALSE
+    )
+  }
+  if (replaces_gfcf) {
+    if (!all(gfcf %in% names(current))) {
+      stop("The recalculated capital module omitted a negative-GFCF diagnostic.",
+        call. = FALSE
+      )
+    }
+    merged[gfcf] <- current[gfcf]
+  }
+
+  nonfinite <- "_nonfinite_resolution_diagnostics.csv"
+  inherited_nonfinite <- inherited[[nonfinite]]
+  current_nonfinite <- current[[nonfinite]]
+  if (!is.null(current_nonfinite) &&
+      any(!current_nonfinite$module %in% active_modules)) {
+    owners <- unique(current_nonfinite$module[
+      !current_nonfinite$module %in% active_modules
+    ])
+    stop(
+      sprintf(
+        paste0(
+          "Recalculation published non-finite diagnostics for inactive ",
+          "module(s): %s."
+        ),
+        paste(owners, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  if (!is.null(inherited_nonfinite)) {
+    inherited_nonfinite <- inherited_nonfinite[
+      !inherited_nonfinite$module %in% active_modules,
+      ,
+      drop = FALSE
+    ]
+  }
+  reconciled_nonfinite <- if (is.null(inherited_nonfinite)) {
+    current_nonfinite
+  } else if (is.null(current_nonfinite)) {
+    inherited_nonfinite
+  } else {
+    rbind(inherited_nonfinite, current_nonfinite)
+  }
+  if (is.null(reconciled_nonfinite) || !nrow(reconciled_nonfinite)) {
+    merged[[nonfinite]] <- NULL
+  } else {
+    merged[[nonfinite]] <- wlv_normalize_nonfinite_resolution_diagnostics(
+      reconciled_nonfinite
+    )
+  }
+
+  wlv_native_normalize_scientific_diagnostics(
+    merged,
+    method,
+    source,
+    expected_years,
+    "Merged recalculation"
+  )
+}
+
+wlv_native_collect_arrays <- function(
+    plan,
+    run_data,
+    run_result,
+    staging) {
+  sea_sectors <- wlv_native_artifact_value(
+    run_result$store,
+    "sea_sectors",
+    c("year", "indicator", "sector", "country")
+  )
+  sea_countries <- wlv_native_artifact_value(
+    run_result$store,
+    "sea_countries",
+    c("year", "indicator", "country")
+  )
+
+  artifacts <- list(
+    sea_sectors = sea_sectors,
+    sea_countries = sea_countries
+  )
+  if (identical(plan$mode, "calculate")) {
+    m_io <- wlv_native_artifact_value(
+      run_result$store,
+      "m_io",
+      c("year", "variable", "input", "output")
+    )
+    m_countries <- wlv_native_artifact_value(
+      run_result$store,
+      "m_countries",
+      c("year", "variable", "origin", "destination")
+    )
+    artifacts$m_io <- m_io
+    artifacts$m_countries <- m_countries
+  } else {
+    artifacts$m_countries <- read_fst_array(
+      file.path(staging, "m_countries.fst")
+    )
+  }
+  artifacts
+}
+
+wlv_native_select_io_years <- function(m_io, years) {
+  if (identical(years, dimnames(m_io)[[1L]])) {
+    return(m_io)
+  }
+  m_io[years, , , , drop = FALSE]
+}
+
+wlv_native_write_panel_arrays <- function(
+    plan,
+    artifacts,
+    staging) {
+  write_fst_array(
+    artifacts$sea_sectors,
+    file.path(staging, "sea_sectors.fst"),
+    drop_axis_names = TRUE
+  )
+  write_fst_array(
+    artifacts$sea_countries,
+    file.path(staging, "sea_countries.fst"),
+    drop_axis_names = TRUE
+  )
+  if (identical(plan$mode, "calculate")) {
+    write_fst_array(
+      artifacts$m_countries,
+      file.path(staging, "m_countries.fst"),
+      drop_axis_names = TRUE
+    )
+  }
+  invisible(NULL)
+}
+
+wlv_native_write_io_arrays <- function(
+    run_data,
+    m_io,
+    staging) {
+  for (source_path in run_data$source_io) {
+    years <- wlv_native_metadata_years(source_path)
+    selected <- wlv_native_select_io_years(m_io, years)
+    write_fst_array(
+      selected,
+      file.path(staging, basename(source_path)),
+      drop_axis_names = TRUE
+    )
+    rm(selected)
+  }
+  invisible(NULL)
+}
+
+wlv_native_write_arrays <- function(
+    plan,
+    run_data,
+    artifacts,
+    staging) {
+  wlv_native_write_panel_arrays(plan, artifacts, staging)
+  if (identical(plan$mode, "calculate")) {
+    wlv_native_write_io_arrays(run_data, artifacts$m_io, staging)
+  }
+  invisible(NULL)
+}
+
+wlv_native_recalculated_anomaly_targets <- function(module_plan) {
+  if (!inherits(module_plan, "wlv_module_plan") ||
+      !is.environment(module_plan)) {
+    stop("Recalculated anomaly targets require a compiled native plan.",
+      call. = FALSE
+    )
+  }
+  rows <- list()
+  for (module in module_plan$modules) {
+    anomaly_outputs <- module$provides[vapply(module$provides, function(output) {
+      identical(output$ref$contract$role, "anomaly")
+    }, logical(1L))]
+    if (length(anomaly_outputs) != 1L) {
+      stop(
+        sprintf(
+          "Native module `%s` lacks exactly one anomaly target contract.",
+          module$node_id
+        ),
+        call. = FALSE
+      )
+    }
+    targets <- wlv_native_anomaly_targets(anomaly_outputs[[1L]])
+    wlv_native_anomaly_target_contract_assert(
+      targets,
+      checkpoint = module$checkpoint,
+      module_id = module$module_id
+    )
+    if (nrow(targets)) {
+      rows[[length(rows) + 1L]] <- wlv_semantic_plain_data_frame(
+        targets,
+        wlv_native_anomaly_target_columns()
+      )
+    }
+  }
+  if (!length(rows)) {
+    return(data.frame(
+      artifact = character(),
+      indicator = character(),
+      stage = integer(),
+      module = character(),
+      producer_id = character(),
+      action = character(),
+      stringsAsFactors = FALSE
+    ))
+  }
+  targets <- unique(do.call(rbind, rows))
+  targets <- targets[order(
+    targets$artifact,
+    targets$indicator,
+    targets$stage,
+    targets$module,
+    targets$action,
+    method = "radix"
+  ), , drop = FALSE]
+  row.names(targets) <- NULL
+  targets
+}
+
+wlv_native_reset_recalculated_anomalies <- function(runtime, module_plan, at_stage) {
+  if (!is.numeric(at_stage) || length(at_stage) != 1L || is.na(at_stage) ||
+      !at_stage %in% c(1L, 4L, 5L)) {
+    stop("Recalculated anomaly reset requires checkpoint 1, 4, or 5.",
+      call. = FALSE
+    )
+  }
+  targets <- wlv_native_recalculated_anomaly_targets(module_plan)
+  normalized_go_indicators <- paste0(
+    "go_price.r.id",
+    c("", ".numerator", ".denominator")
+  )
+  preserved_go <- targets$action == "preserve" &
+    targets$artifact == "sea_sectors" &
+    targets$indicator %in% normalized_go_indicators &
+    targets$stage == 4L &
+    targets$module == "indicator.price_index.normalize"
+  if (any(targets$action == "preserve" & !preserved_go)) {
+    stop("Recalculation contains an unknown preserved anomaly target.",
+      call. = FALSE
+    )
+  }
+  if (identical(at_stage, 1L)) {
+    # A stage-1 run rebuilds go price before normalizing it, so its previous
+    # normalization anomalies are stale and must be replaced.  Stage 4 starts
+    # from the published normalized generation and intentionally preserves them.
+    targets$action[preserved_go] <- "replace"
+  }
+  targets <- targets[targets$action == "replace", , drop = FALSE]
+  if (!nrow(targets) || !nrow(runtime$anomalies)) {
+    return(invisible(targets))
+  }
+  target_keys <- paste(
+    targets$artifact,
+    targets$indicator,
+    as.character(targets$stage),
+    targets$module,
+    sep = "\034"
+  )
+  anomaly_keys <- paste(
+    runtime$anomalies$artifact,
+    runtime$anomalies$indicator,
+    runtime$anomalies$stage,
+    runtime$anomalies$module,
+    sep = "\034"
+  )
+  runtime$anomalies <- runtime$anomalies[
+    !anomaly_keys %in% target_keys,
+    ,
+    drop = FALSE
+  ]
+  row.names(runtime$anomalies) <- NULL
+  invisible(targets)
+}
+
+wlv_run_method <- function(plan, method, cluster = NULL) {
+  wlv_assert_plan_scientific_profile_inventory(plan, method)
+  method_record <- plan$methods[
+    match(method, plan$methods$method),
+    ,
+    drop = FALSE
+  ]
+  run_data <- plan$data[[method]]
+  if (is.null(run_data$native_instances) || is.null(run_data$partitions)) {
+    stop("Native execution requires a completed graph/data preflight.", call. = FALSE)
+  }
+  results_root <- file.path(plan$root, "results")
   run_id <- wlv_new_publication_id("run")
-  run_started_at <- Sys.time()
-  run_warnings <- character()
+  started_at <- Sys.time()
+  warnings <- character()
   staging <- wlv_create_result_staging(
     plan$root,
     method,
-    existing = if (plan$mode == "recalculate") existing_result_dir else NULL
-  )
-  if (plan$mode == "recalculate") {
-    inherited_manifest <- file.path(staging, wlv_run_manifest_filename)
-    if (file.exists(inherited_manifest)) {
-      unlink(inherited_manifest, force = TRUE)
-      if (file.exists(inherited_manifest)) {
-        stop("Could not remove the inherited run manifest from staging.", call. = FALSE)
-      }
+    existing = if (identical(plan$mode, "recalculate")) {
+      run_data$parent_result_dir
+    } else {
+      NULL
     }
-  }
+  )
   staging_open <- TRUE
+  authenticated_parent_manifest <- NULL
+  parent_scientific <- NULL
   on.exit({
     if (staging_open && dir.exists(staging)) {
       try(wlv_remove_result_staging(staging, results_root), silent = TRUE)
     }
   }, add = TRUE)
-
-  missingness_policy <- wlv_load_run_missingness_policy(plan, method_record)
-  aggregation_registry <- plan$aggregation_registries[[method]]
-  wlv_validate_aggregation_registry(aggregation_registry)
-  unit_definitions <- wlv_method_unit_definitions(plan, method_record)
+  if (identical(plan$mode, "recalculate")) {
+    if (!is.list(run_data$parent_manifest)) {
+      stop("Recalculation lacks the verified parent run manifest.",
+        call. = FALSE
+      )
+    }
+    authenticated_parent_manifest <- wlv_verify_run_manifest(
+      run_data$parent_manifest,
+      staging,
+      reject_unlisted = TRUE
+    )
+    inherited_manifest <- file.path(staging, wlv_run_manifest_filename())
+    if (file.exists(inherited_manifest)) unlink(inherited_manifest, force = TRUE)
+    if (file.exists(inherited_manifest)) {
+      stop("Could not remove inherited run manifest from staging.", call. = FALSE)
+    }
+  }
+  runtime_data <- run_data
+  if (identical(plan$mode, "recalculate")) {
+    # Consume only the private parent copy verified above. The live immutable
+    # run directory is not read again during recalculation.
+    runtime_data$parent_result_dir <- staging
+    runtime_data$parent_manifest <- authenticated_parent_manifest
+    parent_scientific <- wlv_native_validate_parent_scientific_profile(
+      plan,
+      method_record,
+      staging,
+      runtime_data$source_sea,
+      authenticated_parent_manifest,
+      run_data$parent_scientific_receipt
+    )
+    runtime_data$parent_scientific_diagnostics <-
+      parent_scientific$diagnostics
+    runtime_data$parent_scientific_checks <-
+      parent_scientific$scientific_checks
+  }
+  policy <- wlv_load_run_missingness_policy(plan, method_record)
+  compatibility <- wlv_native_runtime_compatibility(
+    plan,
+    method_record,
+    policy
+  )
+  if (!identical(compatibility, run_data$runtime_compatibility)) {
+    stop("Runtime compatibility changed after graph/data preflight.",
+      call. = FALSE
+    )
+  }
   contract_runtime <- wlv_new_contract_runtime(
     method = method,
     source = method_record$source[[1L]],
-    policy = missingness_policy
+    policy = policy,
+    scientific_profile = plan$scientific_profiles[[method]]
   )
-  if (plan$mode == "recalculate") {
-    wlv_load_contract_report(
+  if (identical(plan$mode, "recalculate")) {
+    wlv_load_contract_records(
       contract_runtime,
-      file.path(staging, "_anomalies.csv")
+      parent_scientific$anomalies
     )
-    if (length(run_data$result_io)) {
-      run_data$result_io <- file.path(staging, basename(run_data$result_io))
-      missing_snapshot_io <- run_data$result_io[!file.exists(run_data$result_io)]
-      if (length(missing_snapshot_io)) {
-        stop(
-          sprintf(
-            "The recalculation snapshot lacks result matrix file(s): %s.",
-            paste(basename(missing_snapshot_io), collapse = ", ")
-          ),
-          call. = FALSE
-        )
-      }
-    }
+    parent_scientific <- NULL
+    invisible(gc(full = FALSE))
   }
-  values <- list(
-    method_version = method,
-    methods = plan$method_names,
-    wlv_data = run_data,
-    wlv_parameters = plan$configuration[[method]],
-    wlv_result_dir = staging,
-    wlv_existing_result_dir = if (plan$mode == "recalculate") {
-      staging
-    } else {
-      staging
-    },
-    wlv_missingness_policy = missingness_policy,
-    wlv_contract_runtime = contract_runtime,
-    wlv_aggregation_registry = aggregation_registry,
-    wlv_aggregation_contract = aggregation_registry$rows,
-    wlv_unit_definitions = unit_definitions
-  )
-  script <- file.path(plan$root, "R", "lib", "computations.R")
-  if (plan$mode == "recalculate") {
-    values$at_stage <- plan$at_stage
-    values["sea_vars"] <- list(plan$sea_vars)
-    script <- file.path(plan$root, "R", "lib", "re_computations.R")
-  }
+
   run_environment <- tryCatch(
     withCallingHandlers({
-      run_environment <- wlv_run_script(
-        script,
-        values = values,
-        cluster = cluster,
-        preamble = file.path(
-          plan$root,
-          "R",
-          "lib",
-          c(
-            "functions.R", "missingness.R", "unit_dimensions.R",
-            "aggregation_specs.R", "indicator_metadata.R",
-            "leontief_diagnostics.R",
-            "scientific_validation.R", "result_contracts.R"
-          )
-        ),
-        root = plan$root
+      built <- wlv_native_build_store(
+        plan = plan,
+        method_record = method_record,
+        run_data = runtime_data,
+        registry = plan$native_registry,
+        instances = run_data$native_instances,
+        indicators = plan$indicators[[method]],
+        unit_definitions = plan$unit_definitions[[method]],
+        partitions = run_data$partitions,
+        compatibility = compatibility
       )
+      runtime_input_store <- built$store
+      parent_snapshot <- built$parent_snapshot
+      parent_imports <- built$parent_imports
+      rm(built)
+      module_plan <- wlv_compile_module_plan(
+        registry = plan$native_registry,
+        instances = run_data$native_instances,
+        store = runtime_input_store,
+        operation = plan$mode,
+        partitions = run_data$partitions
+      )
+      inherit_io_scientific_checks <-
+        identical(plan$mode, "recalculate") &&
+        identical(plan$at_stage, 5L) &&
+        wlv_native_can_inherit_io_scientific_checks(module_plan)
+      reuse_inherited_io_validation <-
+        identical(plan$mode, "recalculate") &&
+        wlv_native_can_reuse_inherited_io_validation(module_plan)
+      if (identical(plan$mode, "recalculate")) {
+        wlv_native_reset_recalculated_anomalies(
+          contract_runtime,
+          module_plan,
+          plan$at_stage
+        )
+      }
+      retained_locator_ids <- wlv_native_result_locator_ids(module_plan)
+      run_scope <- environment()
+      take_input_store <- function() {
+        if (!exists("runtime_input_store", envir = run_scope, inherits = FALSE)) {
+          stop("The native runtime input store was already consumed.", call. = FALSE)
+        }
+        value <- get(
+          "runtime_input_store",
+          envir = run_scope,
+          inherits = FALSE
+        )
+        rm(list = "runtime_input_store", envir = run_scope)
+        value
+      }
+      module_result <- wlv_run_module_plan(
+        module_plan,
+        take_input_store(),
+        services = list(
+          year_apply = wlv_native_year_apply_service(cluster)
+        ),
+        retain_locator_ids = retained_locator_ids
+      )
+      rm(take_input_store, run_scope, retained_locator_ids)
+      wlv_native_hydrate_validation_runtime(
+        contract_runtime,
+        module_result
+      )
+      arrays <- wlv_native_collect_arrays(
+        plan,
+        runtime_data,
+        module_result,
+        staging
+      )
+      sidecars <- wlv_native_configuration_sidecars(
+        plan,
+        method,
+        runtime_data
+      )
+      parameters <- wlv_native_store_value(
+        module_result$store,
+        "configuration/parameters",
+        wlv_resource_contract(scope = "run", value_type = "data.frame")
+      )
+      sectors <- wlv_native_store_value(
+        module_result$store,
+        "configuration/sectors",
+        wlv_resource_contract(scope = "run", value_type = "data.frame")
+      )
+      metadata <- wlv_native_store_value(
+        module_result$store,
+        "metadata/indicators",
+        wlv_native_indicator_metadata_contract()
+      )
+
+      diagnostics <- wlv_native_csv_diagnostics(
+        module_result,
+        method = method,
+        source = method_record$source[[1L]],
+        expected_years = wlv_native_metadata_years(runtime_data$source_sea)
+      )
+      native_trace <- module_result$trace
+      if (identical(plan$mode, "recalculate")) {
+        diagnostics <- wlv_native_merge_recalculation_diagnostics(
+          run_data = runtime_data,
+          current = diagnostics,
+          module_plan = module_plan,
+          method = method,
+          source = method_record$source[[1L]]
+        )
+      }
+      runtime_store <- if (identical(plan$mode, "calculate")) {
+        wlv_runtime_fork_store(module_result$store)
+      } else {
+        module_result$store
+      }
+      rm(module_result, module_plan)
+      invisible(gc(full = TRUE))
+      snapshot_capture <- if (identical(plan$mode, "calculate")) {
+        wlv_runtime_snapshot_capture(
+          store = runtime_store,
+          method = method,
+          source = method_record$source[[1L]],
+          partitions = run_data$partitions,
+          compatibility = compatibility,
+          consume_store = TRUE
+        )
+      } else {
+        NULL
+      }
+      if (identical(plan$mode, "recalculate")) {
+        if (is.null(parent_snapshot)) {
+          stop(
+            "Recalculation lost its authenticated parent runtime snapshot.",
+            call. = FALSE
+          )
+        }
+        snapshot_capture <- wlv_runtime_snapshot_capture_update_panel(
+          parent_snapshot,
+          runtime_store,
+          parent_imports = parent_imports,
+          compatibility = compatibility,
+          validate_parent = FALSE
+        )
+      }
+      rm(runtime_store)
+      invisible(gc(full = TRUE))
+
+      wlv_validate_sea_stage(
+        contract_runtime,
+        arrays$sea_sectors,
+        sidecars$solutions,
+        stage = 5L,
+        checkpoint = "pre_publish"
+      )
+      wlv_validate_sea_countries_contract(
+        contract_runtime,
+        arrays$sea_countries,
+        checkpoint = "pre_publish"
+      )
+      wlv_validate_m_countries_contract(
+        contract_runtime,
+        arrays$m_countries,
+        checkpoint = "pre_publish"
+      )
+      if (!is.null(arrays$m_io)) {
+        wlv_validate_m_io_contract(
+          contract_runtime,
+          arrays$m_io,
+          checkpoint = "pre_publish"
+        )
+      }
+
+      if (identical(plan$mode, "calculate")) {
+        wlv_native_write_io_arrays(
+          runtime_data,
+          arrays$m_io,
+          staging
+        )
+        arrays$m_io <- NULL
+        invisible(gc(full = TRUE))
+      }
+      wlv_native_write_panel_arrays(
+        plan,
+        arrays,
+        staging
+      )
+      rm(arrays)
+      invisible(gc(full = TRUE))
+      io_artifact_paths <- file.path(
+        staging,
+        basename(runtime_data$source_io)
+      )
+      io_artifact_partitions <- vapply(
+        runtime_data$source_io,
+        wlv_native_io_partition,
+        character(1L)
+      )
+      names(io_artifact_paths) <- io_artifact_partitions
+      panel_artifact_paths <- file.path(
+        staging,
+        c("sea_sectors.fst", "sea_countries.fst")
+      )
+      names(panel_artifact_paths) <- c("sea_sectors", "sea_countries")
+      snapshot <- if (identical(plan$mode, "calculate")) {
+        wlv_runtime_snapshot_finalize(
+          snapshot_capture,
+          io_artifacts = io_artifact_paths,
+          panel_artifacts = panel_artifact_paths,
+          validate_snapshot = FALSE,
+          validate_bound = FALSE
+        )
+      } else {
+        wlv_runtime_snapshot_finalize(
+          snapshot_capture,
+          panel_artifacts = panel_artifact_paths,
+          validate_snapshot = FALSE,
+          validate_bound = FALSE
+        )
+      }
+      io_inheritance_assertion <- if (isTRUE(
+        reuse_inherited_io_validation
+      )) {
+        wlv_runtime_snapshot_assert_io_inherited(
+          parent_snapshot,
+          snapshot
+        )
+      } else {
+        NULL
+      }
+      scientific_io_inputs_inherited <-
+        !is.null(io_inheritance_assertion) &&
+        !is.null(io_inheritance_assertion$scientific_inputs_sha256)
+      # Stage 4 may rebuild a sector dependency of the scientific I/O checks.
+      # The inherited-I/O assertion authorizes reuse only when its parent and
+      # child snapshots bind the exact same dependency fingerprints. Any
+      # difference falls back to complete materialized I/O validation.
+      inherit_io_scientific_checks <-
+        isTRUE(scientific_io_inputs_inherited) &&
+        (isTRUE(inherit_io_scientific_checks) ||
+          (identical(plan$mode, "recalculate") &&
+            identical(plan$at_stage, 4L)))
+      rm(parent_snapshot)
+      rm(snapshot_capture)
+      snapshot_receipt <- wlv_runtime_snapshot_write(
+        snapshot,
+        staging,
+        validate_snapshot = FALSE,
+        authenticate_bound_files = FALSE,
+        return_receipt = TRUE,
+        defer_verification = TRUE
+      )
+      rm(snapshot)
+      invisible(gc(full = TRUE))
+      snapshot_receipt <- wlv_runtime_snapshot_verify_write(
+        snapshot_receipt,
+        staging,
+        authenticate_bound_files = FALSE
+      )
+      inherited_io_validation <- if (!is.null(io_inheritance_assertion)) {
+        wlv_runtime_snapshot_bind_io_inheritance(
+          io_inheritance_assertion,
+          snapshot_receipt
+        )
+      } else {
+        NULL
+      }
+      rm(io_inheritance_assertion)
+      snapshot_receipt_owner <- new.env(parent = emptyenv())
+      snapshot_receipt_owner$receipt <- snapshot_receipt
+      rm(snapshot_receipt)
+      rm(parent_imports)
+      invisible(gc(full = TRUE))
+      for (name in names(diagnostics)) {
+        wlv_write_result_csv(diagnostics[[name]], file.path(staging, name))
+      }
+      wlv_assert_method_source_inputs_unchanged(
+        plan,
+        method_record,
+        run_data,
+        use_receipt = TRUE
+      )
+      wlv_write_result_csv(
+        run_data$source_provenance,
+        file.path(staging, wlv_source_provenance_filename())
+      )
+      source_sidecar <- stats::setNames(
+        list(run_data$source_provenance),
+        wlv_source_provenance_filename()
+      )
+      unit_sidecar <- wlv_catalog_unit_contract_sidecar(
+        plan$catalog,
+        method_record$unit_contract[[1L]],
+        indicators = plan$indicators[[method]],
+        resolved_aggregations = plan$aggregation_registries[[method]]$rows
+      )
+      wlv_write_result_csv(
+        unit_sidecar,
+        file.path(staging, "_unit_contract.csv")
+      )
+      panel <- wlv_native_panel_metadata(parameters, metadata)
+      expected_metadata <- wlv_method_result_metadata(
+        parameters = parameters,
+        assumptions = sidecars$assumptions,
+        matrices = sidecars$matrices,
+        solutions = sidecars$solutions,
+        sectors = sectors,
+        meta_indicators = metadata,
+        extra_csv = c(
+          diagnostics,
+          list(`_unit_contract.csv` = unit_sidecar),
+          source_sidecar,
+          panel
+        )
+      )
+      wlv_write_method_result_metadata(staging, expected_metadata)
       wlv_write_contract_states(
         contract_runtime,
         staging,
-        reader = run_environment$read_fst_array
+        reader = read_fst_array
       )
       wlv_write_contract_report(
         contract_runtime,
         file.path(staging, "_anomalies.csv")
-      )
-      wlv_assert_method_source_inputs_unchanged(
-        plan,
-        method_record,
-        run_data
-      )
-      source_provenance <- run_data$source_provenance
-      wlv_validate_source_provenance(source_provenance)
-      wlv_write_result_csv(
-        source_provenance,
-        file.path(staging, wlv_source_provenance_filename)
-      )
-      source_provenance_csv <- stats::setNames(
-        list(source_provenance),
-        wlv_source_provenance_filename
-      )
-      unit_contract_csv <- list()
-      unit_contract_id <- method_record$unit_contract[[1L]]
-      if (nzchar(unit_contract_id)) {
-        effective_unit_contract <- wlv_catalog_unit_contract_sidecar(
-          plan$catalog,
-          unit_contract_id,
-          indicators = as.character(run_environment$sea_variables$names),
-          require_exact = identical(
-            method_record$status[[1L]],
-            "stable"
-          ),
-          resolved_aggregations = aggregation_registry$rows
-        )
-        wlv_write_result_csv(
-          effective_unit_contract,
-          file.path(staging, "_unit_contract.csv")
-        )
-        unit_contract_csv <- list(
-          `_unit_contract.csv` = effective_unit_contract
-        )
-      }
-      scientific_csv <- if (
-        exists(
-          "wlv_scientific_diagnostics",
-          envir = run_environment,
-          inherits = FALSE
-        )
-      ) {
-        get(
-          "wlv_scientific_diagnostics",
-          envir = run_environment,
-          inherits = FALSE
-        )
-      } else {
-        list()
-      }
-      panel_csv <- get0(
-        "wlv_panel_result_metadata",
-        envir = run_environment,
-        inherits = FALSE,
-        ifnotfound = list()
-      )
-      expected_metadata <- wlv_method_result_metadata(
-        parameters = run_environment$parameters,
-        assumptions = run_environment$assumptions,
-        matrices = run_environment$matrices,
-        solutions = run_environment$sea_variables,
-        sectors = run_environment$sectors,
-        meta_indicators = run_environment$meta_indicators,
-        extra_csv = c(
-          scientific_csv,
-          unit_contract_csv,
-          source_provenance_csv,
-          panel_csv
-        )
       )
       scientific_checks <- wlv_validate_staged_results(
         staging,
@@ -1930,29 +4390,60 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
         mode = plan$mode,
         runtime = contract_runtime,
         expected_metadata = expected_metadata,
-        aggregation_registry = aggregation_registry,
-        stable_aggregations = identical(
-          method_record$status[[1L]],
-          "stable"
-        ),
-        at_stage = if (plan$mode == "recalculate") plan$at_stage else NULL,
-        reader = run_environment$read_fst_array
+        aggregation_registry = plan$aggregation_registries[[method]],
+        expected_io_artifacts = basename(runtime_data$source_io),
+        at_stage = if (identical(plan$mode, "recalculate")) {
+          plan$at_stage
+        } else {
+          NULL
+        },
+        reader = read_fst_array,
+        inherited_scientific_checks = if (inherit_io_scientific_checks) {
+          runtime_data$parent_scientific_checks
+        } else {
+          NULL
+        },
+        inherited_io_validation = inherited_io_validation,
+        runtime_snapshot_receipt = (function(owner) {
+          if (!exists("receipt", envir = owner, inherits = FALSE)) {
+            stop("Runtime snapshot receipt ownership was already transferred.",
+              call. = FALSE
+            )
+          }
+          value <- get("receipt", envir = owner, inherits = FALSE)
+          rm("receipt", envir = owner)
+          value
+        })(snapshot_receipt_owner)
       )
-      scientific_diagnostics <- get0(
-        "wlv_scientific_diagnostics",
-        envir = run_environment,
-        inherits = FALSE,
-        ifnotfound = list()
+      rm(inherited_io_validation)
+      if (exists("receipt", envir = snapshot_receipt_owner, inherits = FALSE)) {
+        stop("Runtime snapshot receipt ownership was not transferred.",
+          call. = FALSE
+        )
+      }
+      rm(snapshot_receipt_owner)
+      validated_artifacts <- attr(
+        scientific_checks,
+        "wlv_validated_run_artifacts",
+        exact = TRUE
       )
-      scientific_diagnostics[["_scientific_checks.csv"]] <- scientific_checks
-      assign(
-        "wlv_scientific_diagnostics",
-        scientific_diagnostics,
-        envir = run_environment
+      if (is.null(validated_artifacts)) {
+        stop(
+          "Staged result validation did not return an artifact snapshot.",
+          call. = FALSE
+        )
+      }
+      attr(scientific_checks, "wlv_validated_run_artifacts") <- NULL
+      environment <- new.env(parent = emptyenv())
+      environment$wlv_native_trace <- native_trace
+      environment$wlv_validated_run_artifacts <- validated_artifacts
+      environment$wlv_scientific_diagnostics <- c(
+        diagnostics,
+        list(`_scientific_checks.csv` = scientific_checks)
       )
-      run_environment
-    }, warning = function(warning) {
-      run_warnings <<- c(run_warnings, conditionMessage(warning))
+      environment
+    }, warning = function(condition) {
+      warnings <<- c(warnings, conditionMessage(condition))
     }),
     error = function(error) {
       wlv_write_failed_contract_report(
@@ -1970,51 +4461,14 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
     run_environment = run_environment,
     run_data = run_data,
     run_id = run_id,
-    parent_run_id = if (plan$mode == "recalculate") run_data$parent_run_id else NULL,
-    started_at = run_started_at,
-    warnings = unique(run_warnings)
+    parent_run_id = if (identical(plan$mode, "recalculate")) {
+      run_data$parent_run_id
+    } else {
+      NULL
+    },
+    started_at = started_at,
+    warnings = unique(warnings)
   )
   staging_open <- FALSE
   run_environment
-}
-
-wlv_run_paper <- function(plan, run_environment, release) {
-  old_working_directory <- setwd(plan$root)
-  on.exit(setwd(old_working_directory), add = TRUE)
-  if (
-    !is.list(release) || is.null(release$manifest) ||
-    is.null(release$root)
-  ) {
-    stop("`release` must be the committed release for this execution.", call. = FALSE)
-  }
-  release_runs <- release$manifest$runs
-  release_methods <- vapply(release_runs, `[[`, character(1L), "method")
-  release_result_dirs <- vapply(release_runs, function(record) {
-    normalizePath(
-      dirname(file.path(plan$root, "results", record$manifest_path)),
-      winslash = "/",
-      mustWork = TRUE
-    )
-  }, character(1L))
-  names(release_result_dirs) <- release_methods
-  run_environment$wlv_current_result_dir <- local({
-    result_dirs <- release_result_dirs
-    function(method) {
-      if (!is.character(method) || length(method) != 1L ||
-          is.na(method) || !method %in% names(result_dirs)) {
-        stop(sprintf("Committed release has no method `%s`.", method), call. = FALSE)
-      }
-      unname(result_dirs[[method]])
-    }
-  })
-  run_environment$wlv_current_release_dir <- release$root
-  tryCatch(
-    sys.source(plan$paper_script, envir = run_environment),
-    error = function(error) {
-      stop(
-        sprintf("Paper `%s` failed: %s", plan$papern, conditionMessage(error)),
-        call. = FALSE
-      )
-    }
-  )
 }

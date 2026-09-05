@@ -117,17 +117,13 @@ project_root <- normalizePath(
   winslash = "/",
   mustWork = TRUE
 )
-setwd(project_root)
-
-publication_environment <- new.env(parent = globalenv())
-for (script in c(
-  "source_manifest.R", "publication_manifest.R", "publication.R"
-)) {
-  sys.source(
-    file.path(project_root, "R", "lib", script),
-    envir = publication_environment
-  )
-}
+bootstrap_environment <- new.env(parent = baseenv())
+sys.source(
+  file.path(project_root, "R", "bootstrap.R"),
+  envir = bootstrap_environment,
+  chdir = FALSE
+)
+publication_environment <- bootstrap_environment$wlv_load_runtime(project_root)
 
 if (!requireNamespace("fst", quietly = TRUE)) {
   stop("Package `fst` is required for the benchmark fixture.", call. = FALSE)
@@ -150,12 +146,16 @@ source_method <- if (method %in% c("wiodr16", "wiodr16v09", "zerodep_2")) {
   "wiodr13"
 }
 
-source_path <- file.path("source_data", source_method, "m_io.fst")
+source_path <- file.path(
+  project_root,
+  "source_data",
+  source_method,
+  "m_io.fst"
+)
 result_dir <- publication_environment$wlv_current_result_dir(
   method = method,
   root = project_root,
-  channel = arguments$channel,
-  allow_legacy = TRUE
+  channel = arguments$channel
 )
 sector_path <- file.path(result_dir, "sea_sectors.fst")
 sector_contract_path <- file.path(result_dir, "_sectors.csv")
@@ -774,8 +774,12 @@ fixture_manifest <- data.frame(
   stringsAsFactors = FALSE
 )
 
+output_path <- arguments$output
+if (!grepl("^([A-Za-z]:[/\\\\]|/)", output_path)) {
+  output_path <- file.path(project_root, output_path)
+}
 output_directory <- normalizePath(
-  arguments$output,
+  output_path,
   winslash = "/",
   mustWork = FALSE
 )

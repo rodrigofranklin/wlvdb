@@ -28,9 +28,11 @@ collection. Retention has two separate calls:
 Load the regular runtime, then inspect a plan:
 
 ```r
-source("R/main.R")
+bootstrap <- new.env(parent = baseenv())
+sys.source("R/bootstrap.R", envir = bootstrap)
+runtime <- bootstrap$wlv_load_runtime(".")
 
-plan <- wlv_plan_publication_prune(
+plan <- runtime$wlv_plan_publication_prune(
   root = ".",
   keep_releases = c(
     stable = 5,
@@ -45,13 +47,13 @@ plan$delete$runs
 plan$reclaimable_bytes
 
 # This does not delete anything.
-preview <- wlv_prune_publications(plan)
+preview <- runtime$wlv_prune_publications(plan)
 ```
 
 After reviewing the exact paths and byte estimate, apply the same plan:
 
 ```r
-result <- wlv_prune_publications(plan, dry_run = FALSE)
+result <- runtime$wlv_prune_publications(plan, dry_run = FALSE)
 result$deleted
 result$reclaimed_bytes
 ```

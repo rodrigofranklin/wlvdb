@@ -16,8 +16,8 @@ enums, identifiers, foreign keys, exact two-level aggregation coverage and the
 effective indicator set of every stable method. Request validation translates
 each direct declaration into a validated aggregation spec and checks its unit
 algebra before a result lock is acquired or any variable module is run. The
-contract, rather than the legacy `country_solution` string, selects the direct
-algorithm; only `formula` rows remain on the dedicated module route.
+resolved typed profile selects the direct algorithm; only `formula` rows remain
+on the dedicated registered-module route.
 
 | Contract strategy | Runtime rule | Required references |
 | --- | --- | --- |
@@ -29,23 +29,23 @@ algorithm; only `formula` rows remain on the dedicated module route.
 | `not_applicable` | Publish semantic `NA` without reducing its values. | The indicator itself, to define the output shape. |
 | `formula` | Execute the named dedicated module after direct reductions. | `module`. |
 
-The schema-v1 adapter declares `missing = available` explicitly when it builds
-each spec. Missing inputs, partial coverage, undefined aggregates and protected
-zero denominators are then handed to the versioned missingness runtime and its
+Schema v1 declares `missing = available` explicitly in each resolved binding.
+Missing inputs, partial coverage, undefined aggregates and protected zero
+denominators are then handed to the versioned missingness runtime and its
 state/anomaly sidecars. Direct sector-to-country reductions finish before
 direct country-to-world reductions, so a world-level weight may consume its
 already aggregated country value. A world-level direct row may not depend on a
 country value produced later by a `formula` module; such a contract fails the
 registry preflight instead of silently reading an uncomputed value.
 
-Stable methods require a complete, valid typed contract and never infer missing
-rows from legacy parameter strings. Experimental methods always use their
-historical `country_solution` route, even when their source has typed rows;
-this requires explicit experimental opt-in and reports every adapted binding
-in a warning. Existing schema-v1 stable WIOD contracts use `sum`, `mean`, and
-`formula`, so this runtime migration preserves their numerical output. Changing
-a stable row to one of the other strategies is a separately reviewed numerical
-migration.
+Stable methods require a complete, valid typed contract. The ten executable
+experimental methods require explicit opt-in and select a complete historical
+WIOD13 or WIOD16 profile by identifier. Those profiles spell out every `sum`,
+arithmetic `mean`, and formula-module binding; missing or incompatible rows
+fail preflight and are never inferred from parameter strings. Existing schema-v1
+stable WIOD contracts use `sum`, `mean`, and `formula`, so this runtime migration
+preserves their numerical output. Changing a stable row to one of the other
+strategies is a separately reviewed numerical migration.
 
 Canonical units are also mapped to symbolic dimensions (`USD`, country-scoped
 `LCU`, person, hour and labour value). Ratio-of-sums outputs must equal the
@@ -94,12 +94,12 @@ Every successful calculation or recalculation writes `_unit_contract.csv` in
 the method result directory. The sidecar is an ordered, effective expansion of
 the selected contract: contract and schema identifiers, unit semantics and one
 row for each aggregation level. Its aggregation fields are overlaid from the
-registry actually executed. Stable registry rows must equal those published
-rows exactly. Experimental indicators without unit definitions remain on the
-warned legacy route and are omitted from this sidecar; the independent
-scientific checks still recompute them from `_method_solutions.csv`. The
-sidecar is staged and byte-compared with the rest of the result metadata, so
-stale or missing contract metadata prevents publication.
+registry actually executed. Registry rows must equal the published rows exactly
+for stable methods and must exactly cover the selected explicit historical
+profile for experimental methods. The independent scientific checks recompute
+every direct aggregation from this sidecar. It is staged and byte-compared with
+the rest of the result metadata, so stale, incomplete or missing contract
+metadata prevents publication.
 
 Changing stored semantics, scale, index base, labour concept or aggregation is
 a contract change and requires a new contract identifier. A metadata-only

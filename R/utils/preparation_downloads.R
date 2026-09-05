@@ -223,53 +223,6 @@ wlv_write_fst_atomic <- function(value, destination, writer) {
   invisible(destination)
 }
 
-wlv_write_fst_array_atomic <- function(value, destination, writer) {
-  if (!is.function(writer)) {
-    stop("`writer` must be a function.", call. = FALSE)
-  }
-  destination_directory <- dirname(destination)
-  if (!dir.exists(destination_directory)) {
-    stop(sprintf("FST destination directory does not exist: %s", destination_directory), call. = FALSE)
-  }
-  temporary <- tempfile(
-    pattern = paste0(".", basename(destination), "-write-"),
-    tmpdir = destination_directory,
-    fileext = ".fst"
-  )
-  temporary_paths <- c(temporary, paste0(temporary, ".meta"))
-  destination_paths <- c(destination, paste0(destination, ".meta"))
-  on.exit({
-    remaining <- temporary_paths[file.exists(temporary_paths)]
-    if (length(remaining)) {
-      unlink(remaining, force = TRUE)
-    }
-  }, add = TRUE)
-
-  writer(value, temporary)
-  missing <- temporary_paths[!file.exists(temporary_paths)]
-  if (length(missing)) {
-    stop(
-      sprintf("Array writer did not produce: %s", paste(missing, collapse = ", ")),
-      call. = FALSE
-    )
-  }
-  sizes <- file.info(temporary_paths)$size
-  if (anyNA(sizes) || any(sizes <= 0)) {
-    stop(sprintf("Array writer produced an empty file for: %s", destination), call. = FALSE)
-  }
-  tryCatch(
-    readRDS(temporary_paths[[2]]),
-    error = function(error) {
-      stop(
-        sprintf("Array writer produced invalid metadata for `%s`: %s", destination, conditionMessage(error)),
-        call. = FALSE
-      )
-    }
-  )
-  wlv_install_files(temporary_paths, destination_paths)
-  invisible(destination)
-}
-
 wlv_download_verified <- function(
     url,
     destination,

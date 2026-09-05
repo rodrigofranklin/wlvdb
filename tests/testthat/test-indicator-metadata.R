@@ -39,56 +39,28 @@ test_that("WIOD16 v2 projects canonical and display metadata explicitly", {
   expect_identical(metadata$index_storage_base, c(1, 1, NA_real_))
 })
 
-test_that("legacy result metadata remains readable without implicit rescaling", {
-  legacy <- data.frame(
-    code = c("go_price.r.id", "gross_output.s.us"),
-    name = c("Price", "Output"),
-    stringsAsFactors = FALSE
-  )
-  expect_warning(
-    completed <- indicator_metadata_environment$wlv_complete_indicator_metadata(
-      legacy
-    ),
-    "display_multiplier = 1",
-    fixed = TRUE
-  )
-  expect_identical(completed$display_multiplier, c(1, 1))
-  expect_warning(
-    displayed <- indicator_metadata_environment$wlv_display_values(
-      c(100, 250),
-      legacy,
-      "go_price.r.id"
-    ),
-    "display_multiplier = 1",
-    fixed = TRUE
-  )
-  expect_identical(displayed, c(100, 250))
-})
-
 test_that("unit contracts fill display metadata before checking overrides", {
   units <- wlv_read_wiodr16_v2_units()
   metadata <- data.frame(
-    code = c("go_price.r.id", "gross_output.s.us", "experimental.metric"),
-    name = c("Price", "Output", "Experimental"),
+    code = c("go_price.r.id", "gross_output.s.us"),
+    name = c("Price", "Output"),
     stringsAsFactors = FALSE
   )
 
   completed <- indicator_metadata_environment$wlv_complete_indicator_metadata(
     metadata,
-    units = units,
-    warn_legacy = FALSE
+    units = units
   )
 
-  expect_identical(completed$display_multiplier, c(100, 1, 1))
-  expect_identical(completed$canonical_unit, c("index", "usd", NA_character_))
-  expect_identical(completed$index_base_year, c("2000", NA_character_, NA_character_))
+  expect_identical(completed$display_multiplier, c(100, 1))
+  expect_identical(completed$canonical_unit, c("index", "usd"))
+  expect_identical(completed$index_base_year, c("2000", NA_character_))
 
-  metadata$display_multiplier <- c(1, NA_real_, NA_real_)
+  metadata$display_multiplier <- c(1, NA_real_)
   expect_error(
     indicator_metadata_environment$wlv_complete_indicator_metadata(
       metadata,
-      units = units,
-      warn_legacy = FALSE
+      units = units
     ),
     "display_multiplier",
     fixed = TRUE
@@ -117,16 +89,14 @@ test_that("stable unit contracts fully project into fresh result metadata", {
     )
     completed <- indicator_metadata_environment$wlv_complete_indicator_metadata(
       metadata,
-      units = units,
-      warn_legacy = FALSE
+      units = units
     )
 
     expect_identical(completed[, names(expected)], expected)
     expect_identical(
       indicator_metadata_environment$wlv_complete_indicator_metadata(
         completed,
-        units = units,
-        warn_legacy = FALSE
+        units = units
       )[, names(expected)],
       expected
     )
@@ -182,14 +152,7 @@ test_that("WIOD16 gross-output prices are stored at base one and displayed once"
     units,
     "go_price.r.id"
   )
-  expect_identical(
-    indicator_metadata_environment$wlv_display_values(
-      stored,
-      metadata,
-      "go_price.r.id"
-    ),
-    c(100, 150)
-  )
+  expect_identical(stored * metadata$display_multiplier[[1L]], c(100, 150))
   expect_identical(stored, c(1, 1.5))
 })
 

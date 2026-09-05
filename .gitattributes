@@ -1,5 +1,19 @@
+# Attribute rules themselves are authenticated with a stable checkout form.
+.gitattributes text eol=lf
+
 # renv/activate.R is generated verbatim by renv and carries template spacing.
 renv/activate.R -whitespace
+
+# Runtime definitions must have one checkout representation on every CI host.
+*.R text eol=lf
+
+# The Issue #13 evidence harness is authenticated byte-for-byte.
+run_logs/issue13-native-gate-orchestrator-v5/*.ps1 text eol=lf
+run_logs/issue13-native-gate-orchestrator-v5/*.md text eol=lf
+run_logs/issue13-native-gate-orchestrator-v5/*.json text eol=lf
+run_logs/issue13-native-gate-orchestrator-v5/*.csv text eol=lf
+run_logs/issue13-evidence-source-v5/** text eol=lf
+docs/validation/issue-13.md text eol=lf
 
 # This historical scientific input is verified against its exact Git blob.
 complementar/wiodr16/china_hours_per_worker.csv text eol=lf

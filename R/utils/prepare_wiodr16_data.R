@@ -38,7 +38,7 @@ if (!dir.exists("source_data/wiodr16")) {
   stop("Cannot create WIOD16 source-data directory.", call. = FALSE)
 }
 
-wiots_manifest <- wiodr16_download_manifest$wiots
+wiots_manifest <- wiodr16_download_manifest()$wiots
 wlv_download_verified(
   url = wiots_manifest$url,
   destination = wiots_manifest$destination,
@@ -48,7 +48,7 @@ wlv_download_verified(
   validator = wlv_validate_wiodr16_wiots_archive
 )
 
-sea_manifest <- wiodr16_download_manifest$sea
+sea_manifest <- wiodr16_download_manifest()$sea
 wlv_download_verified(
   url = sea_manifest$url,
   destination = sea_manifest$destination,
@@ -86,43 +86,43 @@ message(
   )
 )
 
-countries <- c(wiodr16_countries, "ROW")
-sea_variables <- c(wiodr16_sea_variables, "VA_USD", "GO_USD")
+countries <- c(wiodr16_countries(), "ROW")
+sea_variables <- c(wiodr16_sea_variables(), "VA_USD", "GO_USD")
 input_labels <- as.vector(vapply(
   countries,
-  function(country) paste(country, wiodr16_sectors, sep = "."),
-  character(length(wiodr16_sectors))
+  function(country) paste(country, wiodr16_sectors(), sep = "."),
+  character(length(wiodr16_sectors()))
 ))
 final_demand_labels <- as.vector(vapply(
   countries,
-  function(country) paste(country, wiodr16_demand, sep = "."),
-  character(length(wiodr16_demand))
+  function(country) paste(country, wiodr16_demand(), sep = "."),
+  character(length(wiodr16_demand()))
 ))
 output_labels <- c(input_labels, final_demand_labels)
 
 sea_source <- array(
   NA_real_,
   dim = c(
-    length(wiodr16_years), length(sea_variables), length(wiodr16_sectors),
+    length(wiodr16_years()), length(sea_variables), length(wiodr16_sectors()),
     length(countries)
   ),
   dimnames = list(
-    wiodr16_years, sea_variables, wiodr16_sectors, countries
+    wiodr16_years(), sea_variables, wiodr16_sectors(), countries
   )
 )
 for (row_index in seq_len(nrow(sea))) {
   sea_source[
     , sea$variable[[row_index]], sea$code[[row_index]], sea$country[[row_index]]
-  ] <- as.numeric(sea[row_index, wiodr16_years])
+  ] <- as.numeric(sea[row_index, wiodr16_years()])
 }
 
 utils::unzip(
   wiots_manifest$destination,
-  files = wiodr16_rdata_members,
+  files = wiodr16_rdata_members(),
   exdir = "source_data/wiodr16",
   overwrite = TRUE
 )
-wiodr16_rdata_paths <- file.path("source_data/wiodr16", wiodr16_rdata_members)
+wiodr16_rdata_paths <- file.path("source_data/wiodr16", wiodr16_rdata_members())
 missing_rdata_paths <- wiodr16_rdata_paths[!file.exists(wiodr16_rdata_paths)]
 if (length(missing_rdata_paths)) {
   stop(
@@ -133,11 +133,11 @@ if (length(missing_rdata_paths)) {
 
 m_io <- array(
   NA_real_,
-  dim = c(length(wiodr16_years), length(input_labels), length(output_labels)),
-  dimnames = list(wiodr16_years, input_labels, output_labels)
+  dim = c(length(wiodr16_years()), length(input_labels), length(output_labels)),
+  dimnames = list(wiodr16_years(), input_labels, output_labels)
 )
-for (year_index in seq_along(wiodr16_years)) {
-  year <- wiodr16_years[[year_index]]
+for (year_index in seq_along(wiodr16_years())) {
+  year <- wiodr16_years()[[year_index]]
   message(sprintf("Converting WIOD16 WIOT %s...", year))
   converted <- wlv_load_wiodr16_wiot(
     wiodr16_rdata_paths[[year_index]],
@@ -179,7 +179,7 @@ documented_sea_missing <- array(
   dim = dim(sea_source),
   dimnames = dimnames(sea_source)
 )
-documented_sea_missing[, wiodr16_sea_variables, , "ROW"] <- TRUE
+documented_sea_missing[, wiodr16_sea_variables(), , "ROW"] <- TRUE
 documented_sea_missing[, c("EMPE", "H_EMPE"), , "CHN"] <- TRUE
 if (!identical(is.na(sea_source), documented_sea_missing)) {
   stop(
@@ -202,8 +202,8 @@ preparation_validation <- wlv_validate_wiodr16_arrays(
   m_io = m_io,
   sea = sea_source,
   countries = countries,
-  sectors = wiodr16_sectors,
-  demands = wiodr16_demand
+  sectors = wiodr16_sectors(),
+  demands = wiodr16_demand()
 )
 message(
   sprintf(
@@ -240,7 +240,7 @@ wlv_write_wiodr16_labels <- function(values, destination, column_name) {
   invisible(destination)
 }
 wlv_write_wiodr16_labels(
-  wiodr16_demand,
+  wiodr16_demand(),
   "source_data/wiodr16/demand.csv",
   "demand"
 )
@@ -250,7 +250,7 @@ wlv_write_wiodr16_labels(
   "country.source"
 )
 wlv_write_wiodr16_labels(
-  wiodr16_sectors,
+  wiodr16_sectors(),
   "source_data/wiodr16/sectors.csv",
   "sector.source"
 )

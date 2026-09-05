@@ -2,7 +2,9 @@
 # not read or write files; callers remain responsible for persisting the
 # explicit normalization marker together with an artifact.
 
-wlv_source_normalization_marker_name <- "wlv.source_normalization"
+wlv_source_normalization_marker_name <- function() {
+  "wlv.source_normalization"
+}
 
 wlv_normalization_unit_vector <- function(value, variables, label) {
   if (is.null(value)) {
@@ -276,7 +278,7 @@ wlv_validate_source_normalization_contract <- function(contract) {
 }
 
 wlv_source_normalization_marker <- function(value) {
-  attr(value, wlv_source_normalization_marker_name, exact = TRUE)
+  attr(value, wlv_source_normalization_marker_name(), exact = TRUE)
 }
 
 wlv_validate_source_array <- function(value, artifact, contract) {
@@ -368,7 +370,7 @@ wlv_normalize_source_array <- function(value, contract, artifact = c("m_io", "se
       result[, variable, , ] <- result[, variable, , ] * multipliers[[variable]]
     }
   }
-  attr(result, wlv_source_normalization_marker_name) <-
+  attr(result, wlv_source_normalization_marker_name()) <-
     wlv_source_normalization_marker_value(contract, artifact)
   result
 }
@@ -627,8 +629,14 @@ wlv_publish_normalized_source <- function(
     }
   }, add = TRUE)
 
-  writer(normalized$m_io, file.path(staging, "m_io.fst"))
-  writer(normalized$sea, file.path(staging, "sea.fst"))
+  for (artifact in c("m_io", "sea")) {
+    # The validated in-memory marker is persisted by the contract sidecar,
+    # not as an array attribute. Preserve the caller and reject other attributes.
+    payload <- normalized[[artifact]]
+    attr(payload, wlv_source_normalization_marker_name()) <- NULL
+    writer(payload, file.path(staging, paste0(artifact, ".fst")))
+    rm(payload)
+  }
   copied <- file.copy(
     file.path(source_dir, label_files),
     file.path(staging, label_files),

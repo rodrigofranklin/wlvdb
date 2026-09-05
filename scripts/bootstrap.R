@@ -5,12 +5,12 @@ if (!length(script_arg)) {
 
 script_path <- normalizePath(sub("^--file=", "", script_arg[[1]]), mustWork = TRUE)
 project_root <- normalizePath(file.path(dirname(script_path), ".."), mustWork = TRUE)
-setwd(project_root)
 
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 
 message("Activating the renv version pinned by the project...")
-source(file.path("renv", "activate.R"), local = TRUE)
+Sys.setenv(RENV_PROJECT = project_root)
+source(file.path(project_root, "renv", "activate.R"), local = TRUE)
 message("Restoring the project library from renv.lock...")
 renv::consent(provided = TRUE)
 renv::restore(project = project_root, prompt = FALSE)

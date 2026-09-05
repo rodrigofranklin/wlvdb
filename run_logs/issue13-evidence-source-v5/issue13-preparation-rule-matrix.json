@@ -1,0 +1,96 @@
+{
+  "schema": "wlv-issue13-preparation-rule-matrix/1",
+  "scope": "issue-13-preparation-and-transactional-fault-gates",
+  "comparison_modes": {
+    "preparation_cross_engine": {
+      "baseline": "cc2c86189a06676bcb9f0e05e08033d710a92509",
+      "candidate": "91765c1baf841240530e7daba9a34452b473ca10",
+      "rules": [
+        {
+          "id": "official-cache-pins",
+          "artifacts": "six official WIOD13/WIOD16/EU-KLEMS cache files",
+          "comparison": "exact path, byte size, and SHA-256 in both arms"
+        },
+        {
+          "id": "generated-inventory",
+          "artifacts": "normalized WIOD13/WIOD16 plus 42 annual EU-KLEMS tables",
+          "comparison": "exact closed file and directory inventories; unexpected entries fail"
+        },
+        {
+          "id": "source-manifests",
+          "artifacts": "_source_manifest.csv for WIOD13 and WIOD16",
+          "comparison": "exact schema and cells across engines; every listed artifact rehashed and size-checked"
+        },
+        {
+          "id": "contracts-and-labels",
+          "artifacts": "_normalization_contract.csv, _unit_contract.csv, countries.csv, demand.csv, sectors.csv",
+          "comparison": "exact schema, ordering, cells, root-label copies, and UTF-8 content"
+        },
+        {
+          "id": "normalized-arrays",
+          "artifacts": "m_io.fst and sea.fst with sidecars",
+          "comparison": "exact dimensions, dimnames, FST column schema/types, row count, internal hashes, and bitwise double values including NA, NaN, infinities, and signed zero"
+        },
+        {
+          "id": "gfcf-canonical",
+          "artifacts": "_gfcf_canonical.rds",
+          "comparison": "identical R object type, length, attributes, and values"
+        },
+        {
+          "id": "euklems-series",
+          "artifacts": "ekk_1995..2015.fst and ekdeprate_1995..2015.fst",
+          "comparison": "exact file coverage, FST schema/types/rows, data-frame attributes, missingness, ordering, and cells"
+        },
+        {
+          "id": "execution-authentication",
+          "artifacts": "plan audit, immutable scenario/process specs, logs, samples, process metrics, scenario result, source manifests, and EU-KLEMS snapshot",
+          "comparison": "recompute every declared hash; bind scenario id, root, commit, request, channel, workers, output identity, and fresh seed"
+        },
+        {
+          "id": "transaction-cleanliness",
+          "artifacts": "source_data/.preparation-staging and source_data/.prepare-lock-*",
+          "comparison": "no entries or locks before/after publication of the prepared generation"
+        },
+        {
+          "id": "performance",
+          "artifacts": "authenticated process metrics",
+          "comparison": "candidate elapsed <= max(120% baseline, baseline + 600 seconds); candidate peak RSS <= baseline + max(10%, 512 MiB)"
+        }
+      ],
+      "numeric_tolerance": "none-bitwise",
+      "ignored_artifacts": []
+    },
+    "fault_within_engine": {
+      "candidate": "91765c1baf841240530e7daba9a34452b473ca10",
+      "rules": [
+        {
+          "id": "exact-injection-boundary",
+          "artifacts": "10 canonical module/preparation/publication bindings",
+          "comparison": "fault id, binding, phase, call number, optional checkpoint, token, and binding call count must match the audited matrix"
+        },
+        {
+          "id": "visible-release-rollback",
+          "artifacts": "channel marker and its prior release/run identities",
+          "comparison": "exact publication state before and after; prior release must remain verified and visible"
+        },
+        {
+          "id": "source-generation-rollback",
+          "artifacts": "WIOD manifests, EU-KLEMS annual hashes, preparation staging, and locks",
+          "comparison": "exact source state before and after; no partial normalized generation, staging entry, or lock"
+        },
+        {
+          "id": "publication-staging-cleanliness",
+          "artifacts": "results/.staging",
+          "comparison": "empty before and after every injected failure"
+        },
+        {
+          "id": "expected-failure-authentication",
+          "artifacts": "fault result, scenario result, process metrics, stdout/stderr, and samples",
+          "comparison": "expected token observed, nonzero scientific action suppressed transactionally, harness exits successfully only after rollback assertions pass"
+        }
+      ],
+      "numeric_tolerance": "not-applicable-exact-state",
+      "ignored_artifacts": []
+    }
+  }
+}

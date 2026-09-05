@@ -4,38 +4,28 @@
 #                                                                             #
 ###############################################################################
 
-source("R/lib/catalog.R", local = TRUE)
-source("R/lib/dependencies.R", local = TRUE)
-source("R/lib/missingness.R", local = TRUE)
-source("R/lib/unit_dimensions.R", local = TRUE)
-source("R/lib/aggregation_specs.R", local = TRUE)
-source("R/lib/indicator_metadata.R", local = TRUE)
-source("R/lib/gfcf_contracts.R", local = TRUE)
-source("R/lib/gfcf_diagnostics.R", local = TRUE)
-source("R/lib/leontief_diagnostics.R", local = TRUE)
-source("R/lib/scientific_validation.R", local = TRUE)
-source("R/lib/result_contracts.R", local = TRUE)
-source("R/lib/source_manifest.R", local = TRUE)
-source("R/lib/source_normalization.R", local = TRUE)
-source("R/lib/publication_manifest.R", local = TRUE)
-source("R/lib/publication.R", local = TRUE)
-source("R/lib/publication_retention.R", local = TRUE)
-source("R/lib/execution.R", local = TRUE)
+# Public API definitions. This file is loaded last by R/bootstrap.R into the
+# private runtime namespace. It contains definitions only: repository-backed
+# catalog data is loaded afresh for each public operation.
 
-method_catalog <- wlv_load_catalog(".")
-method_list <- wlv_catalog_method_table(method_catalog)$method
+wlv_runtime_catalog <- function() {
+  wlv_assert_loaded_runtime_unchanged()
+  wlv_load_catalog(.wlv_runtime_root())
+}
 
 prepare_wlv <- function(methods = "wiodr13", allow_experimental = FALSE) {
+  catalog <- wlv_runtime_catalog()
   plan <- wlv_validate_request(
     methods = methods,
     repeat_pp = TRUE,
     workers = 1L,
     mode = "calculate",
     requested_operations = "prepare",
+    root = .wlv_runtime_root(),
     allow_experimental = allow_experimental,
-    catalog = method_catalog
+    catalog = catalog
   )
-  wlv_assert_dependencies(include_preparation = TRUE)
+  wlv_assert_dependencies(include_preparation = TRUE, attach = FALSE)
   plan <- wlv_execute_preparation_plan(plan)
 
   invisible(plan$method_names)
@@ -49,6 +39,7 @@ get_wlv <- function(
     workers = getOption("wlv.workers", 1L),
     channel = getOption("wlv.channel", "stable"),
     allow_experimental = FALSE) {
+  catalog <- wlv_runtime_catalog()
   plan <- wlv_validate_request(
     methods = methods,
     repeat_pp = repeat_pp,
@@ -57,25 +48,17 @@ get_wlv <- function(
     workers = workers,
     channel = channel,
     mode = "calculate",
+    root = .wlv_runtime_root(),
     allow_experimental = allow_experimental,
-    catalog = method_catalog
+    catalog = catalog
   )
   wlv_assert_dependencies(
     include_preparation = plan$repeat_pp,
-    include_papers = plan$prepaper
+    attach = FALSE
   )
 
   execution <- wlv_execute_run_plan(plan)
   plan <- execution$plan
-  run_environments <- execution$run_environments
-
-  if (plan$prepaper) {
-    wlv_run_paper(
-      plan,
-      run_environments[[length(run_environments)]],
-      release = execution$release
-    )
-  }
 
   invisible(plan$method_names)
 }
@@ -89,6 +72,7 @@ recalc_wlv <- function(
     workers = getOption("wlv.workers", 1L),
     channel = getOption("wlv.channel", "stable"),
     allow_experimental = FALSE) {
+  catalog <- wlv_runtime_catalog()
   plan <- wlv_validate_request(
     methods = methods,
     papern = papern,
@@ -98,21 +82,13 @@ recalc_wlv <- function(
     mode = "recalculate",
     at_stage = at_stage,
     sea_vars = sea_vars,
+    root = .wlv_runtime_root(),
     allow_experimental = allow_experimental,
-    catalog = method_catalog
+    catalog = catalog
   )
-  wlv_assert_dependencies(include_papers = plan$prepaper)
+  wlv_assert_dependencies(attach = FALSE)
   execution <- wlv_execute_run_plan(plan)
   plan <- execution$plan
-  run_environments <- execution$run_environments
-
-  if (plan$prepaper) {
-    wlv_run_paper(
-      plan,
-      run_environments[[length(run_environments)]],
-      release = execution$release
-    )
-  }
 
   invisible(plan$method_names)
 }

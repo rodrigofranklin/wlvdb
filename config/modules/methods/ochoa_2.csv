@@ -1,0 +1,7 @@
+instance_id;module_id;action;replaces;variant;source_variable;args_json
+assumption.china;assumption.china.reduction_problem;replace;assumption.china;;;{}
+assumption.row;assumption.row.reduction_problem;replace;assumption.row;reduction_problem;;"{""source"":""wiodr13""}"
+matrix.capital;matrix.capital.reduction_problem;replace;matrix.capital;;;{}
+matrix.consumption_basket;matrix.basket.national;replace;matrix.consumption_basket;;;{}
+indicator.complex_labour_multiplier.emp.r.un;indicator.complex_labour_multiplier.emp.r.un.ochoa_2;replace;indicator.complex_labour_multiplier.emp.r.un;;;{}
+indicator.complex_labour_multiplier.empe.r.un;indicator.complex_labour_multiplier.empe.r.un.ochoa_2;replace;indicator.complex_labour_multiplier.empe.r.un;;;{}

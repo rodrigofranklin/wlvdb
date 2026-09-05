@@ -9,6 +9,195 @@ for (script in c(
   )
 }
 
+wlv_scientific_test_profile <- function(
+    method = "demo",
+    source = "demo",
+    years = "2000",
+    signed_counts = rep(0L, length(years))) {
+  scientific_validation_environment$wlv_scientific_profile_contract(
+    id = paste0(method, "_scientific_v1"),
+    method = method,
+    source = source,
+    output_profile = paste0(method, "_output"),
+    leontief_zero = list(
+      id = paste0(method, "_zero_v1"),
+      exception_count = 0L,
+      coordinate_md5 = "d41d8cd98f00b204e9800998ecf8427e",
+      counts = data.frame(
+        year = character(), output = character(),
+        exception_count = integer(), stringsAsFactors = FALSE
+      )
+    ),
+    leontief_signed = list(
+      id = paste0(method, "_signed_v1"),
+      rows = data.frame(
+        year = years,
+        coefficient_negative_count = as.integer(signed_counts),
+        certificate_type = ifelse(
+          signed_counts > 0L,
+          "absolute_convergence_signed",
+          "productivity_nonnegative"
+        ),
+        stringsAsFactors = FALSE
+      )
+    ),
+    nonfinite_resolution = list(
+      id = "nonfinite_none_v1",
+      action = "reject",
+      expected_count = 0L,
+      groups = data.frame(
+        binding = character(), indicator = character(),
+        kind = character(), module = character(),
+        expected_count = integer(), coordinate_sha256 = character(),
+        stringsAsFactors = FALSE
+      ),
+      rules = data.frame(
+        artifact = character(), indicator = character(),
+        year = character(), country = character(), sector = character(),
+        from = character(), to = character(), stringsAsFactors = FALSE
+      )
+    )
+  )
+}
+
+test_that("signed Leontief diagnostics are selected by explicit profile", {
+  e <- scientific_validation_environment
+  profile <- wlv_scientific_test_profile(
+    method = "demo",
+    source = "demo",
+    years = c("2005", "2006", "2007"),
+    signed_counts = c(0L, 397L, 0L)
+  )
+  observed <- profile$leontief_signed$rows
+  expect_identical(
+    e$wlv_scientific_validate_leontief_signed_profile(
+      observed,
+      profile,
+      "demo"
+    ),
+    "2006"
+  )
+
+  wrong_count <- observed
+  wrong_count$coefficient_negative_count[[2L]] <- 396L
+  expect_error(
+    e$wlv_scientific_validate_leontief_signed_profile(
+      wrong_count,
+      profile,
+      "demo"
+    ),
+    "differs from explicit profile"
+  )
+
+  wrong_certificate <- observed
+  wrong_certificate$certificate_type[[2L]] <- "productivity_nonnegative"
+  expect_error(
+    e$wlv_scientific_validate_leontief_signed_profile(
+      wrong_certificate,
+      profile,
+      "demo"
+    ),
+    "differs from explicit profile"
+  )
+
+  zero_profile <- wlv_scientific_test_profile(
+    method = "zerodep_1",
+    source = "wiodr13",
+    years = c("2005", "2006", "2007")
+  )
+  expect_error(
+    e$wlv_scientific_validate_leontief_signed_profile(
+      observed,
+      zero_profile,
+      "zerodep_1"
+    ),
+    "differs from explicit profile"
+  )
+})
+
+test_that("non-finite sidecars pin module identity and every profiled group", {
+  e <- scientific_validation_environment
+  base_profile <- wlv_scientific_test_profile()
+  coordinate_sha256 <- e$wlv_nonfinite_coordinate_sha256("2000|AAA|S1")
+  profile <- e$wlv_scientific_profile_contract(
+    id = "demo_nonfinite_scientific_v1",
+    method = "demo",
+    source = "demo",
+    output_profile = "demo_output",
+    leontief_zero = base_profile$leontief_zero,
+    leontief_signed = base_profile$leontief_signed,
+    nonfinite_resolution = list(
+      id = "demo_nonfinite_v1",
+      action = "replace_nan_with_zero",
+      expected_count = 1L,
+      groups = data.frame(
+        binding = "skill",
+        indicator = "skill",
+        kind = "NaN",
+        module = "module.skill",
+        expected_count = 1L,
+        coordinate_sha256 = coordinate_sha256,
+        stringsAsFactors = FALSE
+      ),
+      rules = data.frame(
+        artifact = "sea_sectors",
+        indicator = "skill",
+        year = "2000",
+        country = "AAA",
+        sector = "S1",
+        from = "NaN",
+        to = "0",
+        stringsAsFactors = FALSE
+      )
+    )
+  )
+  diagnostic <- data.frame(
+    method = "demo",
+    scientific_profile = "demo_nonfinite_scientific_v1",
+    nonfinite_resolution_profile = "demo_nonfinite_v1",
+    action = "replace_nan_with_zero",
+    module = "module.skill",
+    binding = "skill",
+    indicator = "skill",
+    kind = "NaN",
+    resolved_count = 1L,
+    coordinate_sha256 = coordinate_sha256,
+    stringsAsFactors = FALSE
+  )[e$wlv_nonfinite_resolution_diagnostic_columns()]
+  diagnostics <- list(
+    `_nonfinite_resolution_diagnostics.csv` = diagnostic
+  )
+  check <- e$wlv_scientific_validate_nonfinite_resolution(
+    diagnostics,
+    profile,
+    "demo"
+  )
+  expect_identical(check$observations, 1L)
+
+  wrong_module <- diagnostics
+  wrong_module[[1L]]$module <- "module.other"
+  expect_error(
+    e$wlv_scientific_validate_nonfinite_resolution(
+      wrong_module,
+      profile,
+      "demo"
+    ),
+    "published transitions differ from explicit profile"
+  )
+  expect_error(
+    e$wlv_scientific_validate_nonfinite_resolution(list(), profile, "demo"),
+    "requires the non-finite resolution sidecar"
+  )
+  expect_error(
+    e$wlv_scientific_validate_nonfinite_resolution(
+      diagnostics,
+      base_profile,
+      "demo"
+    ),
+    "strict profile published an undeclared resolution sidecar"
+  )
+})
+
 wlv_scientific_test_arrays <- function(method = "demo") {
   years <- "2000"
   indicators <- c(
@@ -270,7 +459,7 @@ test_that("typed scientific aggregation is an independent reference", {
   )
 })
 
-test_that("legacy scientific routes stay distinct from typed sidecar rows", {
+test_that("scientific validation accepts only complete typed routes", {
   values <- wlv_scientific_test_arrays()
   checks <- scientific_validation_environment$
     wlv_scientific_validate_result_arrays(
@@ -279,21 +468,16 @@ test_that("legacy scientific routes stay distinct from typed sidecar rows", {
       values$sea_countries,
       values$m_countries,
       values$solutions,
-      values$aggregations[FALSE, , drop = FALSE],
-      legacy_aggregations = values$aggregations
+      values$aggregations
     )
   contract_check <- checks$check_id == "aggregation_contract"
-  legacy_check <- checks$check_id == "aggregation_legacy_adapter"
-  expect_identical(checks$observations[contract_check], 0L)
   expect_identical(
-    checks$observations[legacy_check],
+    checks$observations[contract_check],
     as.integer(nrow(values$aggregations))
   )
   routed <- checks$check_id %in% c("sector_to_country", "country_to_world")
-  expect_true(all(startsWith(checks$scope[routed], "legacy_adapter:")))
+  expect_false(any(grepl("legacy", checks$scope[routed], fixed = TRUE)))
 
-  unsupported <- values$aggregations
-  unsupported$strategy[[1L]] <- "ratio_of_sums"
   expect_error(
     scientific_validation_environment$wlv_scientific_validate_result_arrays(
       values$method,
@@ -301,10 +485,24 @@ test_that("legacy scientific routes stay distinct from typed sidecar rows", {
       values$sea_countries,
       values$m_countries,
       values$solutions,
-      values$aggregations[FALSE, , drop = FALSE],
-      legacy_aggregations = unsupported
+      values$aggregations[FALSE, , drop = FALSE]
     ),
-    "typed and legacy routes",
+    "typed routes must be supported",
+    fixed = TRUE
+  )
+
+  unsupported <- values$aggregations
+  unsupported$strategy[[1L]] <- "unsupported"
+  expect_error(
+    scientific_validation_environment$wlv_scientific_validate_result_arrays(
+      values$method,
+      values$sea_sectors,
+      values$sea_countries,
+      values$m_countries,
+      values$solutions,
+      unsupported
+    ),
+    "typed routes must be supported",
     fixed = TRUE
   )
 })
@@ -398,6 +596,333 @@ test_that("the WIOD13 signed SEA exception is required, not merely allowed", {
   )
 })
 
+test_that("chunked WIOD13 signed ranges preserve legacy semantics", {
+  environment <- scientific_validation_environment
+  legacy_check <- function(
+      value,
+      artifact,
+      indicator,
+      minimum = 0,
+      maximum = Inf,
+      exact_zero = FALSE,
+      scope = "all published cells") {
+    selected <- !is.na(value)
+    finite_values <- value[selected]
+    if (any(!is.finite(finite_values))) {
+      environment$wlv_abort_scientific_validation(
+        "wiodr13", "method_range", artifact, indicator, scope,
+        "range contains NaN or infinite values"
+      )
+    }
+    if (exact_zero) {
+      invalid <- finite_values != 0
+      tolerance <- "exact zero"
+    } else {
+      lower_scale <- pmax(
+        abs(finite_values),
+        if (is.finite(minimum)) abs(minimum) else 0,
+        1
+      )
+      upper_scale <- pmax(
+        abs(finite_values),
+        if (is.finite(maximum)) abs(maximum) else 0,
+        1
+      )
+      lower_slack <- 64 * .Machine$double.eps * lower_scale
+      upper_slack <- 64 * .Machine$double.eps * upper_scale
+      invalid <- finite_values < minimum - lower_slack |
+        finite_values > maximum + upper_slack
+      tolerance <- sprintf(
+        "[%s,%s];componentwise_roundoff=64*eps*max(1,abs(value),abs(bound))",
+        format(minimum, scientific = TRUE),
+        format(maximum, scientific = TRUE)
+      )
+    }
+    if (identical(artifact, "sea_sectors")) {
+      environment$wlv_scientific_wiodr13_signed_sea_pin(
+        value,
+        indicator,
+        "wiodr13"
+      )
+    } else {
+      environment$wlv_scientific_wiodr13_signed_io_pin(
+        value,
+        indicator,
+        "wiodr13"
+      )
+    }
+    invalid[] <- FALSE
+    maximum_error <- if (!length(finite_values)) {
+      0
+    } else if (exact_zero) {
+      max(abs(finite_values))
+    } else {
+      max(c(minimum - finite_values, finite_values - maximum, 0))
+    }
+    environment$wlv_scientific_check_row(
+      method = "wiodr13",
+      check_id = "method_range",
+      artifact = artifact,
+      indicator = indicator,
+      scope = scope,
+      status = "warning",
+      observations = length(finite_values),
+      maximum_absolute_error = maximum_error,
+      maximum_scaled_error = 0,
+      tolerance = tolerance,
+      detail = paste0(
+        "Pinned WIOD13/2006/GBR.23 signed-domain exception; all other cells ",
+        "remain nonnegative."
+      )
+    )
+  }
+  check <- function(value, artifact, indicator, ...) {
+    environment$wlv_scientific_check_range(
+      value,
+      method = "wiodr13",
+      artifact = artifact,
+      indicator = indicator,
+      ...
+    )
+  }
+  condition <- function(expression) {
+    tryCatch(expression, error = identity)
+  }
+
+  signed_stock <- array(
+    2,
+    dim = c(2L, 1L, 2L, 2L),
+    dimnames = list(
+      year = c("2006", "2007"),
+      indicator = "capital_stock.s.us",
+      sector = c("23", "24"),
+      country = c("GBR", "FRA")
+    )
+  )
+  signed_stock["2006", "capital_stock.s.us", "23", "GBR"] <-
+    -75458950528.278488
+  signed_stock["2007", "capital_stock.s.us", "23", "GBR"] <- NA_real_
+  signed_stock["2006", "capital_stock.s.us", "24", "FRA"] <- NaN
+  signed_stock["2007", "capital_stock.s.us", "24", "FRA"] <- 1e15
+
+  expected <- legacy_check(
+    signed_stock,
+    artifact = "sea_sectors",
+    indicator = "capital_stock.s.us",
+    minimum = 0,
+    maximum = Inf
+  )
+  observed <- check(
+    signed_stock,
+    artifact = "sea_sectors",
+    indicator = "capital_stock.s.us",
+    minimum = 0,
+    maximum = Inf
+  )
+  expect_identical(observed, expected)
+  expect_identical(observed$observations, 6L)
+  expect_identical(
+    observed$maximum_absolute_error,
+    75458950528.278488
+  )
+
+  expected_zero <- legacy_check(
+    signed_stock,
+    artifact = "sea_sectors",
+    indicator = "capital_stock.s.us",
+    minimum = 0,
+    maximum = 0,
+    exact_zero = TRUE
+  )
+  observed_zero <- check(
+    signed_stock,
+    artifact = "sea_sectors",
+    indicator = "capital_stock.s.us",
+    minimum = 0,
+    maximum = 0,
+    exact_zero = TRUE
+  )
+  expect_identical(observed_zero, expected_zero)
+
+  expected_bounded <- legacy_check(
+    signed_stock,
+    artifact = "sea_sectors",
+    indicator = "capital_stock.s.us",
+    minimum = -1e11,
+    maximum = 10
+  )
+  observed_bounded <- check(
+    signed_stock,
+    artifact = "sea_sectors",
+    indicator = "capital_stock.s.us",
+    minimum = -1e11,
+    maximum = 10
+  )
+  expect_identical(observed_bounded, expected_bounded)
+  expect_identical(
+    observed_bounded$maximum_absolute_error,
+    1e15 - 10
+  )
+
+  scan <- environment$wlv_scientific_signed_range_scan(
+    signed_stock,
+    minimum = 0,
+    maximum = Inf,
+    chunk_size = 3L
+  )
+  expect_false(scan$nonfinite)
+  expect_identical(scan$observations, 6L)
+  expect_identical(
+    scan$negative_positions,
+    which(signed_stock < 0, arr.ind = TRUE)
+  )
+  expect_identical(
+    scan$maximum_error,
+    max(c(
+      -signed_stock[!is.na(signed_stock)],
+      signed_stock[!is.na(signed_stock)] - Inf,
+      0
+    ))
+  )
+
+  for (nonfinite in c(Inf, -Inf)) {
+    broken <- signed_stock
+    broken["2007", "capital_stock.s.us", "23", "GBR"] <- nonfinite
+    expected_error <- condition(legacy_check(
+      broken,
+      artifact = "sea_sectors",
+      indicator = "capital_stock.s.us"
+    ))
+    observed_error <- condition(check(
+      broken,
+      artifact = "sea_sectors",
+      indicator = "capital_stock.s.us",
+      minimum = 0,
+      maximum = Inf
+    ))
+    expect_identical(observed_error, expected_error)
+  }
+
+  missing_pin <- signed_stock
+  missing_pin["2006", "capital_stock.s.us", "23", "GBR"] <- NaN
+  expect_identical(
+    condition(check(
+      missing_pin,
+      artifact = "sea_sectors",
+      indicator = "capital_stock.s.us",
+      minimum = 0,
+      maximum = Inf
+    )),
+    condition(legacy_check(
+      missing_pin,
+      artifact = "sea_sectors",
+      indicator = "capital_stock.s.us"
+    ))
+  )
+
+  wrong_value <- signed_stock
+  wrong_value["2006", "capital_stock.s.us", "23", "GBR"] <- -1
+  expect_identical(
+    condition(check(
+      wrong_value,
+      artifact = "sea_sectors",
+      indicator = "capital_stock.s.us",
+      minimum = 0,
+      maximum = Inf
+    )),
+    condition(legacy_check(
+      wrong_value,
+      artifact = "sea_sectors",
+      indicator = "capital_stock.s.us"
+    ))
+  )
+
+  wrong_coordinate <- signed_stock
+  wrong_coordinate["2006", "capital_stock.s.us", "23", "GBR"] <- 1
+  wrong_coordinate["2007", "capital_stock.s.us", "24", "GBR"] <-
+    -75458950528.278488
+  expect_identical(
+    condition(check(
+      wrong_coordinate,
+      artifact = "sea_sectors",
+      indicator = "capital_stock.s.us",
+      minimum = 0,
+      maximum = Inf
+    )),
+    condition(legacy_check(
+      wrong_coordinate,
+      artifact = "sea_sectors",
+      indicator = "capital_stock.s.us"
+    ))
+  )
+
+  expect_error(
+    environment$wlv_scientific_signed_range_scan(
+      signed_stock,
+      0,
+      Inf,
+      chunk_size = 0L
+    ),
+    "Scientific signed-range chunk size is invalid.",
+    fixed = TRUE
+  )
+})
+
+test_that("chunked WIOD13 IO pins preserve count and hash failures", {
+  environment <- scientific_validation_environment
+  condition <- function(expression) {
+    tryCatch(expression, error = identity)
+  }
+  legacy_error <- function(value, indicator) {
+    condition(environment$wlv_scientific_wiodr13_signed_io_pin(
+      value,
+      indicator,
+      "wiodr13"
+    ))
+  }
+  range_error <- function(value, indicator) {
+    condition(environment$wlv_scientific_check_range(
+      value,
+      method = "wiodr13",
+      artifact = "m_io",
+      indicator = indicator,
+      minimum = 0,
+      maximum = Inf
+    ))
+  }
+  io_value <- array(
+    -seq_len(824L),
+    dim = c(1L, 1L, 824L, 1L),
+    dimnames = list(
+      year = "2006",
+      variable = "k_composition",
+      input = sprintf("I%04d", seq_len(824L)),
+      output = "O"
+    )
+  )
+
+  expect_identical(
+    range_error(io_value, "k_composition"),
+    legacy_error(io_value, "k_composition")
+  )
+  expect_match(
+    conditionMessage(range_error(io_value, "k_composition")),
+    "negative-cell pin differs",
+    fixed = TRUE
+  )
+
+  count_mismatch <- io_value[, , -824L, , drop = FALSE]
+  expect_identical(
+    range_error(count_mismatch, "k_composition"),
+    legacy_error(count_mismatch, "k_composition")
+  )
+  expect_match(
+    conditionMessage(range_error(count_mismatch, "k_composition")),
+    "observed=823, expected=824",
+    fixed = TRUE
+  )
+})
+
 test_that("scientific checks and sidecar inventory are deterministic", {
   skip_if_not_installed("Matrix")
   values <- wlv_scientific_test_arrays()
@@ -434,6 +959,11 @@ test_that("scientific checks and sidecar inventory are deterministic", {
   diagnostics <- list(
     `_leontief_diagnostics.csv` = solved$diagnostics
   )
+  scientific_profile <- wlv_scientific_test_profile(
+    method = values$method,
+    source = "demo",
+    years = "2000"
+  )
   build <- function() scientific_validation_environment$
     wlv_finalize_scientific_checks(
       checks = list(base_checks, io_checks),
@@ -442,12 +972,99 @@ test_that("scientific checks and sidecar inventory are deterministic", {
       years = "2000",
       io_years = "2000",
       diagnostics = diagnostics,
-      require_io = TRUE,
-      sea_sectors = values$sea_sectors
+      sea_sectors = values$sea_sectors,
+      scientific_profile = scientific_profile
     )
   first <- build()
   second <- build()
   expect_identical(first, second)
+
+  inherited_io <- scientific_validation_environment$
+    wlv_inherited_io_scientific_checks(
+      first,
+      values$method,
+      "2000"
+    )
+  expected_inherited_io <- first[
+    first$artifact == "m_io" & first$check_id != "io_year_coverage",
+    ,
+    drop = FALSE
+  ]
+  row.names(expected_inherited_io) <- NULL
+  expect_identical(inherited_io, expected_inherited_io)
+  expect_error(
+    scientific_validation_environment$wlv_validate_staged_results(
+      staging = tempdir(),
+      method = values$method,
+      mode = "calculate",
+      runtime = list(),
+      expected_metadata = list(),
+      aggregation_registry = list(),
+      expected_io_artifacts = "m_io.fst",
+      reader = function(path) path,
+      inherited_scientific_checks = first
+    ),
+    "require stage-5 or authenticated stage-4 recalculation",
+    fixed = TRUE
+  )
+  expect_error(
+    scientific_validation_environment$wlv_validate_staged_results(
+      staging = tempdir(),
+      method = values$method,
+      mode = "recalculate",
+      runtime = list(),
+      expected_metadata = list(),
+      aggregation_registry = list(),
+      expected_io_artifacts = "m_io.fst",
+      at_stage = 4L,
+      reader = function(path) path,
+      inherited_scientific_checks = first,
+      inherited_io_validation = NULL
+    ),
+    "require stage-5 or authenticated stage-4 recalculation",
+    fixed = TRUE
+  )
+
+  missing_coverage <- first[first$check_id != "io_year_coverage", , drop = FALSE]
+  expect_error(
+    scientific_validation_environment$wlv_inherited_io_scientific_checks(
+      missing_coverage,
+      values$method,
+      "2000"
+    ),
+    "invalid I/O year coverage",
+    fixed = TRUE
+  )
+  duplicated_coverage <- rbind(
+    first,
+    first[first$check_id == "io_year_coverage", , drop = FALSE]
+  )
+  expect_error(
+    scientific_validation_environment$wlv_inherited_io_scientific_checks(
+      duplicated_coverage,
+      values$method,
+      "2000"
+    ),
+    "invalid I/O year coverage",
+    fixed = TRUE
+  )
+  duplicated_inventory <- rbind(
+    first,
+    first[
+      first$artifact == "m_io" & first$check_id != "io_year_coverage",
+      ,
+      drop = FALSE
+    ][1L, , drop = FALSE]
+  )
+  expect_error(
+    scientific_validation_environment$wlv_inherited_io_scientific_checks(
+      duplicated_inventory,
+      values$method,
+      "2000"
+    ),
+    "lacks a unique I/O check inventory",
+    fixed = TRUE
+  )
 
   stale_diagnostics <- diagnostics
   stale_diagnostics[["_leontief_diagnostics.csv"]]$lambda_fingerprint <-
@@ -463,8 +1080,8 @@ test_that("scientific checks and sidecar inventory are deterministic", {
       years = "2000",
       io_years = "2000",
       diagnostics = stale_diagnostics,
-      require_io = TRUE,
-      sea_sectors = values$sea_sectors
+      sea_sectors = values$sea_sectors,
+      scientific_profile = scientific_profile
     ),
     "diagnostic fingerprint does not match",
     fixed = TRUE

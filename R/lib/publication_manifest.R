@@ -1,14 +1,31 @@
-wlv_publication_schema_version <- "1"
-wlv_run_manifest_schema <- "wlv-run-manifest"
-wlv_release_manifest_schema <- "wlv-release-manifest"
-wlv_channel_marker_schema <- "wlv-channel-marker"
-wlv_output_contract_id <- "wlvpanel-output"
-wlv_output_contract_version <- "1.0.0"
+wlv_publication_schema_version <- function() {
+  "1"
+}
+wlv_run_manifest_schema <- function() {
+  "wlv-run-manifest"
+}
+wlv_release_manifest_schema <- function() {
+  "wlv-release-manifest"
+}
+wlv_channel_marker_schema <- function() {
+  "wlv-channel-marker"
+}
+wlv_output_contract_id <- function() {
+  "wlvpanel-output"
+}
+wlv_output_contract_version <- function() {
+  "1.0.0"
+}
 
-wlv_run_manifest_filename <- "run_manifest.json"
-wlv_release_manifest_filename <- "release_manifest.json"
+wlv_run_manifest_filename <- function() {
+  "run_manifest.json"
+}
+wlv_release_manifest_filename <- function() {
+  "release_manifest.json"
+}
 
-wlv_run_manifest_fields <- c(
+wlv_run_manifest_fields <- function() {
+  c(
   "schema",
   "schema_version",
   "run_id",
@@ -21,8 +38,10 @@ wlv_run_manifest_fields <- c(
   "execution",
   "artifacts"
 )
+}
 
-wlv_release_manifest_fields <- c(
+wlv_release_manifest_fields <- function() {
+  c(
   "schema",
   "schema_version",
   "release_id",
@@ -33,8 +52,10 @@ wlv_release_manifest_fields <- c(
   "runs",
   "artifacts"
 )
+}
 
-wlv_channel_marker_fields <- c(
+wlv_channel_marker_fields <- function() {
+  c(
   "schema",
   "schema_version",
   "channel",
@@ -44,30 +65,41 @@ wlv_channel_marker_fields <- c(
   "release_manifest_sha256",
   "published_at_utc"
 )
+}
 
-wlv_publication_artifact_fields <- c(
+wlv_publication_artifact_fields <- function() {
+  c(
   "path", "role", "size_bytes", "sha256"
 )
+}
 
-wlv_publication_run_reference_fields <- c(
+wlv_publication_run_reference_fields <- function() {
+  c(
   "method", "run_id", "result_id", "manifest_path", "manifest_sha256"
 )
+}
 
-wlv_publication_result_fields <- c(
+wlv_publication_result_fields <- function() {
+  c(
   "provenance", "request", "schema", "audit_summary"
 )
+}
 
-wlv_publication_execution_fields <- c(
+wlv_publication_execution_fields <- function() {
+  c(
   "started_at_utc",
   "finished_at_utc",
   "duration_seconds",
   "warnings",
   "host"
 )
+}
 
-wlv_publication_host_fields <- c(
+wlv_publication_host_fields <- function() {
+  c(
   "r_version", "platform", "os", "arch"
 )
+}
 
 wlv_publication_path_key <- function(path) {
   path <- sub("/+$", "", chartr("\\", "/", path))
@@ -422,6 +454,12 @@ wlv_publication_sha256_raw <- function(value) {
 }
 
 wlv_publication_file_sha256 <- function(path) {
+  # The native runtime always loads the source-manifest hashing primitive.
+  # Delegate before performing the fallback validation so each publication
+  # hash crosses the filesystem boundary only once.
+  if (exists("wlv_source_file_sha256", mode = "function", inherits = TRUE)) {
+    return(wlv_source_file_sha256(path))
+  }
   if (
     !is.character(path) ||
     length(path) != 1L ||
@@ -431,9 +469,6 @@ wlv_publication_file_sha256 <- function(path) {
     isTRUE(file.info(path)$isdir)
   ) {
     stop(sprintf("Cannot hash publication file: %s.", path), call. = FALSE)
-  }
-  if (exists("wlv_source_file_sha256", mode = "function", inherits = TRUE)) {
-    return(wlv_source_file_sha256(path))
   }
   if (!requireNamespace("openssl", quietly = TRUE)) {
     stop("Package `openssl` is required for publication manifests.", call. = FALSE)
@@ -595,7 +630,7 @@ wlv_publication_validate_artifact_records <- function(
   normalized <- lapply(seq_along(artifacts), function(index) {
     record <- wlv_publication_exact_object(
       artifacts[[index]],
-      wlv_publication_artifact_fields,
+      wlv_publication_artifact_fields(),
       sprintf("%s[[%d]]", label, index)
     )
     path <- wlv_publication_validate_scalar_text(record$path, paste0(label, " path"))
@@ -746,7 +781,7 @@ wlv_publication_verify_artifacts <- function(
 wlv_publication_normalize_result <- function(result) {
   wlv_publication_normalize_allowed_object(
     result,
-    wlv_publication_result_fields,
+    wlv_publication_result_fields(),
     "result",
     values_must_be_objects = TRUE
   )
@@ -755,7 +790,7 @@ wlv_publication_normalize_result <- function(result) {
 wlv_publication_normalize_execution <- function(execution) {
   execution <- wlv_publication_normalize_allowed_object(
     execution,
-    wlv_publication_execution_fields,
+    wlv_publication_execution_fields(),
     "execution"
   )
   for (field in intersect(c("started_at_utc", "finished_at_utc"), names(execution))) {
@@ -804,7 +839,7 @@ wlv_publication_normalize_execution <- function(execution) {
   if ("host" %in% names(execution)) {
     host <- wlv_publication_normalize_allowed_object(
       execution$host,
-      wlv_publication_host_fields,
+      wlv_publication_host_fields(),
       "execution$host"
     )
     if (length(host)) {
@@ -815,11 +850,11 @@ wlv_publication_normalize_execution <- function(execution) {
         )
       }) |>
         stats::setNames(names(host))
-      host <- host[intersect(wlv_publication_host_fields, names(host))]
+      host <- host[intersect(wlv_publication_host_fields(), names(host))]
     }
     execution$host <- host
   }
-  execution[intersect(wlv_publication_execution_fields, names(execution))]
+  execution[intersect(wlv_publication_execution_fields(), names(execution))]
 }
 
 wlv_publication_normalize_output_contract <- function(value) {
@@ -834,14 +869,14 @@ wlv_publication_normalize_output_contract <- function(value) {
     "output_contract$version"
   )
   if (
-    !identical(value$id, wlv_output_contract_id) ||
-    !identical(value$version, wlv_output_contract_version)
+    !identical(value$id, wlv_output_contract_id()) ||
+    !identical(value$version, wlv_output_contract_version())
   ) {
     stop(
       sprintf(
         "Unsupported output contract; expected `%s` version `%s`.",
-        wlv_output_contract_id,
-        wlv_output_contract_version
+        wlv_output_contract_id(),
+        wlv_output_contract_version()
       ),
       call. = FALSE
     )
@@ -883,7 +918,7 @@ wlv_publication_calculate_result_id <- function(
 wlv_run_manifest_result_id <- function(manifest) {
   manifest <- wlv_publication_exact_object(
     manifest,
-    wlv_run_manifest_fields,
+    wlv_run_manifest_fields(),
     "Run manifest"
   )
   method <- wlv_publication_validate_id(manifest$method, "method")
@@ -903,7 +938,7 @@ wlv_run_manifest_result_id <- function(manifest) {
 wlv_validate_run_manifest <- function(manifest) {
   manifest <- wlv_publication_exact_object(
     manifest,
-    wlv_run_manifest_fields,
+    wlv_run_manifest_fields(),
     "Run manifest"
   )
   manifest$schema <- wlv_publication_validate_scalar_text(manifest$schema, "schema")
@@ -911,10 +946,10 @@ wlv_validate_run_manifest <- function(manifest) {
     manifest$schema_version,
     "schema_version"
   )
-  if (!identical(manifest$schema, wlv_run_manifest_schema)) {
+  if (!identical(manifest$schema, wlv_run_manifest_schema())) {
     stop("Unsupported run manifest schema.", call. = FALSE)
   }
-  if (!identical(manifest$schema_version, wlv_publication_schema_version)) {
+  if (!identical(manifest$schema_version, wlv_publication_schema_version())) {
     stop("Unsupported run manifest schema version.", call. = FALSE)
   }
   manifest$run_id <- wlv_publication_validate_id(manifest$run_id, "run_id")
@@ -948,7 +983,7 @@ wlv_validate_run_manifest <- function(manifest) {
   if (!identical(manifest$result_id, expected)) {
     stop("Run manifest result_id does not match its semantic contents.", call. = FALSE)
   }
-  invisible(manifest[wlv_run_manifest_fields])
+  invisible(manifest[wlv_run_manifest_fields()])
 }
 
 wlv_build_run_manifest <- function(
@@ -961,11 +996,52 @@ wlv_build_run_manifest <- function(
     execution = list(),
     created_at_utc = wlv_publication_timestamp(),
     parent_run_id = NULL,
-    output_contract_id = wlv_output_contract_id,
-    output_contract_version = wlv_output_contract_version) {
+    output_contract_id = wlv_output_contract_id(),
+    output_contract_version = wlv_output_contract_version(),
+    validated_artifacts = NULL) {
+  artifact_records <- if (is.null(validated_artifacts)) {
+    wlv_publication_build_artifacts(
+      run_root,
+      artifacts,
+      artifact_roles,
+      allow_empty = FALSE,
+      excluded_paths = wlv_run_manifest_filename()
+    )
+  } else {
+    records <- wlv_publication_validate_artifact_records(
+      validated_artifacts,
+      label = "validated artifacts"
+    )
+    declared_paths <- wlv_publication_normalize_relative_paths(
+      artifacts,
+      "artifacts"
+    )
+    if (!is.character(artifact_roles) || anyNA(artifact_roles) ||
+        length(declared_paths) != length(artifact_roles)) {
+      stop("Artifacts and roles must have equal lengths.", call. = FALSE)
+    }
+    order_index <- order(declared_paths, method = "radix")
+    declared_paths <- declared_paths[order_index]
+    declared_roles <- unname(artifact_roles[order_index])
+    observed_paths <- vapply(records, `[[`, character(1L), "path")
+    observed_roles <- vapply(records, `[[`, character(1L), "role")
+    if (!identical(observed_paths, declared_paths) ||
+        !identical(observed_roles, declared_roles)) {
+      stop(
+        "Validated artifact records differ from the declared run inventory.",
+        call. = FALSE
+      )
+    }
+    wlv_publication_resolve_files(
+      run_root,
+      observed_paths,
+      "validated artifacts"
+    )
+    records
+  }
   manifest <- list(
-    schema = wlv_run_manifest_schema,
-    schema_version = wlv_publication_schema_version,
+    schema = wlv_run_manifest_schema(),
+    schema_version = wlv_publication_schema_version(),
     run_id = run_id,
     result_id = paste(rep("0", 64L), collapse = ""),
     created_at_utc = created_at_utc,
@@ -977,13 +1053,7 @@ wlv_build_run_manifest <- function(
     ),
     result = wlv_publication_normalize_result(result),
     execution = wlv_publication_normalize_execution(execution),
-    artifacts = wlv_publication_build_artifacts(
-      run_root,
-      artifacts,
-      artifact_roles,
-      allow_empty = FALSE,
-      excluded_paths = wlv_run_manifest_filename
-    )
+    artifacts = artifact_records
   )
   manifest$result_id <- wlv_publication_calculate_result_id(
     manifest$method,
@@ -994,7 +1064,11 @@ wlv_build_run_manifest <- function(
   wlv_validate_run_manifest(manifest)
 }
 
-wlv_publication_read_json <- function(path, validator, label) {
+wlv_publication_read_json <- function(
+    path,
+    validator,
+    label,
+    expected_sha256 = NULL) {
   wlv_publication_require_jsonlite()
   if (
     !is.character(path) ||
@@ -1010,6 +1084,20 @@ wlv_publication_read_json <- function(path, validator, label) {
     stop(sprintf("%s has an invalid file size.", label), call. = FALSE)
   }
   bytes <- readBin(path, what = "raw", n = as.integer(size))
+  size_after <- unname(file.info(path)$size)
+  if (!identical(length(bytes), as.integer(size)) ||
+      !identical(size, size_after)) {
+    stop(sprintf("%s changed while it was being captured.", label), call. = FALSE)
+  }
+  if (!is.null(expected_sha256)) {
+    expected_sha256 <- wlv_publication_validate_sha256(
+      expected_sha256,
+      paste0(label, " expected SHA-256")
+    )
+    if (!identical(wlv_publication_sha256_raw(bytes), expected_sha256)) {
+      stop(sprintf("%s SHA-256 mismatch.", label), call. = FALSE)
+    }
+  }
   if (
     length(bytes) >= 3L &&
     identical(bytes[seq_len(3L)], as.raw(c(0xef, 0xbb, 0xbf)))
@@ -1043,8 +1131,13 @@ wlv_publication_read_json <- function(path, validator, label) {
   validator(value)
 }
 
-wlv_read_run_manifest <- function(path) {
-  wlv_publication_read_json(path, wlv_validate_run_manifest, "Run manifest")
+wlv_read_run_manifest <- function(path, expected_sha256 = NULL) {
+  wlv_publication_read_json(
+    path,
+    wlv_validate_run_manifest,
+    "Run manifest",
+    expected_sha256 = expected_sha256
+  )
 }
 
 wlv_publication_json_text <- function(value) {
@@ -1103,9 +1196,9 @@ wlv_publication_write_json <- function(value, path, reader, label) {
 
 wlv_write_run_manifest <- function(manifest, path) {
   manifest <- wlv_validate_run_manifest(manifest)
-  if (!identical(basename(path), wlv_run_manifest_filename)) {
+  if (!identical(basename(path), wlv_run_manifest_filename())) {
     stop(
-      sprintf("Run manifests must be named `%s`.", wlv_run_manifest_filename),
+      sprintf("Run manifests must be named `%s`.", wlv_run_manifest_filename()),
       call. = FALSE
     )
   }
@@ -1127,8 +1220,8 @@ wlv_publication_as_run_manifest <- function(manifest) {
 wlv_verify_run_manifest <- function(
     manifest,
     run_root,
-    expected_output_contract_id = wlv_output_contract_id,
-    expected_output_contract_version = wlv_output_contract_version,
+    expected_output_contract_id = wlv_output_contract_id(),
+    expected_output_contract_version = wlv_output_contract_version(),
     reject_unlisted = TRUE) {
   manifest <- wlv_publication_as_run_manifest(manifest)
   expected_output_contract_id <- wlv_publication_validate_scalar_text(
@@ -1148,11 +1241,59 @@ wlv_verify_run_manifest <- function(
   wlv_publication_verify_artifacts(
     manifest$artifacts,
     run_root,
-    excluded_paths = wlv_run_manifest_filename,
+    excluded_paths = wlv_run_manifest_filename(),
     reject_unlisted = reject_unlisted,
     label = "run artifact"
   )
   invisible(manifest)
+}
+
+wlv_run_manifest_artifact_subset <- function(
+    manifest,
+    artifact_paths,
+    label = "run artifact") {
+  manifest <- wlv_publication_as_run_manifest(manifest)
+  artifact_paths <- wlv_publication_normalize_relative_paths(
+    artifact_paths,
+    paste0(label, " paths")
+  )
+  if (!length(artifact_paths) || anyDuplicated(artifact_paths)) {
+    stop(sprintf("%s paths must be non-empty and unique.", label), call. = FALSE)
+  }
+  manifest_paths <- vapply(
+    manifest$artifacts,
+    `[[`,
+    character(1L),
+    "path"
+  )
+  indexes <- match(artifact_paths, manifest_paths)
+  if (anyNA(indexes)) {
+    stop(
+      sprintf("Run manifest does not bind every requested %s.", label),
+      call. = FALSE
+    )
+  }
+  manifest$artifacts[indexes]
+}
+
+wlv_verify_run_manifest_artifact_subset <- function(
+    manifest,
+    run_root,
+    artifact_paths,
+    label = "run artifact") {
+  records <- wlv_run_manifest_artifact_subset(
+    manifest,
+    artifact_paths,
+    label = label
+  )
+  wlv_publication_verify_artifacts(
+    records,
+    run_root,
+    excluded_paths = character(),
+    reject_unlisted = FALSE,
+    label = label
+  )
+  invisible(records)
 }
 
 wlv_publication_normalize_run_references <- function(runs) {
@@ -1162,7 +1303,7 @@ wlv_publication_normalize_run_references <- function(runs) {
   normalized <- lapply(seq_along(runs), function(index) {
     run <- wlv_publication_exact_object(
       runs[[index]],
-      wlv_publication_run_reference_fields,
+      wlv_publication_run_reference_fields(),
       sprintf("runs[[%d]]", index)
     )
     path <- wlv_publication_validate_scalar_text(
@@ -1176,9 +1317,9 @@ wlv_publication_normalize_run_references <- function(runs) {
     if (!identical(path, normalized_path)) {
       stop("Run manifest paths must already be normalized.", call. = FALSE)
     }
-    if (!identical(basename(path), wlv_run_manifest_filename)) {
+    if (!identical(basename(path), wlv_run_manifest_filename())) {
       stop(
-        sprintf("Run references must target `%s`.", wlv_run_manifest_filename),
+        sprintf("Run references must target `%s`.", wlv_run_manifest_filename()),
         call. = FALSE
       )
     }
@@ -1199,7 +1340,7 @@ wlv_publication_normalize_run_references <- function(runs) {
       "runs",
       normalized_run$method,
       normalized_run$run_id,
-      wlv_run_manifest_filename,
+      wlv_run_manifest_filename(),
       sep = "/"
     )
     if (!identical(normalized_run$manifest_path, expected_path)) {
@@ -1230,7 +1371,7 @@ wlv_publication_normalize_run_references <- function(runs) {
 wlv_validate_release_manifest <- function(manifest) {
   manifest <- wlv_publication_exact_object(
     manifest,
-    wlv_release_manifest_fields,
+    wlv_release_manifest_fields(),
     "Release manifest"
   )
   manifest$schema <- wlv_publication_validate_scalar_text(manifest$schema, "schema")
@@ -1238,10 +1379,10 @@ wlv_validate_release_manifest <- function(manifest) {
     manifest$schema_version,
     "schema_version"
   )
-  if (!identical(manifest$schema, wlv_release_manifest_schema)) {
+  if (!identical(manifest$schema, wlv_release_manifest_schema())) {
     stop("Unsupported release manifest schema.", call. = FALSE)
   }
-  if (!identical(manifest$schema_version, wlv_publication_schema_version)) {
+  if (!identical(manifest$schema_version, wlv_publication_schema_version())) {
     stop("Unsupported release manifest schema version.", call. = FALSE)
   }
   manifest$release_id <- wlv_publication_validate_id(
@@ -1264,13 +1405,14 @@ wlv_validate_release_manifest <- function(manifest) {
     label = "release artifacts",
     allow_empty = TRUE
   )
-  invisible(manifest[wlv_release_manifest_fields])
+  invisible(manifest[wlv_release_manifest_fields()])
 }
 
 wlv_build_release_run_reference <- function(
     publication_root,
     method,
-    manifest_path) {
+    manifest_path,
+    verified_run = NULL) {
   method <- wlv_publication_validate_id(method, "method")
   normalized_path <- wlv_publication_normalize_relative_paths(
     manifest_path,
@@ -1279,9 +1421,9 @@ wlv_build_release_run_reference <- function(
   if (!identical(normalized_path, manifest_path)) {
     stop("`manifest_path` must already be normalized.", call. = FALSE)
   }
-  if (!identical(basename(manifest_path), wlv_run_manifest_filename)) {
+  if (!identical(basename(manifest_path), wlv_run_manifest_filename())) {
     stop(
-      sprintf("Run references must target `%s`.", wlv_run_manifest_filename),
+      sprintf("Run references must target `%s`.", wlv_run_manifest_filename()),
       call. = FALSE
     )
   }
@@ -1290,8 +1432,18 @@ wlv_build_release_run_reference <- function(
     manifest_path,
     "run manifest path"
   )[[1L]]
-  run <- wlv_read_run_manifest(path)
-  wlv_verify_run_manifest(run, dirname(path))
+  manifest_sha256 <- wlv_publication_file_sha256(path)
+  run <- wlv_read_run_manifest(path, expected_sha256 = manifest_sha256)
+  if (is.null(verified_run)) {
+    wlv_verify_run_manifest(run, dirname(path))
+  } else {
+    verified_run <- wlv_publication_as_run_manifest(verified_run)
+    if (!wlv_publication_json_identical(run, verified_run)) {
+      stop("Referenced run differs from its post-promotion verification.",
+        call. = FALSE
+      )
+    }
+  }
   if (!identical(run$method, method)) {
     stop("Referenced run method differs from the release method.", call. = FALSE)
   }
@@ -1300,7 +1452,7 @@ wlv_build_release_run_reference <- function(
     run_id = run$run_id,
     result_id = run$result_id,
     manifest_path = manifest_path,
-    manifest_sha256 = wlv_publication_file_sha256(path)
+    manifest_sha256 = manifest_sha256
   )
 }
 
@@ -1316,8 +1468,8 @@ wlv_build_release_manifest <- function(
     created_at_utc = wlv_publication_timestamp()) {
   runs <- wlv_publication_normalize_run_references(runs)
   manifest <- list(
-    schema = wlv_release_manifest_schema,
-    schema_version = wlv_publication_schema_version,
+    schema = wlv_release_manifest_schema(),
+    schema_version = wlv_publication_schema_version(),
     release_id = release_id,
     channel = channel,
     sequence = sequence,
@@ -1329,25 +1481,26 @@ wlv_build_release_manifest <- function(
       artifacts,
       artifact_roles,
       allow_empty = TRUE,
-      excluded_paths = wlv_release_manifest_filename
+      excluded_paths = wlv_release_manifest_filename()
     )
   )
   wlv_validate_release_manifest(manifest)
 }
 
-wlv_read_release_manifest <- function(path) {
+wlv_read_release_manifest <- function(path, expected_sha256 = NULL) {
   wlv_publication_read_json(
     path,
     wlv_validate_release_manifest,
-    "Release manifest"
+    "Release manifest",
+    expected_sha256 = expected_sha256
   )
 }
 
 wlv_write_release_manifest <- function(manifest, path) {
   manifest <- wlv_validate_release_manifest(manifest)
-  if (!identical(basename(path), wlv_release_manifest_filename)) {
+  if (!identical(basename(path), wlv_release_manifest_filename())) {
     stop(
-      sprintf("Release manifests must be named `%s`.", wlv_release_manifest_filename),
+      sprintf("Release manifests must be named `%s`.", wlv_release_manifest_filename()),
       call. = FALSE
     )
   }
@@ -1370,12 +1523,17 @@ wlv_verify_release_manifest <- function(
     manifest,
     release_root,
     publication_root = dirname(release_root),
-    reject_unlisted = TRUE) {
+    reject_unlisted = TRUE,
+    verify_runs = TRUE) {
+  if (!is.logical(verify_runs) || length(verify_runs) != 1L ||
+      is.na(verify_runs)) {
+    stop("`verify_runs` must be one non-missing logical value.", call. = FALSE)
+  }
   manifest <- wlv_publication_as_release_manifest(manifest)
   wlv_publication_verify_artifacts(
     manifest$artifacts,
     release_root,
-    excluded_paths = wlv_release_manifest_filename,
+    excluded_paths = wlv_release_manifest_filename(),
     reject_unlisted = reject_unlisted,
     label = "release artifact"
   )
@@ -1385,15 +1543,13 @@ wlv_verify_release_manifest <- function(
       reference$manifest_path,
       "release run manifests"
     )[[1L]]
-    actual_hash <- wlv_publication_file_sha256(path)
-    if (!identical(actual_hash, reference$manifest_sha256)) {
-      stop(
-        sprintf("Run manifest SHA-256 mismatch for `%s`.", reference$manifest_path),
-        call. = FALSE
-      )
+    run <- wlv_read_run_manifest(
+      path,
+      expected_sha256 = reference$manifest_sha256
+    )
+    if (isTRUE(verify_runs)) {
+      wlv_verify_run_manifest(run, dirname(path))
     }
-    run <- wlv_read_run_manifest(path)
-    wlv_verify_run_manifest(run, dirname(path))
     if (
       !identical(run$method, reference$method) ||
       !identical(run$run_id, reference$run_id) ||
@@ -1417,7 +1573,7 @@ wlv_channel_marker_filename <- function(sequence, release_id) {
 wlv_validate_channel_marker <- function(marker) {
   marker <- wlv_publication_exact_object(
     marker,
-    wlv_channel_marker_fields,
+    wlv_channel_marker_fields(),
     "Channel marker"
   )
   marker$schema <- wlv_publication_validate_scalar_text(marker$schema, "schema")
@@ -1425,10 +1581,10 @@ wlv_validate_channel_marker <- function(marker) {
     marker$schema_version,
     "schema_version"
   )
-  if (!identical(marker$schema, wlv_channel_marker_schema)) {
+  if (!identical(marker$schema, wlv_channel_marker_schema())) {
     stop("Unsupported channel marker schema.", call. = FALSE)
   }
-  if (!identical(marker$schema_version, wlv_publication_schema_version)) {
+  if (!identical(marker$schema_version, wlv_publication_schema_version())) {
     stop("Unsupported channel marker schema version.", call. = FALSE)
   }
   marker$channel <- wlv_publication_validate_channel(marker$channel)
@@ -1445,16 +1601,16 @@ wlv_validate_channel_marker <- function(marker) {
   if (!identical(path, normalized_path)) {
     stop("`release_manifest_path` must already be normalized.", call. = FALSE)
   }
-  if (!identical(basename(path), wlv_release_manifest_filename)) {
+  if (!identical(basename(path), wlv_release_manifest_filename())) {
     stop(
-      sprintf("Channel markers must target `%s`.", wlv_release_manifest_filename),
+      sprintf("Channel markers must target `%s`.", wlv_release_manifest_filename()),
       call. = FALSE
     )
   }
   expected_path <- paste(
     "releases",
     marker$release_id,
-    wlv_release_manifest_filename,
+    wlv_release_manifest_filename(),
     sep = "/"
   )
   if (!identical(path, expected_path)) {
@@ -1475,7 +1631,7 @@ wlv_validate_channel_marker <- function(marker) {
     marker$published_at_utc,
     "published_at_utc"
   )
-  invisible(marker[wlv_channel_marker_fields])
+  invisible(marker[wlv_channel_marker_fields()])
 }
 
 wlv_build_channel_marker <- function(
@@ -1486,8 +1642,8 @@ wlv_build_channel_marker <- function(
     release_manifest_sha256,
     published_at_utc = wlv_publication_timestamp()) {
   marker <- list(
-    schema = wlv_channel_marker_schema,
-    schema_version = wlv_publication_schema_version,
+    schema = wlv_channel_marker_schema(),
+    schema_version = wlv_publication_schema_version(),
     channel = channel,
     sequence = sequence,
     release_id = release_id,
@@ -1498,8 +1654,13 @@ wlv_build_channel_marker <- function(
   wlv_validate_channel_marker(marker)
 }
 
-wlv_read_channel_marker <- function(path) {
-  wlv_publication_read_json(path, wlv_validate_channel_marker, "Channel marker")
+wlv_read_channel_marker <- function(path, expected_sha256 = NULL) {
+  wlv_publication_read_json(
+    path,
+    wlv_validate_channel_marker,
+    "Channel marker",
+    expected_sha256 = expected_sha256
+  )
 }
 
 wlv_write_channel_marker <- function(marker, path) {
@@ -1691,11 +1852,10 @@ wlv_verify_channel_marker <- function(
     marker$release_manifest_path,
     "release manifest path"
   )[[1L]]
-  actual_hash <- wlv_publication_file_sha256(release_path)
-  if (!identical(actual_hash, marker$release_manifest_sha256)) {
-    stop("Release manifest SHA-256 mismatch in channel marker.", call. = FALSE)
-  }
-  release <- wlv_read_release_manifest(release_path)
+  release <- wlv_read_release_manifest(
+    release_path,
+    expected_sha256 = marker$release_manifest_sha256
+  )
   if (
     !identical(release$channel, marker$channel) ||
     !identical(release$sequence, marker$sequence) ||

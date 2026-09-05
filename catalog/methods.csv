@@ -1,16 +1,16 @@
-method;source;code;description;status;can_calculate;can_recalculate;test;documentation;limitations
-wiodr13;wiodr13;WIOD13;Standard v1.0;stable;TRUE;TRUE;tests/testthat/test-wiodr13-validation.R;docs/wiodr13.md;
-wiodr16;wiodr16;WIOD16;Standard v1.0;stable;TRUE;TRUE;tests/testthat/test-wiodr16-validation.R;docs/wiodr16.md;
-alternative_1;wiodr13;rpA1;Reduction Problem: Alternative 1;experimental;TRUE;TRUE;;;Method-specific scientific validation and documentation are pending.
-alternative_2;wiodr13;rpA2;Reduction Problem: Alternative 2;experimental;TRUE;TRUE;;;Method-specific scientific validation and documentation are pending.
-norow_w13;wiodr13;norow_w13;Teste sem suposições para resto do mundo;experimental;TRUE;TRUE;;;Method-specific scientific validation and documentation are pending.
-ochoa_1;wiodr13;rpO1;Reduction Problem: Ochoa 1;experimental;TRUE;TRUE;;;Method-specific scientific validation and documentation are pending.
-ochoa_2;wiodr13;rpO2;Reduction Problem: Ochoa 2;experimental;TRUE;TRUE;;;Method-specific scientific validation and documentation are pending.
-petrovic;wiodr13;rpPE;Reduction Problem: Petrovic;experimental;TRUE;TRUE;;;Method-specific scientific validation and documentation are pending.
-wiodr13v09;wiodr13;W13v09;Standard v0.9;experimental;TRUE;TRUE;;;Legacy method version has no independent scientific validation contract.
-wiodr16v09;wiodr16;W16v09;Standard v0.9;experimental;TRUE;TRUE;;;Experimental legacy profile with its worker-based ROW completion pinned by a versioned scientific contract.
-zerodep_1;wiodr13;zdW13;Zero depreciation;experimental;TRUE;TRUE;;;Counterfactual method requires explicit opt-in and method-specific documentation.
-zerodep_2;wiodr16;zdW16;Zero depreciation;experimental;TRUE;TRUE;;;Counterfactual method requires explicit opt-in and method-specific documentation.
+method;source;code;description;status;can_calculate;can_recalculate;validation_id;documentation;limitations
+wiodr13;wiodr13;WIOD13;Standard v1.0;stable;TRUE;TRUE;wiodr13_scientific_v1;docs/wiodr13.md;
+wiodr16;wiodr16;WIOD16;Standard v1.0;stable;TRUE;TRUE;wiodr16_scientific_v1;docs/wiodr16.md;
+alternative_1;wiodr13;rpA1;Reduction Problem: Alternative 1;experimental;FALSE;FALSE;;;Execution deferred beyond Issue 13. Method-specific scientific validation and documentation are pending.
+alternative_2;wiodr13;rpA2;Reduction Problem: Alternative 2;experimental;FALSE;FALSE;;;Execution deferred beyond Issue 13. Method-specific scientific validation and documentation are pending.
+norow_w13;wiodr13;norow_w13;Teste sem suposições para resto do mundo;experimental;FALSE;FALSE;;;Execution deferred beyond Issue 13. Method-specific scientific validation and documentation are pending.
+ochoa_1;wiodr13;rpO1;Reduction Problem: Ochoa 1;experimental;FALSE;FALSE;;;Execution deferred beyond Issue 13. Method-specific scientific validation and documentation are pending.
+ochoa_2;wiodr13;rpO2;Reduction Problem: Ochoa 2;experimental;FALSE;FALSE;;;Execution deferred beyond Issue 13. Method-specific scientific validation and documentation are pending.
+petrovic;wiodr13;rpPE;Reduction Problem: Petrovic;experimental;FALSE;FALSE;;;Execution deferred beyond Issue 13. Method-specific scientific validation and documentation are pending.
+wiodr13v09;wiodr13;W13v09;Standard v0.9;experimental;FALSE;FALSE;;;Execution deferred beyond Issue 13. Legacy method version has no independent scientific validation contract.
+wiodr16v09;wiodr16;W16v09;Standard v0.9;experimental;FALSE;FALSE;;;Execution deferred beyond Issue 13. Experimental legacy profile with its worker-based ROW completion pinned by a versioned scientific contract.
+zerodep_1;wiodr13;zdW13;Zero depreciation;experimental;FALSE;FALSE;;;Execution deferred beyond Issue 13. Counterfactual method requires method-specific documentation and scientific validation.
+zerodep_2;wiodr16;zdW16;Zero depreciation;experimental;FALSE;FALSE;;;Execution deferred beyond Issue 13. Counterfactual method requires method-specific documentation and scientific validation.
 eora26;eora26;Eora26;Standard v0.9;disabled;FALSE;FALSE;;;Source recovery and scientific validation are required before execution.
 exiobase37;exiobase37;EXI37;Standard v0.9;disabled;FALSE;FALSE;;;Source recovery and scientific validation are required before execution.
 exiobase381;exiobase381;EXI381;Standard v0.9;disabled;FALSE;FALSE;;;Source recovery and scientific validation are required before execution.

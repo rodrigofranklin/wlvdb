@@ -5,7 +5,7 @@
 This matrix is generated from the canonical, machine-readable registries in
 [`catalog/methods.csv`](../catalog/methods.csv),
 [`catalog/sources.csv`](../catalog/sources.csv),
-[`catalog/artifact-profiles.csv`](../catalog/artifact-profiles.csv), and
+[`catalog/artifact-profiles.csv`](../catalog/artifact-profiles.csv),
 [`catalog/missingness-policies.csv`](../catalog/missingness-policies.csv), and
 [`catalog/unit-contracts.csv`](../catalog/unit-contracts.csv).
 Regenerate it with `Rscript --vanilla scripts/render_method_catalog.R` and
@@ -13,56 +13,56 @@ verify synchronization with `Rscript --vanilla scripts/render_method_catalog.R -
 
 ## Status semantics
 
-- `stable`: the declared operations are supported by recovered preparation, validation, tests, and documentation.
+- `stable`: the declared operations are supported by recovered preparation, registered validation, and documentation.
 - `experimental`: the method or source is available for development and evaluation, but requires explicit opt-in with `--allow-experimental` and is not yet a supported scientific release.
 - `disabled`: execution is blocked, including with experimental opt-in, until the listed recovery work is complete.
 
-A method and its source have independent statuses. For example, a source may remain experimental while methods that depend on its incomplete lifecycle are disabled. Capabilities are also explicit: a directory or script existing in the repository does not by itself mean that preparation, calculation, or recalculation is supported.
+A method and its source have independent statuses. For example, a source may remain experimental while methods that depend on its incomplete lifecycle are disabled. Capabilities are also explicit: repository contents alone do not imply that preparation, calculation, or recalculation is supported.
 
 ## Methods
 
 Preparation is a source capability and is repeated here for convenience.
 
-| Method | Source | Method status | Source status | Coverage | Prepare | Calculate | Recalculate | Description | Test/fixture | Documentation | Known limitations |
+| Method | Source | Method status | Source status | Coverage | Prepare | Calculate | Recalculate | Description | Validation ID | Documentation | Known limitations |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `alternative_1` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | yes | yes | Reduction Problem: Alternative 1 | — | — | Method-specific scientific validation and documentation are pending. |
-| `alternative_2` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | yes | yes | Reduction Problem: Alternative 2 | — | — | Method-specific scientific validation and documentation are pending. |
+| `alternative_1` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | no | no | Reduction Problem: Alternative 1 | — | — | Execution deferred beyond Issue 13. Method-specific scientific validation and documentation are pending. |
+| `alternative_2` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | no | no | Reduction Problem: Alternative 2 | — | — | Execution deferred beyond Issue 13. Method-specific scientific validation and documentation are pending. |
 | `eora26` | `eora26` | `disabled` | `experimental` | 1990–2016 | no | no | no | Standard v0.9 | — | — | Source recovery and scientific validation are required before execution. |
 | `exiobase37` | `exiobase37` | `disabled` | `experimental` | — | no | no | no | Standard v0.9 | — | — | Source recovery and scientific validation are required before execution. |
 | `exiobase381` | `exiobase381` | `disabled` | `experimental` | — | no | no | no | Standard v0.9 | — | — | Source recovery and scientific validation are required before execution. |
 | `exiobase382` | `exiobase382` | `disabled` | `experimental` | — | no | no | no | Standard v0.9 | — | — | Source recovery and scientific validation are required before execution. |
 | `exiobase395` | `exiobase395` | `disabled` | `experimental` | 1995–2022 | no | no | no | Standard v0.9 | — | — | Source recovery and scientific validation are required before execution. |
-| `norow_w13` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | yes | yes | Teste sem suposições para resto do mundo | — | — | Method-specific scientific validation and documentation are pending. |
-| `ochoa_1` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | yes | yes | Reduction Problem: Ochoa 1 | — | — | Method-specific scientific validation and documentation are pending. |
-| `ochoa_2` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | yes | yes | Reduction Problem: Ochoa 2 | — | — | Method-specific scientific validation and documentation are pending. |
-| `petrovic` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | yes | yes | Reduction Problem: Petrovic | — | — | Method-specific scientific validation and documentation are pending. |
-| `wiodr13` | `wiodr13` | `stable` | `stable` | 1995–2009 | yes | yes | yes | Standard v1.0 | [tests/testthat/test-wiodr13-validation.R](../tests/testthat/test-wiodr13-validation.R) | [docs/wiodr13.md](wiodr13.md) | — |
-| `wiodr13v09` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | yes | yes | Standard v0.9 | — | — | Legacy method version has no independent scientific validation contract. |
-| `wiodr16` | `wiodr16` | `stable` | `stable` | 2000–2014 | yes | yes | yes | Standard v1.0 | [tests/testthat/test-wiodr16-validation.R](../tests/testthat/test-wiodr16-validation.R) | [docs/wiodr16.md](wiodr16.md) | — |
-| `wiodr16v09` | `wiodr16` | `experimental` | `stable` | 2000–2014 | yes | yes | yes | Standard v0.9 | — | — | Experimental legacy profile with its worker-based ROW completion pinned by a versioned scientific contract. |
-| `zerodep_1` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | yes | yes | Zero depreciation | — | — | Counterfactual method requires explicit opt-in and method-specific documentation. |
-| `zerodep_2` | `wiodr16` | `experimental` | `stable` | 2000–2014 | yes | yes | yes | Zero depreciation | — | — | Counterfactual method requires explicit opt-in and method-specific documentation. |
+| `norow_w13` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | no | no | Teste sem suposições para resto do mundo | — | — | Execution deferred beyond Issue 13. Method-specific scientific validation and documentation are pending. |
+| `ochoa_1` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | no | no | Reduction Problem: Ochoa 1 | — | — | Execution deferred beyond Issue 13. Method-specific scientific validation and documentation are pending. |
+| `ochoa_2` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | no | no | Reduction Problem: Ochoa 2 | — | — | Execution deferred beyond Issue 13. Method-specific scientific validation and documentation are pending. |
+| `petrovic` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | no | no | Reduction Problem: Petrovic | — | — | Execution deferred beyond Issue 13. Method-specific scientific validation and documentation are pending. |
+| `wiodr13` | `wiodr13` | `stable` | `stable` | 1995–2009 | yes | yes | yes | Standard v1.0 | `wiodr13_scientific_v1` | [docs/wiodr13.md](wiodr13.md) | — |
+| `wiodr13v09` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | no | no | Standard v0.9 | — | — | Execution deferred beyond Issue 13. Legacy method version has no independent scientific validation contract. |
+| `wiodr16` | `wiodr16` | `stable` | `stable` | 2000–2014 | yes | yes | yes | Standard v1.0 | `wiodr16_scientific_v1` | [docs/wiodr16.md](wiodr16.md) | — |
+| `wiodr16v09` | `wiodr16` | `experimental` | `stable` | 2000–2014 | yes | no | no | Standard v0.9 | — | — | Execution deferred beyond Issue 13. Experimental legacy profile with its worker-based ROW completion pinned by a versioned scientific contract. |
+| `zerodep_1` | `wiodr13` | `experimental` | `stable` | 1995–2009 | yes | no | no | Zero depreciation | — | — | Execution deferred beyond Issue 13. Counterfactual method requires method-specific documentation and scientific validation. |
+| `zerodep_2` | `wiodr16` | `experimental` | `stable` | 2000–2014 | yes | no | no | Zero depreciation | — | — | Execution deferred beyond Issue 13. Counterfactual method requires method-specific documentation and scientific validation. |
 
 ## Sources
 
-| Source | Status | Coverage | Parameter set | Data directory | Prepare | Preparer | Validator | Artifact profile | Missingness policy | Unit contract | Documentation | Known limitations |
+| Source | Status | Coverage | Parameter set | Data directory | Prepare | Preparation task | Validator ID | Artifact profile | Missingness policy | Unit contract | Documentation | Known limitations |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `eora26` | `experimental` | 1990–2016 | `eora26` | `source_data/eora26` | no | — | — | — | — | — | — | Legacy preparation requires manual inputs and has no validated source contract. |
 | `exiobase37` | `experimental` | — | `exiobase37` | `source_data/exiobase37` | no | — | — | — | — | — | — | Legacy EXIOBASE 3.7 support has no pinned preparer or validator, and temporal coverage has not been revalidated. |
 | `exiobase381` | `experimental` | — | `exiobase381` | `source_data/exiobase381` | no | — | — | — | — | — | — | Legacy EXIOBASE 3.8.1 support has no pinned preparer or validator, and temporal coverage has not been revalidated. |
 | `exiobase382` | `experimental` | — | `exiobase` | `source_data/exiobase382` | no | — | — | — | — | — | — | Shares a legacy parameter set and has no version-pinned preparation contract, and temporal coverage has not been revalidated. |
 | `exiobase395` | `experimental` | 1995–2022 | `exiobase` | `source_data/exiobase395` | no | — | — | — | — | — | — | Recovery is pending before EXIOBASE 3.9.5 can be enabled. |
-| `wiodr13` | `stable` | 1995–2009 | `wiodr13` | `source_data/wiodr13` | yes | [R/utils/prepare_wiodr13_data.R](../R/utils/prepare_wiodr13_data.R) | [R/lib/wiodr13_validation.R](../R/lib/wiodr13_validation.R) (`wlv_validate_wiodr13_prepared`) | `wiod_core` | `wiodr13_v1` | `wiodr13_units_v2` | [docs/wiodr13.md](wiodr13.md) | — |
-| `wiodr16` | `stable` | 2000–2014 | `wiodr16` | `source_data/wiodr16` | yes | [R/utils/prepare_wiodr16_data.R](../R/utils/prepare_wiodr16_data.R) | [R/lib/wiodr16_validation.R](../R/lib/wiodr16_validation.R) (`wlv_validate_wiodr16_prepared`) | `wiod_core` | `wiodr16_v1` | `wiodr16_units_v2` | [docs/wiodr16.md](wiodr16.md) | — |
+| `wiodr13` | `stable` | 1995–2009 | `wiodr13` | `source_data/wiodr13` | yes | `wiodr13` | `wiodr13_prepared_v1` | `wiod_core` | `wiodr13_v1` | `wiodr13_units_v2` | [docs/wiodr13.md](wiodr13.md) | — |
+| `wiodr16` | `stable` | 2000–2014 | `wiodr16` | `source_data/wiodr16` | yes | `wiodr16` | `wiodr16_prepared_v1` | `wiod_core` | `wiodr16_v1` | `wiodr16_units_v2` | [docs/wiodr16.md](wiodr16.md) | — |
 
 ## Missingness policies
 
-Sources reference versioned policy factories; catalog loading validates declarations without executing them.
+Sources reference versioned policy identifiers; catalog loading validates those declarations against the native registry.
 
-| Policy | Script | Factory | Documentation |
-| --- | --- | --- | --- |
-| `wiodr13_v1` | [R/lib/missingness.R](../R/lib/missingness.R) | `wlv_wiodr13_missingness_policy` | [docs/missingness.md](missingness.md) |
-| `wiodr16_v1` | [R/lib/missingness.R](../R/lib/missingness.R) | `wlv_wiodr16_missingness_policy` | [docs/missingness.md](missingness.md) |
+| Policy | Documentation |
+| --- | --- |
+| `wiodr13_v1` | [docs/missingness.md](missingness.md) |
+| `wiodr16_v1` | [docs/missingness.md](missingness.md) |
 
 ## Unit contracts
 

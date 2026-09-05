@@ -1,0 +1,874 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wlvdb.invalid/schemas/issue13-v5-oracle-effect-proof.schema.json",
+  "title": "Issue #13 V5 terminal authorized oracle-effect proof",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "status", "passed", "final_evidence_eligible", "purpose",
+    "generated_at_utc", "evidence", "conclusion"
+  ],
+  "properties": {
+    "schema": {"const": "wlv-issue13-v5-oracle-effect-proof/2"},
+    "status": {"const": "passed"},
+    "passed": {"const": true},
+    "final_evidence_eligible": {"const": false},
+    "purpose": {"const": "closed-authorized-oracle-effect-cc2-to-e2f"},
+    "generated_at_utc": {"type": "string", "format": "date-time"},
+    "evidence": {"$ref": "#/$defs/evidence"},
+    "conclusion": {"$ref": "#/$defs/conclusion"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "sha1": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "md5": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "path": {"type": "string", "minLength": 1},
+    "method": {
+      "enum": [
+        "wiodr13", "wiodr16", "wiodr16v09", "zerodep_1", "zerodep_2",
+        "alternative_1", "alternative_2", "norow_w13", "ochoa_1",
+        "ochoa_2", "petrovic", "wiodr13v09"
+      ]
+    },
+    "commonMethod": {
+      "enum": ["wiodr13", "wiodr16", "wiodr16v09", "zerodep_1", "zerodep_2"]
+    },
+    "namedFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sha256", "size_bytes"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "controllerRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "relative_path", "size_bytes", "sha256", "git_blob"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+        "relative_path": {
+          "type": "string",
+          "pattern": "^run_logs/issue13-native-gate-orchestrator-v5/[A-Za-z0-9._-]+$"
+        },
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "git_blob": {"$ref": "#/$defs/sha1"}
+      }
+    },
+    "sourceController": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit_sha256", "file_count", "inventory_sha256", "records"],
+      "properties": {
+        "commit_sha256": {"$ref": "#/$defs/sha1"},
+        "file_count": {"const": 34},
+        "inventory_sha256": {"$ref": "#/$defs/sha256"},
+        "records": {
+          "type": "array", "minItems": 34, "maxItems": 34,
+          "items": {"$ref": "#/$defs/controllerRecord"}
+        }
+      }
+    },
+    "sourceToolingTree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relative_path", "repository_path", "mode", "type", "tree"],
+      "properties": {
+        "relative_path": {
+          "enum": [".", "issue13-evidence-harness"]
+        },
+        "repository_path": {
+          "type": "string",
+          "pattern": "^run_logs/issue13-evidence-source-v5(?:/issue13-evidence-harness)?$"
+        },
+        "mode": {"const": "040000"},
+        "type": {"const": "tree"},
+        "tree": {"$ref": "#/$defs/sha1"}
+      }
+    },
+    "sourceToolingFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relative_path", "repository_path", "size_bytes", "sha256", "mode",
+        "type", "blob"
+      ],
+      "properties": {
+        "relative_path": {"type": "string", "minLength": 1},
+        "repository_path": {
+          "type": "string",
+          "pattern": "^run_logs/issue13-evidence-source-v5/.+$"
+        },
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "mode": {"const": "100644"},
+        "type": {"const": "blob"},
+        "blob": {"$ref": "#/$defs/sha1"}
+      }
+    },
+    "sourceTooling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_commit", "repository_relative_root", "root", "physical_root",
+        "file_count", "directory_count", "total_bytes", "path_list_sha256",
+        "inventory_sha256", "trees", "records"
+      ],
+      "properties": {
+        "candidate_commit": {"$ref": "#/$defs/sha1"},
+        "repository_relative_root": {
+          "const": "run_logs/issue13-evidence-source-v5"
+        },
+        "root": {"$ref": "#/$defs/path"},
+        "physical_root": {"$ref": "#/$defs/path"},
+        "file_count": {"const": 37},
+        "directory_count": {"const": 1},
+        "total_bytes": {"type": "integer", "minimum": 1},
+        "path_list_sha256": {
+          "const": "7bf2e27807e9bc36d3d3766789439d0d9afdd7b2cc5127145ce0e0f6819db00d"
+        },
+        "inventory_sha256": {"$ref": "#/$defs/sha256"},
+        "trees": {
+          "type": "array", "minItems": 2, "maxItems": 2,
+          "items": {"$ref": "#/$defs/sourceToolingTree"}
+        },
+        "records": {
+          "type": "array", "minItems": 37, "maxItems": 37,
+          "items": {"$ref": "#/$defs/sourceToolingFile"}
+        }
+      }
+    },
+    "physicalFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "role", "sha256", "size_bytes"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "role": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "inventoryRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relative_path", "sha256", "size_bytes"],
+      "properties": {
+        "relative_path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "aggregateInventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file_count", "total_bytes", "inventory_sha256"],
+      "properties": {
+        "file_count": {"type": "integer", "minimum": 1},
+        "total_bytes": {"type": "integer", "minimum": 1},
+        "inventory_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "installedInventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root", "harness_root", "file_count", "total_bytes",
+        "inventory_sha256", "records"
+      ],
+      "properties": {
+        "root": {"$ref": "#/$defs/path"},
+        "harness_root": {"$ref": "#/$defs/path"},
+        "file_count": {"type": "integer", "minimum": 1},
+        "total_bytes": {"type": "integer", "minimum": 1},
+        "inventory_sha256": {"$ref": "#/$defs/sha256"},
+        "records": {
+          "type": "array", "minItems": 1,
+          "items": {"$ref": "#/$defs/inventoryRecord"}
+        }
+      }
+    },
+    "specRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "schema"],
+      "properties": {
+        "path": {"$ref": "#/$defs/path"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "schema": {"const": "wlv-issue13-v5-oracle-effect-spec/2"}
+      }
+    },
+    "schemaRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"$ref": "#/$defs/path"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "oracle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository_root", "patch_path", "patch_sha256", "base_commit",
+        "runtime_commit", "runtime_tree", "changed_file_count"
+      ],
+      "properties": {
+        "repository_root": {"$ref": "#/$defs/path"},
+        "patch_path": {"$ref": "#/$defs/path"},
+        "patch_sha256": {"$ref": "#/$defs/sha256"},
+        "base_commit": {"$ref": "#/$defs/sha1"},
+        "runtime_commit": {"$ref": "#/$defs/sha1"},
+        "runtime_tree": {"$ref": "#/$defs/sha1"},
+        "changed_file_count": {"const": 8}
+      }
+    },
+    "harness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expected_candidate_commit", "manifest_path", "manifest_sha256",
+        "generation", "final_evidence_eligible", "reuses_candidate_evidence",
+        "source_controller_commit_sha256", "source_controller", "source_tooling",
+        "output_tooling", "sealed_output_tooling", "installed_inventory", "tools"
+      ],
+      "properties": {
+        "expected_candidate_commit": {"$ref": "#/$defs/sha1"},
+        "manifest_path": {"$ref": "#/$defs/path"},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "generation": {"const": "v5-terminal"},
+        "final_evidence_eligible": {"const": true},
+        "reuses_candidate_evidence": {"const": false},
+        "source_controller_commit_sha256": {"$ref": "#/$defs/sha1"},
+        "source_controller": {"$ref": "#/$defs/sourceController"},
+        "source_tooling": {"$ref": "#/$defs/sourceTooling"},
+        "output_tooling": {"$ref": "#/$defs/aggregateInventory"},
+        "sealed_output_tooling": {"$ref": "#/$defs/aggregateInventory"},
+        "installed_inventory": {"$ref": "#/$defs/installedInventory"},
+        "tools": {
+          "type": "array", "minItems": 4, "maxItems": 4,
+          "items": {"$ref": "#/$defs/namedFile"}
+        }
+      }
+    },
+    "rscript": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "logical_path", "physical_path", "item_id", "link_count", "size_bytes",
+        "sha256"
+      ],
+      "properties": {
+        "logical_path": {"$ref": "#/$defs/path"},
+        "physical_path": {"$ref": "#/$defs/path"},
+        "item_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}:[0-9a-f]{32}$"
+        },
+        "link_count": {"const": 1},
+        "size_bytes": {"const": 94720},
+        "sha256": {
+          "const": "3ad097e10d867e09eb7e54d8ed1f8ef933779b82be56482a04a27d65536d15f9"
+        }
+      }
+    },
+    "environmentSet": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "prefixItems": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "RENV_CONFIG_AUTO_SNAPSHOT"},
+            "value": {"const": "FALSE"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "RENV_CONFIG_CACHE_ENABLED"},
+            "value": {"const": "FALSE"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "RENV_CONFIG_LOCKING_ENABLED"},
+            "value": {"const": "FALSE"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "RENV_CONFIG_SANDBOX_ENABLED"},
+            "value": {"const": "FALSE"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "RENV_CONFIG_UPDATES_CHECK"},
+            "value": {"const": "FALSE"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "RENV_CONFIG_USER_ENVIRON"},
+            "value": {"const": "FALSE"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "RENV_CONFIG_USER_LIBRARY"},
+            "value": {"const": "FALSE"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "RENV_PATHS_LIBRARY"},
+            "value": {"$ref": "#/$defs/path"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "R_LIBS_USER"},
+            "value": {"$ref": "#/$defs/path"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"const": "TZ"},
+            "value": {"const": "UTC"}
+          }
+        }
+      ],
+      "items": false
+    },
+    "environmentCleared": {
+      "type": "array",
+      "minItems": 35,
+      "maxItems": 35,
+      "prefixItems": [
+        {"const": "LANG"},
+        {"const": "LC_ALL"},
+        {"const": "LC_CTYPE"},
+        {"const": "RENV_ACTIVATE_PROJECT"},
+        {"const": "RENV_AUTOLOADER_ENABLED"},
+        {"const": "RENV_AUTOLOAD_ENABLED"},
+        {"const": "RENV_CONFIG_AUTOLOADER_ENABLED"},
+        {"const": "RENV_CONFIG_EXTERNAL_LIBRARIES"},
+        {"const": "RENV_CONFIG_STARTUP_QUIET"},
+        {"const": "RENV_CONFIG_SYNCHRONIZED_CHECK"},
+        {"const": "RENV_CONFIG_USER_PROFILE"},
+        {"const": "RENV_PATHS_LIBRARY_ROOT"},
+        {"const": "RENV_PATHS_LIBRARY_ROOT_ASIS"},
+        {"const": "RENV_PATHS_LOCKFILE"},
+        {"const": "RENV_PATHS_PREFIX"},
+        {"const": "RENV_PATHS_PREFIX_AUTO"},
+        {"const": "RENV_PATHS_RENV"},
+        {"const": "RENV_PATHS_ROOT"},
+        {"const": "RENV_PATHS_SANDBOX"},
+        {"const": "RENV_PATHS_VERSION"},
+        {"const": "RENV_PROCESS_TYPE"},
+        {"const": "RENV_PROFILE"},
+        {"const": "RENV_PROJECT"},
+        {"const": "RENV_SANDBOX_LOCKING_ENABLED"},
+        {"const": "RENV_STARTUP_DIAGNOSTICS"},
+        {"const": "R_ARCH"},
+        {"const": "R_DEFAULT_PACKAGES"},
+        {"const": "R_ENVIRON"},
+        {"const": "R_ENVIRON_USER"},
+        {"const": "R_HOME"},
+        {"const": "R_LIBS"},
+        {"const": "R_LIBS_SITE"},
+        {"const": "R_PROFILE"},
+        {"const": "R_PROFILE_USER"},
+        {"const": "R_STARTUP_DEBUG"}
+      ],
+      "items": false
+    },
+    "rEnvironment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["set", "cleared"],
+      "properties": {
+        "set": {"$ref": "#/$defs/environmentSet"},
+        "cleared": {"$ref": "#/$defs/environmentCleared"}
+      }
+    },
+    "rPackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name", "version", "path", "required", "file_count", "total_bytes",
+        "inventory_sha256"
+      ],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9.]*$"},
+        "version": {"type": "string", "minLength": 1},
+        "path": {"$ref": "#/$defs/path"},
+        "required": {"type": "boolean"},
+        "file_count": {"type": "integer", "minimum": 1},
+        "total_bytes": {"type": "integer", "minimum": 1},
+        "inventory_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "rActivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode", "verified", "renv_version", "captured_console_line_count",
+        "renv_library_root", "project_inventory_sha256",
+        "project_library_absent_before", "project_library_absent_after",
+        "r_library_inventory_before_sha256",
+        "r_library_inventory_after_sha256"
+      ],
+      "properties": {
+        "mode": {"const": "isolated-project-copy"},
+        "verified": {"const": true},
+        "renv_version": {"const": "1.2.4"},
+        "captured_console_line_count": {"type": "integer", "minimum": 0},
+        "renv_library_root": {"$ref": "#/$defs/path"},
+        "project_inventory_sha256": {"$ref": "#/$defs/sha256"},
+        "project_library_absent_before": {"const": true},
+        "project_library_absent_after": {"const": true},
+        "r_library_inventory_before_sha256": {"$ref": "#/$defs/sha256"},
+        "r_library_inventory_after_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "rLibrary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path", "environment_variable", "environment", "activation",
+        "r_version", "platform",
+        "lib_paths", "required_packages", "loaded_packages", "inventory_sha256"
+      ],
+      "properties": {
+        "path": {"$ref": "#/$defs/path"},
+        "environment_variable": {"const": "R_LIBS_USER"},
+        "environment": {"$ref": "#/$defs/rEnvironment"},
+        "activation": {"$ref": "#/$defs/rActivation"},
+        "r_version": {"type": "string", "minLength": 1},
+        "platform": {"type": "string", "minLength": 1},
+        "lib_paths": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/path"}
+        },
+        "required_packages": {
+          "type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true,
+          "items": {"enum": ["fst", "jsonlite", "openssl"]}
+        },
+        "loaded_packages": {
+          "type": "array", "minItems": 3,
+          "items": {"$ref": "#/$defs/rPackage"}
+        },
+        "inventory_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "runtimeSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rscript", "r_library"],
+      "properties": {
+        "rscript": {"$ref": "#/$defs/rscript"},
+        "r_library": {"$ref": "#/$defs/rLibrary"}
+      }
+    },
+    "runtimeImmutability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["before", "after", "immutable"],
+      "properties": {
+        "before": {"$ref": "#/$defs/runtimeSnapshot"},
+        "after": {"$ref": "#/$defs/runtimeSnapshot"},
+        "immutable": {"const": true}
+      }
+    },
+    "terminalRuntime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "comparison_harness", "rscript", "r_library", "runtime_immutability"
+      ],
+      "properties": {
+        "comparison_harness": {"$ref": "#/$defs/harness"},
+        "rscript": {"$ref": "#/$defs/rscript"},
+        "r_library": {"$ref": "#/$defs/rLibrary"},
+        "runtime_immutability": {"$ref": "#/$defs/runtimeImmutability"}
+      }
+    },
+    "sourceEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "strict_smoke_summary_path", "strict_smoke_summary_sha256",
+        "oracle_smoke_summary_path", "oracle_smoke_summary_sha256"
+      ],
+      "properties": {
+        "strict_smoke_summary_path": {"$ref": "#/$defs/path"},
+        "strict_smoke_summary_sha256": {"$ref": "#/$defs/sha256"},
+        "oracle_smoke_summary_path": {"$ref": "#/$defs/path"},
+        "oracle_smoke_summary_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "pin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"$ref": "#/$defs/path"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "runSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file_count", "total_bytes", "manifest_sha256",
+        "inventory_signature_sha256", "files"
+      ],
+      "properties": {
+        "file_count": {"type": "integer", "minimum": 2},
+        "total_bytes": {"type": "integer", "minimum": 1},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "inventory_signature_sha256": {"$ref": "#/$defs/sha256"},
+        "files": {
+          "type": "array", "minItems": 2,
+          "items": {"$ref": "#/$defs/physicalFile"}
+        }
+      }
+    },
+    "approvedRunState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenario_pin", "scenario_spec_pin", "run_inventory"],
+      "properties": {
+        "scenario_pin": {"$ref": "#/$defs/pin"},
+        "scenario_spec_pin": {"$ref": "#/$defs/pin"},
+        "run_inventory": {"$ref": "#/$defs/runSnapshot"}
+      }
+    },
+    "approvedRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "arm", "method", "expected_commit", "run_root", "manifest_path",
+        "declared_inventory_sha256", "before", "after", "immutable"
+      ],
+      "properties": {
+        "arm": {"enum": ["strict", "oracle"]},
+        "method": {"$ref": "#/$defs/method"},
+        "expected_commit": {"$ref": "#/$defs/sha1"},
+        "run_root": {"$ref": "#/$defs/path"},
+        "manifest_path": {"$ref": "#/$defs/path"},
+        "declared_inventory_sha256": {"$ref": "#/$defs/sha256"},
+        "before": {"$ref": "#/$defs/approvedRunState"},
+        "after": {"$ref": "#/$defs/approvedRunState"},
+        "immutable": {"const": true}
+      }
+    },
+    "commandEnvironment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "value"],
+      "properties": {
+        "name": {"const": "R_LIBS_USER"},
+        "value": {"$ref": "#/$defs/path"}
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phase", "method", "executable", "arguments", "working_directory",
+        "r_library_environment", "environment_set", "environment_cleared",
+        "output_directory", "command_sha256",
+        "exit_code"
+      ],
+      "properties": {
+        "phase": {"enum": ["primary", "replay"]},
+        "method": {"$ref": "#/$defs/commonMethod"},
+        "executable": {"$ref": "#/$defs/path"},
+        "arguments": {
+          "type": "array", "minItems": 9, "maxItems": 9,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "working_directory": {"$ref": "#/$defs/path"},
+        "r_library_environment": {"$ref": "#/$defs/commandEnvironment"},
+        "environment_set": {"$ref": "#/$defs/environmentSet"},
+        "environment_cleared": {"$ref": "#/$defs/environmentCleared"},
+        "output_directory": {"$ref": "#/$defs/path"},
+        "command_sha256": {"$ref": "#/$defs/sha256"},
+        "exit_code": {"const": 0}
+      }
+    },
+    "normalizedFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name", "primary_sha256", "primary_size_bytes", "replay_sha256",
+        "replay_size_bytes", "normalization", "normalized_sha256",
+        "normalized_identical", "raw_byte_identical"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "artifact-summary.csv", "state-transitions.csv",
+            "indicator-differences.csv", "comparison.json"
+          ]
+        },
+        "primary_sha256": {"$ref": "#/$defs/sha256"},
+        "primary_size_bytes": {"type": "integer", "minimum": 0},
+        "replay_sha256": {"$ref": "#/$defs/sha256"},
+        "replay_size_bytes": {"type": "integer", "minimum": 0},
+        "normalization": {"enum": ["identity", "remove-top-level-compared_at"]},
+        "normalized_sha256": {"$ref": "#/$defs/sha256"},
+        "normalized_identical": {"const": true},
+        "raw_byte_identical": {"type": "boolean"}
+      }
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method", "primary_directory", "replay_directory", "comparison_mode",
+        "artifact_count", "candidate_manifest_sha256",
+        "candidate_inventory_sha256", "baseline_manifest_sha256",
+        "baseline_inventory_sha256", "primary_compared_at",
+        "replay_compared_at", "primary_command_sha256",
+        "replay_command_sha256", "files"
+      ],
+      "properties": {
+        "method": {"$ref": "#/$defs/commonMethod"},
+        "primary_directory": {"$ref": "#/$defs/path"},
+        "replay_directory": {"$ref": "#/$defs/path"},
+        "comparison_mode": {"const": "strict"},
+        "artifact_count": {"type": "integer", "minimum": 1},
+        "candidate_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "candidate_inventory_sha256": {"$ref": "#/$defs/sha256"},
+        "baseline_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "baseline_inventory_sha256": {"$ref": "#/$defs/sha256"},
+        "primary_compared_at": {"type": "string", "minLength": 1},
+        "replay_compared_at": {"type": "string", "minLength": 1},
+        "primary_command_sha256": {"$ref": "#/$defs/sha256"},
+        "replay_command_sha256": {"$ref": "#/$defs/sha256"},
+        "files": {
+          "type": "array", "minItems": 4, "maxItems": 4,
+          "items": {"$ref": "#/$defs/normalizedFile"}
+        }
+      }
+    },
+    "comparisonWorkflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primary_root", "replay_root", "generator_created_both_roots",
+        "methods", "commands", "comparisons"
+      ],
+      "properties": {
+        "primary_root": {"$ref": "#/$defs/path"},
+        "replay_root": {"$ref": "#/$defs/path"},
+        "generator_created_both_roots": {"const": true},
+        "methods": {
+          "type": "array", "minItems": 5, "maxItems": 5,
+          "items": {"$ref": "#/$defs/commonMethod"}
+        },
+        "commands": {
+          "type": "array", "minItems": 10, "maxItems": 10,
+          "items": {"$ref": "#/$defs/command"}
+        },
+        "comparisons": {
+          "type": "array", "minItems": 5, "maxItems": 5,
+          "items": {"$ref": "#/$defs/comparison"}
+        }
+      }
+    },
+    "goPrice": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": [
+        "coordinate_count", "coordinate_sha256", "checkpoint",
+        "strict_failure_observed", "oracle_checkpoint_passed", "value_rule"
+      ],
+      "properties": {
+        "coordinate_count": {"const": 525},
+        "coordinate_sha256": {"$ref": "#/$defs/sha256"},
+        "checkpoint": {"const": "after_assumptions"},
+        "strict_failure_observed": {"const": true},
+        "oracle_checkpoint_passed": {"const": true},
+        "value_rule": {"type": "string", "minLength": 1}
+      }
+    },
+    "nanClean": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": [
+        "coordinate_count", "coordinate_sha256", "before_value",
+        "denominator_indicator", "denominator_requirement", "after_value",
+        "module", "policy_id", "action"
+      ],
+      "properties": {
+        "coordinate_count": {"const": 405},
+        "coordinate_sha256": {"$ref": "#/$defs/sha256"},
+        "before_value": {"const": "NaN"},
+        "denominator_indicator": {"type": "string", "minLength": 1},
+        "denominator_requirement": {"type": "string", "minLength": 1},
+        "after_value": {"const": "finite numeric zero"},
+        "module": {"type": "string", "minLength": 1},
+        "policy_id": {"const": "issue13_cc2_historical_nan_clean_v1"},
+        "action": {"const": "replace_historical_nan_with_zero"}
+      }
+    },
+    "leontief": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id", "coordinate_count", "coordinate_md5", "signed_year",
+        "signed_coefficient_count", "signed_certificate",
+        "anomaly_artifact_sha256", "diagnostic_artifact_sha256",
+        "scientific_checks_sha256"
+      ],
+      "properties": {
+        "profile_id": {"enum": ["stable", "v09"]},
+        "coordinate_count": {"enum": [2945, 3150]},
+        "coordinate_md5": {"$ref": "#/$defs/md5"},
+        "signed_year": {"const": "2006"},
+        "signed_coefficient_count": {"enum": [396, 397]},
+        "signed_certificate": {"const": "absolute_convergence_signed"},
+        "anomaly_artifact_sha256": {"$ref": "#/$defs/sha256"},
+        "diagnostic_artifact_sha256": {"$ref": "#/$defs/sha256"},
+        "scientific_checks_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "utf8": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["artifact_sha256", "field", "value", "value_utf8_sha256"],
+      "properties": {
+        "artifact_sha256": {"$ref": "#/$defs/sha256"},
+        "field": {"const": "name"},
+        "value": {"const": "Teste sem suposições para resto do mundo"},
+        "value_utf8_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "recovered": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method", "strict_scenario_path", "strict_scenario_sha256",
+        "strict_failure_id", "strict_failure_message", "oracle_scenario_path",
+        "oracle_scenario_sha256", "oracle_manifest_sha256",
+        "oracle_inventory_sha256", "oracle_result_id", "change_ids",
+        "go_price", "historical_nan_clean", "leontief", "utf8"
+      ],
+      "properties": {
+        "method": {
+          "enum": [
+            "alternative_1", "alternative_2", "norow_w13", "ochoa_1",
+            "ochoa_2", "petrovic", "wiodr13v09"
+          ]
+        },
+        "strict_scenario_path": {"$ref": "#/$defs/path"},
+        "strict_scenario_sha256": {"$ref": "#/$defs/sha256"},
+        "strict_failure_id": {
+          "enum": ["go_price_row_missingness_525", "undeclared_leontief_nonzero_over_zero"]
+        },
+        "strict_failure_message": {"type": "string", "minLength": 1},
+        "oracle_scenario_path": {"$ref": "#/$defs/path"},
+        "oracle_scenario_sha256": {"$ref": "#/$defs/sha256"},
+        "oracle_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "oracle_inventory_sha256": {"$ref": "#/$defs/sha256"},
+        "oracle_result_id": {"$ref": "#/$defs/sha256"},
+        "change_ids": {
+          "type": "array", "minItems": 2, "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "go_price": {"$ref": "#/$defs/goPrice"},
+        "historical_nan_clean": {"$ref": "#/$defs/nanClean"},
+        "leontief": {"$ref": "#/$defs/leontief"},
+        "utf8": {"$ref": "#/$defs/utf8"}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "spec", "proof_schema", "oracle", "terminal_runtime",
+        "source_evidence", "approved_run_immutability", "comparison_workflow",
+        "recovered_methods"
+      ],
+      "properties": {
+        "spec": {"$ref": "#/$defs/specRecord"},
+        "proof_schema": {"$ref": "#/$defs/schemaRecord"},
+        "oracle": {"$ref": "#/$defs/oracle"},
+        "terminal_runtime": {"$ref": "#/$defs/terminalRuntime"},
+        "source_evidence": {"$ref": "#/$defs/sourceEvidence"},
+        "approved_run_immutability": {
+          "type": "array", "minItems": 17, "maxItems": 17,
+          "items": {"$ref": "#/$defs/approvedRun"}
+        },
+        "comparison_workflow": {"$ref": "#/$defs/comparisonWorkflow"},
+        "recovered_methods": {
+          "type": "array", "minItems": 7, "maxItems": 7,
+          "items": {"$ref": "#/$defs/recovered"}
+        }
+      }
+    },
+    "conclusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authorized_patch_authenticated", "terminal_harness_authenticated",
+        "strict_common_method_count", "strict_common_primary_and_replay_passed",
+        "approved_run_count", "approved_runs_immutable", "recovered_method_count",
+        "recovered_methods_passed",
+        "recovered_coordinate_and_diagnostic_contracts_passed",
+        "oracle_effect_closed", "final_v5_gate_substituted"
+      ],
+      "properties": {
+        "authorized_patch_authenticated": {"const": true},
+        "terminal_harness_authenticated": {"const": true},
+        "strict_common_method_count": {"const": 5},
+        "strict_common_primary_and_replay_passed": {"const": true},
+        "approved_run_count": {"const": 17},
+        "approved_runs_immutable": {"const": true},
+        "recovered_method_count": {"const": 7},
+        "recovered_methods_passed": {"const": true},
+        "recovered_coordinate_and_diagnostic_contracts_passed": {"const": true},
+        "oracle_effect_closed": {"const": true},
+        "final_v5_gate_substituted": {"const": false}
+      }
+    }
+  }
+}

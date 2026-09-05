@@ -88,8 +88,7 @@ wlv_contract_indicator_metadata <- function(units, indicators = units$indicator)
 
 wlv_complete_indicator_metadata <- function(
     metadata,
-    units = NULL,
-    warn_legacy = TRUE) {
+    units) {
   if (
     !is.data.frame(metadata) || !"code" %in% names(metadata) ||
       anyNA(metadata$code) || any(!nzchar(metadata$code)) ||
@@ -99,88 +98,36 @@ wlv_complete_indicator_metadata <- function(
       call. = FALSE
     )
   }
-  if (
-    !is.logical(warn_legacy) || length(warn_legacy) != 1L ||
-      is.na(warn_legacy)
-  ) {
-    stop("`warn_legacy` must be one explicit logical value.", call. = FALSE)
-  }
   columns <- wlv_indicator_metadata_columns()
-  missing_columns <- setdiff(columns, names(metadata))
-
-  if (!is.null(units)) {
-    matched <- metadata$code %in% units$indicator
-    projection <- if (any(matched)) {
-      wlv_contract_indicator_metadata(units, metadata$code[matched])
-    } else {
-      data.frame(
-        code = character(),
-        canonical_unit = character(),
-        display_unit = character(),
-        display_multiplier = numeric(),
-        index_base_year = character(),
-        index_storage_base = numeric(),
-        stringsAsFactors = FALSE,
-        check.names = FALSE
-      )
+  projection <- wlv_contract_indicator_metadata(units, metadata$code)
+  defaults <- list(
+    canonical_unit = NA_character_,
+    display_unit = NA_character_,
+    display_multiplier = NA_real_,
+    index_base_year = NA_character_,
+    index_storage_base = NA_real_
+  )
+  for (column in columns) {
+    if (!column %in% names(metadata)) {
+      metadata[[column]] <- rep(defaults[[column]], nrow(metadata))
     }
-    defaults <- list(
-      canonical_unit = NA_character_,
-      display_unit = NA_character_,
-      display_multiplier = NA_real_,
-      index_base_year = NA_character_,
-      index_storage_base = NA_real_
+    observed <- metadata[[column]]
+    expected <- projection[[column]]
+    differs <- !is.na(observed) & (
+      is.na(expected) | (!is.na(expected) & observed != expected)
     )
-    for (column in columns) {
-      if (!column %in% names(metadata)) {
-        metadata[[column]] <- rep(defaults[[column]], nrow(metadata))
-      }
-      observed <- metadata[[column]][matched]
-      expected <- projection[[column]]
-      differs <- !is.na(observed) & (
-        is.na(expected) | (!is.na(expected) & observed != expected)
-      )
-      if (any(differs)) {
-        stop(
-          sprintf(
-            "Indicator metadata column `%s` differs from the unit contract.",
-            column
-          ),
-          call. = FALSE
-        )
-      }
-      fill <- is.na(observed) & !is.na(expected)
-      observed[fill] <- expected[fill]
-      metadata[[column]][matched] <- observed
-      if (identical(column, "display_multiplier")) {
-        metadata[[column]][!matched & is.na(metadata[[column]])] <- 1
-      }
-    }
-  } else if (length(missing_columns)) {
-    if (!"canonical_unit" %in% names(metadata)) {
-      metadata$canonical_unit <- rep(NA_character_, nrow(metadata))
-    }
-    if (!"display_unit" %in% names(metadata)) {
-      metadata$display_unit <- rep(NA_character_, nrow(metadata))
-    }
-    if (!"display_multiplier" %in% names(metadata)) {
-      metadata$display_multiplier <- rep(1, nrow(metadata))
-    }
-    if (!"index_base_year" %in% names(metadata)) {
-      metadata$index_base_year <- rep(NA_character_, nrow(metadata))
-    }
-    if (!"index_storage_base" %in% names(metadata)) {
-      metadata$index_storage_base <- rep(NA_real_, nrow(metadata))
-    }
-    if (isTRUE(warn_legacy)) {
-      warning(
-        paste0(
-          "Legacy indicator metadata lacks explicit display fields; ",
-          "using display_multiplier = 1 without rescaling stored values."
+    if (any(differs)) {
+      stop(
+        sprintf(
+          "Indicator metadata column `%s` differs from the unit contract.",
+          column
         ),
         call. = FALSE
       )
     }
+    fill <- is.na(observed) & !is.na(expected)
+    observed[fill] <- expected[fill]
+    metadata[[column]] <- observed
   }
 
   if (anyNA(metadata$display_multiplier) ||
@@ -192,41 +139,4 @@ wlv_complete_indicator_metadata <- function(
   }
   row.names(metadata) <- metadata$code
   metadata
-}
-
-wlv_read_indicator_metadata <- function(path) {
-  if (!is.character(path) || length(path) != 1L || is.na(path) || !nzchar(path)) {
-    stop("`path` must be one non-empty metadata path.", call. = FALSE)
-  }
-  if (!file.exists(path)) {
-    stop(sprintf("Indicator metadata does not exist: `%s`.", path), call. = FALSE)
-  }
-  value <- tryCatch(
-    readRDS(path),
-    error = function(error) {
-      stop(
-        sprintf("Cannot read indicator metadata `%s`: %s", path, conditionMessage(error)),
-        call. = FALSE
-      )
-    }
-  )
-  wlv_complete_indicator_metadata(value, warn_legacy = TRUE)
-}
-
-wlv_display_values <- function(value, metadata, indicator) {
-  if (!is.numeric(value)) {
-    stop("Display conversion requires numeric values.", call. = FALSE)
-  }
-  if (
-    !is.character(indicator) || length(indicator) != 1L ||
-      is.na(indicator) || !nzchar(indicator)
-  ) {
-    stop("`indicator` must be one non-empty identifier.", call. = FALSE)
-  }
-  metadata <- wlv_complete_indicator_metadata(metadata, warn_legacy = TRUE)
-  row <- match(indicator, metadata$code)
-  if (is.na(row)) {
-    stop(sprintf("Unknown display indicator `%s`.", indicator), call. = FALSE)
-  }
-  value * metadata$display_multiplier[[row]]
 }

@@ -24,10 +24,8 @@ wlv_make_catalog_fixture <- function() {
     file.path(root, "catalog"),
     file.path(root, "methods", "demo"),
     file.path(root, "parameters", "raw_demo"),
-    file.path(root, "R", "utils"),
-    file.path(root, "R", "lib"),
-    file.path(root, "docs"),
-    file.path(root, "tests", "testthat")
+    file.path(root, "config", "outputs", "sources"),
+    file.path(root, "docs")
   )
   for (path in paths) {
     dir.create(path, recursive = TRUE, showWarnings = FALSE)
@@ -41,9 +39,8 @@ wlv_make_catalog_fixture <- function() {
     parameter_set = "raw_demo",
     data_dir = "source_data/demo_source",
     can_prepare = "TRUE",
-    preparer = "R/utils/prepare_demo_data.R",
-    validator_script = "R/lib/demo_validation.R",
-    validator_function = "wlv_validate_demo_prepared",
+    preparation_task = "demo_source",
+    validator_id = "demo_prepared_v1",
     artifact_profile = "demo_core",
     missingness_policy = "demo_v1",
     unit_contract = "demo_units_v1",
@@ -60,7 +57,7 @@ wlv_make_catalog_fixture <- function() {
     status = "stable",
     can_calculate = "TRUE",
     can_recalculate = "TRUE",
-    test = "tests/testthat/test-demo.R",
+    validation_id = "demo_scientific_v1",
     documentation = "docs/demo.md",
     limitations = "",
     stringsAsFactors = FALSE,
@@ -80,8 +77,6 @@ wlv_make_catalog_fixture <- function() {
   )
   missingness_policies <- data.frame(
     policy = "demo_v1",
-    script = "R/lib/demo_missingness.R",
-    factory = "wlv_demo_missingness_policy",
     documentation = "docs/demo.md",
     stringsAsFactors = FALSE,
     check.names = FALSE
@@ -117,7 +112,7 @@ wlv_make_catalog_fixture <- function() {
     indicator = rep("demo.value", 2L),
     level = c("sector_to_country", "country_to_world"),
     strategy = rep("sum", 2L),
-    module = "",
+    module_id = "",
     numerator = "",
     denominator = "",
     weight = "",
@@ -161,38 +156,29 @@ wlv_make_catalog_fixture <- function() {
     )
   )
   writeLines(
-    "invisible(NULL)",
-    file.path(root, "R", "utils", "prepare_demo_data.R")
-  )
-  writeLines(
-    "wlv_validate_demo_prepared <- function(...) invisible(TRUE)",
-    file.path(root, "R", "lib", "demo_validation.R")
-  )
-  writeLines(
-    "wlv_demo_missingness_policy <- function(...) list(policy_id = 'demo_v1')",
-    file.path(root, "R", "lib", "demo_missingness.R")
-  )
-  writeLines(
     "# Demonstration source contract",
     file.path(root, "docs", "demo.md")
   )
   wlv_catalog_test_write(
-    file.path(root, "parameters", "raw_demo", "_source_solutions.csv"),
+    file.path(root, "config", "outputs", "method_profiles.csv"),
+    data.frame(method = "demo", profile = "demo_standard")
+  )
+  wlv_catalog_test_write(
+    file.path(root, "config", "outputs", "profiles.csv"),
+    data.frame(profile = "demo_standard", source = "demo_source")
+  )
+  wlv_catalog_test_write(
+    file.path(root, "config", "outputs", "overrides.csv"),
     data.frame(
-      names = "demo.value",
-      sector_solution = "DEMO",
-      country_solution = "sum",
-      stage = "0",
-      order = "1",
-      stringsAsFactors = FALSE,
-      check.names = FALSE
+      profile = "demo_standard",
+      position = "1",
+      indicator = "demo.value"
     )
   )
-  writeLines(
-    "# Demonstration method test",
-    file.path(root, "tests", "testthat", "test-demo.R")
+  wlv_catalog_test_write(
+    file.path(root, "config", "outputs", "sources", "demo_source.csv"),
+    data.frame(indicator = "demo.value")
   )
-
   root
 }
 
@@ -219,6 +205,14 @@ test_that("repository catalog classifies every method and source explicitly", {
   expect_equal(sum(catalog$methods$status == "disabled"), 5L)
   expect_setequal(
     catalog$methods$method[catalog$methods$status == "stable"],
+    c("wiodr13", "wiodr16")
+  )
+  expect_setequal(
+    catalog$methods$method[catalog$methods$can_calculate],
+    c("wiodr13", "wiodr16")
+  )
+  expect_setequal(
+    catalog$methods$method[catalog$methods$can_recalculate],
     c("wiodr13", "wiodr16")
   )
   expect_false(any(
@@ -272,7 +266,7 @@ test_that("catalog accessors and output formats are deterministic", {
     c(
       "method", "code", "description", "source", "status", "source_status",
       "missingness_policy", "unit_contract", "year_start", "year_end", "years",
-      "can_prepare", "can_calculate", "can_recalculate", "test",
+      "can_prepare", "can_calculate", "can_recalculate", "validation_id",
       "documentation", "limitations"
     )
   )
@@ -287,7 +281,8 @@ test_that("catalog accessors and output formats are deterministic", {
     catalog,
     "wiodr13_v1"
   )
-  expect_identical(policy$factory, "wlv_wiodr13_missingness_policy")
+  expect_identical(names(policy), c("policy", "documentation"))
+  expect_identical(policy$policy, "wiodr13_v1")
   unit_contract <- catalog_environment$wlv_catalog_unit_contract(
     catalog,
     "wiodr13_units_v2"
@@ -344,7 +339,7 @@ test_that("catalog accessors and output formats are deterministic", {
   )
 })
 
-test_that("catalog schema rejects invalid enums, booleans, years, and paths", {
+test_that("catalog schema rejects invalid enums, booleans, years, paths, and IDs", {
   cases <- list(
     list(
       file = "sources.csv",
@@ -406,10 +401,10 @@ test_that("catalog schema rejects invalid enums, booleans, years, and paths", {
     list(
       file = "missingness-policies.csv",
       edit = function(value) {
-        value$factory[[1L]] <- "unsafe factory"
+        value$policy[[1L]] <- "unsafe policy"
         value
       },
-      message = "invalid `factory`"
+      message = "invalid `policy`"
     )
   )
 
@@ -557,7 +552,7 @@ test_that("calculation capabilities require a source artifact profile", {
   })
   wlv_catalog_test_edit(root, "methods.csv", function(value) {
     value$status <- "experimental"
-    value$test <- ""
+    value$validation_id <- ""
     value$documentation <- ""
     value$limitations <- "Runtime artifact contract is pending."
     value
@@ -621,45 +616,45 @@ test_that("stable entries require complete and existing contracts", {
   unlink(root, recursive = TRUE, force = TRUE)
   root <- wlv_make_catalog_fixture()
   wlv_catalog_test_edit(root, "methods.csv", function(value) {
-    value$test <- ""
+    value$validation_id <- ""
     value
   })
   expect_error(
     catalog_environment$wlv_load_catalog(root),
-    "Stable method.*a test"
+    "Stable method.*a validation ID"
   )
 
   unlink(root, recursive = TRUE, force = TRUE)
   root <- wlv_make_catalog_fixture()
   wlv_catalog_test_edit(root, "methods.csv", function(value) {
-    value$test <- "tests/testthat/missing.R"
+    value$validation_id <- "tests/testthat/missing.R"
     value
   })
   expect_error(
     catalog_environment$wlv_load_catalog(root),
-    "declares missing `test`"
+    "invalid `validation_id`"
   )
 
   unlink(root, recursive = TRUE, force = TRUE)
   root <- wlv_make_catalog_fixture()
   wlv_catalog_test_edit(root, "sources.csv", function(value) {
-    value$validator_function <- "wlv_missing_validator"
+    value$validator_id <- "R/lib/missing.R"
     value
   })
   expect_error(
     catalog_environment$wlv_load_catalog(root),
-    "Validator `wlv_missing_validator` is not defined"
+    "invalid `validator_id`"
   )
 
   unlink(root, recursive = TRUE, force = TRUE)
   root <- wlv_make_catalog_fixture()
   wlv_catalog_test_edit(root, "missingness-policies.csv", function(value) {
-    value$factory <- "wlv_missing_policy_factory"
+    value$policy <- "R/lib/missingness.R"
     value
   })
   expect_error(
     catalog_environment$wlv_load_catalog(root),
-    "Missingness policy factory `wlv_missing_policy_factory` is not defined"
+    "invalid `policy`"
   )
 
   unlink(root, recursive = TRUE, force = TRUE)
@@ -761,6 +756,7 @@ test_that("unit sidecars overlay resolved aggregation rows deterministically", {
     "wiodr13_units_v1"
   )
   resolved <- contract$aggregations
+  names(resolved)[names(resolved) == "module_id"] <- "module"
   resolved$notes <- paste0("resolved:", seq_len(nrow(resolved)))
   sidecar <- catalog_environment$wlv_catalog_unit_contract_sidecar(
     catalog,
@@ -773,18 +769,19 @@ test_that("unit sidecars overlay resolved aggregation rows deterministically", {
 
   extra <- resolved[seq_len(2L), , drop = FALSE]
   extra$indicator <- "experimental.extra"
-  overlaid <- catalog_environment$wlv_catalog_unit_contract_sidecar(
-    catalog,
-    "wiodr13_units_v1",
-    indicators = c(contract$units$indicator, "experimental.extra"),
-    require_exact = FALSE,
-    resolved_aggregations = rbind(resolved, extra)
+  expect_error(
+    catalog_environment$wlv_catalog_unit_contract_sidecar(
+      catalog,
+      "wiodr13_units_v1",
+      indicators = c(contract$units$indicator, "experimental.extra"),
+      resolved_aggregations = rbind(resolved, extra)
+    ),
+    "does not exactly match",
+    fixed = TRUE
   )
-  expect_false("experimental.extra" %in% overlaid$indicator)
-  expect_identical(overlaid$aggregation_notes, resolved$notes)
 })
 
-test_that("stable typed aggregation is authoritative over legacy routing", {
+test_that("stable typed aggregation is independent from retired routing fragments", {
   root <- wlv_make_catalog_fixture()
   on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
   path <- file.path(
@@ -824,6 +821,142 @@ test_that("constant compensation is declared in additive 2000 USD", {
     expect_identical(selected$price_basis, rep("constant", 2L))
     expect_identical(selected$base_year, rep("2000", 2L))
   }
+})
+
+test_that("scientific profile declarations are immutable catalog inputs", {
+  catalog <- catalog_environment$wlv_load_catalog(wlv_test_root)
+  inventory <- attr(catalog, "wlv_catalog_input_inventory", exact = TRUE)
+  expect_true(all(c(
+    "config/modules/common.csv",
+    "config/aggregations/method_profiles.csv",
+    "config/contracts/scientific_method_profiles.csv",
+    "config/contracts/scientific_profiles.csv",
+    "config/contracts/leontief_zero_profiles.csv",
+    "config/contracts/leontief_signed_profiles.csv",
+    "config/contracts/nonfinite_resolution_profiles.csv",
+    "config/contracts/nonfinite_resolution_groups.csv"
+  ) %in% names(inventory)))
+})
+
+test_that("module and aggregation configuration drift invalidates a loaded catalog", {
+  root <- wlv_make_catalog_fixture()
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  module_directory <- file.path(root, "config", "modules")
+  aggregation_directory <- file.path(root, "config", "aggregations")
+  dir.create(module_directory, recursive = TRUE, showWarnings = FALSE)
+  dir.create(aggregation_directory, recursive = TRUE, showWarnings = FALSE)
+  module_path <- file.path(module_directory, "common.csv")
+  aggregation_path <- file.path(aggregation_directory, "method_profiles.csv")
+  writeLines("instance_id;module_id", module_path, useBytes = TRUE)
+  writeLines("method;profile", aggregation_path, useBytes = TRUE)
+
+  catalog <- catalog_environment$wlv_load_catalog(root)
+  inventory <- attr(catalog, "wlv_catalog_input_inventory", exact = TRUE)
+  expect_true(all(c(
+    "config/modules/common.csv",
+    "config/aggregations/method_profiles.csv"
+  ) %in% names(inventory)))
+
+  writeLines(
+    c("instance_id;module_id", "probe;probe.module"),
+    module_path,
+    useBytes = TRUE
+  )
+  writeLines(
+    c("method;profile", "demo;historical"),
+    aggregation_path,
+    useBytes = TRUE
+  )
+  error <- tryCatch(
+    catalog_environment$wlv_catalog_assert_inputs_unchanged(catalog),
+    error = identity
+  )
+  expect_s3_class(error, "error")
+  expect_match(conditionMessage(error), "config/modules/common.csv", fixed = TRUE)
+  expect_match(
+    conditionMessage(error),
+    "config/aggregations/method_profiles.csv",
+    fixed = TRUE
+  )
+})
+
+test_that("catalog input receipts avoid repeated hashes and fail closed", {
+  root <- wlv_make_catalog_fixture()
+  on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
+  module_directory <- file.path(root, "config", "modules")
+  dir.create(module_directory, recursive = TRUE, showWarnings = FALSE)
+  module_path <- file.path(module_directory, "common.csv")
+  writeLines("instance_id;module_id", module_path, useBytes = TRUE)
+
+  catalog <- catalog_environment$wlv_load_catalog(root)
+  receipt <- attr(catalog, "wlv_catalog_input_receipt", exact = TRUE)
+  expect_true(is.environment(receipt))
+  expect_true(environmentIsLocked(receipt))
+
+  inventory_calls <- 0L
+  original_inventory <- catalog_environment$wlv_catalog_input_inventory
+  assign(
+    "wlv_catalog_input_inventory",
+    function(...) {
+      inventory_calls <<- inventory_calls + 1L
+      original_inventory(...)
+    },
+    envir = catalog_environment
+  )
+  on.exit(assign(
+    "wlv_catalog_input_inventory",
+    original_inventory,
+    envir = catalog_environment
+  ), add = TRUE)
+
+  expect_invisible(
+    catalog_environment$wlv_catalog_assert_inputs_unchanged(
+      catalog,
+      force_hash = FALSE
+    )
+  )
+  expect_identical(inventory_calls, 0L)
+  expect_invisible(catalog_environment$wlv_catalog_assert_inputs_unchanged(
+    catalog,
+    force_hash = TRUE
+  ))
+  expect_identical(inventory_calls, 1L)
+  expect_error(
+    catalog_environment$wlv_catalog_assert_inputs_unchanged(
+      catalog,
+      force_hash = NA
+    ),
+    "force-hash flag is invalid",
+    fixed = TRUE
+  )
+
+  without_receipt <- catalog
+  attr(without_receipt, "wlv_catalog_input_receipt") <-
+    new.env(parent = emptyenv())
+  inventory_calls <- 0L
+  expect_invisible(
+    catalog_environment$wlv_catalog_assert_inputs_unchanged(
+      without_receipt,
+      force_hash = FALSE
+    )
+  )
+  expect_identical(inventory_calls, 1L)
+
+  writeLines(
+    c("instance_id;module_id", "probe;probe.module"),
+    module_path,
+    useBytes = TRUE
+  )
+  inventory_calls <- 0L
+  expect_error(
+    catalog_environment$wlv_catalog_assert_inputs_unchanged(
+      catalog,
+      force_hash = FALSE
+    ),
+    "config/modules/common.csv",
+    fixed = TRUE
+  )
+  expect_identical(inventory_calls, 1L)
 })
 
 test_that("unit contract schemas and foreign keys reject drift", {

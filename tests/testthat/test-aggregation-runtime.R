@@ -42,8 +42,7 @@ test_that("SEA runtime dispatches independent specifications at each level", {
         country_solution = "sum",
         stringsAsFactors = FALSE
       ),
-      method = "typed_demo",
-      stable = TRUE
+      method = "typed_demo"
     )
   environment$sea_variables <- data.frame(
     names = "metric",
@@ -116,7 +115,8 @@ test_that("typed states and anomalies flow through missingness runtime", {
     dimnames = dimnames(value)
   )
   allowed[is.na(value)] <- "source_missing"
-  runtime <- aggregation_runtime_environment$wlv_new_contract_runtime(
+  runtime <- wlv_test_contract_runtime(
+    aggregation_runtime_environment,
     method = "typed_demo",
     source = "typed_demo",
     policy = aggregation_runtime_environment$wlv_strict_missingness_policy(
@@ -181,8 +181,7 @@ test_that("world bindings can consume an earlier dependency with runtime states"
         country_solution = c("sum", "mean"),
         stringsAsFactors = FALSE
       ),
-      method = "typed_dependencies",
-      stable = TRUE
+      method = "typed_dependencies"
     )
   environment$sea_variables <- data.frame(
     names = c("weight", "metric"),
@@ -213,8 +212,8 @@ test_that("world bindings can consume an earlier dependency with runtime states"
       country = c("A", "B", "WWW")
     )
   )
-  environment$wlv_contract_runtime <- aggregation_runtime_environment$
-    wlv_new_contract_runtime(
+  environment$wlv_contract_runtime <- wlv_test_contract_runtime(
+      aggregation_runtime_environment,
       method = "typed_dependencies",
       source = "typed_dependencies",
       policy = aggregation_runtime_environment$wlv_strict_missingness_policy(
@@ -267,8 +266,8 @@ test_that("world bindings can consume an earlier dependency with runtime states"
   selective$sea_countries <- environment$sea_countries
   selective$sea_countries[1L, "weight", "B"] <- NA_real_
   selective$sea_countries[, "metric", ] <- NA_real_
-  selective$wlv_contract_runtime <- aggregation_runtime_environment$
-    wlv_new_contract_runtime(
+  selective$wlv_contract_runtime <- wlv_test_contract_runtime(
+      aggregation_runtime_environment,
       method = "typed_dependencies",
       source = "typed_dependencies",
       policy = aggregation_runtime_environment$wlv_strict_missingness_policy(

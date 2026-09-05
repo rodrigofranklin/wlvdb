@@ -2,30 +2,36 @@
 # calculation module is evaluated. Values are immutable by convention: every
 # operation returns a new canonical object.
 
-wlv_unit_dimension_bases <- c(
+wlv_unit_dimension_bases <- function() {
+  c(
   "USD", "LCU", "person", "hour", "labour_value"
 )
-wlv_unit_price_bases <- c("not_applicable", "current", "constant")
-wlv_unit_kinds <- c("quantity", "ratio", "index")
+}
+wlv_unit_price_bases <- function() {
+  c("not_applicable", "current", "constant")
+}
+wlv_unit_kinds <- function() {
+  c("quantity", "ratio", "index")
+}
 
 wlv_unit_canonical_exponents <- function(exponents = NULL) {
   result <- stats::setNames(
-    integer(length(wlv_unit_dimension_bases)),
-    wlv_unit_dimension_bases
+    integer(length(wlv_unit_dimension_bases())),
+    wlv_unit_dimension_bases()
   )
   if (is.null(exponents) || !length(exponents)) {
     return(result)
   }
   invalid_message <- paste0(
     "`exponents` must be a uniquely named integer vector using only: ",
-    paste(wlv_unit_dimension_bases, collapse = ", "), "."
+    paste(wlv_unit_dimension_bases(), collapse = ", "), "."
   )
   if (
     !is.numeric(exponents) || is.null(names(exponents)) ||
       anyNA(exponents) || any(!is.finite(exponents)) ||
       anyNA(names(exponents)) || any(!nzchar(names(exponents))) ||
       anyDuplicated(names(exponents)) ||
-      any(!names(exponents) %in% wlv_unit_dimension_bases)
+      any(!names(exponents) %in% wlv_unit_dimension_bases())
   ) {
     stop(invalid_message, call. = FALSE)
   }
@@ -75,10 +81,10 @@ wlv_unit_dimension <- function(
   }
   if (
     !is.character(kind) || length(kind) != 1L || is.na(kind) ||
-      !kind %in% wlv_unit_kinds
+      !kind %in% wlv_unit_kinds()
   ) {
     stop(
-      sprintf("`kind` must be one of: %s.", paste(wlv_unit_kinds, collapse = ", ")),
+      sprintf("`kind` must be one of: %s.", paste(wlv_unit_kinds(), collapse = ", ")),
       call. = FALSE
     )
   }
@@ -123,12 +129,12 @@ wlv_unit_dimension <- function(
   }
   if (
     !is.character(price_basis) || length(price_basis) != 1L ||
-      is.na(price_basis) || !price_basis %in% wlv_unit_price_bases
+      is.na(price_basis) || !price_basis %in% wlv_unit_price_bases()
   ) {
     stop(
       sprintf(
         "`price_basis` must be one of: %s.",
-        paste(wlv_unit_price_bases, collapse = ", ")
+        paste(wlv_unit_price_bases(), collapse = ", ")
       ),
       call. = FALSE
     )
@@ -215,12 +221,12 @@ wlv_unit_base <- function(
     base_year = NA_integer_) {
   if (
     !is.character(base) || length(base) != 1L || is.na(base) ||
-      !base %in% wlv_unit_dimension_bases
+      !base %in% wlv_unit_dimension_bases()
   ) {
     stop(
       sprintf(
         "`base` must be one of: %s.",
-        paste(wlv_unit_dimension_bases, collapse = ", ")
+        paste(wlv_unit_dimension_bases(), collapse = ", ")
       ),
       call. = FALSE
     )
@@ -487,7 +493,9 @@ wlv_unit_rebase <- function(unit, base_year, index_base = unit$index_base) {
   wlv_unit_index(base_year = base_year, index_base = index_base)
 }
 
-wlv_unit_rebase_index <- wlv_unit_rebase
+wlv_unit_rebase_index <- function(unit, base_year, index_base = unit$index_base) {
+  wlv_unit_rebase(unit, base_year, index_base = index_base)
+}
 
 wlv_unit_assert_country_aggregation <- function(unit, countries) {
   wlv_unit_assert(unit)
@@ -525,7 +533,9 @@ wlv_unit_assert_country_aggregation <- function(unit, countries) {
   invisible(unit)
 }
 
-wlv_unit_assert_aggregable <- wlv_unit_assert_country_aggregation
+wlv_unit_assert_aggregable <- function(unit, countries) {
+  wlv_unit_assert_country_aggregation(unit, countries)
+}
 
 wlv_unit_contract_field <- function(row, name) {
   value <- row[[name]][[1L]]
