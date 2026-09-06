@@ -259,7 +259,7 @@ Os quatro painéis não contêm `NaN`; suas máscaras foram comparadas e os esta
 semânticos completos foram preservados. As seleções conservaram exatamente as
 células externas à lista pedida. As matrizes, parâmetros, diagnósticos de
 Leontief/GFCF, metadados, unidades e proveniência herdados também passaram na
-comparação de SHA-256 contra o pai completo.
+comparação de SHA-256 contra o cálculo completo de referência.
 
 O consolidado `results/summary.json` autentica os 18 relatórios e manifests,
 confere toda a cadeia de pais e as solicitações declaradas e vincula as provas
