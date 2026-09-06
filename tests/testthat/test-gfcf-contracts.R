@@ -1,18 +1,18 @@
 gfcf_contract_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "missingness.R"),
+  file.path(wlv_test_root, "scripts", "lib", "missingness.R"),
   envir = gfcf_contract_environment
 )
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "result_contracts.R"),
+  file.path(wlv_test_root, "scripts", "lib", "result_contracts.R"),
   envir = gfcf_contract_environment
 )
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "gfcf_contracts.R"),
+  file.path(wlv_test_root, "scripts", "lib", "gfcf_contracts.R"),
   envir = gfcf_contract_environment
 )
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "gfcf_diagnostics.R"),
+  file.path(wlv_test_root, "scripts", "lib", "gfcf_diagnostics.R"),
   envir = gfcf_contract_environment
 )
 

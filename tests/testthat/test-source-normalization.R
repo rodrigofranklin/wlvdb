@@ -1,10 +1,10 @@
 source_normalization_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "source_manifest.R"),
+  file.path(wlv_test_root, "scripts", "lib", "source_manifest.R"),
   envir = source_normalization_environment
 )
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "source_normalization.R"),
+  file.path(wlv_test_root, "scripts", "lib", "source_normalization.R"),
   envir = source_normalization_environment
 )
 
@@ -430,7 +430,7 @@ test_that("normalized publication strips only its marker for the real FST writer
   skip_if_not_installed("fst")
   skip_if_not_installed("openssl")
   storage <- new.env(parent = baseenv())
-  sys.source(file.path(wlv_test_root, "R", "lib", "functions.R"), storage)
+  sys.source(file.path(wlv_test_root, "scripts", "lib", "functions.R"), storage)
   marker_name <- source_normalization_environment$wlv_source_normalization_marker_name()
 
   for (source in c("wiodr13", "wiodr16")) {

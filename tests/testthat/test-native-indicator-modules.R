@@ -1,16 +1,16 @@
 native_indicator_environment <- new.env(parent = baseenv())
 for (path in c(
-  "R/lib/module_runtime.R",
-  "R/lib/semantic_resources.R",
-  "R/modules/native/contracts.R",
-  "R/modules/native/source_modules.R",
-  "R/modules/native/matrix_modules.R",
-  "R/modules/native/indicator_helpers.R",
-  "R/modules/native/indicator_common_modules.R",
-  "R/modules/native/indicator_source_derived_modules.R",
-  "R/modules/native/indicator_stage4_collector.R",
-  "R/modules/native/indicator_reduction_modules.R",
-  "R/modules/native/zz_indicator_registry.R"
+  "scripts/lib/module_runtime.R",
+  "scripts/lib/semantic_resources.R",
+  "scripts/modules/native/contracts.R",
+  "scripts/modules/native/source_modules.R",
+  "scripts/modules/native/matrix_modules.R",
+  "scripts/modules/native/indicator_helpers.R",
+  "scripts/modules/native/indicator_common_modules.R",
+  "scripts/modules/native/indicator_source_derived_modules.R",
+  "scripts/modules/native/indicator_stage4_collector.R",
+  "scripts/modules/native/indicator_reduction_modules.R",
+  "scripts/modules/native/zz_indicator_registry.R"
 )) {
   sys.source(file.path(wlv_test_root, path), envir = native_indicator_environment)
 }
@@ -202,7 +202,7 @@ test_that("source indicators project the selected variable's sparse states", {
 test_that("auxiliary indicator instances follow deterministic conventions", {
   config_environment <- new.env(parent = baseenv())
   sys.source(
-    file.path(wlv_test_root, "R", "lib", "module_config.R"),
+    file.path(wlv_test_root, "scripts", "lib", "module_config.R"),
     envir = config_environment
   )
   config <- config_environment$wlv_resolve_module_config(
@@ -344,7 +344,7 @@ test_that("auxiliary indicator instances follow deterministic conventions", {
   reduction_source <- readLines(
     file.path(
       wlv_test_root,
-      "R",
+      "scripts",
       "modules",
       "native",
       "indicator_reduction_modules.R"

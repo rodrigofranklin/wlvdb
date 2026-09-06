@@ -1,6 +1,6 @@
 test_that("runtime manifest is explicit, ordered, and excludes legacy executors", {
   bootstrap <- new.env(parent = baseenv())
-  sys.source(file.path(wlv_test_root, "R", "bootstrap.R"), envir = bootstrap)
+  sys.source(file.path(wlv_test_root, "scripts", "runtime_bootstrap.R"), envir = bootstrap)
 
   manifest <- bootstrap$wlv_runtime_definition_manifest()
   files <- bootstrap$wlv_runtime_definition_files(wlv_test_root)
@@ -10,12 +10,12 @@ test_that("runtime manifest is explicit, ordered, and excludes legacy executors"
   ))
 
   expect_identical(relative, manifest)
-  expect_identical(tail(manifest, 2L), c("R/lib/execution.R", "R/main.R"))
+  expect_identical(tail(manifest, 2L), c("scripts/lib/execution.R", "scripts/main.R"))
   expect_identical(anyDuplicated(manifest), 0L)
   expect_false(any(grepl("paper", manifest, ignore.case = TRUE)))
   expect_false(any(grepl(
     paste0(
-      "^R/(lib/(computations|re_computations)[.]R|",
+      "^scripts/(lib/(computations|re_computations)[.]R|",
       "modules/(assumptions|matrices|reduced_matrices|variables)/)"
     ),
     manifest
@@ -24,7 +24,7 @@ test_that("runtime manifest is explicit, ordered, and excludes legacy executors"
 
 test_that("bootstrap evaluates the exact captured and validated expressions", {
   bootstrap <- new.env(parent = baseenv())
-  sys.source(file.path(wlv_test_root, "R", "bootstrap.R"), envir = bootstrap)
+  sys.source(file.path(wlv_test_root, "scripts", "runtime_bootstrap.R"), envir = bootstrap)
   definition <- tempfile("wlv-bootstrap-captured-", fileext = ".R")
   on.exit(unlink(definition, force = TRUE), add = TRUE)
   writeLines(
@@ -34,7 +34,7 @@ test_that("bootstrap evaluates the exact captured and validated expressions", {
   )
   captured <- bootstrap$wlv_bootstrap_capture_definitions(
     definition,
-    "R/lib/captured.R"
+    "scripts/lib/captured.R"
   )
   writeLines(
     "captured_value <- function() 'changed'",
@@ -44,13 +44,13 @@ test_that("bootstrap evaluates the exact captured and validated expressions", {
   expressions <- parse(
     text = bootstrap$wlv_bootstrap_definition_text(
       captured$bytes[[1L]],
-      "R/lib/captured.R"
+      "scripts/lib/captured.R"
     ),
     encoding = "UTF-8"
   )
   bootstrap$wlv_bootstrap_validate_definitions(
     expressions,
-    "R/lib/captured.R"
+    "scripts/lib/captured.R"
   )
   namespace <- new.env(parent = baseenv())
   eval(expressions, envir = namespace)
@@ -68,18 +68,18 @@ test_that("bootstrap evaluates the exact captured and validated expressions", {
 
 test_that("runtime cannot attest a bootstrap loaded from another root", {
   bootstrap <- new.env(parent = baseenv())
-  sys.source(file.path(wlv_test_root, "R", "bootstrap.R"), envir = bootstrap)
+  sys.source(file.path(wlv_test_root, "scripts", "runtime_bootstrap.R"), envir = bootstrap)
   other_root <- tempfile("wlv-bootstrap-other-root-")
   dir.create(other_root)
   on.exit(unlink(other_root, recursive = TRUE, force = TRUE), add = TRUE)
-  relative <- c("R/bootstrap.R", bootstrap$wlv_runtime_definition_manifest())
+  relative <- c("scripts/runtime_bootstrap.R", bootstrap$wlv_runtime_definition_manifest())
   for (path in relative) {
     source <- file.path(wlv_test_root, path)
     destination <- file.path(other_root, path)
     dir.create(dirname(destination), recursive = TRUE, showWarnings = FALSE)
     expect_true(file.copy(source, destination, overwrite = FALSE))
   }
-  path <- file.path(other_root, "R", "bootstrap.R")
+  path <- file.path(other_root, "scripts", "runtime_bootstrap.R")
   text <- readLines(path, warn = FALSE, encoding = "UTF-8")
   target <- "The runtime definition manifest is invalid."
   replacement <- "The selected runtime definition manifest is invalid."
@@ -177,7 +177,7 @@ test_that("runtime loading is independent of the process working directory", {
 
 test_that("bootstrap metadata accessors seal and defensively copy containers", {
   bootstrap <- new.env(parent = baseenv())
-  sys.source(file.path(wlv_test_root, "R", "bootstrap.R"), envir = bootstrap)
+  sys.source(file.path(wlv_test_root, "scripts", "runtime_bootstrap.R"), envir = bootstrap)
   accessor <- bootstrap$wlv_bootstrap_value_accessor(list(nested = list(1L)))
   first <- accessor()
   first$nested[[1L]] <- 2L
@@ -191,7 +191,7 @@ test_that("bootstrap metadata accessors seal and defensively copy containers", {
 
 test_that("runtime compatibility generation is invariant to line endings", {
   bootstrap <- new.env(parent = baseenv())
-  sys.source(file.path(wlv_test_root, "R", "bootstrap.R"), envir = bootstrap)
+  sys.source(file.path(wlv_test_root, "scripts", "runtime_bootstrap.R"), envir = bootstrap)
   lf <- charToRaw("alpha <- function() {\n  1L\n}\n")
   crlf <- charToRaw("alpha <- function() {\r\n  1L\r\n}\r\n")
   cr <- charToRaw("alpha <- function() {\r  1L\r}\r")
@@ -199,7 +199,7 @@ test_that("runtime compatibility generation is invariant to line endings", {
     list(lf, crlf, cr),
     bootstrap$wlv_bootstrap_compatibility_sha256_bytes,
     character(1L),
-    relative_path = "R/example.R"
+    relative_path = "scripts/example.R"
   )
   expect_identical(unname(hashes), rep(hashes[[1L]], 3L))
   expect_false(identical(
@@ -213,7 +213,7 @@ test_that("bootstrap rejects incomplete project roots before loading", {
   dir.create(incomplete)
   on.exit(unlink(incomplete, recursive = TRUE, force = TRUE), add = TRUE)
   bootstrap <- new.env(parent = baseenv())
-  sys.source(file.path(wlv_test_root, "R", "bootstrap.R"), envir = bootstrap)
+  sys.source(file.path(wlv_test_root, "scripts", "runtime_bootstrap.R"), envir = bootstrap)
 
   expect_error(
     bootstrap$wlv_runtime_definition_files(incomplete),
@@ -223,7 +223,7 @@ test_that("bootstrap rejects incomplete project roots before loading", {
 
 test_that("every runtime manifest file contains only function definitions", {
   bootstrap <- new.env(parent = baseenv())
-  sys.source(file.path(wlv_test_root, "R", "bootstrap.R"), envir = bootstrap)
+  sys.source(file.path(wlv_test_root, "scripts", "runtime_bootstrap.R"), envir = bootstrap)
 
   for (relative_path in bootstrap$wlv_runtime_definition_manifest()) {
     expressions <- parse(
@@ -255,23 +255,23 @@ test_that("every runtime manifest file contains only function definitions", {
 
 test_that("bootstrap accepts functions and rejects every non-function RHS", {
   bootstrap <- new.env(parent = baseenv())
-  sys.source(file.path(wlv_test_root, "R", "bootstrap.R"), envir = bootstrap)
+  sys.source(file.path(wlv_test_root, "scripts", "runtime_bootstrap.R"), envir = bootstrap)
 
   expect_no_error(bootstrap$wlv_bootstrap_validate_definitions(
     expression(value <- function() TRUE),
-    "R/lib/definition.R"
+    "scripts/lib/definition.R"
   ))
   expect_error(
     bootstrap$wlv_bootstrap_validate_definitions(
       expression(run_task()),
-      "R/lib/task.R"
+      "scripts/lib/task.R"
     ),
     "top-level execution"
   )
   expect_error(
     bootstrap$wlv_bootstrap_validate_definitions(
       expression(value <- run_task()),
-      "R/lib/task-assignment.R"
+      "scripts/lib/task-assignment.R"
     ),
     "top-level execution"
   )
@@ -287,7 +287,7 @@ test_that("bootstrap accepts functions and rejects every non-function RHS", {
     expect_error(
       bootstrap$wlv_bootstrap_validate_definitions(
         invalid_definitions[[label]],
-        paste0("R/lib/", label, ".R")
+        paste0("scripts/lib/", label, ".R")
       ),
       "top-level execution",
       info = label
@@ -305,11 +305,11 @@ test_that("bootstrap accepts functions and rejects every non-function RHS", {
 
 test_that("runtime bootstrap performs no repository-backed catalog I/O", {
   bootstrap <- new.env(parent = baseenv())
-  sys.source(file.path(wlv_test_root, "R", "bootstrap.R"), envir = bootstrap)
+  sys.source(file.path(wlv_test_root, "scripts", "runtime_bootstrap.R"), envir = bootstrap)
   root <- tempfile("wlv-bootstrap-definitions-")
   dir.create(root)
   on.exit(unlink(root, recursive = TRUE, force = TRUE), add = TRUE)
-  relative <- c("R/bootstrap.R", bootstrap$wlv_runtime_definition_manifest())
+  relative <- c("scripts/runtime_bootstrap.R", bootstrap$wlv_runtime_definition_manifest())
   for (directory in unique(dirname(relative))) {
     dir.create(file.path(root, directory), recursive = TRUE, showWarnings = FALSE)
   }
@@ -324,7 +324,7 @@ test_that("runtime bootstrap performs no repository-backed catalog I/O", {
   expect_false(exists("method_catalog", envir = runtime, inherits = FALSE))
   expect_false(exists("method_list", envir = runtime, inherits = FALSE))
   expect_true(is.function(runtime$wlv_runtime_catalog))
-  definition <- file.path(root, "R", "main.R")
+  definition <- file.path(root, "scripts", "main.R")
   writeLines(
     c(readLines(definition, encoding = "UTF-8"), ""),
     definition,

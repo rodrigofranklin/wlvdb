@@ -90,10 +90,10 @@ jobs:
             identical(as.character(getRversion()), "4.6.1"),
             startsWith(temporary, paste0(campaign, "/scratch/"))
           )
-          files <- list.files("R", pattern = "\\.[Rr]$", recursive = TRUE, full.names = TRUE)
+          files <- list.files("scripts", pattern = "\\.[Rr]$", recursive = TRUE, full.names = TRUE)
           invisible(lapply(files, parse))
           bootstrap <- new.env(parent = baseenv())
-          sys.source("R/bootstrap.R", envir = bootstrap)
+          sys.source("scripts/runtime_bootstrap.R", envir = bootstrap)
           runtime <- bootstrap$wlv_load_runtime(".")
           stopifnot(
             is.function(runtime$prepare_wlv),

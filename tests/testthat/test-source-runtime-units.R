@@ -48,7 +48,7 @@ test_that("canonical SEA variables are copied without runtime scaling", {
   environment <- wlv_source_runtime_fixture("RAW")
 
   sys.source(
-    file.path(wlv_test_root, "R", "modules", "variables", "sea_sectors.R"),
+    file.path(wlv_test_root, "scripts", "modules", "variables", "sea_sectors.R"),
     envir = environment
   )
 
@@ -63,7 +63,7 @@ test_that("legacy scaled SEA expressions fail before data are copied", {
 
   expect_error(
     sys.source(
-      file.path(wlv_test_root, "R", "modules", "variables", "sea_sectors.R"),
+      file.path(wlv_test_root, "scripts", "modules", "variables", "sea_sectors.R"),
       envir = environment
     ),
     "Legacy scaled SEA source expressions"

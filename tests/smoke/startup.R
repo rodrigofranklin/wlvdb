@@ -14,10 +14,18 @@ Sys.setenv(RENV_PROJECT = repo_root)
 source(file.path(repo_root, "renv", "activate.R"), local = TRUE)
 
 profile_path <- file.path(repo_root, ".Rprofile")
-project_path <- file.path(repo_root, "worldlabourvalues.Rproj")
 
 profile <- readLines(profile_path, warn = FALSE, encoding = "UTF-8")
-project <- readLines(project_path, warn = FALSE, encoding = "UTF-8")
+# Each contributor can keep a personal IDE project locally. Only tracked files
+# define the shared setup, so an ignored local .Rproj must not fail this check.
+tracked_files <- system2(
+  "git",
+  c("-C", shQuote(repo_root), "ls-files", "--cached", "--deduplicate"),
+  stdout = TRUE,
+  stderr = TRUE
+)
+stopifnot(is.null(attr(tracked_files, "status")))
+tracked_files <- tracked_files[file.exists(file.path(repo_root, tracked_files))]
 
 forbidden <- c(
   "install\\.packages\\s*\\(",
@@ -33,13 +41,11 @@ forbidden <- c(
 stopifnot(
   !any(vapply(forbidden, grepl, logical(1), x = paste(profile, collapse = "\n"),
               perl = TRUE, ignore.case = TRUE)),
-  "RestoreWorkspace: No" %in% project,
-  "SaveWorkspace: No" %in% project,
-  "AlwaysSaveHistory: No" %in% project
+  !any(grepl("[.]Rproj$|(^|/)[.]Rproj[.]user/", tracked_files, ignore.case = TRUE))
 )
 
 invisible(parse(profile_path, encoding = "UTF-8"))
-bootstrap_path <- file.path(repo_root, "R", "bootstrap.R")
+bootstrap_path <- file.path(repo_root, "scripts", "runtime_bootstrap.R")
 invisible(parse(bootstrap_path, encoding = "UTF-8"))
 bootstrap_environment <- new.env(parent = baseenv())
 sys.source(bootstrap_path, envir = bootstrap_environment)

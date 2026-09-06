@@ -201,7 +201,7 @@ test_that("git provenance fails closed and hashes deterministic status", {
     call_count <<- call_count + 1L
     arguments[[call_count]] <<- args
     if (identical(call_count, 1L)) return(strrep("a", 40L))
-    c("?? R/z-new.R", " M R/a-existing.R")
+    c("?? scripts/z-new.R", " M scripts/a-existing.R")
   }
   inventory <- list(list(
     path = "contracts/results/run-manifest-v1.schema.json",
@@ -212,7 +212,7 @@ test_that("git provenance fails closed and hashes deterministic status", {
     inventory
   )
   expected <- paste(
-    sort(c("?? R/z-new.R", " M R/a-existing.R"), method = "radix"),
+    sort(c("?? scripts/z-new.R", " M scripts/a-existing.R"), method = "radix"),
     collapse = "\n"
   )
   expect_true(provenance$dirty)
@@ -227,10 +227,10 @@ test_that("the publication input tree includes every native configuration class"
   fixture <- wlv_make_native_publication_fixture(mutable = TRUE)
   on.exit(wlv_remove_native_fixture(fixture), add = TRUE)
   roots <- c(
-    "R", "catalog", "config", "complementar", "contracts/results",
+    "scripts", "catalog", "config", "complementar", "contracts/results",
     "contracts/units",
     "methods/native_test", "parameters/native_test",
-    "parameters/common_ground", "scripts"
+    "parameters/common_ground"
   )
   for (path in roots) {
     wlv_native_test_write_text(
@@ -239,7 +239,7 @@ test_that("the publication input tree includes every native configuration class"
     )
   }
   wlv_native_test_write_text(
-    file.path(fixture$root, "R", "native_definition.R"),
+    file.path(fixture$root, "scripts", "native_definition.R"),
     "native_definition <- function() TRUE"
   )
   for (path in c("DESCRIPTION", "renv.lock", "scripts/run_wlv.R")) {
@@ -299,7 +299,7 @@ test_that("the publication input tree includes every native configuration class"
   )
   relative <- vapply(inventory, `[[`, character(1L), "path")
 
-  expect_true(any(startsWith(relative, "R/")))
+  expect_true(any(startsWith(relative, "scripts/")))
   expect_true(any(startsWith(relative, "catalog/")))
   expect_true(any(startsWith(relative, "config/")))
   expect_true(any(startsWith(relative, "complementar/")))

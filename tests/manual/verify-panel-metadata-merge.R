@@ -10,7 +10,7 @@ stopifnot(startsWith(tolower(report_path), paste0(tolower(repo), "/temp/")),
   dir.exists(dirname(report_path)), !file.exists(report_path))
 source(file.path(repo, "renv/activate.R"))
 bootstrap <- new.env(parent = baseenv())
-sys.source(file.path(repo, "R/bootstrap.R"), bootstrap)
+sys.source(file.path(repo, "scripts/runtime_bootstrap.R"), bootstrap)
 runtime <- bootstrap$wlv_load_runtime(repo)
 roots <- normalizePath(args[1:2], winslash = "/", mustWork = TRUE)
 manifest_paths <- file.path(roots, "run_manifest.json")
@@ -75,7 +75,7 @@ report <- list(schema = "wlv-issue31-panel-metadata/1", passed = TRUE,
   runtime_compatibility = paste0(runtime$.wlv_runtime_compatibility_generation()),
   runs = lapply(seq_along(roots), function(i) list(method = manifests[[i]]$method,
     run_id = manifests[[i]]$run_id, path = roots[[i]], manifest_sha256 = before[[i]])),
-  publication_code_sha256 = hash(file.path(repo, "R/lib/publication.R")),
+  publication_code_sha256 = hash(file.path(repo, "scripts/lib/publication.R")),
   verifier_sha256 = hash(file.path(repo, "tests/manual/verify-panel-metadata-merge.R")),
   input_bytes_unchanged = TRUE, unicode_escape_sequences_absent = TRUE,
   checks = checks)

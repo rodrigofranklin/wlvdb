@@ -5,6 +5,21 @@ Isso inclui worktrees Git, fontes copiadas, resultados, logs e arquivos temporá
 O diretório é ignorado pelo Git. O código reutilizável continua em `scripts/` e
 `tests/manual/`.
 
+`tests/` é código-fonte versionado: contém verificações automáticas, ferramentas
+de prova manual e dados de exemplo controlados (*fixtures*) que permitem
+detectar regressões. Saídas dos testes, relatórios gerados e logs pertencem à
+campanha, não a `tests/` nem ao código da aplicação.
+
+`run_logs/` deixou de ser uma pasta versionada e é ignorada pelo Git. As
+ferramentas históricas autenticadas antes guardadas nela foram preservadas,
+sem alteração dos bytes, em
+`tests/manual/archive/issue13-evidence-source-v5/` e
+`tests/manual/archive/issue13-native-gate-orchestrator-v5/`. O
+[arquivo de ferramentas](../tests/manual/archive/README.md) explica seu uso
+para derivação ou reconstrução na revisão original. Seus caminhos internos
+históricos não são comandos para executar no checkout atual. Novos logs
+continuam obrigatoriamente em `temp/<id>/logs/`.
+
 Os comandos de gerenciamento requerem PowerShell 7.5 ou posterior.
 `New`, `Status`, `Complete` e `Fail` são utilizáveis também no Ubuntu com
 PowerShell instalado. `Clean` usa `Get-CimInstance Win32_Process` para impedir

@@ -1,6 +1,6 @@
 module_config_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "module_config.R"),
+  file.path(wlv_test_root, "scripts", "lib", "module_config.R"),
   envir = module_config_environment
 )
 
@@ -79,7 +79,7 @@ test_that("typed module configuration rejects ambiguous layer mutations", {
     "missing earlier instance"
   )
 
-  wlv_test_write_module_fragment(source, "bad;R/modules/bad.R;add;;;;{}")
+  wlv_test_write_module_fragment(source, "bad;scripts/modules/bad.R;add;;;;{}")
   expect_error(
     module_config_environment$wlv_resolve_module_config(root, "demo", "demo"),
     "invalid module alias"
@@ -123,7 +123,7 @@ test_that("all executable methods have a deterministic typed configuration", {
 
   runtime <- new.env(parent = baseenv())
   sys.source(
-    file.path(wlv_test_root, "R", "lib", "module_runtime.R"),
+    file.path(wlv_test_root, "scripts", "lib", "module_runtime.R"),
     envir = runtime
   )
   instances <- runtime$wlv_runtime_instances(resolved$wiodr13)
@@ -229,7 +229,7 @@ test_that("aggregation profiles reject incomplete and path-based bindings", {
   )
   formula <- profile
   formula$strategy <- "formula"
-  formula$module <- c("aggregation.demo", "R/modules/demo.R")
+  formula$module <- c("aggregation.demo", "scripts/modules/demo.R")
   expect_error(
     module_config_environment$wlv_validate_aggregation_profile(
       formula,

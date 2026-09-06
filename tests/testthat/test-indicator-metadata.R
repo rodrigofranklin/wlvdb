@@ -1,6 +1,6 @@
 indicator_metadata_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "indicator_metadata.R"),
+  file.path(wlv_test_root, "scripts", "lib", "indicator_metadata.R"),
   envir = indicator_metadata_environment
 )
 
@@ -106,7 +106,7 @@ test_that("stable unit contracts fully project into fresh result metadata", {
 test_that("WIOD16 gross-output prices are stored at base one and displayed once", {
   environment <- new.env(parent = globalenv())
   sys.source(
-    file.path(wlv_test_root, "R", "lib", "functions.R"),
+    file.path(wlv_test_root, "scripts", "lib", "functions.R"),
     envir = environment
   )
   environment$`%>%` <- magrittr::`%>%`
@@ -140,7 +140,7 @@ test_that("WIOD16 gross-output prices are stored at base one and displayed once"
   sys.source(
     file.path(
       wlv_test_root,
-      "R", "modules", "variables", "wiodr16", "go_price.r.id.R"
+      "scripts", "modules", "variables", "wiodr16", "go_price.r.id.R"
     ),
     envir = environment
   )
@@ -159,7 +159,7 @@ test_that("WIOD16 gross-output prices are stored at base one and displayed once"
 test_that("effective unit sidecars expose unambiguous index storage metadata", {
   catalog_environment <- new.env(parent = baseenv())
   sys.source(
-    file.path(wlv_test_root, "R", "lib", "catalog.R"),
+    file.path(wlv_test_root, "scripts", "lib", "catalog.R"),
     envir = catalog_environment
   )
   catalog <- catalog_environment$wlv_load_catalog(wlv_test_root)
@@ -254,7 +254,7 @@ test_that("contracts distinguish constant compensation and percent display", {
 test_that("shared index labels separate storage from presentation", {
   modules <- file.path(
     wlv_test_root,
-    "R", "modules", "variables", "wiodr13",
+    "scripts", "modules", "variables", "wiodr13",
     c(
       "basket_price.r.pc.R", "basket_value.r.pc.R", "exchange.r.id.R",
       "exchange.r.id.v09.R"

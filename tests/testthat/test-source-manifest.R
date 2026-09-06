@@ -1,6 +1,6 @@
 source_manifest_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "source_manifest.R"),
+  file.path(wlv_test_root, "scripts", "lib", "source_manifest.R"),
   envir = source_manifest_environment
 )
 

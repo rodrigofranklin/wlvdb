@@ -27,5 +27,5 @@ test_that("generated method documentation matches the canonical catalog", {
   expect_false(any(grepl("Test/fixture", document, fixed = TRUE)))
   expect_false(any(grepl("| Policy | Script | Factory |", document, fixed = TRUE)))
   expect_false(any(grepl("tests/testthat/test-wiodr13-validation.R", document, fixed = TRUE)))
-  expect_false(any(grepl("R/lib/missingness.R", document, fixed = TRUE)))
+  expect_false(any(grepl("scripts/lib/missingness.R", document, fixed = TRUE)))
 })

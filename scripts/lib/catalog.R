@@ -1,0 +1,1877 @@
+wlv_catalog_schemas <- function() {
+  list(
+  sources = c(
+    "source", "status", "year_start", "year_end", "parameter_set",
+    "data_dir", "can_prepare", "preparation_task", "validator_id",
+    "artifact_profile", "missingness_policy",
+    "unit_contract", "documentation", "limitations"
+  ),
+  methods = c(
+    "method", "source", "code", "description", "status", "can_calculate",
+    "can_recalculate", "validation_id", "documentation", "limitations"
+  ),
+  artifacts = c("profile", "artifact", "kind", "sidecar", "operations"),
+  missingness = c("policy", "documentation"),
+  unit_contracts = c(
+    "contract", "schema_version", "source", "units", "aggregations",
+    "documentation"
+  ),
+  unit_definitions = c(
+    "indicator", "quantity_kind", "source_unit", "source_scale",
+    "canonical_unit", "display_unit", "display_multiplier", "currency",
+    "price_basis", "base_year", "index_base", "labour_concept", "notes"
+  ),
+  unit_aggregations = c(
+    "indicator", "level", "strategy", "module_id", "numerator",
+    "denominator", "weight", "zero_denominator", "notes"
+  )
+)
+}
+
+wlv_catalog_stop <- function(message, ...) {
+  stop(sprintf(message, ...), call. = FALSE)
+}
+
+wlv_catalog_read_csv <- function(path, schema, name) {
+  if (!file.exists(path)) {
+    wlv_catalog_stop("Catalog file `%s` does not exist.", path)
+  }
+
+  value <- tryCatch(
+    utils::read.csv2(
+      text = readLines(path, encoding = "UTF-8", warn = FALSE),
+      stringsAsFactors = FALSE,
+      colClasses = "character",
+      check.names = FALSE,
+      na.strings = NULL,
+      strip.white = FALSE,
+      comment.char = ""
+    ),
+    error = function(error) {
+      wlv_catalog_stop(
+        "Cannot read the %s catalog `%s`: %s",
+        name,
+        path,
+        conditionMessage(error)
+      )
+    }
+  )
+
+  if (!identical(names(value), schema)) {
+    wlv_catalog_stop(
+      "The %s catalog must have exactly these columns, in order: %s.",
+      name,
+      paste(schema, collapse = ", ")
+    )
+  }
+  if (!nrow(value)) {
+    wlv_catalog_stop("The %s catalog cannot be empty.", name)
+  }
+  if (anyNA(value)) {
+    wlv_catalog_stop(
+      "The %s catalog contains NA. Use an empty field only where the schema allows it.",
+      name
+    )
+  }
+
+  untrimmed <- vapply(
+    value,
+    function(column) any(column != trimws(column)),
+    logical(1)
+  )
+  if (any(untrimmed)) {
+    wlv_catalog_stop(
+      "The %s catalog contains leading or trailing whitespace in: %s.",
+      name,
+      paste(names(value)[untrimmed], collapse = ", ")
+    )
+  }
+
+  value
+}
+
+wlv_catalog_validate_required <- function(value, columns, name) {
+  for (column in columns) {
+    missing <- !nzchar(value[[column]])
+    if (any(missing)) {
+      wlv_catalog_stop(
+        "The %s catalog contains an empty `%s` at row(s): %s.",
+        name,
+        column,
+        paste(which(missing), collapse = ", ")
+      )
+    }
+  }
+  invisible(value)
+}
+
+wlv_catalog_validate_ids <- function(values, column, name) {
+  invalid <- !grepl("^[a-z][a-z0-9_]*$", values)
+  if (any(invalid)) {
+    wlv_catalog_stop(
+      "The %s catalog contains invalid `%s` identifiers: %s.",
+      name,
+      column,
+      paste(unique(values[invalid]), collapse = ", ")
+    )
+  }
+  invisible(values)
+}
+
+wlv_catalog_validate_optional_ids <- function(values, column, name) {
+  present <- nzchar(values)
+  if (any(present)) {
+    wlv_catalog_validate_ids(values[present], column, name)
+    wlv_catalog_validate_unique(values[present], column, name)
+  }
+  invisible(values)
+}
+
+wlv_catalog_validate_unique <- function(values, column, name) {
+  if (anyDuplicated(values)) {
+    duplicates <- unique(values[duplicated(values)])
+    wlv_catalog_stop(
+      "The %s catalog contains duplicate `%s` values: %s.",
+      name,
+      column,
+      paste(duplicates, collapse = ", ")
+    )
+  }
+  invisible(values)
+}
+
+wlv_catalog_validate_enum <- function(values, allowed, column, name) {
+  invalid <- !values %in% allowed
+  if (any(invalid)) {
+    wlv_catalog_stop(
+      "The %s catalog has invalid `%s` value(s): %s. Allowed values: %s.",
+      name,
+      column,
+      paste(unique(values[invalid]), collapse = ", "),
+      paste(allowed, collapse = ", ")
+    )
+  }
+  invisible(values)
+}
+
+wlv_catalog_parse_boolean <- function(values, column, name) {
+  wlv_catalog_validate_enum(values, c("TRUE", "FALSE"), column, name)
+  values == "TRUE"
+}
+
+wlv_catalog_parse_years <- function(start, end, name) {
+  missing_start <- !nzchar(start)
+  missing_end <- !nzchar(end)
+  incomplete <- xor(missing_start, missing_end)
+  if (any(incomplete)) {
+    wlv_catalog_stop(
+      "The %s catalog must declare both `year_start` and `year_end`, or neither, at row(s): %s.",
+      name,
+      paste(which(incomplete), collapse = ", ")
+    )
+  }
+
+  present <- !missing_start
+  invalid <- present & (
+    !grepl("^[0-9]{4}$", start) |
+      !grepl("^[0-9]{4}$", end)
+  )
+  if (any(invalid)) {
+    wlv_catalog_stop(
+      "The %s catalog contains a non-canonical four-digit year at row(s): %s.",
+      name,
+      paste(which(invalid), collapse = ", ")
+    )
+  }
+
+  start_integer <- rep(NA_integer_, length(start))
+  end_integer <- rep(NA_integer_, length(end))
+  start_integer[present] <- as.integer(start[present])
+  end_integer[present] <- as.integer(end[present])
+  reversed <- present & start_integer > end_integer
+  if (any(reversed)) {
+    wlv_catalog_stop(
+      "The %s catalog has `year_start` after `year_end` at row(s): %s.",
+      name,
+      paste(which(reversed), collapse = ", ")
+    )
+  }
+
+  list(start = start_integer, end = end_integer)
+}
+
+wlv_catalog_safe_relative_path <- function(path) {
+  if (!is.character(path) || length(path) != 1L || is.na(path) || !nzchar(path)) {
+    return(FALSE)
+  }
+  if (
+    grepl("\\\\", path) ||
+      grepl("^([A-Za-z]:|/|~)", path) ||
+      grepl("//", path, fixed = TRUE) ||
+      grepl("[[:cntrl:]]", path)
+  ) {
+    return(FALSE)
+  }
+
+  pieces <- strsplit(path, "/", fixed = TRUE)[[1L]]
+  all(
+    nzchar(pieces) &
+      !pieces %in% c(".", "..") &
+      grepl("^[A-Za-z0-9._-]+$", pieces)
+  )
+}
+
+wlv_catalog_validate_paths <- function(values, column, name, optional = FALSE) {
+  present <- nzchar(values)
+  if (!optional && any(!present)) {
+    wlv_catalog_stop(
+      "The %s catalog contains an empty `%s` at row(s): %s.",
+      name,
+      column,
+      paste(which(!present), collapse = ", ")
+    )
+  }
+  invalid <- present & !vapply(values, wlv_catalog_safe_relative_path, logical(1))
+  if (any(invalid)) {
+    wlv_catalog_stop(
+      "The %s catalog contains unsafe relative path(s) in `%s`: %s.",
+      name,
+      column,
+      paste(unique(values[invalid]), collapse = ", ")
+    )
+  }
+  invisible(values)
+}
+
+wlv_catalog_require_declared_files <- function(root, values, column, name) {
+  values <- unique(values[nzchar(values)])
+  missing <- values[!file.exists(file.path(root, values))]
+  if (length(missing)) {
+    wlv_catalog_stop(
+      "The %s catalog declares missing `%s` path(s): %s.",
+      name,
+      column,
+      paste(missing, collapse = ", ")
+    )
+  }
+  invisible(values)
+}
+
+wlv_catalog_parse_operations <- function(values) {
+  lapply(values, function(value) strsplit(value, "|", fixed = TRUE)[[1L]])
+}
+
+wlv_catalog_validate_sources <- function(sources, root) {
+  name <- "sources"
+  wlv_catalog_validate_required(
+    sources,
+    c("source", "status", "parameter_set", "data_dir", "can_prepare"),
+    name
+  )
+  wlv_catalog_validate_ids(sources$source, "source", name)
+  wlv_catalog_validate_ids(sources$parameter_set, "parameter_set", name)
+  wlv_catalog_validate_unique(sources$source, "source", name)
+  wlv_catalog_validate_enum(
+    sources$status,
+    c("stable", "experimental", "disabled"),
+    "status",
+    name
+  )
+  years <- wlv_catalog_parse_years(sources$year_start, sources$year_end, name)
+  sources$year_start <- years$start
+  sources$year_end <- years$end
+  sources$can_prepare <- wlv_catalog_parse_boolean(
+    sources$can_prepare,
+    "can_prepare",
+    name
+  )
+
+  enabled_disabled <- sources$status == "disabled" & sources$can_prepare
+  if (any(enabled_disabled)) {
+    wlv_catalog_stop(
+      "Disabled source(s) cannot declare preparation capability: %s.",
+      paste(sources$source[enabled_disabled], collapse = ", ")
+    )
+  }
+
+  wlv_catalog_validate_paths(sources$data_dir, "data_dir", name)
+  wlv_catalog_validate_paths(
+    sources$documentation,
+    "documentation",
+    name,
+    optional = TRUE
+  )
+  wlv_catalog_require_declared_files(
+    root,
+    sources$documentation,
+    "documentation",
+    name
+  )
+
+  preparation_task_present <- nzchar(sources$preparation_task)
+  invalid_preparation_task <- preparation_task_present & !grepl(
+    "^[a-z][a-z0-9_.-]*$",
+    sources$preparation_task
+  )
+  if (any(invalid_preparation_task)) {
+    wlv_catalog_stop(
+      "The sources catalog contains invalid `preparation_task` identifiers: %s.",
+      paste(unique(sources$preparation_task[invalid_preparation_task]), collapse = ", ")
+    )
+  }
+
+  wlv_catalog_validate_optional_ids(sources$validator_id, "validator_id", name)
+  missing_preparation_task <- sources$can_prepare & !preparation_task_present
+  unexpected_preparation_task <- !sources$can_prepare & preparation_task_present
+  mismatched_preparation_task <- sources$can_prepare &
+    sources$preparation_task != sources$source
+  if (any(
+    missing_preparation_task | unexpected_preparation_task |
+      mismatched_preparation_task
+  )) {
+    wlv_catalog_stop(
+      paste0(
+        "The sources catalog has an inconsistent native ",
+        "`can_prepare`/`preparation_task` contract at row(s): %s."
+      ),
+      paste(which(
+        missing_preparation_task | unexpected_preparation_task |
+          mismatched_preparation_task
+      ), collapse = ", ")
+    )
+  }
+
+  profile_present <- nzchar(sources$artifact_profile)
+  invalid_profile <- profile_present &
+    !grepl("^[a-z][a-z0-9_]*$", sources$artifact_profile)
+  if (any(invalid_profile)) {
+    wlv_catalog_stop(
+      "The sources catalog contains invalid `artifact_profile` identifiers: %s.",
+      paste(unique(sources$artifact_profile[invalid_profile]), collapse = ", ")
+    )
+  }
+
+  policy_present <- nzchar(sources$missingness_policy)
+  invalid_policy <- policy_present &
+    !grepl("^[a-z][a-z0-9_]*$", sources$missingness_policy)
+  if (any(invalid_policy)) {
+    wlv_catalog_stop(
+      "The sources catalog contains invalid `missingness_policy` identifiers: %s.",
+      paste(unique(sources$missingness_policy[invalid_policy]), collapse = ", ")
+    )
+  }
+
+  unit_contract_present <- nzchar(sources$unit_contract)
+  invalid_unit_contract <- unit_contract_present &
+    !grepl("^[a-z][a-z0-9_]*$", sources$unit_contract)
+  if (any(invalid_unit_contract)) {
+    wlv_catalog_stop(
+      "The sources catalog contains invalid `unit_contract` identifiers: %s.",
+      paste(
+        unique(sources$unit_contract[invalid_unit_contract]),
+        collapse = ", "
+      )
+    )
+  }
+
+  missing_parameter_sets <- unique(sources$parameter_set[
+    !dir.exists(file.path(root, "parameters", sources$parameter_set))
+  ])
+  if (length(missing_parameter_sets)) {
+    wlv_catalog_stop(
+      "The sources catalog refers to missing parameter set(s): %s.",
+      paste(missing_parameter_sets, collapse = ", ")
+    )
+  }
+  parameter_directories <- basename(list.dirs(
+    file.path(root, "parameters"),
+    recursive = FALSE,
+    full.names = TRUE
+  ))
+  orphan_parameter_sets <- setdiff(
+    parameter_directories,
+    c("common_ground", unique(sources$parameter_set))
+  )
+  if (length(orphan_parameter_sets)) {
+    wlv_catalog_stop(
+      "Parameter set directory or directories are absent from the sources catalog: %s.",
+      paste(orphan_parameter_sets, collapse = ", ")
+    )
+  }
+
+  stable <- sources$status == "stable"
+  incomplete_stable <- stable & (
+    !sources$can_prepare |
+      !nzchar(sources$preparation_task) |
+      !nzchar(sources$validator_id) |
+      !nzchar(sources$artifact_profile) |
+      !nzchar(sources$missingness_policy) |
+      !nzchar(sources$unit_contract) |
+      !nzchar(sources$documentation)
+  )
+  if (any(incomplete_stable)) {
+    wlv_catalog_stop(
+      paste0(
+        "Stable source(s) must declare preparation, validation, artifacts, ",
+        "missingness and unit contracts, and documentation: %s."
+      ),
+      paste(sources$source[incomplete_stable], collapse = ", ")
+    )
+  }
+
+  undocumented_nonstable <- !stable & !nzchar(sources$limitations)
+  if (any(undocumented_nonstable)) {
+    wlv_catalog_stop(
+      "Non-stable source(s) must explain their limitations: %s.",
+      paste(sources$source[undocumented_nonstable], collapse = ", ")
+    )
+  }
+
+  sources
+}
+
+wlv_catalog_validate_artifacts <- function(artifacts) {
+  name <- "artifact profiles"
+  wlv_catalog_validate_required(
+    artifacts,
+    c("profile", "artifact", "kind", "sidecar", "operations"),
+    name
+  )
+  wlv_catalog_validate_ids(artifacts$profile, "profile", name)
+  wlv_catalog_validate_enum(
+    artifacts$kind,
+    c("csv", "fst_array", "fst_array_glob"),
+    "kind",
+    name
+  )
+  is_glob <- grepl("*", artifacts$artifact, fixed = TRUE)
+  invalid_glob_kind <- xor(is_glob, artifacts$kind == "fst_array_glob")
+  if (any(invalid_glob_kind)) {
+    wlv_catalog_stop(
+      "The artifact profiles catalog must use `fst_array_glob` exactly for artifacts containing `*`, at row(s): %s.",
+      paste(which(invalid_glob_kind), collapse = ", ")
+    )
+  }
+  safe_artifacts <- artifacts$artifact
+  safe_artifacts[is_glob] <- sub("*", "x", safe_artifacts[is_glob], fixed = TRUE)
+  invalid_glob <- is_glob & (
+    lengths(regmatches(artifacts$artifact, gregexpr("*", artifacts$artifact, fixed = TRUE))) != 1L |
+      !grepl("\\.fst$", artifacts$artifact)
+  )
+  if (any(invalid_glob)) {
+    wlv_catalog_stop(
+      "The artifact profiles catalog contains an invalid FST glob at row(s): %s.",
+      paste(which(invalid_glob), collapse = ", ")
+    )
+  }
+  wlv_catalog_validate_paths(safe_artifacts, "artifact", name)
+  artifacts$sidecar <- wlv_catalog_parse_boolean(
+    artifacts$sidecar,
+    "sidecar",
+    name
+  )
+
+  keys <- paste(artifacts$profile, artifacts$artifact, sep = "/")
+  wlv_catalog_validate_unique(keys, "profile/artifact", name)
+  operations <- wlv_catalog_parse_operations(artifacts$operations)
+  allowed_operations <- c("prepare", "calculate", "recalculate")
+  invalid_operations <- vapply(
+    operations,
+    function(value) {
+      !length(value) ||
+        any(!nzchar(value)) ||
+        any(!value %in% allowed_operations) ||
+        anyDuplicated(value) > 0L
+    },
+    logical(1)
+  )
+  if (any(invalid_operations)) {
+    wlv_catalog_stop(
+      "The artifact profiles catalog contains invalid `operations` at row(s): %s. Use unique values from %s separated by `|`.",
+      paste(which(invalid_operations), collapse = ", "),
+      paste(allowed_operations, collapse = ", ")
+    )
+  }
+
+  artifacts
+}
+
+wlv_catalog_validate_missingness_policies <- function(policies, root) {
+  name <- "missingness policies"
+  wlv_catalog_validate_required(
+    policies,
+    c("policy", "documentation"),
+    name
+  )
+  wlv_catalog_validate_ids(policies$policy, "policy", name)
+  wlv_catalog_validate_unique(policies$policy, "policy", name)
+  wlv_catalog_validate_paths(
+    policies$documentation,
+    "documentation",
+    name
+  )
+  wlv_catalog_require_declared_files(
+    root,
+    policies$documentation,
+    "documentation",
+    name
+  )
+
+  policies
+}
+
+wlv_catalog_validate_indicator_ids <- function(values, column, name) {
+  invalid <- !grepl("^[A-Za-z][A-Za-z0-9._]*$", values)
+  if (any(invalid)) {
+    wlv_catalog_stop(
+      "The %s contains invalid `%s` identifiers: %s.",
+      name,
+      column,
+      paste(unique(values[invalid]), collapse = ", ")
+    )
+  }
+  invisible(values)
+}
+
+wlv_catalog_parse_positive_numbers <- function(values, column, name) {
+  canonical <- grepl(
+    "^(0|[1-9][0-9]*)([.][0-9]+)?([eE][+-]?[0-9]+)?$",
+    values
+  )
+  numbers <- suppressWarnings(as.numeric(values))
+  invalid <- !canonical | is.na(numbers) | !is.finite(numbers) | numbers <= 0
+  if (any(invalid)) {
+    wlv_catalog_stop(
+      "The %s contains invalid positive `%s` value(s): %s.",
+      name,
+      column,
+      paste(unique(values[invalid]), collapse = ", ")
+    )
+  }
+  numbers
+}
+
+wlv_catalog_validate_unit_definitions <- function(value, contract) {
+  name <- sprintf("unit definitions for contract `%s`", contract)
+  wlv_catalog_validate_required(
+    value,
+    c(
+      "indicator", "quantity_kind", "source_unit", "source_scale",
+      "canonical_unit", "display_unit", "display_multiplier", "currency",
+      "price_basis", "labour_concept"
+    ),
+    name
+  )
+  wlv_catalog_validate_indicator_ids(value$indicator, "indicator", name)
+  wlv_catalog_validate_unique(value$indicator, "indicator", name)
+  wlv_catalog_validate_enum(
+    value$quantity_kind,
+    c("count", "duration", "index", "labour_value", "monetary", "multiplier", "ratio"),
+    "quantity_kind",
+    name
+  )
+  for (column in c("source_unit", "canonical_unit", "display_unit")) {
+    wlv_catalog_validate_ids(value[[column]], column, name)
+  }
+  value$source_scale <- wlv_catalog_parse_positive_numbers(
+    value$source_scale,
+    "source_scale",
+    name
+  )
+  value$display_multiplier <- wlv_catalog_parse_positive_numbers(
+    value$display_multiplier,
+    "display_multiplier",
+    name
+  )
+  wlv_catalog_validate_enum(
+    value$currency,
+    c("local_currency", "mixed", "none", "usd"),
+    "currency",
+    name
+  )
+  wlv_catalog_validate_enum(
+    value$price_basis,
+    c("constant", "current", "mixed", "not_applicable"),
+    "price_basis",
+    name
+  )
+  wlv_catalog_validate_enum(
+    value$labour_concept,
+    c(
+      "employees", "employment", "hours_employees",
+      "hours_persons_engaged", "mixed", "not_applicable",
+      "persons_engaged"
+    ),
+    "labour_concept",
+    name
+  )
+
+  has_base_year <- nzchar(value$base_year)
+  invalid_base_year <- has_base_year & !grepl("^[0-9]{4}$", value$base_year)
+  if (any(invalid_base_year)) {
+    wlv_catalog_stop(
+      "The %s contains invalid `base_year` value(s): %s.",
+      name,
+      paste(unique(value$base_year[invalid_base_year]), collapse = ", ")
+    )
+  }
+  has_index_base <- nzchar(value$index_base)
+  index_base <- rep(NA_real_, nrow(value))
+  if (any(has_index_base)) {
+    index_base[has_index_base] <- wlv_catalog_parse_positive_numbers(
+      value$index_base[has_index_base],
+      "index_base",
+      name
+    )
+  }
+  invalid_index_metadata <- value$quantity_kind == "index" &
+    (!has_base_year | !has_index_base)
+  unexpected_index_base <- value$quantity_kind != "index" & has_index_base
+  if (any(invalid_index_metadata | unexpected_index_base)) {
+    wlv_catalog_stop(
+      paste0(
+        "The %s must declare `base_year` and `index_base` for indices, ",
+        "and `index_base` only for indices (row(s): %s)."
+      ),
+      name,
+      paste(which(invalid_index_metadata | unexpected_index_base), collapse = ", ")
+    )
+  }
+  value$base_year[!has_base_year] <- NA_character_
+  value$index_base <- index_base
+  value
+}
+
+wlv_catalog_validate_unit_aggregations <- function(value, units, contract) {
+  name <- sprintf("unit aggregations for contract `%s`", contract)
+  wlv_catalog_validate_required(value, c("indicator", "level", "strategy"), name)
+  wlv_catalog_validate_indicator_ids(value$indicator, "indicator", name)
+  wlv_catalog_validate_enum(
+    value$level,
+    c("country_to_world", "sector_to_country"),
+    "level",
+    name
+  )
+  wlv_catalog_validate_enum(
+    value$strategy,
+    c(
+      "formula", "invariant", "mean", "not_applicable", "ratio_of_sums",
+      "sum", "weighted_mean"
+    ),
+    "strategy",
+    name
+  )
+  keys <- paste(value$indicator, value$level, sep = "/")
+  wlv_catalog_validate_unique(keys, "indicator/level", name)
+
+  missing_units <- setdiff(unique(value$indicator), units$indicator)
+  if (length(missing_units)) {
+    wlv_catalog_stop(
+      "The %s refers to indicator(s) absent from its unit definitions: %s.",
+      name,
+      paste(missing_units, collapse = ", ")
+    )
+  }
+  missing_aggregations <- setdiff(units$indicator, unique(value$indicator))
+  if (length(missing_aggregations)) {
+    wlv_catalog_stop(
+      "The %s does not cover unit indicator(s): %s.",
+      name,
+      paste(missing_aggregations, collapse = ", ")
+    )
+  }
+  level_count <- table(factor(value$indicator, levels = units$indicator))
+  if (any(level_count != 2L)) {
+    wlv_catalog_stop(
+      "The %s must declare both aggregation levels exactly once for: %s.",
+      name,
+      paste(names(level_count)[level_count != 2L], collapse = ", ")
+    )
+  }
+
+  has_module <- nzchar(value$module_id)
+  invalid_module <- has_module & !grepl(
+    "^aggregation[.][a-z][a-z0-9_.]*$",
+    value$module_id
+  )
+  if (any(invalid_module)) {
+    wlv_catalog_stop(
+      "The %s contains invalid `module_id` identifier(s): %s.",
+      name,
+      paste(unique(value$module_id[invalid_module]), collapse = ", ")
+    )
+  }
+  formula <- value$strategy == "formula"
+  if (any(formula != has_module)) {
+    wlv_catalog_stop(
+      "The %s must declare `module_id` exactly for `formula` strategies at row(s): %s.",
+      name,
+      paste(which(formula != has_module), collapse = ", ")
+    )
+  }
+  expected_module <- paste0("aggregation.", value$indicator)
+  mismatched_module <- formula & value$module_id != expected_module
+  if (any(mismatched_module)) {
+    wlv_catalog_stop(
+      paste0(
+        "The %s must bind every formula to its explicit native `module_id` ",
+        "at row(s): %s."
+      ),
+      name,
+      paste(which(mismatched_module), collapse = ", ")
+    )
+  }
+
+  dependency_columns <- c("numerator", "denominator", "weight")
+  for (column in dependency_columns) {
+    present <- nzchar(value[[column]])
+    if (any(present)) {
+      wlv_catalog_validate_indicator_ids(value[[column]][present], column, name)
+      missing_dependencies <- setdiff(
+        unique(value[[column]][present]),
+        units$indicator
+      )
+      if (length(missing_dependencies)) {
+        wlv_catalog_stop(
+          "The %s has unknown `%s` indicator(s): %s.",
+          name,
+          column,
+          paste(missing_dependencies, collapse = ", ")
+        )
+      }
+    }
+  }
+  ratio <- value$strategy == "ratio_of_sums"
+  weighted <- value$strategy == "weighted_mean"
+  invalid_dependencies <-
+    (ratio & (!nzchar(value$numerator) | !nzchar(value$denominator) | nzchar(value$weight))) |
+    (weighted & (!nzchar(value$weight) | nzchar(value$numerator) | nzchar(value$denominator))) |
+    (!(ratio | weighted) & vapply(
+      seq_len(nrow(value)),
+      function(index) any(nzchar(unlist(value[index, dependency_columns], use.names = FALSE))),
+      logical(1)
+    ))
+  if (any(invalid_dependencies)) {
+    wlv_catalog_stop(
+      "The %s has dependencies inconsistent with `strategy` at row(s): %s.",
+      name,
+      paste(which(invalid_dependencies), collapse = ", ")
+    )
+  }
+  needs_zero_policy <- ratio | weighted
+  has_zero_policy <- nzchar(value$zero_denominator)
+  invalid_zero_policy <- has_zero_policy &
+    !value$zero_denominator %in% c("error", "not_applicable", "zero")
+  if (any(invalid_zero_policy) || any(needs_zero_policy != has_zero_policy)) {
+    wlv_catalog_stop(
+      paste0(
+        "The %s must declare a valid `zero_denominator` exactly for ratio ",
+        "or weighted strategies (row(s): %s)."
+      ),
+      name,
+      paste(
+        which(invalid_zero_policy | needs_zero_policy != has_zero_policy),
+        collapse = ", "
+      )
+    )
+  }
+  value
+}
+
+wlv_catalog_validate_unit_contracts <- function(contracts, root) {
+  name <- "unit contracts"
+  wlv_catalog_validate_required(
+    contracts,
+    c("contract", "schema_version", "source", "units", "aggregations", "documentation"),
+    name
+  )
+  wlv_catalog_validate_ids(contracts$contract, "contract", name)
+  wlv_catalog_validate_ids(contracts$source, "source", name)
+  wlv_catalog_validate_unique(contracts$contract, "contract", name)
+  wlv_catalog_validate_enum(
+    contracts$schema_version,
+    c("1", "2"),
+    "schema_version",
+    name
+  )
+  for (column in c("units", "aggregations", "documentation")) {
+    wlv_catalog_validate_paths(contracts[[column]], column, name)
+    wlv_catalog_require_declared_files(root, contracts[[column]], column, name)
+  }
+
+  unit_definitions <- vector("list", nrow(contracts))
+  aggregations <- vector("list", nrow(contracts))
+  names(unit_definitions) <- names(aggregations) <- contracts$contract
+  for (index in seq_len(nrow(contracts))) {
+    contract <- contracts$contract[[index]]
+    units <- wlv_catalog_read_csv(
+      file.path(root, contracts$units[[index]]),
+      wlv_catalog_schemas()$unit_definitions,
+      sprintf("unit definitions for contract `%s`", contract)
+    )
+    units <- wlv_catalog_validate_unit_definitions(units, contract)
+    aggregation <- wlv_catalog_read_csv(
+      file.path(root, contracts$aggregations[[index]]),
+      wlv_catalog_schemas()$unit_aggregations,
+      sprintf("unit aggregations for contract `%s`", contract)
+    )
+    aggregation <- wlv_catalog_validate_unit_aggregations(
+      aggregation,
+      units,
+      contract
+    )
+    unit_definitions[[contract]] <- units
+    aggregations[[contract]] <- aggregation
+  }
+
+  list(
+    contracts = contracts,
+    unit_definitions = unit_definitions,
+    aggregations = aggregations
+  )
+}
+
+wlv_catalog_validate_methods <- function(methods, sources, root) {
+  name <- "methods"
+  wlv_catalog_validate_required(
+    methods,
+    c(
+      "method", "source", "code", "description", "status",
+      "can_calculate", "can_recalculate"
+    ),
+    name
+  )
+  wlv_catalog_validate_ids(methods$method, "method", name)
+  wlv_catalog_validate_ids(methods$source, "source", name)
+  wlv_catalog_validate_unique(methods$method, "method", name)
+  wlv_catalog_validate_unique(methods$code, "code", name)
+  invalid_code <- !grepl("^[A-Za-z0-9][A-Za-z0-9._-]*$", methods$code)
+  if (any(invalid_code)) {
+    wlv_catalog_stop(
+      "The methods catalog contains invalid `code` values: %s.",
+      paste(unique(methods$code[invalid_code]), collapse = ", ")
+    )
+  }
+  wlv_catalog_validate_enum(
+    methods$status,
+    c("stable", "experimental", "disabled"),
+    "status",
+    name
+  )
+  methods$can_calculate <- wlv_catalog_parse_boolean(
+    methods$can_calculate,
+    "can_calculate",
+    name
+  )
+  methods$can_recalculate <- wlv_catalog_parse_boolean(
+    methods$can_recalculate,
+    "can_recalculate",
+    name
+  )
+  wlv_catalog_validate_optional_ids(
+    methods$validation_id,
+    "validation_id",
+    name
+  )
+  wlv_catalog_validate_paths(
+    methods$documentation,
+    "documentation",
+    name,
+    optional = TRUE
+  )
+  wlv_catalog_require_declared_files(
+    root,
+    methods$documentation,
+    "documentation",
+    name
+  )
+
+  missing_sources <- setdiff(unique(methods$source), sources$source)
+  if (length(missing_sources)) {
+    wlv_catalog_stop(
+      "The methods catalog refers to unknown source(s): %s.",
+      paste(missing_sources, collapse = ", ")
+    )
+  }
+
+  disabled <- methods$status == "disabled"
+  enabled_disabled <- disabled & (methods$can_calculate | methods$can_recalculate)
+  if (any(enabled_disabled)) {
+    wlv_catalog_stop(
+      "Disabled method(s) cannot declare calculation capabilities: %s.",
+      paste(methods$method[enabled_disabled], collapse = ", ")
+    )
+  }
+
+  source_rows <- match(methods$source, sources$source)
+  has_runtime_capability <- methods$can_calculate | methods$can_recalculate
+  missing_artifact_profile <- has_runtime_capability &
+    !nzchar(sources$artifact_profile[source_rows])
+  if (any(missing_artifact_profile)) {
+    wlv_catalog_stop(
+      "Method(s) with calculation capabilities require a source artifact profile: %s.",
+      paste(methods$method[missing_artifact_profile], collapse = ", ")
+    )
+  }
+
+  stable <- methods$status == "stable"
+  invalid_stable <- stable & (
+      sources$status[source_rows] != "stable" |
+      !methods$can_calculate |
+      !methods$can_recalculate |
+      !nzchar(methods$validation_id) |
+      !nzchar(methods$documentation)
+  )
+  if (any(invalid_stable)) {
+    wlv_catalog_stop(
+      "Stable method(s) require a stable source, calculate/recalculate capabilities, a validation ID, and documentation: %s.",
+      paste(methods$method[invalid_stable], collapse = ", ")
+    )
+  }
+
+  undocumented_nonstable <- !stable & !nzchar(methods$limitations)
+  if (any(undocumented_nonstable)) {
+    wlv_catalog_stop(
+      "Non-stable method(s) must explain their limitations: %s.",
+      paste(methods$method[undocumented_nonstable], collapse = ", ")
+    )
+  }
+
+  method_root <- file.path(root, "methods")
+  if (!dir.exists(method_root)) {
+    wlv_catalog_stop("Methods directory does not exist: `%s`.", method_root)
+  }
+  directories <- sort(
+    list.dirs(method_root, recursive = FALSE, full.names = FALSE),
+    method = "radix"
+  )
+  registered <- sort(methods$method, method = "radix")
+  if (!identical(directories, registered)) {
+    missing_from_catalog <- setdiff(directories, registered)
+    missing_from_tree <- setdiff(registered, directories)
+    details <- c(
+      if (length(missing_from_catalog)) {
+        sprintf("unregistered directories: %s", paste(missing_from_catalog, collapse = ", "))
+      },
+      if (length(missing_from_tree)) {
+        sprintf("missing directories: %s", paste(missing_from_tree, collapse = ", "))
+      }
+    )
+    wlv_catalog_stop(
+      "The methods catalog and `methods/` directory differ (%s).",
+      paste(details, collapse = "; ")
+    )
+  }
+
+  for (index in seq_len(nrow(methods))) {
+    method <- methods$method[[index]]
+    parameter_file <- file.path(root, "methods", method, "_parameters.csv")
+    if (!file.exists(parameter_file)) {
+      wlv_catalog_stop(
+        "Method `%s` is missing `_parameters.csv`.",
+        method
+      )
+    }
+    parameters <- tryCatch(
+      utils::read.csv2(
+        text = readLines(
+          parameter_file,
+          encoding = "UTF-8",
+          warn = FALSE
+        ),
+        stringsAsFactors = FALSE,
+        colClasses = "character",
+        check.names = FALSE,
+        na.strings = NULL
+      ),
+      error = function(error) {
+        wlv_catalog_stop(
+          "Cannot read `_parameters.csv` for method `%s`: %s",
+          method,
+          conditionMessage(error)
+        )
+      }
+    )
+    required_parameter_columns <- c("source", "code", "name")
+    missing_parameter_columns <- setdiff(
+      required_parameter_columns,
+      names(parameters)
+    )
+    if (length(missing_parameter_columns)) {
+      wlv_catalog_stop(
+        "Method `%s` `_parameters.csv` lacks: %s.",
+        method,
+        paste(missing_parameter_columns, collapse = ", ")
+      )
+    }
+    declared <- unique(parameters$source[nzchar(parameters$source)])
+    expected <- sources$parameter_set[[source_rows[[index]]]]
+    if (length(declared) != 1L || !identical(declared, expected)) {
+      wlv_catalog_stop(
+        "Method `%s` `_parameters.csv` must declare source parameter set `%s`; found: %s.",
+        method,
+        expected,
+        if (length(declared)) paste(declared, collapse = ", ") else "<empty>"
+      )
+    }
+    declared_code <- unique(parameters$code[nzchar(parameters$code)])
+    if (
+      length(declared_code) != 1L ||
+      !identical(declared_code, methods$code[[index]])
+    ) {
+      wlv_catalog_stop(
+        "Method `%s` `_parameters.csv` code must match catalog code `%s`.",
+        method,
+        methods$code[[index]]
+      )
+    }
+    declared_name <- unique(parameters$name[nzchar(parameters$name)])
+    if (
+      length(declared_name) != 1L ||
+      !identical(declared_name, methods$description[[index]])
+    ) {
+      wlv_catalog_stop(
+        "Method `%s` `_parameters.csv` name must match catalog description `%s`.",
+        method,
+        methods$description[[index]]
+      )
+    }
+  }
+
+  methods
+}
+
+wlv_catalog_native_output_indicators <- function(root, method, source) {
+  output_root <- file.path(root, "config", "outputs")
+  mapping <- wlv_catalog_read_csv(
+    file.path(output_root, "method_profiles.csv"),
+    c("method", "profile"),
+    "native output method profiles"
+  )
+  profiles <- wlv_catalog_read_csv(
+    file.path(output_root, "profiles.csv"),
+    c("profile", "source"),
+    "native output profiles"
+  )
+  overrides <- wlv_catalog_read_csv(
+    file.path(output_root, "overrides.csv"),
+    c("profile", "position", "indicator"),
+    "native output overrides"
+  )
+  source_indicators <- wlv_catalog_read_csv(
+    file.path(output_root, "sources", paste0(source, ".csv")),
+    "indicator",
+    sprintf("native output source `%s`", source)
+  )$indicator
+  selected <- mapping[mapping$method == method, , drop = FALSE]
+  if (nrow(selected) != 1L || anyDuplicated(mapping$method)) {
+    wlv_catalog_stop(
+      "Stable method `%s` requires exactly one native output profile.",
+      method
+    )
+  }
+  profile <- profiles[profiles$profile == selected$profile[[1L]], , drop = FALSE]
+  if (nrow(profile) != 1L || anyDuplicated(profiles$profile) ||
+      !identical(profile$source[[1L]], source)) {
+    wlv_catalog_stop(
+      "Native output profile source mismatch for stable method `%s`.",
+      method
+    )
+  }
+  if (!length(source_indicators) || any(!nzchar(source_indicators)) ||
+      anyDuplicated(source_indicators) ||
+      any(!grepl("^[a-z][a-z0-9_.]*$", source_indicators))) {
+    wlv_catalog_stop(
+      "Native output source `%s` has invalid indicator identifiers.",
+      source
+    )
+  }
+  selected_overrides <- overrides[
+    overrides$profile == profile$profile[[1L]],
+    ,
+    drop = FALSE
+  ]
+  if (nrow(selected_overrides)) {
+    positions <- suppressWarnings(as.integer(selected_overrides$position))
+    valid <- !is.na(positions) & positions > 0L &
+      selected_overrides$position == as.character(positions) &
+      positions <= length(source_indicators) &
+      selected_overrides$indicator %in% source_indicators
+    if (any(!valid) || anyDuplicated(positions) ||
+        anyDuplicated(selected_overrides$indicator)) {
+      wlv_catalog_stop(
+        "Native output profile for stable method `%s` has invalid overrides.",
+        method
+      )
+    }
+    result <- rep(NA_character_, length(source_indicators))
+    result[positions] <- selected_overrides$indicator
+    result[is.na(result)] <- source_indicators[
+      !source_indicators %in% selected_overrides$indicator
+    ]
+    return(result)
+  }
+  source_indicators
+}
+
+wlv_catalog_validate_stable_unit_coverage <- function(
+    sources,
+    methods,
+    unit_contract_data,
+    root) {
+  stable_methods <- which(methods$status == "stable")
+  for (method_index in stable_methods) {
+    method <- methods$method[[method_index]]
+    source_index <- match(methods$source[[method_index]], sources$source)
+    contract <- sources$unit_contract[[source_index]]
+    outputs <- wlv_catalog_native_output_indicators(
+      root,
+      method,
+      sources$source[[source_index]]
+    )
+    units <- unit_contract_data$unit_definitions[[contract]]
+    missing_units <- setdiff(outputs, units$indicator)
+    extra_units <- setdiff(units$indicator, outputs)
+    if (length(missing_units) || length(extra_units)) {
+      details <- c(
+        if (length(missing_units)) {
+          sprintf("missing: %s", paste(missing_units, collapse = ", "))
+        },
+        if (length(extra_units)) {
+          sprintf("unexpected: %s", paste(extra_units, collapse = ", "))
+        }
+      )
+      wlv_catalog_stop(
+        "Unit contract `%s` does not exactly cover stable method `%s` (%s).",
+        contract,
+        method,
+        paste(details, collapse = "; ")
+      )
+    }
+
+  }
+  invisible(TRUE)
+}
+
+wlv_catalog_validate_cross_references <- function(
+    sources,
+    methods,
+    artifacts,
+    missingness_policies,
+    unit_contract_data,
+    root) {
+  profiles <- unique(artifacts$profile)
+  missing_profiles <- setdiff(
+    unique(sources$artifact_profile[nzchar(sources$artifact_profile)]),
+    profiles
+  )
+  if (length(missing_profiles)) {
+    wlv_catalog_stop(
+      "The sources catalog refers to unknown artifact profile(s): %s.",
+      paste(missing_profiles, collapse = ", ")
+    )
+  }
+
+  missing_policies <- setdiff(
+    unique(sources$missingness_policy[nzchar(sources$missingness_policy)]),
+    missingness_policies$policy
+  )
+  if (length(missing_policies)) {
+    wlv_catalog_stop(
+      "The sources catalog refers to unknown missingness policy or policies: %s.",
+      paste(missing_policies, collapse = ", ")
+    )
+  }
+
+  unit_contracts <- unit_contract_data$contracts
+  missing_unit_contracts <- setdiff(
+    unique(sources$unit_contract[nzchar(sources$unit_contract)]),
+    unit_contracts$contract
+  )
+  if (length(missing_unit_contracts)) {
+    wlv_catalog_stop(
+      "The sources catalog refers to unknown unit contract(s): %s.",
+      paste(missing_unit_contracts, collapse = ", ")
+    )
+  }
+  unknown_contract_sources <- setdiff(unit_contracts$source, sources$source)
+  if (length(unknown_contract_sources)) {
+    wlv_catalog_stop(
+      "The unit contracts catalog refers to unknown source(s): %s.",
+      paste(unknown_contract_sources, collapse = ", ")
+    )
+  }
+  for (index in which(nzchar(sources$unit_contract))) {
+    contract_index <- match(sources$unit_contract[[index]], unit_contracts$contract)
+    if (
+      !is.na(contract_index) &&
+        !identical(unit_contracts$source[[contract_index]], sources$source[[index]])
+    ) {
+      wlv_catalog_stop(
+        "Source `%s` unit contract `%s` belongs to source `%s`.",
+        sources$source[[index]],
+        sources$unit_contract[[index]],
+        unit_contracts$source[[contract_index]]
+      )
+    }
+  }
+
+  stable <- sources$status == "stable"
+  for (index in which(stable)) {
+    profile <- sources$artifact_profile[[index]]
+    rows <- artifacts$profile == profile
+    operations <- unlist(
+      wlv_catalog_parse_operations(artifacts$operations[rows]),
+      use.names = FALSE
+    )
+    if (!any(rows) || !"prepare" %in% operations) {
+      wlv_catalog_stop(
+        "Stable source `%s` requires a non-empty artifact profile with preparation artifacts.",
+        sources$source[[index]]
+      )
+    }
+  }
+
+  for (index in seq_len(nrow(sources))) {
+    source <- sources$source[[index]]
+    source_methods <- methods$source == source
+    required_operations <- c(
+      if (sources$can_prepare[[index]]) "prepare",
+      if (any(methods$can_calculate[source_methods])) "calculate",
+      if (any(methods$can_recalculate[source_methods])) "recalculate"
+    )
+    if (!length(required_operations)) {
+      next
+    }
+
+    profile <- sources$artifact_profile[[index]]
+    rows <- artifacts$profile == profile
+    declared_operations <- unique(unlist(
+      wlv_catalog_parse_operations(artifacts$operations[rows]),
+      use.names = FALSE
+    ))
+    missing_operations <- setdiff(required_operations, declared_operations)
+    if (length(missing_operations)) {
+      wlv_catalog_stop(
+        "Source `%s` artifact profile `%s` lacks required operation(s): %s.",
+        source,
+        profile,
+        paste(missing_operations, collapse = ", ")
+      )
+    }
+  }
+
+
+  wlv_catalog_validate_stable_unit_coverage(
+    sources,
+    methods,
+    unit_contract_data,
+    root
+  )
+
+  invisible(TRUE)
+}
+
+# Capture every repository file whose bytes or presence can affect catalog
+# validation. Keeping this inventory on the returned catalog closes the gap
+# between reading catalog data and freezing the publication input snapshot.
+wlv_catalog_input_paths <- function(root) {
+  root <- normalizePath(root, winslash = "/", mustWork = TRUE)
+  directories <- file.path(root, c(
+    "scripts",
+    "catalog",
+    file.path("config", "modules"),
+    file.path("config", "aggregations"),
+    file.path("config", "outputs"),
+    file.path("config", "contracts"),
+    file.path("contracts", "units"),
+    "methods",
+    "parameters"
+  ))
+  directories <- directories[dir.exists(directories)]
+  paths <- unlist(lapply(directories, function(directory) {
+    list.files(
+      directory,
+      recursive = TRUE,
+      full.names = TRUE,
+      all.files = TRUE,
+      include.dirs = FALSE,
+      no.. = TRUE
+    )
+  }), use.names = FALSE)
+  paths <- unique(paths[file.exists(paths) & !file.info(paths)$isdir])
+  sort(normalizePath(paths, winslash = "/", mustWork = TRUE), method = "radix")
+}
+
+wlv_catalog_input_inventory <- function(root) {
+  root <- normalizePath(root, winslash = "/", mustWork = TRUE)
+  paths <- wlv_catalog_input_paths(root)
+  hashes <- unname(tools::md5sum(paths))
+  if (anyNA(hashes) || any(!nzchar(hashes))) {
+    wlv_catalog_stop("Could not hash every catalog input file.")
+  }
+  relative <- substring(paths, nchar(root) + 2L)
+  stats::setNames(hashes, chartr("\\", "/", relative))
+}
+
+wlv_catalog_input_path_stamps <- function(paths) {
+  if (!is.character(paths) || anyNA(paths) || any(!nzchar(paths)) ||
+      anyDuplicated(paths)) {
+    wlv_catalog_stop("Catalog input paths are invalid.")
+  }
+  info <- file.info(paths, extra_cols = FALSE)
+  if (nrow(info) != length(paths) || anyNA(info$isdir) || any(info$isdir) ||
+      anyNA(info$size) || anyNA(info$mtime) || anyNA(info$ctime)) {
+    wlv_catalog_stop("Catalog input metadata could not be captured.")
+  }
+  lapply(seq_along(paths), function(index) {
+    list(
+      path = paths[[index]],
+      size = as.double(info$size[[index]]),
+      mtime = as.double(info$mtime[[index]]),
+      ctime = as.double(info$ctime[[index]])
+    )
+  })
+}
+
+wlv_catalog_input_receipt <- function(root, inventory, paths, stamps) {
+  root <- normalizePath(root, winslash = "/", mustWork = TRUE)
+  if (!is.character(paths) || anyNA(paths) || any(!nzchar(paths)) ||
+      anyDuplicated(paths) || !is.list(stamps) ||
+      !identical(length(stamps), length(paths))) {
+    wlv_catalog_stop("Catalog input receipt paths are invalid.")
+  }
+  stamp_paths <- vapply(stamps, `[[`, character(1L), "path")
+  relative <- chartr("\\", "/", substring(paths, nchar(root) + 2L))
+  if (!is.character(inventory) || is.null(names(inventory)) ||
+      anyNA(inventory) || any(!nzchar(inventory)) ||
+      !identical(names(inventory), relative) ||
+      !identical(stamp_paths, paths)) {
+    wlv_catalog_stop("Catalog input receipt inventory is invalid.")
+  }
+  receipt <- new.env(parent = emptyenv())
+  receipt$schema <- "wlv-catalog-input-receipt/1.0.0"
+  receipt$root <- root
+  receipt$inventory <- inventory
+  receipt$paths <- paths
+  receipt$stamps <- stamps
+  lockEnvironment(receipt, bindings = TRUE)
+  receipt
+}
+
+wlv_catalog_input_receipt_is_current <- function(catalog, expected) {
+  receipt <- attr(catalog, "wlv_catalog_input_receipt", exact = TRUE)
+  tryCatch({
+    fields <- if (is.environment(receipt)) {
+      sort(ls(receipt, all.names = TRUE), method = "radix")
+    } else {
+      character()
+    }
+    required <- sort(
+      c("schema", "root", "inventory", "paths", "stamps"),
+      method = "radix"
+    )
+    if (!is.environment(receipt) ||
+        !identical(parent.env(receipt), emptyenv()) ||
+        !environmentIsLocked(receipt) || !identical(fields, required) ||
+        !all(vapply(fields, bindingIsLocked, logical(1L), env = receipt)) ||
+        any(vapply(fields, bindingIsActive, logical(1L), env = receipt)) ||
+        !identical(receipt$schema, "wlv-catalog-input-receipt/1.0.0") ||
+        !identical(
+          receipt$root,
+          normalizePath(catalog$root, winslash = "/", mustWork = TRUE)
+        ) || !identical(receipt$inventory, expected)) {
+      return(FALSE)
+    }
+    paths <- wlv_catalog_input_paths(receipt$root)
+    stamps <- wlv_catalog_input_path_stamps(paths)
+    identical(paths, receipt$paths) && identical(stamps, receipt$stamps)
+  }, error = function(error) FALSE)
+}
+
+wlv_catalog_assert_inputs_unchanged <- function(catalog, force_hash = TRUE) {
+  wlv_catalog_assert(catalog)
+  if (!is.logical(force_hash) || length(force_hash) != 1L ||
+      is.na(force_hash)) {
+    wlv_catalog_stop("Catalog input force-hash flag is invalid.")
+  }
+  expected <- attr(catalog, "wlv_catalog_input_inventory", exact = TRUE)
+  if (!is.character(expected) || is.null(names(expected)) || anyNA(expected)) {
+    wlv_catalog_stop("The catalog lacks its immutable input inventory.")
+  }
+  if (!isTRUE(force_hash) &&
+      wlv_catalog_input_receipt_is_current(catalog, expected)) {
+    return(invisible(TRUE))
+  }
+  current <- wlv_catalog_input_inventory(catalog$root)
+  if (!identical(expected, current)) {
+    paths <- union(names(expected), names(current))
+    changed <- paths[vapply(paths, function(path) {
+      !path %in% names(expected) || !path %in% names(current) ||
+        !identical(expected[[path]], current[[path]])
+    }, logical(1L))]
+    wlv_catalog_stop(
+      "Catalog inputs changed after they were loaded: %s.",
+      paste(changed, collapse = ", ")
+    )
+  }
+  invisible(TRUE)
+}
+
+# Load and validate the complete, repository-backed method/source catalog.
+wlv_load_catalog <- function(root = ".") {
+  if (!is.character(root) || length(root) != 1L || is.na(root)) {
+    wlv_catalog_stop("`root` must be one existing directory path.")
+  }
+  root <- normalizePath(root, mustWork = TRUE)
+  catalog_dir <- file.path(root, "catalog")
+  input_inventory <- wlv_catalog_input_inventory(root)
+  if (!identical(input_inventory, wlv_catalog_input_inventory(root))) {
+    wlv_catalog_stop("Catalog inputs changed while their inventory was captured.")
+  }
+
+  sources <- wlv_catalog_read_csv(
+    file.path(catalog_dir, "sources.csv"),
+    wlv_catalog_schemas()$sources,
+    "sources"
+  )
+  methods <- wlv_catalog_read_csv(
+    file.path(catalog_dir, "methods.csv"),
+    wlv_catalog_schemas()$methods,
+    "methods"
+  )
+  artifacts <- wlv_catalog_read_csv(
+    file.path(catalog_dir, "artifact-profiles.csv"),
+    wlv_catalog_schemas()$artifacts,
+    "artifact profiles"
+  )
+  missingness_policies <- wlv_catalog_read_csv(
+    file.path(catalog_dir, "missingness-policies.csv"),
+    wlv_catalog_schemas()$missingness,
+    "missingness policies"
+  )
+  unit_contracts <- wlv_catalog_read_csv(
+    file.path(catalog_dir, "unit-contracts.csv"),
+    wlv_catalog_schemas()$unit_contracts,
+    "unit contracts"
+  )
+
+  sources <- wlv_catalog_validate_sources(sources, root)
+  artifacts <- wlv_catalog_validate_artifacts(artifacts)
+  missingness_policies <- wlv_catalog_validate_missingness_policies(
+    missingness_policies,
+    root
+  )
+  unit_contract_data <- wlv_catalog_validate_unit_contracts(
+    unit_contracts,
+    root
+  )
+  methods <- wlv_catalog_validate_methods(methods, sources, root)
+  wlv_catalog_validate_cross_references(
+    sources,
+    methods,
+    artifacts,
+    missingness_policies,
+    unit_contract_data,
+    root
+  )
+
+  catalog <- structure(
+    list(
+      root = root,
+      sources = sources,
+      methods = methods,
+      artifacts = artifacts,
+      missingness_policies = missingness_policies,
+      unit_contracts = unit_contract_data$contracts,
+      unit_definitions = unit_contract_data$unit_definitions,
+      unit_aggregations = unit_contract_data$aggregations
+    ),
+    class = c("wlv_catalog", "list")
+  )
+  current_paths <- wlv_catalog_input_paths(root)
+  current_stamps <- wlv_catalog_input_path_stamps(current_paths)
+  current_inventory <- wlv_catalog_input_inventory(root)
+  final_inventory <- wlv_catalog_input_inventory(root)
+  final_paths <- wlv_catalog_input_paths(root)
+  final_stamps <- wlv_catalog_input_path_stamps(final_paths)
+  if (!identical(input_inventory, current_inventory) ||
+      !identical(current_inventory, final_inventory) ||
+      !identical(current_paths, final_paths) ||
+      !identical(current_stamps, final_stamps)) {
+    wlv_catalog_stop("Catalog inputs changed while the catalog was loading.")
+  }
+  attr(catalog, "wlv_catalog_input_inventory") <- input_inventory
+  attr(catalog, "wlv_catalog_input_receipt") <-
+    wlv_catalog_input_receipt(
+      root,
+      input_inventory,
+      paths = final_paths,
+      stamps = final_stamps
+    )
+  catalog
+}
+
+wlv_catalog_assert <- function(catalog) {
+  if (!inherits(catalog, "wlv_catalog")) {
+    wlv_catalog_stop("`catalog` must be returned by `wlv_load_catalog()`.")
+  }
+  invisible(catalog)
+}
+
+wlv_catalog_method <- function(catalog, method) {
+  wlv_catalog_assert(catalog)
+  if (
+    !is.character(method) || length(method) != 1L || is.na(method) ||
+      !grepl("^[a-z][a-z0-9_]*$", method)
+  ) {
+    wlv_catalog_stop("`method` must be one valid method identifier.")
+  }
+  row <- catalog$methods$method == method
+  if (!any(row)) {
+    wlv_catalog_stop("Unknown method `%s`.", method)
+  }
+  catalog$methods[row, , drop = FALSE]
+}
+
+wlv_catalog_source <- function(catalog, source) {
+  wlv_catalog_assert(catalog)
+  if (
+    !is.character(source) || length(source) != 1L || is.na(source) ||
+      !grepl("^[a-z][a-z0-9_]*$", source)
+  ) {
+    wlv_catalog_stop("`source` must be one valid source identifier.")
+  }
+  row <- catalog$sources$source == source
+  if (!any(row)) {
+    wlv_catalog_stop("Unknown source `%s`.", source)
+  }
+  catalog$sources[row, , drop = FALSE]
+}
+
+wlv_catalog_missingness_policy <- function(catalog, policy) {
+  wlv_catalog_assert(catalog)
+  if (
+    !is.character(policy) || length(policy) != 1L || is.na(policy) ||
+      !grepl("^[a-z][a-z0-9_]*$", policy)
+  ) {
+    wlv_catalog_stop("`policy` must be one valid missingness policy identifier.")
+  }
+  row <- catalog$missingness_policies$policy == policy
+  if (!any(row)) {
+    wlv_catalog_stop("Unknown missingness policy `%s`.", policy)
+  }
+  catalog$missingness_policies[row, , drop = FALSE]
+}
+
+wlv_catalog_unit_contract <- function(catalog, contract) {
+  wlv_catalog_assert(catalog)
+  if (
+    !is.character(contract) || length(contract) != 1L || is.na(contract) ||
+      !grepl("^[a-z][a-z0-9_]*$", contract)
+  ) {
+    wlv_catalog_stop("`contract` must be one valid unit contract identifier.")
+  }
+  row <- catalog$unit_contracts$contract == contract
+  if (!any(row)) {
+    wlv_catalog_stop("Unknown unit contract `%s`.", contract)
+  }
+  list(
+    metadata = catalog$unit_contracts[row, , drop = FALSE],
+    units = catalog$unit_definitions[[contract]],
+    aggregations = catalog$unit_aggregations[[contract]]
+  )
+}
+
+wlv_catalog_unit_contract_sidecar <- function(
+    catalog,
+    contract,
+    indicators = NULL,
+    resolved_aggregations = NULL) {
+  value <- wlv_catalog_unit_contract(catalog, contract)
+  units <- value$units
+  aggregation_columns <- c(
+    "indicator", "level", "strategy", "module", "numerator",
+    "denominator", "weight", "zero_denominator", "notes"
+  )
+  if (!is.null(resolved_aggregations) &&
+      (!is.data.frame(resolved_aggregations) ||
+        any(!aggregation_columns %in% names(resolved_aggregations)) ||
+        anyNA(resolved_aggregations[aggregation_columns]))) {
+    wlv_catalog_stop(
+      "`resolved_aggregations` must contain complete aggregation rows."
+    )
+  }
+  aggregations <- if (is.null(resolved_aggregations)) {
+    catalog_columns <- aggregation_columns
+    catalog_columns[catalog_columns == "module"] <- "module_id"
+    rows <- value$aggregations[catalog_columns]
+    names(rows)[names(rows) == "module_id"] <- "module"
+    rows
+  } else {
+    resolved_aggregations[aggregation_columns]
+  }
+  if (is.null(indicators)) {
+    indicators <- units$indicator
+  }
+  if (
+    !is.character(indicators) || !length(indicators) || anyNA(indicators) ||
+      any(!nzchar(indicators)) || anyDuplicated(indicators)
+  ) {
+    wlv_catalog_stop("`indicators` must be unique, non-empty indicator names.")
+  }
+  missing <- setdiff(indicators, units$indicator)
+  extra <- setdiff(units$indicator, indicators)
+  if (length(missing) || length(extra)) {
+    details <- c(
+      if (length(missing)) sprintf("missing: %s", paste(missing, collapse = ", ")),
+      if (length(extra)) sprintf("unexpected: %s", paste(extra, collapse = ", "))
+    )
+    wlv_catalog_stop(
+      "Unit contract `%s` does not exactly match the effective indicators (%s).",
+      contract,
+      paste(details, collapse = "; ")
+    )
+  }
+  aggregations <- aggregations[
+    aggregations$indicator %in% indicators,
+    ,
+    drop = FALSE
+  ]
+
+  expected_keys <- unlist(lapply(indicators, function(indicator) {
+    paste(indicator, c("sector_to_country", "country_to_world"), sep = "\034")
+  }), use.names = FALSE)
+  aggregation_keys <- paste(
+    aggregations$indicator,
+    aggregations$level,
+    sep = "\034"
+  )
+  if (anyDuplicated(aggregation_keys) || !setequal(aggregation_keys, expected_keys)) {
+    wlv_catalog_stop(
+      paste0(
+        "Unit contract `%s` sidecar aggregation rows must cover both levels ",
+        "of every effective indicator exactly once."
+      ),
+      contract
+    )
+  }
+
+  aggregation_order <- match(aggregations$indicator, indicators)
+  level_order <- match(
+    aggregations$level,
+    c("sector_to_country", "country_to_world")
+  )
+  aggregations <- aggregations[
+    order(aggregation_order, level_order, method = "radix"),
+    ,
+    drop = FALSE
+  ]
+  units <- units[
+    match(aggregations$indicator, units$indicator),
+    ,
+    drop = FALSE
+  ]
+  metadata <- value$metadata
+  data.frame(
+    contract = rep(metadata$contract[[1L]], nrow(aggregations)),
+    schema_version = rep(metadata$schema_version[[1L]], nrow(aggregations)),
+    source = rep(metadata$source[[1L]], nrow(aggregations)),
+    indicator = aggregations$indicator,
+    quantity_kind = units$quantity_kind,
+    source_unit = units$source_unit,
+    source_scale = units$source_scale,
+    canonical_unit = units$canonical_unit,
+    display_unit = units$display_unit,
+    display_multiplier = units$display_multiplier,
+    currency = units$currency,
+    price_basis = units$price_basis,
+    base_year = units$base_year,
+    index_base = units$index_base,
+    index_base_year = ifelse(
+      units$quantity_kind == "index",
+      units$base_year,
+      NA_character_
+    ),
+    index_storage_base = ifelse(
+      units$quantity_kind == "index",
+      units$index_base,
+      NA_real_
+    ),
+    labour_concept = units$labour_concept,
+    level = aggregations$level,
+    strategy = aggregations$strategy,
+    module = aggregations$module,
+    numerator = aggregations$numerator,
+    denominator = aggregations$denominator,
+    weight = aggregations$weight,
+    zero_denominator = aggregations$zero_denominator,
+    unit_notes = units$notes,
+    aggregation_notes = aggregations$notes,
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+}
+
+wlv_catalog_artifacts <- function(catalog, profile, operation = NULL) {
+  wlv_catalog_assert(catalog)
+  if (
+    !is.character(profile) || length(profile) != 1L || is.na(profile) ||
+      !grepl("^[a-z][a-z0-9_]*$", profile)
+  ) {
+    wlv_catalog_stop("`profile` must be one valid artifact profile identifier.")
+  }
+  rows <- catalog$artifacts$profile == profile
+  if (!any(rows)) {
+    wlv_catalog_stop("Unknown artifact profile `%s`.", profile)
+  }
+  value <- catalog$artifacts[rows, , drop = FALSE]
+
+  if (!is.null(operation)) {
+    if (
+      !is.character(operation) || length(operation) != 1L || is.na(operation) ||
+        !operation %in% c("prepare", "calculate", "recalculate")
+    ) {
+      wlv_catalog_stop(
+        "`operation` must be NULL, `prepare`, `calculate`, or `recalculate`."
+      )
+    }
+    applies <- vapply(
+      wlv_catalog_parse_operations(value$operations),
+      function(operations) operation %in% operations,
+      logical(1)
+    )
+    value <- value[applies, , drop = FALSE]
+  }
+
+  rownames(value) <- NULL
+  value
+}
+
+wlv_catalog_format_years <- function(year_start, year_end) {
+  if (length(year_start) != length(year_end)) {
+    wlv_catalog_stop("`year_start` and `year_end` must have equal lengths.")
+  }
+  result <- rep("", length(year_start))
+  present <- !is.na(year_start) & !is.na(year_end)
+  same <- present & year_start == year_end
+  result[same] <- as.character(year_start[same])
+  range <- present & !same
+  result[range] <- paste(year_start[range], year_end[range], sep = "-")
+  result
+}
+
+wlv_catalog_method_table <- function(catalog) {
+  wlv_catalog_assert(catalog)
+  source_rows <- match(catalog$methods$source, catalog$sources$source)
+  sources <- catalog$sources[source_rows, , drop = FALSE]
+  value <- data.frame(
+    method = catalog$methods$method,
+    code = catalog$methods$code,
+    description = catalog$methods$description,
+    source = catalog$methods$source,
+    status = catalog$methods$status,
+    source_status = sources$status,
+    missingness_policy = sources$missingness_policy,
+    unit_contract = sources$unit_contract,
+    year_start = sources$year_start,
+    year_end = sources$year_end,
+    years = wlv_catalog_format_years(sources$year_start, sources$year_end),
+    can_prepare = sources$can_prepare,
+    can_calculate = catalog$methods$can_calculate,
+    can_recalculate = catalog$methods$can_recalculate,
+    validation_id = catalog$methods$validation_id,
+    documentation = catalog$methods$documentation,
+    limitations = catalog$methods$limitations,
+    stringsAsFactors = FALSE
+  )
+  value <- value[order(value$method, method = "radix"), , drop = FALSE]
+  rownames(value) <- NULL
+  value
+}
+
+wlv_catalog_render_fixed_width <- function(table) {
+  display <- data.frame(
+    METHOD = table$method,
+    SOURCE = table$source,
+    STATUS = table$status,
+    SOURCE_STATUS = if ("source_status" %in% names(table)) {
+      table$source_status
+    } else {
+      rep("-", nrow(table))
+    },
+    YEARS = ifelse(nzchar(table$years), table$years, "-"),
+    PREPARE = ifelse(table$can_prepare, "yes", "no"),
+    CALCULATE = ifelse(table$can_calculate, "yes", "no"),
+    RECALCULATE = ifelse(table$can_recalculate, "yes", "no"),
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+  widths <- vapply(
+    seq_along(display),
+    function(index) max(nchar(c(names(display)[[index]], display[[index]]))),
+    integer(1)
+  )
+  render_row <- function(values) {
+    paste(
+      vapply(
+        seq_along(values),
+        function(index) {
+          format(values[[index]], width = widths[[index]], justify = "left")
+        },
+        character(1)
+      ),
+      collapse = "  "
+    )
+  }
+  paste(
+    c(render_row(names(display)), apply(display, 1L, render_row)),
+    collapse = "\n"
+  )
+}
+
+# Return catalog output ready for cat(): a fixed table, legacy names, or CSV2.
+wlv_format_catalog_table <- function(
+    catalog_or_table,
+    format = c("table", "names", "csv")) {
+  format <- match.arg(format)
+  table <- if (inherits(catalog_or_table, "wlv_catalog")) {
+    wlv_catalog_method_table(catalog_or_table)
+  } else {
+    catalog_or_table
+  }
+  required <- c(
+    "method", "source", "status", "years", "can_prepare",
+    "can_calculate", "can_recalculate"
+  )
+  if (!is.data.frame(table) || !all(required %in% names(table))) {
+    wlv_catalog_stop(
+      "`catalog_or_table` must be a catalog or a method table with: %s.",
+      paste(required, collapse = ", ")
+    )
+  }
+
+  if (format == "names") {
+    return(paste(table$method, collapse = "\n"))
+  }
+  if (format == "table") {
+    return(wlv_catalog_render_fixed_width(table))
+  }
+
+  lines <- character()
+  connection <- textConnection("lines", open = "w", local = TRUE)
+  on.exit(close(connection), add = TRUE)
+  utils::write.table(
+    table,
+    file = connection,
+    sep = ";",
+    row.names = FALSE,
+    col.names = TRUE,
+    quote = TRUE,
+    na = "",
+    qmethod = "double"
+  )
+  close(connection)
+  on.exit(NULL, add = FALSE)
+  paste(lines, collapse = "\n")
+}

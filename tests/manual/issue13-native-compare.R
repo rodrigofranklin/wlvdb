@@ -15,7 +15,7 @@ sys.source(
   envir = environment()
 )
 runtime <- new.env(parent = baseenv())
-sys.source(file.path(root, "R", "lib", "functions.R"), envir = runtime)
+sys.source(file.path(root, "scripts", "lib", "functions.R"), envir = runtime)
 
 phase <- function(label) {
   message(format(Sys.time(), "%Y-%m-%dT%H:%M:%S"), " ", label)

@@ -28,7 +28,8 @@ y sus métodos permanecen deshabilitados hasta completar su recuperación.
 Abrir el proyecto no instala paquetes, no actualiza el checkout Git, no
 restaura un espacio de trabajo guardado y no inicia cálculos. Desde la raíz del
 repositorio, restaure una vez las versiones exactas de los paquetes y ejecute
-un método explícitamente:
+un método explícitamente. Puede usar el editor o terminal que prefiera;
+el flujo no depende de un IDE y sus ajustes personales no se versionan:
 
 ```sh
 Rscript --vanilla scripts/bootstrap.R
@@ -42,7 +43,7 @@ del proyecto y cargue las funciones principales explícitamente:
 ```r
 source("renv/activate.R")
 bootstrap <- new.env(parent = baseenv())
-sys.source("R/bootstrap.R", envir = bootstrap)
+sys.source("scripts/runtime_bootstrap.R", envir = bootstrap)
 wlv <- bootstrap$wlv_load_runtime(".")
 wlv$get_wlv("wiodr13")
 ```
@@ -57,7 +58,7 @@ La función ** get_wlv **  es una función que ejecuta todos los cálculos y gen
 
 Por ejemplo, para calcular el método estándar actual con WIOD13, ejecute
 `wlv$get_wlv("wiodr13")` en el runtime privado devuelto por el bootstrap.
-`R/main.R` contiene definiciones y no debe cargarse directamente.
+`scripts/main.R` contiene definiciones y no debe cargarse directamente.
 
 La función acepta los siguientes argumentos: 
 
@@ -91,7 +92,7 @@ ejecutables, expresiones R ni orden semántico.
  
 Las subcarpetas en `methods/` contienen metadatos, parámetros y clasificaciones
 sectoriales. El comportamiento científico ejecutable se registra como
-funciones nativas en `R/modules/native/`; el orden lo determina el grafo de
+funciones nativas en `scripts/modules/native/`; el orden lo determina el grafo de
 dependencias compilado, nunca la posición de las filas en los CSV.
  
  
@@ -102,10 +103,22 @@ Los resultados son runs inmutables en `results/runs/<método>/<run_id>/`.
 Las releases de `results/releases/` fijan conjuntos coherentes y los marcadores
 append-only de `results/channels/<canal>/` seleccionan la release vigente.
 
-### 5) Runtime R
+### 5) scripts
 
-El bootstrap determinista carga definiciones de función de `R/lib/`,
-`R/modules/native/`, `R/preparation/` y `R/main.R` en un único namespace
+`scripts/` reúne el código de la aplicación y los comandos de mantenimiento.
+`scripts/bootstrap.R` restaura los paquetes; `scripts/runtime_bootstrap.R`
+carga el entorno privado de ejecución.
+
+El bootstrap determinista carga definiciones de función de `scripts/lib/`,
+`scripts/modules/native/`, `scripts/preparation/` y `scripts/main.R` en un único namespace
 privado y bloqueado. Los módulos científicos reciben entradas, argumentos y
 servicios inyectados mediante un contexto explícito; los ejecutores legacy
 basados en `source()` no forman parte del runtime alcanzable.
+
+### 6) tests y campañas locales
+
+`tests/` contiene código de pruebas y datos de ejemplo controlados (*fixtures*)
+versionados para detectar regresiones. Los resultados generados, logs y
+experimentos locales pertenecen a `temp/<id>/`, ignorado por Git. Consulte
+[campañas y limpieza local](docs/local-campaigns.md). La campaña preservada
+`temp/054/` no debe volver a ejecutarse, modificarse ni eliminarse.

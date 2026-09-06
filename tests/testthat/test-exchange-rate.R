@@ -1,10 +1,10 @@
 exchange_contract_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "missingness.R"),
+  file.path(wlv_test_root, "scripts", "lib", "missingness.R"),
   envir = exchange_contract_environment
 )
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "result_contracts.R"),
+  file.path(wlv_test_root, "scripts", "lib", "result_contracts.R"),
   envir = exchange_contract_environment
 )
 
@@ -262,14 +262,14 @@ test_that("exchange modules publish direction, units and a base-one index", {
   sys.source(
     file.path(
       wlv_test_root,
-      "R", "modules", "variables", "wiodr13", "exchange.r.us.R"
+      "scripts", "modules", "variables", "wiodr13", "exchange.r.us.R"
     ),
     envir = module_environment
   )
   sys.source(
     file.path(
       wlv_test_root,
-      "R", "modules", "variables", "wiodr13", "exchange.r.id.R"
+      "scripts", "modules", "variables", "wiodr13", "exchange.r.id.R"
     ),
     envir = module_environment
   )

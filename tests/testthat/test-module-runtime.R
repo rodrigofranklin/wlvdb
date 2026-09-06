@@ -1,6 +1,6 @@
 module_runtime_environment <- new.env(parent = globalenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "module_runtime.R"),
+  file.path(wlv_test_root, "scripts", "lib", "module_runtime.R"),
   envir = module_runtime_environment
 )
 

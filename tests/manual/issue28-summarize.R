@@ -11,7 +11,7 @@ stopifnot(startsWith(tolower(campaign), paste0(tolower(repo), "/temp/")))
 source(file.path(repo, "renv", "activate.R"))
 root <- file.path(campaign, "worktrees", "candidate")
 boot <- new.env(parent = baseenv())
-sys.source(file.path(root, "R", "bootstrap.R"), envir = boot)
+sys.source(file.path(root, "scripts", "runtime_bootstrap.R"), envir = boot)
 runtime <- boot$wlv_load_runtime(root)
 hash <- runtime$wlv_publication_file_sha256
 read_json <- function(path) jsonlite::read_json(path, simplifyVector = FALSE)

@@ -23,7 +23,7 @@ git <- function(path, ...) {
   paste(system2("git", c("-C", shQuote(path), ...), stdout = TRUE), collapse = "\n")
 }
 bootstrap <- new.env(parent = baseenv())
-sys.source(file.path(root, "R/bootstrap.R"), envir = bootstrap)
+sys.source(file.path(root, "scripts/runtime_bootstrap.R"), envir = bootstrap)
 runtime <- bootstrap$wlv_load_runtime(root)
 definition_files <- bootstrap$wlv_runtime_definition_files(root)
 before <- vapply(definition_files, sha, character(1L))
@@ -45,7 +45,7 @@ tryCatch({
     stopifnot(setequal(methods$method[methods$can_calculate], supported),
               setequal(methods$method[methods$can_recalculate], supported))
     runtime$wlv_assert_dependencies(include_preparation = TRUE, attach = FALSE)
-    invisible(lapply(list.files(file.path(root, "R"), "[.][Rr]$",
+    invisible(lapply(list.files(file.path(root, "scripts"), "[.][Rr]$",
                                recursive = TRUE, full.names = TRUE), parse))
     tests <- testthat::test_dir(file.path(root, "tests/testthat"),
       reporter = "summary", stop_on_failure = TRUE, stop_on_warning = TRUE)

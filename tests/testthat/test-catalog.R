@@ -1,6 +1,6 @@
 catalog_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "catalog.R"),
+  file.path(wlv_test_root, "scripts", "lib", "catalog.R"),
   envir = catalog_environment
 )
 
@@ -638,7 +638,7 @@ test_that("stable entries require complete and existing contracts", {
   unlink(root, recursive = TRUE, force = TRUE)
   root <- wlv_make_catalog_fixture()
   wlv_catalog_test_edit(root, "sources.csv", function(value) {
-    value$validator_id <- "R/lib/missing.R"
+    value$validator_id <- "scripts/lib/missing.R"
     value
   })
   expect_error(
@@ -649,7 +649,7 @@ test_that("stable entries require complete and existing contracts", {
   unlink(root, recursive = TRUE, force = TRUE)
   root <- wlv_make_catalog_fixture()
   wlv_catalog_test_edit(root, "missingness-policies.csv", function(value) {
-    value$policy <- "R/lib/missingness.R"
+    value$policy <- "scripts/lib/missingness.R"
     value
   })
   expect_error(

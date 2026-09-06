@@ -11,6 +11,10 @@ test_that("beginner documentation stays bilingual and its examples parse", {
   pairs <- list(
     c("README-PT.md", "README.md"),
     c("docs/guide-pt.md", "docs/guide-en.md"),
+    c("docs/theory-pt.md", "docs/theory-en.md"),
+    c("docs/methodology-pt.md", "docs/methodology-en.md"),
+    c("docs/assumptions-pt.md", "docs/assumptions-en.md"),
+    c("docs/references-pt.md", "docs/references-en.md"),
     c("docs/results-dictionary-pt.md", "docs/results-dictionary-en.md")
   )
   revision <- "<!-- documentation-revision: wiod-consolidation-v1 -->"
@@ -28,6 +32,16 @@ test_that("beginner documentation stays bilingual and its examples parse", {
   }
 })
 
+test_that("the documented two-sector example reproduces its analytical results", {
+  methodology <- readLines(file.path(wlv_test_root, "docs", "methodology-en.md"), encoding = "UTF-8")
+  examples <- wlv_doc_blocks(methodology, "r")
+  expect_length(examples, 1L)
+  expect_no_error(capture.output(eval(
+    parse(text = examples[[1L]]$text),
+    envir = new.env(parent = baseenv())
+  )))
+})
+
 test_that("the bilingual dictionary covers the executed indicator contracts exactly", {
   renderer <- new.env(parent = baseenv())
   sys.source(file.path(wlv_test_root, "scripts", "render_results_dictionary.R"), renderer)
@@ -40,6 +54,8 @@ test_that("the bilingual dictionary covers the executed indicator contracts exac
 
 test_that("beginner guide local links and anchors resolve", {
   documents <- c("README.md", "README-PT.md", "docs/guide-pt.md", "docs/guide-en.md",
+    "docs/theory-pt.md", "docs/theory-en.md", "docs/methodology-pt.md", "docs/methodology-en.md",
+    "docs/assumptions-pt.md", "docs/assumptions-en.md", "docs/references-pt.md", "docs/references-en.md",
     "docs/results-dictionary-pt.md", "docs/results-dictionary-en.md", "docs/documentation-sync.md")
   slug <- function(value) {
     value <- tolower(sub("^#+ +", "", value))
@@ -76,7 +92,7 @@ test_that("guide examples use actual CLI options and public API arguments", {
     expect_true(all(parsed$methods %in% c("wiodr13", "wiodr16")))
   }
   api <- new.env(parent = baseenv())
-  sys.source(file.path(wlv_test_root, "R", "main.R"), api)
+  sys.source(file.path(wlv_test_root, "scripts", "main.R"), api)
   blocks <- wlv_doc_blocks(guide, "r")
   eval(parse(text = blocks[[1L]]$text), new.env(parent = baseenv()))
   for (block in blocks) {

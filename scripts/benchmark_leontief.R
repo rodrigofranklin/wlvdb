@@ -166,7 +166,7 @@ if (!identical(tolower(resolved_ancestor), tolower(campaign_root)) &&
 arguments$output <- benchmark_output
 bootstrap_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(project_root, "R", "bootstrap.R"),
+  file.path(project_root, "scripts", "runtime_bootstrap.R"),
   envir = bootstrap_environment,
   chdir = FALSE
 )

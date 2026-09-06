@@ -253,7 +253,7 @@ test_that("prepared USD GFCF values are tied to their exact raw sidecar", {
 test_that("WIOD country codes follow the EU KLEMS conventions", {
   functions_environment <- new.env(parent = baseenv())
   sys.source(
-    file.path(wlv_test_root, "R", "lib", "functions.R"),
+    file.path(wlv_test_root, "scripts", "lib", "functions.R"),
     envir = functions_environment
   )
 
@@ -418,7 +418,7 @@ test_that("productive exploitation rates include a ratio-of-totals world value",
   sys.source(
     file.path(
       wlv_test_root,
-      "R", "modules", "variables", "common",
+      "scripts", "modules", "variables", "common",
       "surplus_value.emp_p.r.pc-country.R"
     ),
     envir = environment
@@ -426,7 +426,7 @@ test_that("productive exploitation rates include a ratio-of-totals world value",
   sys.source(
     file.path(
       wlv_test_root,
-      "R", "modules", "variables", "common",
+      "scripts", "modules", "variables", "common",
       "surplus_value.empe_p.r.pc-country.R"
     ),
     envir = environment

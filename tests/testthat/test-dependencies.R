@@ -18,7 +18,7 @@ test_that("the restored library and lockfile are synchronized", {
 
 test_that("feature dependency groups remain declared", {
   environment <- new.env(parent = baseenv())
-  sys.source(file.path(wlv_test_root, "R", "lib", "dependencies.R"), envir = environment)
+  sys.source(file.path(wlv_test_root, "scripts", "lib", "dependencies.R"), envir = environment)
 
   description <- read.dcf(file.path(wlv_test_root, "DESCRIPTION"))
   declared <- paste(description[1, c("Imports", "Suggests")], collapse = ",")
@@ -34,7 +34,7 @@ test_that("feature dependency groups remain declared", {
 
 test_that("a missing dependency produces an actionable error", {
   environment <- new.env(parent = baseenv())
-  sys.source(file.path(wlv_test_root, "R", "lib", "dependencies.R"), envir = environment)
+  sys.source(file.path(wlv_test_root, "scripts", "lib", "dependencies.R"), envir = environment)
 
   missing_package <- paste(c("not", "an", "installed", "package"), collapse = "-")
   expect_error(

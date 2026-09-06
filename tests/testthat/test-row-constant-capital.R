@@ -1,6 +1,6 @@
 row_capital_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "row_capital.R"),
+  file.path(wlv_test_root, "scripts", "lib", "row_capital.R"),
   envir = row_capital_environment
 )
 
@@ -147,12 +147,12 @@ test_that("modern ROW assumptions rebuild and register two years of constant cap
   environment <- new.env(parent = globalenv())
   for (script in c("missingness.R", "result_contracts.R", "gfcf_contracts.R")) {
     sys.source(
-      file.path(wlv_test_root, "R", "lib", script),
+      file.path(wlv_test_root, "scripts", "lib", script),
       envir = environment
     )
   }
   sys.source(
-    file.path(wlv_test_root, "R", "lib", "row_capital.R"),
+    file.path(wlv_test_root, "scripts", "lib", "row_capital.R"),
     envir = environment
   )
   environment$`%>%` <- magrittr::`%>%`
@@ -247,7 +247,7 @@ test_that("modern ROW assumptions rebuild and register two years of constant cap
   expect_no_error(sys.source(
     file.path(
       wlv_test_root,
-      "R", "modules", "assumptions", "row", "row.R"
+      "scripts", "modules", "assumptions", "row", "row.R"
     ),
     envir = environment
   ))

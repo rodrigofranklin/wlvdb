@@ -1,6 +1,6 @@
 preflight_bootstrap <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "bootstrap.R"),
+  file.path(wlv_test_root, "scripts", "runtime_bootstrap.R"),
   envir = preflight_bootstrap
 )
 preflight_environment <- preflight_bootstrap$wlv_load_runtime(wlv_test_root)

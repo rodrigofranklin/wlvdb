@@ -21,7 +21,7 @@ report_path <- args[[7L]]
 stopifnot(!file.exists(report_path), method %in% c("wiodr13", "wiodr16"),
   mode %in% c("calculate", "recalculate"), workers %in% c(1L, 2L))
 bootstrap <- new.env(parent = baseenv())
-sys.source(file.path(root, "R", "bootstrap.R"), envir = bootstrap)
+sys.source(file.path(root, "scripts", "runtime_bootstrap.R"), envir = bootstrap)
 runtime <- bootstrap$wlv_load_runtime(root)
 channel <- Sys.getenv("WLV_ISSUE28_CHANNEL", "validation/issue28")
 current <- function() runtime$wlv_resolve_method_run_reference(root, method,

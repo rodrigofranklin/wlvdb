@@ -1,10 +1,10 @@
 missingness_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "missingness.R"),
+  file.path(wlv_test_root, "scripts", "lib", "missingness.R"),
   envir = missingness_environment
 )
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "result_contracts.R"),
+  file.path(wlv_test_root, "scripts", "lib", "result_contracts.R"),
   envir = missingness_environment
 )
 

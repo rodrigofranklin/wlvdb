@@ -1,6 +1,6 @@
 leontief_diagnostic_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "leontief_diagnostics.R"),
+  file.path(wlv_test_root, "scripts", "lib", "leontief_diagnostics.R"),
   envir = leontief_diagnostic_environment
 )
 
@@ -381,7 +381,7 @@ test_that("published diagnostics cannot relax the canonical numerical policy", {
 
 test_that("the transformation script contains two annual productive-block passes", {
   script <- readLines(
-    file.path(wlv_test_root, "R", "modules", "matrices", "transformation.R"),
+    file.path(wlv_test_root, "scripts", "modules", "matrices", "transformation.R"),
     warn = FALSE,
     encoding = "UTF-8"
   )

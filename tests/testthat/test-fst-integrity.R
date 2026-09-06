@@ -1,6 +1,6 @@
 fst_integrity_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "functions.R"),
+  file.path(wlv_test_root, "scripts", "lib", "functions.R"),
   envir = fst_integrity_environment
 )
 
