@@ -32,7 +32,7 @@ For one year, an industry is a **country–sector pair**. A Brazilian steel indu
 | $b_{ic}$ | Share of supplier $i$ in country $c$'s consumption basket | Dimensionless |
 | $W_j$, $v_j$ | Employee compensation in money; its basket equivalent in labour value | Current USD; labour-value units |
 
-Here **$D$ is a depreciation flow matrix**, matching `k_depreciation`. The article uses $D$ for depreciation *coefficients*. Below, $d=D\operatorname{diag}(x)^{-1}$ denotes those coefficients. Keeping this distinction avoids adding a stock or an unscaled flow to a coefficient matrix.
+Here **$D$ is a depreciation flow matrix**, matching `k_depreciation`. The article uses $D$ for depreciation *coefficients*. Below, $d=D\,\mathrm{diag}(x)^{-1}$ denotes those coefficients. Keeping this distinction avoids adding a stock or an unscaled flow to a coefficient matrix.
 
 The source generation is normalized before calculation: money is in currency units, labour in hours, and employment in persons, rather than the provider's millions/thousands. A stored `.mv` unit has the numerical scale of an hour under $z=1$, but its theoretical meaning depends on the productive classification and reduction assumption. The [unit contracts](units.md), including `_normalization_contract.csv` and `_unit_contract.csv`, are authoritative. The full WIOD13 industry system has 1,435 pairs; WIOD16 has 2,464. The solve uses their productive subset.
 
@@ -75,9 +75,9 @@ $$
 
 These are direct labour, labour in the immediate inputs, labour in the inputs of those inputs, and so on. Each successive term accounts for another production round. This is why the inverse is meaningful economically under its assumptions, rather than just a convenient matrix operation.
 
-Using money accounts does not require the assumption that observed prices already equal labour values. In the ideal case of a coherent physical table, let $Q$ be physical deliveries, $q$ physical output and $p_i>0$ the price per physical unit of product $i$. Then $Z=\operatorname{diag}(p)Q$, $x=\operatorname{diag}(p)q$, and monetary coefficients are a change of units of physical coefficients. The corresponding labour coefficient is physical labour value divided by $p_i$. Real country–industry aggregates approximate this case: differences in product mix, valuation and aggregation remain empirical limitations. Matrix algebra does not remove them.
+Using money accounts does not require the assumption that observed prices already equal labour values. In the ideal case of a coherent physical table, let $Q$ be physical deliveries, $q$ physical output and $p_i>0$ the price per physical unit of product $i$. Then $Z=\mathrm{diag}(p)Q$, $x=\mathrm{diag}(p)q$, and monetary coefficients are a change of units of physical coefficients. The corresponding labour coefficient is physical labour value divided by $p_i$. Real country–industry aggregates approximate this case: differences in product mix, valuation and aggregation remain empirical limitations. Matrix algebra does not remove them.
 
-More explicitly, write $S=\operatorname{diag}(p)$, with superscripts $m$ and $q$ for monetary and physical units. For inputs and depreciation valued on the same coherent basis,
+More explicitly, write $S=\mathrm{diag}(p)$, with superscripts $m$ and $q$ for monetary and physical units. For inputs and depreciation valued on the same coherent basis,
 
 $$
 C^m=SC^qS^{-1},\qquad \ell^m=\ell^qS^{-1},
