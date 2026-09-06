@@ -1,6 +1,6 @@
 # Real-data public-API recalculation gate. Run from the main repository with
 # TEMP, TMP and TMPDIR set to the campaign scratch directory before R starts.
-# Usage: Rscript tests/manual/issue28-recalculation.R <isolated-root> <method>
+# Usage: Rscript --vanilla tests/manual/issue28-recalculation.R <isolated-root> <method>
 #   <calculate|recalculate> <stage> <workers> <all|indicator[,indicator]>
 #   <report.json> [full-calculation-report.json]
 # The root must be a campaign copy with normalized sources and no user channel.
@@ -9,6 +9,7 @@ stopifnot(length(args) %in% c(7L, 8L))
 root <- normalizePath(args[[1L]], winslash = "/", mustWork = TRUE)
 repo <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
 stopifnot(startsWith(tolower(root), paste0(tolower(repo), "/temp/")))
+source(file.path(repo, "renv", "activate.R"))
 method <- args[[2L]]
 mode <- args[[3L]]
 stage <- as.integer(args[[4L]])

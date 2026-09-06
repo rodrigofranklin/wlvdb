@@ -106,12 +106,18 @@ jobs:
         shell: Rscript {0}
         run: |
           source("renv/activate.R")
-          testthat::test_dir(
+          results <- testthat::test_dir(
             "tests/testthat",
             reporter = "summary",
             stop_on_failure = TRUE,
             stop_on_warning = TRUE
           )
+          counts <- as.data.frame(results)
+          cat(sprintf(
+            "Validation totals: files=%d cases=%d passed=%d failed=%d errors=%d warnings=%d skipped=%d\n",
+            length(unique(counts$file)), nrow(counts), sum(counts$passed),
+            sum(counts$failed), sum(counts$error), sum(counts$warning), sum(counts$skipped)
+          ))
       - name: Close the verification campaign
         if: always()
         shell: pwsh

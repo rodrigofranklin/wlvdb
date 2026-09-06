@@ -41,12 +41,30 @@ com o gravador anterior para uma tabela ASCII com números de alta precisão.
 
 Em 06/09/2026, no Windows/R 4.6.1, passaram 23 expectativas desse arquivo
 no processo UTF-8 padrão, incluindo uma troca temporária para C no teste,
-e 13 em um processo iniciado diretamente em C. Os 18 testes de expectativas
-iniciais de `test-publication-missing-metadata.R` também passaram em ambos.
+e 13 em um processo iniciado diretamente em C. As 18 expectativas iniciais
+de `test-publication-missing-metadata.R` também passaram em ambos.
 O primeiro ensaio do teste expôs apenas que a serialização R inclui o nome
 do locale; a referência de imutabilidade passou a ser capturada depois de
 selecionar cada locale. Nenhum resultado científico foi produzido ou
 alterado por esses ensaios.
+
+O controle negativo separado executou o gravador antigo e o corrigido sobre
+a mesma tabela sintética de duas linhas, sob locale C, e confirmou que
+somente o segundo conserva exatamente o objeto lido. Os dois arquivos e o
+relatório foram preservados em `temp/issue15-integration/results/`:
+
+| Artefato | SHA-256 |
+| --- | --- |
+| `issue32-before.csv` (resultado reprovado) | `738ae5a4266d342d3e5eebaba0944137654f3f5f93dc89221aacf1b0551f529b` |
+| `issue32-after.csv` (ida e volta exata) | `f8c28b479f7b18c881c74f38cc1ca044e74222b97ad16a0a372802f810c9b21f` |
+| `issue32-unicode-check.json` | `1a2df5520c77b8139a4c85ce096d39ac2df769777f523b4237db114d6bcdb748` |
+
+O relatório registra R 4.6.1, locale C e hashes dos arquivos-fonte de leitura
+e escrita no momento da prova. O script da campanha é
+`temp/issue15-integration/scratch/issue32-evidence.R`; executa-se com
+`Rscript --vanilla` depois de configurar os temporários e as três variáveis
+de locale indicadas acima. Esses hashes de arquivos locais incluem seus
+fins de linha e não substituem a impressão digital canônica do runtime.
 
 Com temporários configurados dentro de uma campanha, a verificação focada é:
 

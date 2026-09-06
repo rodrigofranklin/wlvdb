@@ -64,7 +64,7 @@ try {
         $arguments = @($harnessPath,
           $taskRoot, $method, $scenario[1], $scenario[2], $scenario[3], $scenario[4], $reportPath)
         if ($scenario[1] -ceq 'recalculate') { $arguments += $baseline }
-        & Rscript @arguments > $logPath 2>&1
+        & Rscript --vanilla @arguments > $logPath 2>&1
         if ($LASTEXITCODE -ne 0) { throw "Scenario failed: $name. See $logPath" }
         Get-Content -LiteralPath $logPath -Tail 1
       }

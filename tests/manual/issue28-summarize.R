@@ -8,6 +8,7 @@ stopifnot(length(args) == 2L, !file.exists(args[[2L]]))
 campaign <- normalizePath(args[[1L]], winslash = "/", mustWork = TRUE)
 repo <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
 stopifnot(startsWith(tolower(campaign), paste0(tolower(repo), "/temp/")))
+source(file.path(repo, "renv", "activate.R"))
 root <- file.path(campaign, "worktrees", "candidate")
 boot <- new.env(parent = baseenv())
 sys.source(file.path(root, "R", "bootstrap.R"), envir = boot)
@@ -16,7 +17,7 @@ hash <- runtime$wlv_publication_file_sha256
 read_json <- function(path) jsonlite::read_json(path, simplifyVector = FALSE)
 lock <- read_json(file.path(root, "renv.lock"))
 scenarios <- list(
-  full1 = list(mode = "calculate", stage = 1L, workers = 1L, vars = NULL),
+  full1 = list(mode = "calculate", stage = NULL, workers = 1L, vars = NULL),
   `stage1-full1` = list(mode = "recalculate", stage = 1L, workers = 1L, vars = NULL),
   `stage4-full1` = list(mode = "recalculate", stage = 4L, workers = 1L, vars = NULL),
   `stage4-full2` = list(mode = "recalculate", stage = 4L, workers = 2L, vars = NULL),
@@ -45,7 +46,7 @@ for (method in c("wiodr13", "wiodr16")) {
     report <- read_json(report_path)
     manifest_path <- file.path(report$run_path, "run_manifest.json")
     manifest <- read_json(manifest_path)
-    stopifnot(isTRUE(report$passed), isTRUE(manifest$complete),
+    stopifnot(isTRUE(report$passed), isTRUE(manifest$result$provenance$complete),
       identical(hash(manifest_path), report$manifest_sha256),
       identical(manifest$run_id, report$run_id),
       identical(manifest$parent_run_id, previous),
@@ -74,7 +75,25 @@ for (method in c("wiodr13", "wiodr16")) {
           lock_version = if (is.null(pinned)) NULL else pinned$Version,
           matches_lock_version = matches)
       })
+      historical_path <- file.path(campaign, "results", if (method == "wiodr13") {
+        "wiodr13-full-to-054-v3.json"
+      } else "wiodr16-full-to-054.json")
+      historical <- read_json(historical_path)
+      archive_path <- file.path(repo, historical$full$path, "run_manifest.json")
+      archive <- read_json(archive_path)
+      stopifnot(identical(hash(archive_path), historical$full$manifest_sha256),
+        identical(historical$recalculated$manifest_sha256, report$manifest_sha256),
+        length(historical$groups) == 0L, isTRUE(historical$semantic_na_nan_unchanged),
+        isTRUE(historical$semantic_states_identical),
+        all(vapply(historical$preserved_artifacts, function(x) {
+          isTRUE(x$bytes_identical) || isTRUE(x$decoded_identical)
+        }, logical(1L))),
+        identical(manifest$result$provenance$packages, archive$result$provenance$packages))
       models[[method]] <- list(panels = panels, packages = package_checks,
+        packages_identical_to_054 = TRUE,
+        historical_comparison = basename(historical_path),
+        historical_comparison_sha256 = hash(historical_path),
+        historical_full_manifest_sha256 = historical$full$manifest_sha256,
         renv_lock_sha256 = hash(file.path(root, "renv.lock")),
         runtime_compatibility = manifest$result$provenance$runtime_compatibility)
     } else {
@@ -107,12 +126,17 @@ for (method in c("wiodr13", "wiodr16")) {
 }
 recovery_path <- file.path(campaign, "results", "wiodr16-publication-recovery.json")
 recovery <- read_json(recovery_path)
-stopifnot(identical(recovery$original_api_attempt_exit, 1L),
-  identical(recovery$recalculated, FALSE), identical(recovery$run_changed, FALSE))
+stopifnot(isTRUE(recovery$passed), identical(recovery$original_api_attempt_exit, 1L),
+  identical(recovery$recalculated, FALSE), identical(recovery$run_changed, FALSE),
+  identical(recovery$manifest_sha256, summary[["wiodr16/full1"]]$manifest_sha256),
+  identical(recovery$run_id, summary[["wiodr16/full1"]]$run_id),
+  all(vapply(recovery$checks, isTRUE, logical(1L))))
+delta_path <- file.path(campaign, "results", "historical-delta-v2.json")
 out <- list(schema = "wlv-issue28-summary/1", passed = TRUE,
   scientific_scenarios = length(summary), full_calculations = 2L, recalculations = 16L,
   evidence_scope = "Reports and run manifests authenticated; original per-run comparisons retained.",
   recovery_report = basename(recovery_path), recovery_report_sha256 = hash(recovery_path),
+  historical_delta_report = basename(delta_path), historical_delta_report_sha256 = hash(delta_path),
   models = models, scenarios = summary)
 jsonlite::write_json(out, args[[2L]], pretty = TRUE, auto_unbox = TRUE, null = "null")
 message("PASS 18 scientific scenarios, 16 exact recalculations; original WIOD16 API exit 1 retained")

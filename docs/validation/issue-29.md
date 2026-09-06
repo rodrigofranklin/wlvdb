@@ -40,12 +40,33 @@ expôs uma dependência indevida do locale: primeiro a leitura CSV com
 `fileEncoding` tentava converter acentos para ASCII; depois, os literais R
 do próprio gerador não eram marcados como UTF-8. As tentativas reprovadas estão
 nos logs `dictionary-check.log` e `dictionary-check-002.log` da campanha.
-A correção lê CSVs com `readLines(encoding = "UTF-8")` e mantém um lançador
-ASCII que carrega as definições bilíngues legíveis de
-`scripts/lib/results_dictionary.R` com `parse(encoding = "UTF-8")`.
-O comando `--check` e as 140 expectativas documentais passaram tanto no locale
-C quanto no locale UTF-8 padrão. Os textos e bytes dos dicionários canônicos
-permaneceram inalterados; não foi necessário mudar o locale para obter sucesso.
+A tentativa seguinte passou os testes de saída nos dois locales, mas usava
+um carregador `eval(parse(...))`, rejeitado corretamente pelo guard estático
+na suíte integrada. Esse carregador e seu helper foram removidos, preservando
+a reprovação da suíte como evidência; o guard não foi alterado.
+
+O gerador final define a função diretamente em
+`scripts/render_results_dictionary.R`, com escapes Unicode nos literais R e
+CSV lido por `readLines(encoding = "UTF-8")`. O código executável é ASCII,
+enquanto significados e documentos continuam legíveis em UTF-8. O comando
+`--check` e as 140 expectativas documentais passam em C e UTF-8, juntamente
+com o guard estático. Os textos e bytes dos dicionários canônicos permanecem
+inalterados; não é necessário mudar o locale para obter sucesso.
+
+A correção final tem logs `dictionary-static-C-check.log`,
+`dictionary-static-UTF8-check.log`, `dictionary-static-C-tests.log` e
+`dictionary-static-UTF8-tests.log` em `temp/issue15-integration/logs/`:
+140 expectativas documentais em cada locale e 63 do guard em C. A inspeção
+estática de todo o repositório também passou. O relatório
+`temp/issue15-integration/results/comments/dictionary-static-final.json`,
+SHA-256 `9e1d802119666f281e70bd40337c086d0613acb203422491ea72a87d4b2ef521`,
+confirma os hashes inalterados dos dois dicionários e a mesma geração de
+compatibilidade do runtime da worktree científica congelada `ea48c02`:
+`8ef95868fddf3d66873176a2405f0b289fa6de442cd56ab9fcae5c7a18963703`.
+O primeiro auditor já passou o guard, mas parou na comparação da classe S3
+do hash com uma string; o log permanece preservado e a segunda execução
+normaliza somente essa representação. A correção documental não modifica
+o runtime que executa a integração científica final.
 
 Comandos, na raiz do repositório e com temporários configurados numa campanha:
 

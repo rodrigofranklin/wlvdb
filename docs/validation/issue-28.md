@@ -157,6 +157,16 @@ ao primeiro completo. A preservação textual é verificada nos arquivos e rótu
 desses runs; não substitui a regressão Unicode geral do writer, corrigida no #32.
 As invocações retomadas usam uma cópia congelada do R harness por cenário.
 
+O ambiente efetivo da campanha usa R 4.6.1 e as mesmas 45 versões de pacotes
+registradas nos manifests dos completos preservados da campanha 054. As 33
+dependências que constam de `renv.lock` possuem versões semanticamente iguais
+às fixadas; a comparação interpreta versões R, inclusive a equivalência entre
+`Matrix` 1.7.5 e 1.7-5. O pacote opcional `data.table` 1.18.4 também estava
+presente nos runs 054 e nesta campanha, mas não integra o lock. Essa descrição
+registra o ambiente realmente executado, sem atribuir-lhe ativação de `renv`
+que não ocorreu. A validação integrada do #15 usa `--vanilla`, ativação explícita
+da biblioteca fixada e o caminho base de FST quando `data.table` está ausente.
+
 O primeiro cálculo WIOD16 produziu e validou o run
 `run-20260906T013526440Z-a787bfa40bfdd3bb`, mas a tentativa de juntá-lo ao canal
 WIOD13 falhou: o leitor de metadados tratava campos opcionais vazios como valores
@@ -178,13 +188,103 @@ proveniência da fonte e hashes das matrizes. Seleções incluem comparação
 explícita com o pai para as células não selecionadas. Nenhuma tolerância foi
 aumentada.
 
-O cálculo WIOD13 novo também foi comparado ao completo preservado da campanha
-054, com as mesmas fontes autenticadas: nenhum valor dos painéis mudou;
-unidades, proveniência da fonte e os payloads FST das matrizes são idênticos em
-bytes. Os dois sidecars `.fst.meta` das matrizes têm representação serializada
+Os cálculos completos novos de WIOD13 e WIOD16 também foram comparados aos
+completos preservados da campanha 054, com as mesmas fontes autenticadas:
+nenhum valor dos painéis mudou; os estados semânticos e máscaras de ausência
+são idênticos. Os arquivos de unidades, proveniência da fonte e os payloads
+FST das matrizes são idênticos em bytes. Os dois sidecars `.fst.meta` das
+matrizes têm representação serializada
 diferente e conteúdo `readRDS()` exatamente idêntico. Essa diferença de
 serialização é discriminada no relatório, sem tolerância numérica nem alteração
 do arquivo histórico.
 
-**Estado da campanha:** validação real em execução. Resultados finais e hashes
-serão registrados aqui após a conclusão de todos os cenários.
+A prova histórica do #13 de equivalência entre `workers = 1` e `workers = 2`
+nos caminhos completos e de recálculo que não tiveram suas fórmulas alteradas
+é reutilizada com sua autoria temporal e seus hashes originais. Ela não é
+apresentada como execução do commit novo. Nesta campanha, o estágio 4 completo
+e a seleção dos dois índices de cesta são executados novamente com ambos os
+números de workers; a repetição parte do resultado recém-publicado e exige a
+mesma identidade exata ao completo. A seleção do estágio 5 também é verificada
+com ambos os números de workers.
+
+Para reproduzir os cálculos, restaure as dependências de `renv.lock`, crie uma
+campanha nova pelo gerenciador e provisione `worktrees/candidate` com a cópia
+fixa do código, metadados iniciais de `results/` e fontes normalizadas com
+manifests compatíveis. O controlador recusa campanha encerrada ou candidato
+ausente. Depois dessa preparação, execute, da raiz do repositório:
+
+```powershell
+pwsh -NoProfile -File tests/manual/issue28-recalculation-suite.ps1 -CampaignId issue28-reproduction
+```
+
+O lançador versionado após a campanha usa `Rscript --vanilla` e ativa
+`renv/activate.R` explicitamente. Um runtime diferente exige seu próprio
+cálculo completo; não se retoma um pai antigo alterando a autenticação.
+`tests/manual/issue28-summarize.R` consolida os 18 relatórios sem recalcular:
+confere hashes de manifests, requisições, linhagem, artefatos herdados,
+comparações históricas, versões registradas e contagens efetivas de ausência.
+Seu segundo argumento é um relatório novo, que não pode existir previamente.
+
+## Resultado da campanha nova
+
+Os **18 cenários científicos** terminaram com os resultados esperados: dois
+cálculos completos e **16 recálculos exatamente iguais ao respectivo completo**.
+O número de cenários abaixo inclui WIOD13 e WIOD16:
+
+| Modalidade | Seleção | Workers | Cenários aprovados |
+|---|---|---|---:|
+| Cálculo completo | Todos | 1 | 2 |
+| Recálculo, estágio 1 | Todos | 1 | 2 |
+| Recálculo, estágio 4 | Todos | 1 e 2 | 4 |
+| Recálculo, estágio 5 | Todos | 1 | 2 |
+| Recálculo, estágio 4 | `basket_price.r.pc`, `basket_value.r.pc` | 1 e 2 | 4 |
+| Recálculo, estágio 5 | `gross_output.s.du` | 1 e 2 | 4 |
+
+Essa contagem é científica: a tentativa original de publicação conjunta do
+completo WIOD16 continua sendo uma falha de API, recuperada pelo procedimento
+autenticado descrito acima. A suite retomada dos oito recálculos WIOD16 terminou
+com exit 0. A publicação conjunta corrigida tem sua própria prova no #15.
+
+Foram comparadas 25.333.920 posições de painéis nos 16 recálculos, sem
+divergências. A igualdade inclui ausências efetivas, além de valores finitos:
+
+| Modelo e painel | Células por painel | Células `NA` |
+|---|---:|---:|
+| WIOD13 setorial | 1.248.450 | 25.856 |
+| WIOD13 nacional/mundial | 36.540 | 540 |
+| WIOD16 setorial | 1.848.000 | 46.777 |
+| WIOD16 nacional/mundial | 33.750 | 375 |
+
+Os quatro painéis não contêm `NaN`; suas máscaras foram comparadas e os estados
+semânticos completos foram preservados. As seleções conservaram exatamente as
+células externas à lista pedida. As matrizes, parâmetros, diagnósticos de
+Leontief/GFCF, metadados, unidades e proveniência herdados também passaram na
+comparação de SHA-256 contra o pai completo.
+
+O consolidado `results/summary.json` autentica os 18 relatórios e manifests,
+confere toda a cadeia de pais e as solicitações declaradas e vincula as provas
+históricas e a recuperação. Seu SHA-256 é
+`c2749a9ddda4569e66473daf07759c39f1886b94ee28b98af2221590509c1e49`.
+Os manifests dos completos que serviram de referência são:
+
+- WIOD13, `run-20260906T011636058Z-a7f71103e10afefc`:
+  `aa67dd40bf1c763d622de2c259781fd6d9ebfae403bc90127a420cfa09f7ac79`.
+- WIOD16, `run-20260906T013526440Z-a787bfa40bfdd3bb`:
+  `0872bb14b2f7781b3f1b96903abca777817d712b558942dc0186ba87c6ffa5de`.
+
+As provas históricas finais são `results/historical-delta-v2.json`,
+`results/wiodr13-full-to-054-v3.json` e `results/wiodr16-full-to-054.json`.
+A versão v3 da comparação WIOD13 acrescenta a autenticação dos snapshots e a
+igualdade de estados semânticos; as versões anteriores foram preservadas.
+Nenhum cálculo foi repetido para acrescentar essa verificação de leitura.
+
+A campanha foi encerrada como **completed**, com **preserve = true**. Os 18
+runs, relatórios, tentativas falhas, logs e harnesses congelados permanecem em
+`temp/issue28-recalculation/`. O controle negativo está preservado em
+`worktrees/regression-control`. Os 914.458.356 bytes de fontes duplicadas foram
+removidos por uma campanha auxiliar encerrada, após inspeção e `Clean -Apply`;
+as fontes originais da campanha 054 e do repositório principal permanecem
+inalteradas. A pasta `scratch/` ficou vazia. `results/cleanup-completed.json`
+confere que os 18 relatórios e manifests conservaram seus hashes após a limpeza;
+seu SHA-256 é
+`5a327ac2232e6ac280c85e8f479be80ee2fc7c72742ffe0a0015dbdbce821cd5`.

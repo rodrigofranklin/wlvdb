@@ -95,6 +95,13 @@ Hashes de bytes podem mudar com a política de fins de linha; a árvore sintáti
 
 ## Limites da revisão
 
+As correções posteriores de leitura, chaves e serialização dos metadados têm
+provas próprias nos [#31](issue-31.md) e [#32](issue-32.md). A auditoria final
+registrada no [#15](issue-15.md) compara a worktree executada ao snapshot
+científico: 209 de 211 arquivos têm AST idêntica; as únicas três definições
+alteradas pertencem à publicação. A prova de comentários acima conserva o
+recorte e os hashes da etapa em que foi produzida.
+
 A prova cobre ausência de mudanças executáveis nos comentários, não uma auditoria
 independente de toda hipótese econômica preservada. Hipóteses históricas como
 extrapolações de jornada, média MD e zeros convencionais foram nomeadas, sem

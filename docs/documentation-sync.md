@@ -28,9 +28,10 @@ com colunas PT/EN; unidades, escalas e agregações vêm exclusivamente dos
 contratos executáveis. O gerador recusa indicadores sem tradução e cobertura
 diferente dos resultados configurados.
 
-O lançador `scripts/render_results_dictionary.R` usa apenas ASCII e carrega
-as definições legíveis de `scripts/lib/results_dictionary.R` explicitamente
-como UTF-8. Essa separação garante os mesmos bytes sob locale C ou UTF-8;
+O gerador `scripts/render_results_dictionary.R` usa apenas ASCII, com escapes
+Unicode nos literais bilíngues. A função está definida diretamente nesse
+arquivo, sem carregamento dinâmico. Descrições e dicionários permanecem
+legíveis em UTF-8. Isso preserva os mesmos bytes sob locale C ou UTF-8;
 não troque a leitura por conversão para o locale da máquina.
 
 ```sh
@@ -72,9 +73,10 @@ columns; units, scales and aggregations come exclusively from executable
 contracts. The generator rejects missing translations and coverage differing
 from configured outputs. Use the three commands above to regenerate and check.
 
-The `scripts/render_results_dictionary.R` launcher is ASCII-only and loads
-readable definitions from `scripts/lib/results_dictionary.R` explicitly as
-UTF-8. This separation ensures identical bytes under C and UTF-8 locales;
+The `scripts/render_results_dictionary.R` generator is ASCII-only, using
+Unicode escapes for bilingual literals. Its function is defined directly
+in that file, without dynamic loading. Descriptions and dictionaries remain
+readable UTF-8. This ensures identical bytes under C and UTF-8 locales;
 do not replace this reading path with conversion to the machine's locale.
 
 `tests/testthat/test-user-documentation.R` checks revision and navigation,

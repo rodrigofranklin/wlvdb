@@ -19,6 +19,12 @@ rejeitados. Ausência em ambos permanece `NA`; a ordem dos métodos não muda
 o resultado. Não se aplica preferência por método nem se reescrevem os CSVs
 dos runs anteriores.
 
+As chaves `cod_label` e `value` são obrigatórias: `NA`, campo vazio ou somente
+espaços agora abortam antes de agrupar as linhas. A verificação anterior
+conferia esquema e integridade, mas não impedia que a ordenação descartasse
+uma chave ausente silenciosamente. A ausência opcional de uma descrição não
+autoriza ausência do identificador ao qual ela pertence.
+
 O escopo é desserialização de metadados e publicação, sem mudança de fórmulas,
 unidades ou números econômicos. O inventário do runtime inclui este arquivo,
 portanto seu fingerprint de compatibilidade muda. A prova de igualdade AST
@@ -28,15 +34,20 @@ depois do #31. A integração final do #15 produz pais novos no runtime final.
 
 ## Regressão sintética
 
-`tests/testthat/test-publication-missing-metadata.R` passou com 18 expectativas:
+`tests/testthat/test-publication-missing-metadata.R` passou com 34 expectativas:
 ausência CSV, string histórica `NA`, vazio nos dois métodos, ambas as ordens,
 preservação de `FALSE` e `"0"`, campos com separador entre aspas, rejeição de
 conflitos presentes e hashes incorretos e preservação dos arquivos de entrada.
+Dezesseis verificações cobrem as duas chaves obrigatórias nas duas ordens,
+com `NA`, vazio, texto `NA` e espaços.
 
-O mesmo teste final contra o snapshot anterior à correção falhou em quatro
+Na versão inicial de 18 expectativas, o teste contra o snapshot anterior à
+correção falhou em quatro
 verificações, incluindo conflito indevido em `go_price.r.id/groups`.
 Esse controle carrega o código preservado somente para leitura e não modifica
-o snapshot. A fixture sintética cobre ausência, sem dados WIOD.
+o snapshot. A fixture sintética cobre ausência, sem dados WIOD. Após a guarda
+de chaves, o conjunto final também passou junto aos testes Unicode do #32 sob
+locale `C`: 34 verificações de ausências e 13 de Unicode, sem falhas.
 
 Com `TEMP`, `TMP` e `TMPDIR` direcionados ao `scratch/` de uma campanha:
 
@@ -52,6 +63,8 @@ Evidências em `temp/issue15-integration/`:
 | --- | --- |
 | `logs/issue31-missing-metadata-negative-final-v2.log` | `ff9515276a7001479b1fa723a72ce9ef8505c5592b16b9912568514adebbd073` |
 | `logs/issue31-missing-metadata-green3.log` | `96e6914551bdd700dc7e70fbfef922faea11c4d6f15a6648bda96ff8a21255b5` |
+| `logs/issue31-keys-green.log` | `b6b208ad80dca90e276cd2da35b62809b0177dd233c28e0296c9808e63cc8e98` |
+| `logs/issue31-32-green-final-C.log` | `af946726101aa14176ecb057026b73bbd99ccc893d72da0f1af065a02ce71644` |
 
 Tentativas anteriores dos testes também estão preservadas. Uma delas expôs
 separadamente conversão indevida de Unicode no gravador sob locale `C`,
@@ -65,7 +78,7 @@ quatro CSVs de painel, executou o merge nas duas ordens e gravou somente cópias
 das tabelas combinadas na campanha de integração. Não recalculou matrizes.
 
 ```sh
-Rscript --vanilla tests/manual/verify-panel-metadata-merge.R temp/issue28-recalculation/worktrees/candidate/results/runs/wiodr13/run-20260906T011636058Z-a7f71103e10afefc temp/issue28-recalculation/worktrees/candidate/results/runs/wiodr16/run-20260906T013526440Z-a787bfa40bfdd3bb temp/issue15-integration/results/comments/issue31-panel-merge-v2.json
+Rscript --vanilla tests/manual/verify-panel-metadata-merge.R temp/issue28-recalculation/worktrees/candidate/results/runs/wiodr13/run-20260906T011636058Z-a7f71103e10afefc temp/issue28-recalculation/worktrees/candidate/results/runs/wiodr16/run-20260906T013526440Z-a787bfa40bfdd3bb temp/issue15-integration/results/comments/issue31-panel-merge-final.json
 ```
 
 O comando exige um relatório ainda inexistente; para repetir a leitura, use
@@ -84,13 +97,15 @@ rótulos/descrições e quatro campos de grupo/tipo, relativos a
 `go_price.r.id` e `hours_worked.emp.s.hr`. As diferenças brutas adicionais
 de `reverted` já eram reconhecidas como ausências pelo parser lógico.
 
-Relatório `results/comments/issue31-panel-merge-v2.json`, SHA-256
-`f088b02dd6a4e5c236ab2bc37ca0528f26ce6d89dc087d670599b165ab63ce90`.
+Relatório final `results/comments/issue31-panel-merge-final.json`, SHA-256
+`50fee6b23b2c187d8b1e1a813f6d1cf2c736ffe4767c5c2e4728e3d36ccfc90f`.
 Ele registra caminhos, IDs e hashes de ambos os manifestos, inventário do
 verificador e do código de publicação, conflitos anteriores e hashes das
 cópias resultantes. Uma primeira tentativa completou as verificações e parou
 ao serializar o relatório por causa da classe S3 do hash; seus arquivos foram
 preservados. A segunda converteu o hash para texto antes da escrita e passou.
+A leitura final repetiu o gate depois da guarda de chaves do #31 e da correção
+Unicode do #32, mantendo os mesmos resultados e os runs originais intactos.
 
 Esta prova valida a combinação real dos metadados. A publicação transacional
 completa e a leitura pelo WLVPanel no runtime final pertencem ao gate integrado
