@@ -186,6 +186,12 @@ wlv_scientific_format_position <- function(value, position) {
   }, character(1L)), collapse = "/")
 }
 
+# Compara uma identidade contábil/calculada com referência independente.
+# Eixos devem coincidir; ausência de um lado e número do outro é erro mesmo
+# quando todos os números presentes são próximos. Limite = erro absoluto +
+# erro relativo × escala, ou limite específico de soma. É tolerância numérica,
+# não margem para aceitar uma divergência metodológica.
+# Guias: docs/guide-pt.md e docs/guide-en.md.
 wlv_scientific_compare <- function(
     observed,
     expected,
@@ -302,6 +308,10 @@ wlv_scientific_compare <- function(
   )
 }
 
+# Somar muitos termos pode acumular arredondamento, sobretudo se sinais opostos
+# se cancelam. gamma_k cresce com a quantidade de termos; sum(abs(terms)) mede
+# sua escala antes do cancelamento. Assim o teste não usa um percentual econômico
+# arbitrário para comparar, por exemplo, conservação do estoque por coluna.
 wlv_scientific_reduction_error_limit <- function(terms, expected) {
   terms <- terms[!is.na(terms)]
   if (!length(terms) || is.na(expected)) {
@@ -352,6 +362,9 @@ wlv_scientific_aggregation_row <- function(
   row
 }
 
+# Recalcula a regra de agregação publicada para confrontar o resultado, cobrindo
+# somas, razões, médias e invariantes. A referência usa as definições declaradas;
+# não pressupõe que todo indicador nacional seja soma dos números setoriais.
 wlv_scientific_reference_aggregate <- function(
     strategy,
     value = NULL,
@@ -715,6 +728,9 @@ wlv_scientific_signed_range_scan <- function(
   )
 }
 
+# Sinais economicamente admissíveis dependem do indicador. Perfis autenticados
+# permitem exceções observadas com coordenadas/assinaturas específicas; não são
+# uma dispensa geral para números negativos ou não finitos surgidos em outra fonte.
 wlv_scientific_check_range <- function(
     value,
     method,
@@ -854,6 +870,10 @@ wlv_scientific_check_range <- function(
   )
 }
 
+# Validação cruzada dos artefatos finais: ano/indicador/setor/país devem concordar
+# com metadados e regras de agregação. Países incluem ROW; WWW é conferido como
+# agregado adicional. Também se conferem identidades entre séries e comércio.
+# O resultado são linhas de evidência, não dados econômicos corrigidos pelo teste.
 wlv_scientific_validate_result_arrays <- function(
     method,
     sea_sectors,
@@ -1206,6 +1226,11 @@ wlv_scientific_validate_result_arrays <- function(
   result[wlv_scientific_check_columns()]
 }
 
+# Para cada ano, a soma dos fornecedores de capital de um usuário deve recuperar
+# seu estoque; o mesmo vale para depreciação e sua série setorial. Essa prova
+# liga a matriz ano × variável × input × output à SEA publicada. Conferir os
+# rótulos antes de somar evita uma identidade aparentemente correta entre setores
+# ou países trocados.
 wlv_scientific_validate_io_array <- function(method, m_io, sea_sectors) {
   rows <- list(wlv_scientific_structure_check(m_io, 4L, method, "m_io"))
   years <- dimnames(m_io)[[1L]]
@@ -1425,6 +1450,9 @@ wlv_read_scientific_check_artifact <- function(path, method) {
   value
 }
 
+# Herança de evidência exige cobertura exata e validação do artefato ancestral.
+# Esta seleção não demonstra sozinha que os insumos ficaram iguais: o executor
+# só a autoriza após comparar os vínculos científicos do snapshot pai e filho.
 wlv_inherited_io_scientific_checks <- function(value, method, io_years) {
   wlv_validate_scientific_check_artifact(value, method)
   io_years <- as.character(io_years)
@@ -1822,6 +1850,10 @@ wlv_scientific_validate_diagnostics <- function(
   do.call(rbind, rows)
 }
 
+# Fecha o conjunto de provas da execução: cada ano de resultado deve existir
+# em exatamente um bloco I/O, e diagnósticos devem reconciliar com os resultados.
+# A tabela final acompanha a publicação. Aprovação indica consistência com os
+# contratos/hipóteses implementados, não validade universal da teoria escolhida.
 wlv_finalize_scientific_checks <- function(
     checks,
     method,

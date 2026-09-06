@@ -1,5 +1,10 @@
 # Native WIOD-derived indicator modules -----------------------------------
 
+# Câmbio público: VA nacional em moeda local / VA nacional em USD = LCU/USD.
+# A mesma taxa país-ano vale para todos os setores, inclusive os que têm VA zero;
+# uma razão setorial criaria câmbios diferentes dentro da mesma moeda. A variante
+# v09 é histórica e não o caminho dos dois métodos públicos. Arrays de saída:
+# ano × setor × país. Guias: docs/guide-pt.md e docs/guide-en.md.
 wlv_native_exchange_us_spec <- function(id, historical_v09 = FALSE) {
   metadata <- wlv_native_indicator_metadata_row(
     "exchange.r.us",
@@ -73,6 +78,9 @@ wlv_indicator_exchange_r_us_v09_spec <- function() {
   )
 }
 
+# Índice cambial = taxa atual / taxa de 2000, sem unidade. ROW usa a trajetória
+# dos EUA por hipótese. Não usar este índice para converter um nível monetário
+# diretamente: a conversão LCU -> USD exige exchange.r.us, a taxa em LCU/USD.
 wlv_native_exchange_index_spec <- function(id, historical_v09 = FALSE) {
   wlv_native_indicator_spec(
     id,
@@ -128,6 +136,10 @@ wlv_indicator_exchange_r_id_v09_spec <- function() {
   )
 }
 
+# Conversão comum de remuneração COMP/LAB e rendimento do capital CAP: moeda
+# local corrente dividida por LCU/USD produz USD correntes. COMP refere-se aos
+# empregados; LAB inclui renda laboral dos demais ocupados. Nenhum deflator é
+# aplicado aqui: os resultados continuam a preços de mercado do próprio ano.
 wlv_native_current_usd_spec <- function(id, indicator, source_variable, metadata) {
   wlv_native_indicator_spec(
     id,
@@ -191,6 +203,9 @@ wlv_indicator_profit_s_us_spec <- function() {
 )
 }
 
+# WIOD13 fornece K_GFCF a preços constantes de 1995. Multiplicar por GFCF_P
+# (base 1995=1 na fonte normalizada) o leva a moeda local corrente; dividir pelo
+# câmbio corrente resulta em USD. Estoque não é o fluxo de investimento do ano.
 wlv_indicator_capital_stock_s_us_wiodr13_spec <- function() {
   wlv_native_indicator_spec(
   "indicator.capital_stock.s.us.wiodr13",
@@ -218,6 +233,11 @@ wlv_indicator_capital_stock_s_us_wiodr13_spec <- function() {
 )
 }
 
+# WIOD16: estoque K corrente / câmbio corrente gera USD correntes. A variante
+# constante divide por índice de preço de produção e câmbio do primeiro ano
+# (2000 no contrato público), estimando USD de 2000. O deflator GO é uma proxy
+# metodológica para o estoque. Limpeza de não finitos estruturais e truncamento
+# de negativos seguem o perfil WIOD16 e registram coordenadas transformadas.
 wlv_native_wiodr16_capital_spec <- function(
     id,
     indicator,
@@ -314,6 +334,10 @@ wlv_indicator_capital_stock_s_cu_wiodr16_spec <- function() {
   )
 }
 
+# Horas dos ocupados = horas dos empregados / empregados × ocupados.
+# Extrapola a jornada média dos empregados aos demais ocupados; as fontes já
+# estão em horas e pessoas. O helper contratual trata células sem empregados;
+# China e ROW são resolvidos por hipóteses posteriores, não por jornada inventada.
 wlv_indicator_hours_worked_emp_s_hr_wiodr16_spec <- function() {
   wlv_native_indicator_spec(
   "indicator.hours_worked.emp.s.hr.wiodr16",
@@ -342,6 +366,9 @@ wlv_indicator_hours_worked_emp_s_hr_wiodr16_spec <- function() {
 )
 }
 
+# Rebaseia GO_PI da fonte para 2000=1 em cada setor/país. É um índice temporal,
+# não um preço absoluto comparável entre setores. O painel pode exibir base 100
+# por metadados; a série numérica continua em base 1 em todo o cálculo.
 wlv_indicator_go_price_r_id_wiodr16_spec <- function() {
   wlv_native_indicator_spec(
   "indicator.go_price.r.id.wiodr16",
@@ -384,6 +411,10 @@ wlv_indicator_go_price_r_id_wiodr16_spec <- function() {
 }
 
 # The base basket and base lambda are run resources shared by every period.
+# Congela a composição da cesta e lambda no primeiro ano: 1995 em WIOD13,
+# 2000 em WIOD16. Essa é a base dos pesos; a apresentação final 2000=1 é outra
+# operação. Cada base deve estar em um único bloco anual; duplicá-la ou tomar
+# a primeira partição arbitrária mudaria as comparações temporais.
 wlv_indicator_basket_zero_collector_spec <- function() {
   wlv_native_module_spec(
   id = "indicator.basket_zero.collector",
@@ -482,6 +513,45 @@ wlv_indicator_basket_zero_collector_spec <- function() {
 )
 }
 
+# WIOD13 publishes GO_P rebased separately for each sector in 2000. Those
+# published indices cannot replace the pre-rebasing price levels in a fixed
+# basket: division by a sector-specific base changes its relative weights.
+# Stage-4 recalculation recovers the same GO_P levels from the authenticated
+# normalized source, applying only the original USA proxy for ROW. It does
+# not replace the inherited public gross-output price indicator.
+# Correção #28: preços usados dentro da cesta devem ter a mesma base do cálculo
+# completo. Ex.: dividir dois setores por bases 2 e 4 muda seus pesos relativos,
+# mesmo se a cesta final for rebaseada depois. No recálculo WIOD13/estágio 4,
+# GO_P vem da fonte autenticada em sua base original 1995=1, com proxy EUA ->
+# ROW. São índices temporais, não preços absolutos. Somamos peso monetário de
+# 1995 × índice original e só então rebaseamos a cesta agregada para 2000=1.
+# O recurso go_price.r.id já publicado permanece herdado.
+wlv_native_basket_go_price_ref <- function(args) {
+  if (isTRUE(args$go_price_from_source)) {
+    return(list(go_price_source = wlv_resource_ref(
+      "source/sea", wlv_native_source_sea_contract()
+    )))
+  }
+  wlv_native_indicator_ref(
+    "go_price.r.id", "go_price", producer = args$go_price_producer
+  )
+}
+
+wlv_native_basket_go_price <- function(ctx) {
+  if (!isTRUE(ctx$arg("go_price_from_source"))) {
+    return(ctx$input("go_price"))
+  }
+  value <- wlv_native_source_variable(
+    ctx$input("go_price_source"), "GO_P", ctx$input("lists")
+  )
+  value[, , "ROW"] <- value[, , "USA"]
+  value
+}
+
+# Índice da cesta fixa: para cada consumidor, somar peso de cada origem/produto
+# no ano-base × seu índice de preço atual. colSums soma fornecedores, mantendo
+# consumidores. A normalização final para 2000=1 ocorre após reunir todos os
+# anos, preservando os mesmos pesos no cálculo completo e no recálculo.
 wlv_indicator_basket_price_r_pc_spec <- function() {
   wlv_native_indicator_spec(
   "indicator.basket_price.r.pc",
@@ -490,7 +560,8 @@ wlv_indicator_basket_price_r_pc_spec <- function() {
   parameters = list(
     go_price_producer = wlv_module_parameter(
       "character", default = "assumption.row"
-    )
+    ),
+    go_price_from_source = wlv_module_parameter("logical", default = FALSE)
   ),
   requires = function(args) {
     c(
@@ -498,9 +569,7 @@ wlv_indicator_basket_price_r_pc_spec <- function() {
         "basket_zero", "basket_zero", c("input", "output"), scope = "run",
         producer = "indicator.basket_zero.collector"
       ),
-      wlv_native_indicator_ref(
-        "go_price.r.id", "go_price", producer = args$go_price_producer
-      ),
+      wlv_native_basket_go_price_ref(args),
       wlv_native_source_io_ref("period_source"),
       wlv_native_run_ref("dimensions/lists", "lists", "list"),
       wlv_native_run_ref("dimensions/nums", "nums", "list")
@@ -517,7 +586,7 @@ wlv_indicator_basket_price_r_pc_spec <- function() {
     lists <- wlv_native_partition_lists(period_source, ctx$input("lists"))
     nums <- ctx$input("nums")
     year_count <- dim(period_source)[[1L]]
-    go_price <- ctx$input("go_price")[lists$years, , , drop = FALSE]
+    go_price <- wlv_native_basket_go_price(ctx)[lists$years, , , drop = FALSE]
     go_price[, , "ROW"] <- go_price[, , "USA"]
     value <- (
       aperm(
@@ -535,6 +604,10 @@ wlv_indicator_basket_price_r_pc_spec <- function() {
 )
 }
 
+# Variação do trabalho incorporado numa cesta fixa: peso-base × preço/índice
+# cambial × lambda atual, somados por consumidor, divididos pelo valor da cesta
+# com lambda-base. O índice cambial concilia a evolução monetária com lambda em
+# mv/USD. O resultado é índice sem unidade, rebaseado depois para 2000=1.
 wlv_indicator_basket_value_r_pc_spec <- function() {
   wlv_native_indicator_spec(
   "indicator.basket_value.r.pc",
@@ -543,7 +616,8 @@ wlv_indicator_basket_value_r_pc_spec <- function() {
   parameters = list(
     go_price_producer = wlv_module_parameter(
       "character", default = "assumption.row"
-    )
+    ),
+    go_price_from_source = wlv_module_parameter("logical", default = FALSE)
   ),
   requires = function(args) {
     c(
@@ -556,9 +630,7 @@ wlv_indicator_basket_value_r_pc_spec <- function() {
         producer = "indicator.basket_zero.collector"
       ),
       wlv_native_intermediate_ref("lambda", axes = c("year", "input")),
-      wlv_native_indicator_ref(
-        "go_price.r.id", "go_price", producer = args$go_price_producer
-      ),
+      wlv_native_basket_go_price_ref(args),
       wlv_native_indicator_ref("exchange.r.id", "exchange"),
       wlv_native_source_io_ref("period_source"),
       wlv_native_run_ref("dimensions/lists", "lists", "list"),
@@ -582,7 +654,7 @@ wlv_indicator_basket_value_r_pc_spec <- function() {
       na.rm = TRUE
     )
     price_exchange <-
-      ctx$input("go_price")[lists$years, , , drop = FALSE] /
+      wlv_native_basket_go_price(ctx)[lists$years, , , drop = FALSE] /
       ctx$input("exchange")[lists$years, , , drop = FALSE]
     value <- (
       aperm(
@@ -609,6 +681,10 @@ wlv_indicator_basket_value_r_pc_spec <- function() {
 }
 
 # One instance per price indicator keeps selective recalculation atomic.
+# Divide cada trajetória pelo seu próprio nível no ano-base. Não multiplica
+# por 100 e não recalcula as quantidades/pesos que deram origem ao índice.
+# Uma base zero resulta em not_applicable; exige ano-base rotulado para impedir
+# que uma seleção temporal altere silenciosamente o significado de "base 2000".
 wlv_indicator_price_index_normalize_spec <- function() {
   wlv_native_module_spec(
   id = "indicator.price_index.normalize",
@@ -683,6 +759,10 @@ wlv_indicator_price_index_normalize_spec <- function() {
 )
 }
 
+# Remuneração real: COMP ou LAB em moeda local corrente / preço da cesta
+# (2000=1) / câmbio de 2000 = USD constantes de 2000. Diferentemente da conversão
+# corrente, o câmbio é fixo. Denominadores ausentes/inaplicáveis acompanham
+# os estados da divisão sequencial; não há renda real zero presumida por falta.
 wlv_native_constant_compensation_spec <- function(id, indicator, source_variable) {
   wlv_native_indicator_spec(
     id,

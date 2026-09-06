@@ -1,5 +1,9 @@
 # Contrato de validação científica
 
+Guias introdutórios completos: [Português](guide-pt.md) / [English](guide-en.md).
+A resolução da divergência WIOD13 no estágio 4, a fronteira de compatibilidade
+e as provas posteriores estão em [issue #28](validation/issue-28.md).
+
 A validação científica é parte da transação de publicação. Um cálculo ou um
 recálculo só substitui a geração anterior depois que os resultados em *staging*
 passam pelos contratos estruturais, numéricos e semânticos. Falhas abortam a
@@ -224,6 +228,15 @@ conter indicadores cujo estágio declarado seja igual ou posterior ao checkpoint
 Nomes desconhecidos e combinações de estágio que produziriam um recálculo vazio
 falham antes da execução. Remover um indicador já publicado altera o schema do
 resultado e exige um cálculo completo; o recálculo não contrai arrays ou sidecars.
+
+No recálculo seletivo, dependências não selecionadas são lidas do pai
+autenticado; indicadores dependentes fora da seleção não são atualizados
+implicitamente. Uma alteração de fonte, parâmetros científicos, unidades ou
+classificação requer cálculo completo mesmo quando `at_stage = 1`: nenhum
+checkpoint autoriza combinar matrizes antigas com uma proveniência científica
+nova. No WIOD13, o índice `GO_P` da fonte (1995 = 1) e o índice publicado
+`go_price.r.id` (2000 = 1) são recursos distintos. A cesta deve consumir o
+primeiro em ambos os percursos para preservar os pesos econômicos de 1995.
 
 Para valores recalculados por soma, “equivale” significa erro menor ou igual ao
 limite de redução declarado; rótulos, ausência, zeros estruturais e células não

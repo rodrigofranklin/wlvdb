@@ -1987,6 +1987,11 @@ wlv_validate_method_prepared_artifacts <- function(
   )
 }
 
+# Verificação anterior ao cálculo: configurações, fontes, rótulos, unidades e
+# grafo de dependências devem formar um conjunto coerente. Um arquivo FST legível
+# não basta: manifesto e perfil científico precisam autenticar a geração usada.
+# No recálculo também se verifica a execução ancestral antes de herdar recursos.
+# Guias: docs/guide-pt.md e docs/guide-en.md.
 wlv_validate_data <- function(
     plan,
     wiodr13_validator = NULL,
@@ -3625,6 +3630,9 @@ wlv_native_can_reuse_inherited_io_validation <- function(module_plan) {
     !any(provided_targets %in% c("artifact/m_io", "intermediate/lambda"))
 }
 
+# Diagnósticos da nova execução = evidência herdada ainda aplicável + evidência
+# dos módulos refeitos. Registros antigos dos alvos recalculados devem ser
+# substituídos, para não atribuir ao resultado atual anomalias já resolvidas.
 wlv_native_merge_recalculation_diagnostics <- function(
     run_data,
     current,
@@ -3968,6 +3976,11 @@ wlv_native_reset_recalculated_anomalies <- function(runtime, module_plan, at_sta
   invisible(targets)
 }
 
+# Executa um método com contexto isolado. staging é uma área privada: calcular
+# ou falhar ali não muda a versão que o painel lê. No recálculo, a cópia privada
+# do ancestral é autenticada antes de servir como entrada; os arquivos publicados
+# anteriores permanecem como evidência da linhagem. O grafo decide recursos novos
+# e herdados; sua ordem tem de seguir as dependências econômicas declaradas.
 wlv_run_method <- function(plan, method, cluster = NULL) {
   wlv_assert_plan_scientific_profile_inventory(plan, method)
   method_record <- plan$methods[
@@ -4177,6 +4190,10 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
       }
       rm(module_result, module_plan)
       invisible(gc(full = TRUE))
+      # O snapshot registra os recursos científicos necessários para reproduzir
+      # dependências, inclusive valores intermediários que o painel não mostra.
+      # Atualizar seus vínculos no recálculo não autoriza reciclar uma validação
+      # quando algum insumo da identidade científica mudou.
       snapshot_capture <- if (identical(plan$mode, "calculate")) {
         wlv_runtime_snapshot_capture(
           store = runtime_store,
@@ -4207,6 +4224,10 @@ wlv_run_method <- function(plan, method, cluster = NULL) {
       rm(runtime_store)
       invisible(gc(full = TRUE))
 
+      # Antes de gravar os resultados, conferir estados de ausência e contratos
+      # de todas as formas publicadas. A validação científica posterior relê os
+      # artefatos e confere identidades/agregações; validar só a memória deixaria
+      # erros de exportação fora da prova que acompanha a publicação.
       wlv_validate_sea_stage(
         contract_runtime,
         arrays$sea_sectors,

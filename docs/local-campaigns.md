@@ -6,6 +6,12 @@ O diretório é ignorado pelo Git. O código reutilizável continua em `scripts/
 `tests/manual/`.
 
 Os comandos de gerenciamento requerem PowerShell 7.5 ou posterior.
+`New`, `Status`, `Complete` e `Fail` são utilizáveis também no Ubuntu com
+PowerShell instalado. `Clean` usa `Get-CimInstance Win32_Process` para impedir
+a exclusão de campanhas em uso e requer Windows; não se deve contornar essa
+verificação no Ubuntu. Os runners hospedados da CI encerram o registro e
+descartam a campanha com o checkout após o job. Essa limpeza automática do
+runner não representa suporte de `Clean` no Linux.
 
 ## Criar e executar
 

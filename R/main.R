@@ -13,6 +13,10 @@ wlv_runtime_catalog <- function() {
   wlv_load_catalog(.wlv_runtime_root())
 }
 
+# Entrada pública para preparar fontes WIOD13/WIOD16: baixa/autentica arquivos,
+# converte unidades, valida estruturas e promove uma geração normalizada coerente.
+# Não calcula indicadores. get_wlv a consome; repeat_pp também permite prepará-la
+# antes de um cálculo. Guias de uso: docs/guide-pt.md e docs/guide-en.md.
 prepare_wlv <- function(methods = "wiodr13", allow_experimental = FALSE) {
   catalog <- wlv_runtime_catalog()
   plan <- wlv_validate_request(
@@ -31,6 +35,11 @@ prepare_wlv <- function(methods = "wiodr13", allow_experimental = FALSE) {
   invisible(plan$method_names)
 }
 
+# Cálculo completo: validar pedido/fontes -> hipóteses -> matrizes/Leontief ->
+# indicadores -> agregações -> validação científica -> publicação transacional.
+# channel seleciona a versão publicada visível ao painel; workers muda o modo
+# de execução, não a hipótese econômica. O retorno invisível contém os métodos;
+# os dados, unidades, estados e proveniência ficam na execução publicada.
 get_wlv <- function(
     methods = "wiodr13",
     repeat_pp = FALSE,
@@ -63,6 +72,11 @@ get_wlv <- function(
   invisible(plan$method_names)
 }
 
+# Recálculo: parte de uma execução publicada autenticada e reconstrói a seleção
+# de indicadores e suas dependências conforme at_stage/sea_vars. Não é edição
+# direta de células: a saída é uma nova execução com linhagem para a anterior.
+# Matrizes e evidências só são herdadas quando suas dependências são compatíveis;
+# a validação e a publicação seguem as mesmas garantias do cálculo completo.
 recalc_wlv <- function(
     methods = "wiodr13",
     at_stage = 1,

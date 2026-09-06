@@ -86,6 +86,10 @@ wlv_wiodr16_expected_dimensions <- function(
   )
 }
 
+# O mapa de ausências identifica as variáveis SEA não observadas em ROW e
+# EMPE/H_EMPE da China. Esses NA são esperados na fonte, mas sua causa precisa
+# sobreviver até o módulo de hipótese que os resolve. Guias bilíngues:
+# docs/guide-pt.md e docs/guide-en.md.
 wlv_wiodr16_assert_sea_missingness <- function(
     sea,
     countries,
@@ -176,6 +180,10 @@ wlv_wiodr16_assert_sea_missingness <- function(
   )
 }
 
+# Confronta a organização ano × fornecedor × usuário/demanda da WIOT com a SEA
+# ano × variável × setor × país, suas unidades e identidade de produção bruta.
+# Falta, ordem errada ou números não finitos fora do perfil abortam a preparação;
+# um array com dimensões plausíveis ainda pode estar cientificamente incorreto.
 wlv_validate_wiodr16_arrays <- function(
     m_io,
     sea,

@@ -1,5 +1,10 @@
 # WIOD13 recovery and provenance
 
+Beginner guides: [Português](guide-pt.md) / [English](guide-en.md).
+Current executable support is limited to `wiodr13` and `wiodr16`.
+Historical alternatives mentioned below are preserved for audit and cannot
+be enabled by experimental opt-in.
+
 The `wiodr13` source is rebuilt from the files below. Downloads are installed
 only after their exact byte size and cryptographic checksum have been
 verified. Cached files are verified again before they are reused.
@@ -13,8 +18,12 @@ verified. Cached files are verified again before they are reused.
 
 The WIOD files belong to the
 [World Input-Output Database 2013 Release, 1995-2011](https://doi.org/10.34894/XDTAUZ).
-Use of the data must follow the attribution and licence terms published with
-the source datasets.
+The Dataverse 2.1 metadata checked on 2026-09-06 declares Creative Commons
+Attribution 4.0 International (CC BY 4.0). The
+[official EU KLEMS 2019 archive](https://euklems.eu/archive-history/) also
+declares CC BY 4.0. Cite the source releases and identify WLVDB transformations;
+the immutable file IDs and hashes above, rather than the latest upstream
+download, define the calculation inputs.
 
 ## Versioned time coverage
 
@@ -33,6 +42,29 @@ variables not supplied for the Rest of the World remain explicitly missing;
 the method's Rest-of-World assumption handles the required derived values.
 These compatibility rules are documented here so they are not mistaken for
 observed zeros or source measurements.
+
+Capital-data coverage declines in 2008-2009. These years remain in the database
+contract, but the compatibility missing-to-zero rule can produce finite
+capital-derived outputs without complete economic coverage. WLVPanel's
+`utils/prepare_data.R` excludes both years from every WIOD13 series, including
+sector and bilateral arrays; its practical WIOD13 display ends in 2007. This
+panel filter must not be described as a general `NA` mask in published WLVDB
+files. For example, the pinned normalized `K_GFCF` has 39 zero cells in 2007,
+517 in 2008 and 585 in 2009, outside the 35 missing ROW cells in each year.
+These counts describe source coverage and compatibility, not measured absence
+of capital.
+
+## Calculation and recalculation consistency
+
+WIOD13's fixed consumption basket uses monetary consumption shares from 1995
+and the source `GO_P` index with `1995 = 1`. Only the aggregate basket is later
+rebased to `2000 = 1`. Using published sector indices already rebased to 2000
+changes relative basket weights. The current stage-4 recalculation therefore
+reads `GO_P` from the authenticated normalized source, with the same USA-to-ROW
+assumption as full calculation, and preserves the published `go_price.r.id`.
+The [issue #28 evidence](validation/issue-28.md) explains the former divergence
+and its correction. A parent predating the semantic correction requires a
+fresh full calculation; historical runs remain unchanged.
 
 ## Calculation safeguards restored
 

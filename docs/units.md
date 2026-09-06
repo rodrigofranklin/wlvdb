@@ -38,14 +38,14 @@ already aggregated country value. A world-level direct row may not depend on a
 country value produced later by a `formula` module; such a contract fails the
 registry preflight instead of silently reading an uncomputed value.
 
-Stable methods require a complete, valid typed contract. The ten executable
-experimental methods require explicit opt-in and select a complete historical
-WIOD13 or WIOD16 profile by identifier. Those profiles spell out every `sum`,
-arithmetic `mean`, and formula-module binding; missing or incompatible rows
-fail preflight and are never inferred from parameter strings. Existing schema-v1
-stable WIOD contracts use `sum`, `mean`, and `formula`, so this runtime migration
-preserves their numerical output. Changing a stable row to one of the other
-strategies is a separately reviewed numerical migration.
+The executable methods `wiodr13` and `wiodr16` require complete typed v2
+contracts. Historical profiles preserve earlier `sum`, arithmetic `mean` and
+formula-module bindings for audit, but the ten alternative WIOD methods are
+outside current executable support, including with experimental opt-in.
+Missing or incompatible rows fail preflight and are never inferred from
+parameter strings. The earlier dispatcher migration preserved schema-v1
+values; subsequent v2 migrations deliberately changed intensive aggregates
+as described in `unit-migration.md` and `wiodr13-aggregation-migration.md`.
 
 Canonical units are also mapped to symbolic dimensions (`USD`, country-scoped
 `LCU`, person, hour and labour value). Ratio-of-sums outputs must equal the
@@ -95,8 +95,8 @@ the method result directory. The sidecar is an ordered, effective expansion of
 the selected contract: contract and schema identifiers, unit semantics and one
 row for each aggregation level. Its aggregation fields are overlaid from the
 registry actually executed. Registry rows must equal the published rows exactly
-for stable methods and must exactly cover the selected explicit historical
-profile for experimental methods. The independent scientific checks recompute
+for stable methods. Historical experimental profiles remain audit definitions,
+not an additional executable lifecycle. The independent scientific checks recompute
 every direct aggregation from this sidecar. It is staged and byte-compared with
 the rest of the result metadata, so stale, incomplete or missing contract
 metadata prevents publication.

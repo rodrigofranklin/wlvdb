@@ -1,5 +1,11 @@
 # Native country-matrix reductions ----------------------------------------
 
+# Da matriz mundial detalhada para comércio bilateral: somar setores/demandas
+# com o mesmo país de origem e destino, por ano. O resultado final é
+# ano × origem × destino; a diagonal é zero porque comércio doméstico não é
+# exportação. productive restringe fornecedores conforme a classificação do método.
+# na.rm=TRUE soma células disponíveis; estados/contratos continuam responsáveis
+# pela distinção entre ausência e zero. Guias: docs/guide-pt.md e docs/guide-en.md.
 wlv_native_reduce_country_matrix <- function(
     value,
     filters,
@@ -134,6 +140,10 @@ wlv_reduced_transfers_productive_values_spec <- function() {
 )
 }
 
+# Converte transferências bilaterais em magnitude de valor para dólares a preços
+# diretos usando o fator anual do comércio (mv/USD). Dividir mv por mv/USD produz
+# USD, preservando origem/destino e sinal. Esse fator é diferente do coeficiente
+# mundial da produção usado pelos indicadores setoriais de preços diretos.
 wlv_reduced_direct_price_spec <- function(id, output, input) {
   wlv_native_module_spec(
     id = id,

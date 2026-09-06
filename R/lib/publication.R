@@ -1227,6 +1227,12 @@ wlv_run_manifest_host <- function() {
   )
 }
 
+# Uma execução publicada (run) é um conjunto imutável de dados, metadados e
+# evidências do método. O manifesto registra hashes, unidades, código, entradas
+# e ancestral do recálculo. Só promove a cópia privada após verificar que os
+# bytes continuam exatamente os validados; um hash não prova a fórmula, mas
+# vincula a prova científica aos bytes que o pesquisador e o painel receberão.
+# Guias: docs/guide-pt.md e docs/guide-en.md.
 wlv_promote_method_run <- function(
     plan,
     method,
@@ -1412,11 +1418,15 @@ wlv_read_panel_result_csv <- function(
   Encoding(decoded) <- "UTF-8"
   connection <- textConnection(decoded, open = "r", encoding = "UTF-8")
   on.exit(close(connection), add = TRUE)
+  # O gravador publica ausências como campos vazios. Restaurá-las como NA
+  # permite completar metadados entre métodos; valores presentes divergentes
+  # continuam sendo conflitos no merge. "NA" conserva a leitura histórica.
   value <- utils::read.csv2(
     connection,
     stringsAsFactors = FALSE,
     check.names = FALSE,
-    na.strings = "NA"
+    encoding = "UTF-8",
+    na.strings = c("", "NA")
   )
   if (!identical(names(value), columns)) {
     stop(sprintf("Panel metadata `%s` has an incompatible schema.", path), call. = FALSE)
@@ -1445,7 +1455,12 @@ wlv_merge_panel_result_tables <- function(
     )
   })
   combined <- do.call(rbind, tables)
-  keys <- sort(unique(as.character(combined[[key]])), method = "radix")
+  key_values <- as.character(combined[[key]])
+  if (anyNA(key_values) || any(!nzchar(trimws(key_values)))) {
+    stop(sprintf("Panel metadata key `%s` must not be missing or empty.", key),
+      call. = FALSE)
+  }
+  keys <- sort(unique(key_values), method = "radix")
   rows <- lapply(keys, function(value) {
     group <- combined[as.character(combined[[key]]) == value, , drop = FALSE]
     result <- group[1L, , drop = FALSE]
@@ -1467,6 +1482,10 @@ wlv_merge_panel_result_tables <- function(
   merged
 }
 
+# Uma versão publicada (release) reúne execuções coerentes e metadados do painel.
+# O canal é apenas um seletor dessa versão. Sua troca ocorre por renomeação
+# atômica do marcador após conferir cada manifesto: leitores veem a versão
+# anterior ou a nova, sem misturar tabelas de métodos/datas diferentes.
 wlv_commit_release <- function(plan, run_environments) {
   wlv_assert_plan_publication_inputs_unchanged(plan, use_receipt = TRUE)
   wlv_assert_run_environments_source_inputs_unchanged(
@@ -1744,6 +1763,9 @@ wlv_execute_preparation_plan <- function(plan) {
   })
 }
 
+# Coordenador do percurso: preparação opcional, validação das fontes, execução
+# de cada método e commit da versão. O bloqueio evita publicações concorrentes
+# sobre o mesmo repositório; não substitui as verificações de integridade.
 wlv_execute_run_plan <- function(plan) {
   wlv_with_publication_lock(plan, function() {
     wlv_assert_plan_publication_inputs_unchanged(plan, use_receipt = TRUE)

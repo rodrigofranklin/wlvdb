@@ -60,6 +60,9 @@ wlv_wiodr13_workbook_missingness_signature <- function(
   )
 }
 
+# Confere a assinatura das coordenadas ausentes da planilha oficial, antes da
+# substituição histórica por zero. Igual quantidade de NA em lugares diferentes
+# não é o mesmo perfil de fonte. Guias: docs/guide-pt.md e docs/guide-en.md.
 wlv_wiodr13_validate_workbook_missingness <- function(
     sea,
     years = as.character(1995:2009),
@@ -248,6 +251,10 @@ wlv_wiodr13_assert_sea_missingness <- function(
   )
 }
 
+# Valida a fonte, antes dos indicadores: dimensões/rótulos, lacunas SEA admitidas,
+# sinais da WIOT e identidade produção bruta = soma das entregas. O perfil de
+# FBCF negativa é conferido separadamente da política que a transforma em peso
+# de alocação do capital. O validador diagnostica; não redefine a fonte.
 wlv_validate_wiodr13_arrays <- function(
     m_io,
     sea,

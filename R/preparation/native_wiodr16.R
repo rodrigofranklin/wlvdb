@@ -129,6 +129,11 @@ wlv_validate_wiodr16_workbook_native <- function(
   invisible(TRUE)
 }
 
+# Percurso WIOD16: autenticar arquivos, conferir a contabilidade e normalizar.
+# São 2000–2014, 56 setores e 43 países mais ROW: SEA ano × variável × setor ×
+# país = 15 × 18 × 56 × 44; WIOT ano × fornecedor × usuário/demanda =
+# 15 × 2464 × 2684. As 220 colunas finais são cinco demandas por região.
+# Guias: docs/guide-pt.md e docs/guide-en.md; convenção: docs/code-commenting.md.
 wlv_prepare_wiodr16_task <- function(ctx) {
   catalog <- ctx$catalog()
   source_record <- ctx$source_record()
@@ -201,6 +206,9 @@ wlv_prepare_wiodr16_task <- function(ctx) {
     ),
     stringsAsFactors = FALSE
   )
+  # EMPE e H_EMPE ausentes na China permanecem ausentes nesta fonte. A hipótese
+  # explícita sobre empregados e jornada pertence à etapa assumption.china;
+  # preencher agora apagaria a distinção entre observação e imputação.
   sea_validation <- ctx$service("validate_wiodr16_sea_data")(
     sea,
     years = contract$years,
@@ -302,6 +310,9 @@ wlv_prepare_wiodr16_task <- function(ctx) {
     m_io[year_index, , ] <- converted$m_io
     sea_source[year_index, "VA_USD", , ] <- converted$value_added
     sea_source[year_index, "GO_USD", , ] <- converted$gross_output
+    # Cada fornecedor deve entregar sua produção total aos usos intermediários
+    # e finais. O resíduo compara a soma da linha com GO, em unidades da fonte.
+    # O limite relativo aceita arredondamento; pmax(1, ...) evita dividir por zero.
     gross_output_residual <- rowSums(converted$m_io) - converted$gross_output
     gross_output_relative_residual <- max(
       abs(gross_output_residual) / pmax(1, abs(converted$gross_output))
@@ -338,6 +349,8 @@ wlv_prepare_wiodr16_task <- function(ctx) {
       call. = FALSE
     )
   }
+  # ROW tem WIOT, mas não uma SEA observada completa. Este mapa exige exatamente
+  # as lacunas conhecidas de ROW/China; dimensões corretas, sozinhas, não bastam.
   documented_sea_missing <- array(
     FALSE,
     dim = dim(sea_source),
@@ -424,6 +437,9 @@ wlv_prepare_wiodr16_task <- function(ctx) {
     catalog,
     unit_contract_id
   )
+  # Só após a validação contábil são aplicadas as escalas monetárias/de trabalho
+  # do contrato. O manifesto vincula arquivos, unidades e observações de FBCF
+  # (formação bruta de capital fixo) usados posteriormente na alocação do capital.
   normalized <- ctx$service("normalize_source")(
     m_io = m_io,
     sea = sea_source,

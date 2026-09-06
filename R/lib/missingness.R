@@ -807,6 +807,12 @@ wlv_assert_conformable_numeric <- function(numerator, denominator) {
   invisible(TRUE)
 }
 
+# Uma razão econômica precisa de uma política explícita para denominador zero.
+# zero_if_both_zero admite 0/0 como zero estrutural, mas rejeita x/0 com x != 0;
+# not_applicable registra inaplicabilidade (NA + estado), como uma taxa sem base.
+# Nenhuma dessas opções permite NA/Inf inesperados ou eixos incompatíveis.
+# A saída preserva a forma dos operandos e registra a ação por coordenada.
+# Guias: docs/guide-pt.md e docs/guide-en.md.
 wlv_safe_divide <- function(
     numerator,
     denominator,

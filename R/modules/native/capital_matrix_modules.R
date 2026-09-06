@@ -149,6 +149,10 @@ wlv_native_capital_assert_dimensions <- function(
   invisible(TRUE)
 }
 
+# FBCF (formação bruta de capital fixo) identifica quais fornecedores entregam
+# bens de capital a cada país. Serve como peso de composição, não como estoque.
+# O contrato aplica a política de sinais por fonte e devolve também as células
+# transformadas, para que truncar um peso negativo tenha evidência verificável.
 wlv_native_capital_gfcf <- function(
     source_io,
     method,
@@ -412,6 +416,13 @@ wlv_native_capital_output_arrays <- function(source_io) {
   )
 }
 
+# Reconstrói a origem setorial do capital usado por cada setor/país. A entrada
+# combina estoque monetário WIOD, FBCF da WIOT e pesos/taxas EU KLEMS. A saída
+# k_composition[i,j] é o estoque do usuário j atribuído ao fornecedor i; a soma
+# da coluna deve recuperar o estoque de j. k_depreciation aplica a taxa anual
+# correspondente, na mesma unidade monetária, para alimentar Leontief e lucro.
+# Arrays: ano × fornecedor (input) × usuário (output); só o bloco industrial
+# é preenchido. Guias: docs/guide-pt.md e docs/guide-en.md.
 wlv_native_capital_spec <- function(
     id,
     method,
@@ -526,6 +537,8 @@ wlv_native_capital_spec <- function(
             year,
             "capital_weights"
           )
+          # O deslocamento temporal é uma hipótese do método, não um ajuste de
+          # índice: WIOD13 e WIOD16 públicos usam taxas do ano seguinte.
           depreciation_year <- as.character(as.numeric(year) + depreciation_offset)
           ek_dep_rate <- wlv_native_capital_table_for_year(
             depreciation_rates,
@@ -556,6 +569,8 @@ wlv_native_capital_spec <- function(
             }
           }
 
+          # MD representa a média sintética preparada para países sem cobertura.
+          # Assim o modelo distingue falta de composição de ausência de capital.
           local_rows[!(local_rows$p_ek %in% unique(ek_k$country)), "p_ek"] <- "MD"
           local_rows$ps_ek <- paste0(local_rows$p_ek, local_rows$s_ek)
           ek_k$ps <- paste0(ek_k$country, ek_k$sector)
@@ -563,6 +578,9 @@ wlv_native_capital_spec <- function(
             ek_dep_rate$ps <- paste0(ek_dep_rate$country, ek_dep_rate$sector)
           }
 
+          # Um setor EU KLEMS pode corresponder a vários setores WIOD. A parcela
+          # VA_WIOD / VA_agregado distribui seu peso; os sanitizadores específicos
+          # documentam sinais/zeros excepcionais sem mudar a política da outra fonte.
           gdp_year <- as.numeric(gdp[year, , , drop = FALSE])
           aggregates <- tapply(
             gdp_year,
@@ -631,6 +649,10 @@ wlv_native_capital_spec <- function(
           gfcf <- gfcf_year[
             , rep(seq_len(nums$countries), each = nums$sectors), drop = FALSE
           ]
+          # Combinamos composição por ativo, repartição por VA e oferta de FBCF.
+          # Normalizar por coluna e multiplicar pelo estoque conserva o nível
+          # monetário conhecido. Se os pesos primários somam zero, a distribuição
+          # nacional de FBCF é o fallback explícito; isso é registrado no diagnóstico.
           composition <- composition * gfcf
           stock_year <- as.numeric(capital_stock[year, , , drop = FALSE])
           if (identical(selected_method, "wiodr16")) {

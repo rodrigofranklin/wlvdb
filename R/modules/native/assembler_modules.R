@@ -1,5 +1,9 @@
 # Native result assemblers -------------------------------------------------
 
+# Montagem temporal: apenas concatena blocos já calculados na ordem dos anos,
+# verificando cobertura e eixos. Não soma anos nem preenche lacunas da fonte.
+# As funções de estado abaixo fazem a mesma montagem para as causas de ausência.
+# Guias: docs/guide-pt.md e docs/guide-en.md.
 wlv_native_collect_partitioned_resource <- function(
     partitions,
     expected_years,
@@ -253,6 +257,10 @@ wlv_native_matrix_assembler_requires <- function(args) {
   )
 }
 
+# Acrescenta o eixo variable às matrizes anuais: m_io torna-se ano × variável ×
+# fornecedor × usuário; m_countries, ano × variável × origem × destino.
+# Um eixo variable reúne medidas com unidades distintas, que não podem ser
+# somadas entre si. A montagem preserva valores, rótulos e estados por recurso.
 wlv_native_matrix_assembler_spec <- function() {
   wlv_native_module_spec(
   id = "assembler.matrices",
@@ -399,6 +407,11 @@ wlv_native_panel_assembler_requires <- function(args) {
   )
 }
 
+# Prepara o contrato consumido pelo painel, após indicadores e agregações.
+# sea_sectors = ano × indicador × setor × país; sea_countries = ano × indicador
+# × país, incluindo WWW. O painel não deve reconstruir taxas a partir de médias:
+# recebe o agregado calculado. Rótulos e estados devem concordar exatamente com
+# cada recurso terminal, tanto no cálculo completo quanto no recálculo.
 wlv_native_panel_assembler_spec <- function() {
   wlv_native_module_spec(
   id = "assembler.panel",

@@ -10,6 +10,11 @@ wlv_native_source_sea_contract <- function() {
   )
 }
 
+# Extrai uma variável das contas socioeconômicas (SEA) sem alterar sua unidade.
+# Entrada ano × variável × setor × país; saída ano × setor × país. A seleção
+# preserva os estados semânticos da variável: retirar um eixo não transforma
+# ausência de fonte em observação. requires/provides tornam essa dependência
+# explícita para o cálculo e o recálculo. Guias: docs/guide-pt.md e guide-en.md.
 wlv_source_indicator_spec <- function() {
   wlv_native_module_spec(
   id = "source_indicator",

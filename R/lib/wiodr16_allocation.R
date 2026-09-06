@@ -127,6 +127,10 @@ wlv_wiodr16_expected_gfcf_fallbacks <- function() {
   )
 }
 
+# Exceções de fonte são listas autenticadas de ano/país/setor/valor, não limites
+# genéricos. Conferir coordenadas e magnitudes distingue uma observação conhecida
+# de um defeito novo antes de qualquer truncamento. Guias: docs/guide-pt.md e
+# docs/guide-en.md, contratos de alocação/ausência WIOD16.
 wlv_wiodr16_assert_exact_anomalies <- function(
     observed,
     expected,
@@ -517,6 +521,10 @@ wlv_wiodr16_sanitize_capital_stock <- function(capital_stock, year, input_labels
   capital_stock
 }
 
+# Aloca o estoque monetário de cada usuário entre fornecedores. O caminho WIOD16
+# exige pesos não negativos e conserva cada total de coluna; sem pesos EU KLEMS
+# usa a FBCF nacional autorizada e documenta a escolha. Não inventa capital para
+# compensar pesos ausentes nem transforma estoque negativo em ativo físico.
 wlv_wiodr16_allocate_capital <- function(
     weights,
     capital_stock,

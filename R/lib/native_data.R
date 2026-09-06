@@ -104,6 +104,11 @@ wlv_native_import_group_indices <- function(filters) {
   structure(indices, class = c("wlv_import_group_indices", "list"))
 }
 
+# Constrói a ordem canônica de leitura: setores variam dentro de cada país;
+# input combina país.setor e output acrescenta demandas finais após indústrias.
+# Essa ordem dá significado econômico a rep(), array() e newDim(): mudar rótulos
+# sem permutar números troca fornecedores e compradores silenciosamente.
+# Guias: docs/guide-pt.md e docs/guide-en.md.
 wlv_native_dimensions_from_years <- function(
     years,
     sectors,
@@ -247,6 +252,9 @@ wlv_native_instances_require_resource <- function(registry, instances, key) {
   key %in% wlv_native_instance_required_keys(registry, instances)
 }
 
+# Máscaras não são fluxos econômicos: trade separa países, productive_sectors
+# aplica a classificação metodológica e countries/imports codificam grupos.
+# A parte decimal identifica um grupo de setor/país; não é uma proporção de valor.
 wlv_native_io_filters <- function(lists, nums, rows, columns) {
   filter_names <- c("countries", "productive_sectors", "trade", "imports")
   result <- array(
@@ -557,6 +565,10 @@ wlv_native_validate_seed_semantic_pairs <- function(seeds) {
   invisible(seeds)
 }
 
+# Fronteira entre arquivos autenticados e recursos do cálculo. Aqui os dados
+# ganham eixos, unidades e estados semânticos explícitos; os módulos recebem
+# valores prontos via ctx$input, sem abrir caminhos ou alterar a fonte.
+# O conjunto solicitado depende do grafo, inclusive no recálculo parcial.
 wlv_native_base_seeds <- function(
     plan,
     method_record,

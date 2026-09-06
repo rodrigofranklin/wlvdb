@@ -1,111 +1,58 @@
-#Resumo
+# Banco de Dados de Valores Trabalho Mundiais (WLVDB)
 
-Projeto de ciência aberta para desenvolver, implementar e melhorar metodologias para obter valores (marxistas, sraffianos ...) e categóricos estima baseados em informações públicas de nível mundial, como matrizes de saída de entrada mundial, Klems, Cepal Io Data. Extensões adicionais para incluir a exiobase, melhores estimativas disponíveis para mais países. 
+<!-- documentation-revision: wiod-consolidation-v1 -->
 
-Ao usar os dados, solicitamos citar: 
+Português | [English](README.md)
 
-FRANKLIN, R.;BORGES, R,; SÁNCHEZ, C.; MONTIBELER, E. Skilled labour and the reduction problem: questioning the exploitation rate equalization hypoyhesis. _World Review of Political Economy_ (no prelo), 2022.
+O WLVDB estima valores trabalho, taxas de mais-valia, capital e transferências
+pelo comércio a partir de matrizes mundiais de insumo-produto e contas
+socioeconômicas. O projeto relaciona categorias econômicas a cálculos
+reproduzíveis e publica os resultados lidos pelo WLVPanel. São estimativas sob
+hipóteses explícitas, não observações diretas das categorias marxianas.
 
-Também inclui estimativas preliminares em: 
+Esta versão oferece suporte **somente a `wiodr13` (1995–2009) e `wiodr16`
+(2000–2014)**. Ambos preparam fontes, calculam, validam, recalculam variáveis e
+publicam resultados para o painel. EXIOBASE e EORA são expansão futura no
+[#14](https://github.com/rodrigofranklin/wlvdb/issues/14). As definições
+alternativas preservadas não são executáveis, mesmo com a opção experimental.
+Pesquisadores podem consumir os resultados em scripts próprios de análise;
+preparação e geração de artigos estão fora do projeto.
 
-- Troca desigual; 
-- taxas de exploração; 
-- Taxas de lucro; 
-- Diferentes aproximações aos valores — preços diretos, valores em tempo de trabalho abstrato e preços sraffianos.
+| Comece aqui | Percurso de leitura |
+| --- | --- |
+| Entender a proposta econômica | [Finalidade, cobertura, glossário e metodologia](docs/guide-pt.md#entender-o-projeto) |
+| Usar resultados sem executar cálculos | [Arquivos, unidades, ausências e leitura de dados](docs/guide-pt.md#usar-os-resultados), depois o [dicionário completo de indicadores](docs/results-dictionary-pt.md) |
+| Executar ou manter o cálculo | [Instalação e percurso executável](docs/guide-pt.md#executar-o-projeto), depois o [mapa do código](docs/guide-pt.md#compreender-o-código) |
 
-## Suporte de métodos e fontes
-
-A cobertura temporal e as operações disponíveis estão na
-[matriz canônica de suporte](docs/methods.md). WIOD13 e WIOD16 são as famílias
-recuperadas; `wiodr13` e `wiodr16` são os únicos métodos executáveis nesta
-entrega. As definições alternativas ficam preservadas para incorporação
-posterior, com cálculo e recálculo bloqueados mesmo com opt-in experimental.
-As fontes EXIOBASE e EORA são experimentais, e seus
-métodos permanecem desabilitados até que a recuperação seja concluída.
-
-## Inicialização segura e função principal
-
-Abrir o projeto não instala pacotes, não atualiza o checkout Git, não restaura
-um workspace salvo e não inicia cálculos. Na raiz do repositório, restaure uma
-vez as versões exatas dos pacotes e execute um método explicitamente:
+Na raiz do repositório, com R 4.6.1 instalado:
 
 ```sh
 Rscript --vanilla scripts/bootstrap.R
-Rscript --vanilla scripts/run_wlv.R --method wiodr13
+Rscript --vanilla scripts/run_wlv.R --method wiodr13 --prepare-only --check
+Rscript --vanilla scripts/run_wlv.R --method wiodr13 --prepare-only
+Rscript --vanilla scripts/run_wlv.R --method wiodr13 --workers 1
 ```
 
-O bootstrap restaura o `renv.lock`; ele não baixa os dados econômicos de
-origem. Para trabalhar interativamente depois do bootstrap, ative a biblioteca
-do projeto e carregue as funções principais de forma explícita:
+O bootstrap restaura os pacotes do `renv.lock`. A preparação baixa e verifica
+as entradas econômicas. `--check` verifica apenas o ambiente e a solicitação;
+não valida fontes nem calcula resultados. Abrir o projeto não instala pacotes,
+não carrega uma sessão salva nem inicia cálculos. Consulte as
+[medições de recursos](docs/guide-pt.md#recursos) antes de uma execução real.
 
-```r
-source("renv/activate.R")
-bootstrap <- new.env(parent = baseenv())
-sys.source("R/bootstrap.R", envir = bootstrap)
-wlv <- bootstrap$wlv_load_runtime(".")
-wlv$get_wlv("wiodr13")
-```
+O [catálogo de suporte](docs/methods.md), os contratos das fontes
+[WIOD13](docs/wiodr13.md) e [WIOD16](docs/wiodr16.md), a
+[validação científica](docs/scientific-validation.md) e o
+[contrato de publicação](docs/result-publication.md) detalham a implementação.
+O guia completo bilíngue é autossuficiente; os anexos técnicos conservam seu
+idioma original. A revisão documental e as regras de manutenção estão na
+[convenção de sincronização](docs/documentation-sync.md).
 
-Use `Rscript --vanilla scripts/run_wlv.R --help` para ver todas as opções da
-linha de comando, ou acrescente `--check` para validar o ambiente e o método
-sem iniciar cálculos.
+Experimentos e campanhas locais ficam exclusivamente em `temp/<id>/`, ignorado
+pelo Git. Consulte [campanhas e limpeza local](docs/local-campaigns.md) para
+criar, encerrar e remover execuções temporárias. A campanha 054 permanece
+preservada em `temp/054/`.
 
-### Função get_wlv 
-
-**get_wlv** é uma função que executa todos os cálculos e grava arquivos para a pasta de resultados com todas as variáveis e matrizes com país e contas socioeconômicas setoriais (sea_countries e sea_sectors). 
-
-Por exemplo, para calcular o método padrão atual com dados do WIOD13, execute
-`wlv$get_wlv("wiodr13")` no runtime privado retornado pelo bootstrap acima.
-`R/main.R` contém definições e não deve ser carregado diretamente.
-
-A função aceita os seguintes argumentos: 
-
-* methods - uma string ou um vetor de caracteres como `c("wiodr13", "wiodr16")` para os métodos a serem calculados. Por padrão, `"wiodr13"`
-* repeat_pp - Verdadeiro/Falso para indicar se o download completo e a preparação de dados de origem devem ser executados. Por padrão, falso 
-* papern, prepaper - argumentos descontinuados, preservados somente nos valores padrão (`0`, `FALSE`) para compatibilidade das chamadas; a geração de papers foi removida e pedidos para ativá-la falham antes do cálculo
-* workers - inteiro positivo que controla os workers PSOCK. O padrão é `1`, que executa sequencialmente sem criar cluster
-* channel - canal de publicação em minúsculas, como `stable` ou `research/input-v3`
-* allow_experimental - opt-in explícito para capacidades experimentais; não habilita métodos cujo cálculo ou recálculo esteja bloqueado
-
-## Estrutura de pastas/ organização do repositório 
-
-###1) source_data - a ser baixada em separado - [link aqui] (https://coletiva.imperialismoedependencia.org/s/wjMfkBXDnptADXF) 
-
-Pasta com dados baixados das fontes primárias de insumo-produto, em subpastas de acordo com a fonte. 
-
-Os dados nesta pasta também são formatados para manter uma estrutura tratável de diferentes fontes para o mesmo fluxo de processamento.
-
-### 2) Catálogo e configuração
-
-`catalog/` declara fontes, métodos, capacidades, perfis de validação e contratos
-públicos. `config/modules/` compõe instâncias nativas de método, fonte e
-`common` com operações tipadas `add`, `replace` e `remove`.
-`config/aggregations/` declara os perfis históricos de agregação. Os CSVs
-contêm apenas identificadores e argumentos tipados; caminhos executáveis,
-expressões R e ordem semântica não fazem parte da configuração.
-
-### 3) Métodos
-
-
-O primeiro artigo produzido, e de referência, mostra como a mesma fonte pode ser trabalhada com métodos diferentes. Nesse caso, diferentes métodos para converter o tempo de trabalho concreto ao tempo de trabalho abstrato. 
-
-Uma das características do Banco de Dados de Valores Trabalho Mundiais é a facilidade de criar, aplicar e comparar diferentes métodos para estimativa de categorias. Como tal, fornece complemento subsidiário para discussões teóricas.
-
-As subpastas em `methods/` contêm metadados, parâmetros e classificações
-setoriais. O comportamento científico executável é registrado como funções
-nativas em `R/modules/native/`; a ordem vem do grafo de dependências compilado,
-nunca da posição das linhas nos CSVs.
-
-###4) results - a ser baixado em separado caso se queira verificar os resultados já produzidos pela nossa equipe - [Link aqui] (https://coletiva.imperialismodependencia.org/s/nmmdymxl8fwxfjq) 
-
-Os resultados são runs imutáveis em `results/runs/<método>/<run_id>/`.
-Releases em `results/releases/` fixam conjuntos coerentes, e marcadores
-append-only em `results/channels/<canal>/` selecionam a release corrente.
-
-### 5) Runtime R
-
-O bootstrap determinístico carrega definições de função de `R/lib/`,
-`R/modules/native/`, `R/preparation/` e `R/main.R` em um único namespace
-privado e bloqueado. Módulos científicos recebem entradas, argumentos e
-serviços injetados por contexto explícito; executores legados baseados em
-`source()` não fazem parte do runtime alcançável.
+Para uma citação reproduzível, registre método, anos, commit Git, contrato de
+unidades, `run_id`, `result_id`, `release_id` e referências das fontes do run.
+A atribuição e as licenças das fontes são explicadas no
+[guia](docs/guide-pt.md#fontes-e-atribuição).

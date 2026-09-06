@@ -1,3 +1,8 @@
+# Interface de linha de comando do percurso público WIOD13/WIOD16. --prepare-only
+# termina na fonte normalizada; o cálculo publica também indicadores e metadados
+# para WLVPanel. --check valida ambiente/pedido, não executa a prova científica.
+# Recálculos seletivos usam recalc_wlv na API R. Exemplos completos e requisitos:
+# docs/guide-pt.md e docs/guide-en.md.
 usage <- function() {
   cat(
     paste(
