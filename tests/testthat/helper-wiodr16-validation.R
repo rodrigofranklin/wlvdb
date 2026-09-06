@@ -1,18 +1,18 @@
 wiodr16_validation_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "gfcf_contracts.R"),
+  file.path(wlv_test_root, "scripts", "lib", "gfcf_contracts.R"),
   envir = wiodr16_validation_environment
 )
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "wiodr13_validation.R"),
+  file.path(wlv_test_root, "scripts", "lib", "wiodr13_validation.R"),
   envir = wiodr16_validation_environment
 )
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "wiodr16_allocation.R"),
+  file.path(wlv_test_root, "scripts", "lib", "wiodr16_allocation.R"),
   envir = wiodr16_validation_environment
 )
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "wiodr16_validation.R"),
+  file.path(wlv_test_root, "scripts", "lib", "wiodr16_validation.R"),
   envir = wiodr16_validation_environment
 )
 

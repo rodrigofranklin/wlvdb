@@ -1,13 +1,13 @@
 native_output_environment <- new.env(parent = globalenv())
 for (path in c(
-  "R/lib/catalog.R",
-  "R/lib/missingness.R",
-  "R/lib/result_contracts.R",
-  "R/lib/unit_dimensions.R",
-  "R/lib/aggregation_specs.R",
-  "R/lib/module_config.R",
-  "R/lib/native_aggregation_registry.R",
-  "R/lib/native_output_contract.R"
+  "scripts/lib/catalog.R",
+  "scripts/lib/missingness.R",
+  "scripts/lib/result_contracts.R",
+  "scripts/lib/unit_dimensions.R",
+  "scripts/lib/aggregation_specs.R",
+  "scripts/lib/module_config.R",
+  "scripts/lib/native_aggregation_registry.R",
+  "scripts/lib/native_output_contract.R"
 )) {
   sys.source(file.path(wlv_test_root, path), envir = native_output_environment)
 }

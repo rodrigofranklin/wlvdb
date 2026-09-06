@@ -4,7 +4,7 @@
 args <- commandArgs(trailingOnly = TRUE)
 stopifnot(length(args) == 3L, !file.exists(args[[3L]]))
 bootstrap <- new.env(parent = baseenv())
-sys.source(file.path(getwd(), "R", "bootstrap.R"), envir = bootstrap)
+sys.source(file.path(getwd(), "scripts", "runtime_bootstrap.R"), envir = bootstrap)
 runtime <- bootstrap$wlv_load_runtime(getwd())
 hash <- runtime$wlv_publication_file_sha256
 roots <- args[1:2]

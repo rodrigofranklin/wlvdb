@@ -1,6 +1,6 @@
 unit_dimensions_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "unit_dimensions.R"),
+  file.path(wlv_test_root, "scripts", "lib", "unit_dimensions.R"),
   envir = unit_dimensions_environment
 )
 

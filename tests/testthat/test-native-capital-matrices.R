@@ -1,15 +1,15 @@
 native_capital_environment <- new.env(parent = globalenv())
 for (native_capital_file in c(
-  "R/lib/module_runtime.R",
-  "R/lib/semantic_resources.R",
-  "R/lib/missingness.R",
-  "R/lib/result_contracts.R",
-  "R/lib/functions.R",
-  "R/lib/wiodr16_allocation.R",
-  "R/lib/gfcf_contracts.R",
-  "R/lib/gfcf_diagnostics.R",
-  "R/modules/native/contracts.R",
-  "R/modules/native/capital_matrix_modules.R"
+  "scripts/lib/module_runtime.R",
+  "scripts/lib/semantic_resources.R",
+  "scripts/lib/missingness.R",
+  "scripts/lib/result_contracts.R",
+  "scripts/lib/functions.R",
+  "scripts/lib/wiodr16_allocation.R",
+  "scripts/lib/gfcf_contracts.R",
+  "scripts/lib/gfcf_diagnostics.R",
+  "scripts/modules/native/contracts.R",
+  "scripts/modules/native/capital_matrix_modules.R"
 )) {
   sys.source(
     file.path(wlv_test_root, native_capital_file),

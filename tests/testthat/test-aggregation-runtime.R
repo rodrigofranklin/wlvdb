@@ -1,7 +1,7 @@
 aggregation_runtime_environment <- new.env(parent = globalenv())
 for (script in c("missingness.R", "aggregation_specs.R", "result_contracts.R")) {
   sys.source(
-    file.path(wlv_test_root, "R", "lib", script),
+    file.path(wlv_test_root, "scripts", "lib", script),
     envir = aggregation_runtime_environment
   )
 }
@@ -74,7 +74,7 @@ test_that("SEA runtime dispatches independent specifications at each level", {
     sys.source(
       file.path(
         wlv_test_root,
-        "R",
+        "scripts",
         "modules",
         "variables",
         "sea_countries.R"
@@ -226,7 +226,7 @@ test_that("world bindings can consume an earlier dependency with runtime states"
     sys.source(
       file.path(
         wlv_test_root,
-        "R",
+        "scripts",
         "modules",
         "variables",
         "sea_countries.R"
@@ -292,7 +292,7 @@ test_that("world bindings can consume an earlier dependency with runtime states"
     sys.source(
       file.path(
         wlv_test_root,
-        "R",
+        "scripts",
         "modules",
         "variables",
         "sea_countries.R"

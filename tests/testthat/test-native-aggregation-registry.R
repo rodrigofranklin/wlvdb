@@ -1,10 +1,10 @@
 native_aggregation_environment <- new.env(parent = baseenv())
 for (native_aggregation_file in c(
-  "R/lib/unit_dimensions.R",
-  "R/lib/aggregation_specs.R",
-  "R/lib/module_config.R",
-  "R/lib/catalog.R",
-  "R/lib/native_aggregation_registry.R"
+  "scripts/lib/unit_dimensions.R",
+  "scripts/lib/aggregation_specs.R",
+  "scripts/lib/module_config.R",
+  "scripts/lib/catalog.R",
+  "scripts/lib/native_aggregation_registry.R"
 )) {
   sys.source(
     file.path(wlv_test_root, native_aggregation_file),

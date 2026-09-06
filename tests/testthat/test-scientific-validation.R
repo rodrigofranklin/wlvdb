@@ -4,7 +4,7 @@ for (script in c(
   "leontief_diagnostics.R", "scientific_validation.R", "result_contracts.R"
 )) {
   sys.source(
-    file.path(wlv_test_root, "R", "lib", script),
+    file.path(wlv_test_root, "scripts", "lib", script),
     envir = scientific_validation_environment
   )
 }

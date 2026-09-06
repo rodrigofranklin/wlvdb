@@ -1,6 +1,6 @@
 native_data_environment <- new.env(parent = globalenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "native_data.R"),
+  file.path(wlv_test_root, "scripts", "lib", "native_data.R"),
   envir = native_data_environment
 )
 

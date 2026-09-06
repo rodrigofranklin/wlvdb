@@ -17,6 +17,19 @@ To work with existing data, go to [use the results](#use-the-results) and the
 dictionary. To produce results, follow [run the project](#run-the-project).
 The [code map](#understand-the-code) follows the same data journey.
 
+This guide connects three kinds of work. The [theory](theory-en.md) explains
+what the concepts mean and why input-output accounts can estimate them;
+the [mathematical methodology](methodology-en.md) develops the equations;
+the [assumptions and remaining work](assumptions-en.md) identify the conditions
+under which the estimates should be interpreted. Consult the
+[ABNT references](references-en.md) for the methodological literature.
+
+| Your immediate goal | What you need | Where to start |
+| --- | --- | --- |
+| Analyse an existing indicator | An authenticated result publication, R and the dictionary. | [Use the results](#use-the-results). |
+| Reproduce the database | The identified code, pinned source files, package environment, time and storage. | [Choose the level of reproduction](#choose-the-level-of-reproduction). |
+| Improve a formula or add coverage | A stated economic question, a code change and evidence appropriate to that change. | [Contribute an improvement](#contribute-an-improvement). |
+
 ### Coverage and limitations
 
 | Executable method | Years | Source countries/regions | Industries | Published indicators |
@@ -180,6 +193,15 @@ economic bases are not comparable.
 
 ## Use the results
 
+Cloning this repository supplies code, configuration, documentation and
+versioned supplements. It does **not** supply a calculated database:
+`source_data/` and `results/` are excluded from Git. For the reading examples,
+obtain a complete publication from the project maintainers or generate one
+using the calculation instructions below. A publication must include its
+channel, release and referenced runs. The guide does not assume an automatic
+download of precomputed results. The small test fixtures are illustrative
+data, not estimates for countries.
+
 ### Files and units
 
 A published execution, or *run*, lives in `results/runs/<method>/<run_id>/`.
@@ -231,18 +253,24 @@ use available components and record partial coverage; a wholly missing group
 remains `NA`. Do not sum countries including `WWW`, or obtain national rates
 by averaging industry rates.
 
+The standard ratio calculations sum numerator and denominator independently,
+so their coverage can differ. For instance, world (`WWW`) persons-engaged
+surplus-value rates can include ROW hours without corresponding reproduction
+costs, since ROW compensation is absent. Check each operand's coverage before
+using the rate; a finite result does not guarantee matching populations.
+
 ### Read and select data in R
 
 R is the language used for calculations. Run the following instructions from
 the repository root after installing packages and obtaining a published
 release. `source()` loads instructions from a file; `<-` assigns a name to
 an object. The bootstrap below creates a private environment called `wlv`.
-Do not load `R/main.R` directly.
+Do not load `scripts/main.R` directly.
 
 ```r
 source("renv/activate.R")
 bootstrap <- new.env(parent = baseenv())
-sys.source("R/bootstrap.R", envir = bootstrap)
+sys.source("scripts/runtime_bootstrap.R", envir = bootstrap)
 wlv <- bootstrap$wlv_load_runtime(".")
 run_dir <- wlv$wlv_current_result_dir("wiodr13", root = ".", channel = "stable")
 countries <- wlv$read_fst_array(file.path(run_dir, "sea_countries.fst"))
@@ -262,6 +290,70 @@ retains axes even when selecting a single country. Use names returned by
 `dimnames`, never assumed positions. Change the method to `wiodr16` to read
 the other source.
 
+### Turn a selected series into an analysis table
+
+Suppose the research question concerns the employee surplus-value rate in
+Brazil. The code below continues the previous R session and produces one
+row per year. It keeps the stored ratio alongside its displayed percentage;
+neither column changes the economic definition of the indicator.
+
+```r
+indicator <- "surplus_value.empe.r.pc"
+unit <- unique(units[units$indicator == indicator,
+  c("canonical_unit", "display_unit", "display_multiplier")])
+stopifnot(nrow(unit) == 1L)
+series <- countries[, indicator, "BRA", drop = FALSE]
+analysis <- data.frame(
+  year = as.integer(dimnames(series)[[1L]]),
+  country = "BRA",
+  indicator = indicator,
+  stored_value = as.vector(series),
+  stringsAsFactors = FALSE
+)
+analysis$display_value <- analysis$stored_value *
+  as.numeric(unit$display_multiplier[[1L]])
+analysis$display_unit <- unit$display_unit[[1L]]
+print(analysis)
+```
+
+The unit sidecar repeats each indicator for its aggregation levels;
+`unique()` extracts its common display definition. The resulting `analysis`
+is an ordinary R data frame, suitable for a chart, a statistical model or an
+explicit CSV export in your analysis project. Missing observations remain
+missing. Review `_states.csv` and `_anomalies.csv` before interpreting a
+series or discarding rows.
+
+This particular indicator includes productive and unproductive **employees**.
+Choose `surplus_value.empe_p.r.pc` for the productive-employee variant and
+consult its definition before comparison. A displayed value of 150 means a
+rate of 150%, not 150 hours; a move from 150% to 160% is 10 percentage points.
+Use the already calculated national rate: the mean of sector rates answers
+a different question. The WIOD13 coverage warning above still applies to
+2008–2009; this reading example applies no panel filter.
+
+### Record the data behind an analysis
+
+The channel can select a different release tomorrow. Record the immutable run
+used today and preserve the complete manifests alongside the analysis:
+
+```r
+manifest <- jsonlite::fromJSON(
+  file.path(run_dir, "run_manifest.json"), simplifyVector = FALSE)
+manifest[c("method", "run_id", "result_id", "parent_run_id")]
+manifest$output_contract
+str(manifest$result$provenance, max.level = 2L)
+```
+
+The inspected provenance belongs to the calculation, whereas the commit of
+your analysis script describes what you subsequently did with its output.
+An adequate data note identifies both, the method, years, indicator IDs,
+countries/sectors, units, source and unit-contract versions, `run_id`,
+`result_id`, the corresponding release, any selection or transformation,
+and the access date. Include the relevant
+[bibliographic references](references-en.md). Cite a reproduced publication
+as that publication; do not silently attribute its results to the current
+checkout or merely to the moving `stable` channel.
+
 For external analysis, copy only the selection you need and record the run
 and contract. Your research script and outputs can belong to another project.
 Experiments within this repository must use a campaign in `temp/<id>/`.
@@ -278,6 +370,26 @@ dependencies are documented in the
 [WLVPanel repository](https://github.com/rodrigofranklin/wlvpanel).
 
 ## Run the project
+
+### Choose the level of reproduction
+
+| Level | Operation | What it establishes |
+| --- | --- | --- |
+| Reproduce an analysis | Read the same immutable publication and rerun the selection, transformation and analysis script. | The same input data support the reported table or finding. It does not recompute the database. |
+| Recalculate selected indicators | Use `recalc_wlv` with a compatible published parent and normalized sources. | Selected variables can be reconstructed while the authenticated matrices are reused. |
+| Reproduce the full calculation | Restore the identified environment, prepare pinned sources and run `get_wlv` or the CLI. | The database can be rebuilt from the declared statistical inputs and assumptions. |
+| Check software or sensitivity | Run synthetic tests, or conduct a separately identified campaign varying an assumption. | Tests check specified behavior; sensitivity measures dependence on an assumption. Neither alone reproduces the original empirical result. |
+
+First identify the target publication and its code/environment provenance.
+The current branch contains the current implementation; it is not necessarily
+the version that produced a historical result. Match source identities,
+supplements, classification and contracts before comparing outputs. A new
+execution receives a new `run_id`; compare numerical values within the
+declared tolerances, together with axes, units, missingness and diagnostics.
+Equal rounded numbers or a successful exit code alone are insufficient.
+Rebuilding the database also does not automatically reproduce the figures,
+sample restrictions or specifications of a published article: those require
+the article's own analysis steps.
 
 ### Installation and preparation
 
@@ -304,6 +416,9 @@ Rscript --version
 These libraries support curl, openssl, xml2, stringi and C/C++ components in
 `renv.lock`; the `sudo` commands are Ubuntu-specific. Current calculation
 requires no graphical editor, LaTeX or paper-generation tools.
+Choose your preferred IDE or editor; the repository does not version RStudio
+project files or personal IDE settings. All documented commands work from the
+repository root in a terminal.
 
 ```sh
 git clone https://github.com/rodrigofranklin/wlvdb.git
@@ -329,6 +444,15 @@ live in `source_data/`, including `normalized/` and its manifest. Versioned
 supplementary files live in `complementar/`. Cached sources are verified before
 reuse. Old shared download packages are unnecessary. `--check` verifies only
 arguments and dependencies; actual preparation validates source data.
+
+The download paths and accepted source identities are described in the
+[WIOD13](wiodr13.md) and [WIOD16](wiodr16.md) contracts. Source preparation
+depends on the providers continuing to serve those exact files. If a file
+cannot be obtained or fails its checksum, retain the diagnostic and seek the
+authenticated source; replacing it with the latest similarly named file
+changes the experiment. A documented historical supplement can be reproduced
+as an input without its original construction being independently repeatable:
+the Chinese-hours mapping is one such remaining limitation.
 
 ### Calculation, recalculation and publication
 
@@ -357,6 +481,12 @@ wlv$recalc_wlv("wiodr16", at_stage = 5,
 
 Execute only the desired operations: preparation and calculation above are
 alternatives to terminal commands, not additional mandatory steps.
+The public functions return the processed method names invisibly; the data
+are written to the published run. Read them with the result reader shown
+above. The public CLI and these API functions do not offer year, country or
+sector filters for a full calculation: each method runs its contracted
+coverage. Select a smaller research sample when reading the results.
+
 Recalculation updates variables from an authenticated published run while
 preserving matrices, without rebuilding investment allocation or solving
 Leontief again. It does not replace a full calculation after source, matrix
@@ -470,18 +600,25 @@ Rscript --vanilla scripts/render_results_dictionary.R --check
 
 ## Understand the code
 
+`scripts/` contains application code and maintenance commands. The package
+restorer `scripts/bootstrap.R` and private loader `scripts/runtime_bootstrap.R`
+serve different purposes. `tests/` contains verification code and controlled
+example data (fixtures) maintained in Git. Generated test results, logs and
+campaign data belong in `temp/<id>/`, ignored by Git; do not write them next
+to test code.
+
 | Entrypoint/directory | Role in the workflow |
 | --- | --- |
 | `scripts/bootstrap.R`, `renv.lock` | Reproducible package environment. |
-| `scripts/run_wlv.R`, `R/bootstrap.R`, `R/main.R` | Terminal commands, private loading and public functions `prepare_wlv`, `get_wlv`, `recalc_wlv`. |
+| `scripts/run_wlv.R`, `scripts/runtime_bootstrap.R`, `scripts/main.R` | Terminal commands, private loading and public functions `prepare_wlv`, `get_wlv`, `recalc_wlv`. |
 | `catalog/`, `config/`, `parameters/`, `methods/` | Support, units, module/indicator selection, dependencies and economic classification. CSV row order does not determine execution order. |
-| `R/preparation/`, `R/lib/preparation_*`, `source_normalization.R` | Verified downloads, preparation and normalized generation. |
-| `R/modules/native/source_modules.R`, `indicator_source_derived_modules.R` | Observed and derived variables: employment, hours, exchange, capital and prices. |
-| `R/modules/native/assumption_modules.R`, `capital_matrix_modules.R` | Economic completion and capital allocation. |
-| `R/modules/native/matrix_modules.R`, `indicator_common_modules.R` | Values, trade, baskets and economic indicators. |
-| `R/lib/native_planner.R`, `native_store.R`, `execution.R` | Dependency ordering, resource management and calculation/recalculation. |
-| `R/lib/scientific_validation.R`, `leontief_diagnostics.R`, `missingness.R` | Identities, numerical stability and missing-value meaning. |
-| `R/lib/publication*.R`, `contracts/results/` | Provenance, inventories and transactional WLVPanel publication. |
+| `scripts/preparation/`, `scripts/lib/preparation_*`, `source_normalization.R` | Verified downloads, preparation and normalized generation. |
+| `scripts/modules/native/source_modules.R`, `indicator_source_derived_modules.R` | Observed and derived variables: employment, hours, exchange, capital and prices. |
+| `scripts/modules/native/assumption_modules.R`, `capital_matrix_modules.R` | Economic completion and capital allocation. |
+| `scripts/modules/native/matrix_modules.R`, `indicator_common_modules.R` | Values, trade, baskets and economic indicators. |
+| `scripts/lib/native_planner.R`, `native_store.R`, `execution.R` | Dependency ordering, resource management and calculation/recalculation. |
+| `scripts/lib/scientific_validation.R`, `leontief_diagnostics.R`, `missingness.R` | Identities, numerical stability and missing-value meaning. |
+| `scripts/lib/publication*.R`, `contracts/results/` | Provenance, inventories and transactional WLVPanel publication. |
 | `tests/testthat/`, `tests/manual/`, `docs/validation/` | Automated tests, reproducible real-data proofs and revision evidence. |
 
 Start with the module for your indicator and read its inputs, units and
@@ -492,6 +629,106 @@ of executing historical scripts scattered across the repository.
 economic rule requires revising contracts, tests, the dictionary and both
 guides together. The [synchronization convention](documentation-sync.md)
 defines that review.
+
+## Contribute an improvement
+
+An issue reports a question or defect; a pull request (PR) proposes a concrete
+change for review. Contributions can improve explanations, a source mapping,
+an economic assumption, a numerical calculation or coverage. State which of
+these is changing so reviewers can judge the required evidence.
+
+### Follow one indicator from its meaning to its output
+
+Take `surplus_value.empe.r.pc`, the employee surplus-value rate. Its definition
+is total abstract employee labour divided by the estimated value of employee
+labour power, minus one. To investigate or improve its implementation:
+
+1. Read [theory](theory-en.md), [methodology](methodology-en.md),
+   [assumptions](assumptions-en.md) and its dictionary entry. Specify the
+   affected population, unit and expected behavior before changing code.
+2. Find `wlv_indicator_surplus_value_empe_r_pc_spec()` in
+   `scripts/modules/native/indicator_common_modules.R`. It names the two input
+   indicators and calls `wlv_native_stage5_ratio_spec()` in that same file.
+   The shared factory defines stage 5, zero-denominator handling and the
+   calculation at sector and country levels. Read that factory as well as
+   the small indicator wrapper.
+3. Trace registration in `scripts/modules/native/zz_indicator_registry.R` and
+   selection in `config/modules/common.csv`. Published indicator lists are
+   in `config/outputs/sources/wiodr13.csv` and `wiodr16.csv`. The applicable
+   `contracts/units/*_v2-units.csv` and `*_v2-aggregations.csv` define stored
+   units, display and aggregation. `_method_solutions.csv` in a published
+   run is generated evidence of the selected stages, not a source file to
+   edit. Legacy similarly named scripts in `scripts/modules/variables/` do not
+   replace the active native implementation.
+4. Use an independently calculated example to establish expected behavior.
+   If two sectors have labour of 100 and 300 hours and labour-power values of
+   50 and 100 hours, their rates are 100% and 200%; the aggregate is
+   `400 / 150 - 1 = 1.666...`, or about 166.67%. A simple average gives 150%
+   and is wrong for this aggregate. Cover a zero denominator and a wholly
+   missing group as well. These cases check the intended economic behavior,
+   rather than merely repeating the implementation in a test.
+5. Match evidence to the change. An editorial correction needs bilingual
+   meaning and documentation checks. A formula correction additionally needs
+   relevant tests, numerical comparisons and disclosure of affected outputs.
+   A changed upstream assumption may require full calculation; selective
+   recalculation does not automatically replace dependent indicators outside
+   the selection.
+
+The relevant files can be located from the repository root with:
+
+```sh
+rg -n 'surplus_value.empe.r.pc|wlv_native_stage5_ratio_spec' scripts/modules/native config contracts/units docs/indicator-descriptions.csv
+```
+
+### Add an indicator or extend the method
+
+| Proposed change | Implementation and documentation to inspect |
+| --- | --- |
+| Clarify an existing indicator | `docs/indicator-descriptions.csv` has PT/EN descriptions; the paired guides explain interpretation. Generated dictionary pages must be regenerated rather than edited directly. |
+| Add a derived indicator | A native module specification and explicit registry entry; selected modules in `config/modules/`; selected outputs in `config/outputs/`; applicable unit/aggregation contracts; economic descriptions, missingness behavior and tests. |
+| Change labour classification or an imputation | `methods/<method>/_sectors.csv`, active assumption modules, affected matrix dependencies, scientific contracts and sensitivity evidence. Preserve the interpretation of existing published results. |
+| Add a statistical source or release | `catalog/sources.csv`, `catalog/methods.csv`, `scripts/preparation/registry.R`, source preparation and normalization, sector/country correspondence, unit and missingness policies, native modules and independent validation. A download adapter alone is insufficient. |
+
+An added source must establish which source fields measure output, inputs,
+hours, employment, compensation, investment and capital; their units and
+years; the orientation of each axis; and the treatment of unavailable fields.
+It also needs source identities and rights, a defensible productive-sector
+classification, reproducible mappings and evidence on the resulting estimates.
+EXIOBASE, EORA and alternative reduction methods remain deferred until their
+public workflow and validation are implemented. Changing a catalogue label
+or passing `--allow-experimental` does not supply those missing components.
+The [remaining-work register](assumptions-en.md) distinguishes these research
+extensions from corrections to currently supported methods.
+
+For an indicator change, start with the relevant tests in
+`tests/testthat/test-native-indicator-modules.R`,
+`test-native-aggregation-registry.R`, `test-unit-dimensions.R`,
+`test-missingness-contracts.R` and `test-scientific-validation.R`.
+The public integration and recalculation tests check whether the change
+survives the full runtime. Run tests through the campaign workflow in
+[validation and common errors](#validation-and-common-errors); keep empirical
+comparisons, logs and temporary worktrees inside that campaign. Never use the
+preserved campaign 054 for a new attempt.
+
+When economic descriptions or indicator coverage change, regenerate and
+check the dictionaries, then review the diff:
+
+```sh
+Rscript --vanilla scripts/render_results_dictionary.R
+Rscript --vanilla scripts/render_results_dictionary.R --check
+Rscript --vanilla scripts/render_method_catalog.R --check
+git diff --check
+git status --short
+```
+
+A reviewable PR explains the economic problem, old and new behavior, affected
+methods and periods, assumptions and limitations, changed files, and the
+evidence obtained. State explicitly which checks ran and whether any real
+source calculation was performed. Include both languages and update contracts
+and the documentation revision if scientific semantics or the public workflow
+change. Keep generated research data out of Git. Report a failing download
+with its source identity and diagnostic; report a numerical discrepancy with
+its method, run, indicator, coordinates, observed value and expected behavior.
 
 ## Sources and attribution
 

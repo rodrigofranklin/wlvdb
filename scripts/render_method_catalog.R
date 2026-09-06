@@ -397,7 +397,7 @@ source(file.path(project_root, "renv", "activate.R"), local = TRUE)
 
 bootstrap_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(project_root, "R", "bootstrap.R"),
+  file.path(project_root, "scripts", "runtime_bootstrap.R"),
   envir = bootstrap_environment,
   chdir = FALSE
 )

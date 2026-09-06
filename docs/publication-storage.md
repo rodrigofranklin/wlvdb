@@ -29,7 +29,7 @@ Load the regular runtime, then inspect a plan:
 
 ```r
 bootstrap <- new.env(parent = baseenv())
-sys.source("R/bootstrap.R", envir = bootstrap)
+sys.source("scripts/runtime_bootstrap.R", envir = bootstrap)
 runtime <- bootstrap$wlv_load_runtime(".")
 
 plan <- runtime$wlv_plan_publication_prune(

@@ -18,6 +18,19 @@ e consulte o dicionário. Para produzir novos resultados, siga
 [executar o projeto](#executar-o-projeto). O [mapa do código](#compreender-o-código)
 acompanha o mesmo percurso dos dados.
 
+Este guia conecta três tipos de trabalho. A [teoria](theory-pt.md) explica
+o significado dos conceitos e por que as contas de insumo-produto permitem
+estimá-los; a [metodologia matemática](methodology-pt.md) desenvolve as
+equações; as [hipóteses e tarefas pendentes](assumptions-pt.md) identificam
+as condições de interpretação das estimativas. Consulte as
+[referências em ABNT](references-pt.md) para a literatura metodológica.
+
+| Seu objetivo imediato | O que é necessário | Por onde começar |
+| --- | --- | --- |
+| Analisar um indicador existente | Uma publicação autenticada dos resultados, R e o dicionário. | [Usar os resultados](#usar-os-resultados). |
+| Reproduzir o banco de dados | Código identificado, fontes fixadas, ambiente de pacotes, tempo e armazenamento. | [Escolher o nível de reprodução](#escolher-o-nível-de-reprodução). |
+| Melhorar uma fórmula ou ampliar a cobertura | Uma pergunta econômica explícita, uma alteração no código e evidências adequadas à mudança. | [Contribuir com uma melhoria](#contribuir-com-uma-melhoria). |
+
 ### Cobertura e limites
 
 | Método executável | Anos | Países/regiões na fonte | Setores | Indicadores publicados |
@@ -181,6 +194,15 @@ média mundial, porque as moedas e bases econômicas não são comparáveis.
 
 ## Usar os resultados
 
+Clonar este repositório fornece código, configurações, documentação e
+suplementos versionados. Isso **não** fornece um banco de dados calculado:
+`source_data/` e `results/` são excluídos do Git. Para executar os exemplos
+de leitura, obtenha uma publicação completa com os mantenedores do projeto
+ou produza uma seguindo as instruções de cálculo abaixo. Uma publicação
+precisa incluir canal, release e runs referenciados. O guia não pressupõe
+download automático de resultados previamente calculados. As pequenas
+fixtures de teste são dados ilustrativos, não estimativas para países.
+
 ### Arquivos e unidades
 
 Uma execução publicada, ou *run*, fica em `results/runs/<método>/<run_id>/`.
@@ -231,18 +253,25 @@ componentes disponíveis e registrar cobertura parcial; um grupo inteiro
 ausente continua `NA`. Não some países incluindo `WWW`, nem calcule taxas
 nacionais pela média de taxas setoriais.
 
+As razões padrão somam numerador e denominador independentemente, de modo
+que suas coberturas podem diferir. Por exemplo, taxas mundiais (`WWW`) de
+mais-valia das pessoas ocupadas podem incluir horas do ROW sem custos de
+reprodução correspondentes, pois a remuneração do ROW está ausente. Examine
+a cobertura de cada componente antes de usar a taxa; um resultado finito
+não garante populações correspondentes.
+
 ### Ler e selecionar dados em R
 
 R é a linguagem utilizada nos cálculos. As instruções abaixo são executadas
 na raiz do repositório, depois de instalar os pacotes e ter uma release
 publicada. `source()` carrega um arquivo de instruções; `<-` atribui um nome
 a um objeto. O bootstrap abaixo cria o ambiente privado chamado `wlv`.
-`R/main.R` não deve ser carregado diretamente.
+`scripts/main.R` não deve ser carregado diretamente.
 
 ```r
 source("renv/activate.R")
 bootstrap <- new.env(parent = baseenv())
-sys.source("R/bootstrap.R", envir = bootstrap)
+sys.source("scripts/runtime_bootstrap.R", envir = bootstrap)
 wlv <- bootstrap$wlv_load_runtime(".")
 run_dir <- wlv$wlv_current_result_dir("wiodr13", root = ".", channel = "stable")
 countries <- wlv$read_fst_array(file.path(run_dir, "sea_countries.fst"))
@@ -262,6 +291,70 @@ país. `drop = FALSE` conserva os eixos, mesmo ao selecionar um único país.
 Use os nomes retornados por `dimnames`, nunca posições supostas. Troque o
 método por `wiodr16` para ler a outra fonte.
 
+### Transformar uma série selecionada em tabela de análise
+
+Suponha que a pergunta de pesquisa trate da taxa de mais-valia dos empregados
+no Brasil. O código abaixo continua a sessão R anterior e produz uma linha
+por ano. Ele conserva a razão armazenada ao lado da porcentagem exibida;
+nenhuma dessas colunas modifica a definição econômica do indicador.
+
+```r
+indicator <- "surplus_value.empe.r.pc"
+unit <- unique(units[units$indicator == indicator,
+  c("canonical_unit", "display_unit", "display_multiplier")])
+stopifnot(nrow(unit) == 1L)
+series <- countries[, indicator, "BRA", drop = FALSE]
+analysis <- data.frame(
+  year = as.integer(dimnames(series)[[1L]]),
+  country = "BRA",
+  indicator = indicator,
+  stored_value = as.vector(series),
+  stringsAsFactors = FALSE
+)
+analysis$display_value <- analysis$stored_value *
+  as.numeric(unit$display_multiplier[[1L]])
+analysis$display_unit <- unit$display_unit[[1L]]
+print(analysis)
+```
+
+O sidecar de unidades repete cada indicador para seus níveis de agregação;
+`unique()` extrai a definição de exibição comum a esses níveis. O objeto
+`analysis` é um data frame comum do R, adequado para gráficos, modelos
+estatísticos ou exportação explícita em CSV no seu projeto de análise.
+As observações ausentes continuam ausentes. Consulte `_states.csv` e
+`_anomalies.csv` antes de interpretar uma série ou descartar linhas.
+
+Este indicador inclui **empregados** produtivos e improdutivos. Escolha
+`surplus_value.empe_p.r.pc` para a variante dos empregados produtivos e
+consulte sua definição antes de comparar. Um valor exibido de 150 significa
+taxa de 150%, não 150 horas; passar de 150% para 160% representa 10 pontos
+percentuais. Use a taxa nacional já calculada: a média das taxas setoriais
+responde a outra pergunta. O alerta anterior de cobertura WIOD13 continua
+válido para 2008–2009; este exemplo de leitura não aplica o filtro do painel.
+
+### Registrar os dados utilizados na análise
+
+O canal pode selecionar outra release amanhã. Registre o run imutável usado
+hoje e preserve os manifestos completos junto à análise:
+
+```r
+manifest <- jsonlite::fromJSON(
+  file.path(run_dir, "run_manifest.json"), simplifyVector = FALSE)
+manifest[c("method", "run_id", "result_id", "parent_run_id")]
+manifest$output_contract
+str(manifest$result$provenance, max.level = 2L)
+```
+
+A proveniência consultada pertence ao cálculo, enquanto o commit do seu
+script de análise descreve o que você fez posteriormente com o resultado.
+Uma nota de dados adequada identifica ambos, método, anos, códigos dos
+indicadores, países/setores, unidades, versões da fonte e do contrato de
+unidades, `run_id`, `result_id`, a release correspondente, seleções ou
+transformações e data de acesso. Inclua as
+[referências bibliográficas](references-pt.md) pertinentes. Cite uma
+publicação reproduzida como aquela publicação; não atribua silenciosamente
+seus resultados ao checkout atual ou apenas ao canal móvel `stable`.
+
 Para análises externas, copie apenas a seleção necessária e registre o run e
 o contrato. Seu script e os resultados da pesquisa podem ficar em outro
 projeto. Experimentos feitos dentro deste repositório devem usar uma campanha
@@ -278,6 +371,26 @@ apresentação. A instalação e as dependências do aplicativo estão no
 [repositório WLVPanel](https://github.com/rodrigofranklin/wlvpanel).
 
 ## Executar o projeto
+
+### Escolher o nível de reprodução
+
+| Nível | Operação | O que permite demonstrar |
+| --- | --- | --- |
+| Reproduzir uma análise | Ler a mesma publicação imutável e repetir o script de seleção, transformação e análise. | Os mesmos dados sustentam a tabela ou conclusão apresentada. Isso não recalcula o banco. |
+| Recalcular indicadores selecionados | Usar `recalc_wlv` com um run pai publicado compatível e fontes normalizadas. | Variáveis selecionadas podem ser reconstruídas com reutilização das matrizes autenticadas. |
+| Reproduzir o cálculo completo | Restaurar o ambiente identificado, preparar fontes fixadas e executar `get_wlv` ou a CLI. | O banco pode ser reconstruído a partir das entradas estatísticas e hipóteses declaradas. |
+| Verificar o software ou a sensibilidade | Executar testes sintéticos ou uma campanha identificada separadamente que varie uma hipótese. | Testes verificam comportamentos definidos; sensibilidade mede a dependência de uma hipótese. Nenhum deles reproduz sozinho o resultado empírico original. |
+
+Primeiro identifique a publicação desejada e a proveniência de seu código e
+ambiente. O branch atual contém a implementação atual; não necessariamente
+a versão que produziu um resultado histórico. Confira identidades das fontes,
+suplementos, classificação e contratos antes de comparar saídas. Uma nova
+execução recebe outro `run_id`; compare os valores numéricos segundo as
+tolerâncias declaradas, junto com eixos, unidades, ausências e diagnósticos.
+Números arredondados iguais ou um código de saída bem-sucedido não bastam.
+Reconstruir o banco também não reproduz automaticamente figuras, restrições
+amostrais ou especificações de um artigo publicado: isso exige as etapas
+de análise do próprio artigo.
 
 ### Instalação e preparação
 
@@ -304,6 +417,9 @@ Rscript --version
 Essas bibliotecas atendem a curl, openssl, xml2, stringi e componentes C/C++
 do `renv.lock`; os comandos `sudo` são exclusivos do Ubuntu. O cálculo atual
 não requer um editor gráfico, LaTeX nem ferramentas de geração de artigos.
+Escolha livremente seu IDE ou editor; o repositório não versiona arquivos de
+projeto do RStudio nem configurações pessoais de IDE. Todos os comandos
+documentados funcionam a partir da raiz do repositório em um terminal.
 
 ```sh
 git clone https://github.com/rodrigofranklin/wlvdb.git
@@ -332,6 +448,16 @@ verificadas antes do reuso. Não é necessário obter um pacote de dados de link
 antigos compartilhados. `--check` apenas verifica argumentos e dependências;
 é a preparação efetiva que valida as fontes.
 
+Os caminhos de download e as identidades aceitas das fontes estão descritos
+nos contratos [WIOD13](wiodr13.md) e [WIOD16](wiodr16.md). A preparação depende
+de os provedores continuarem disponibilizando esses arquivos exatos. Se um
+arquivo não puder ser obtido ou não passar na verificação de checksum,
+conserve o diagnóstico e procure a fonte autenticada; substituí-lo pelo
+arquivo mais recente de nome semelhante muda o experimento. Um suplemento
+histórico documentado pode ser reproduzido como entrada sem que sua construção
+original seja repetível de forma independente: a correspondência das horas
+chinesas é uma dessas limitações pendentes.
+
 ### Cálculo, recálculo e publicação
 
 ```sh
@@ -359,6 +485,13 @@ wlv$recalc_wlv("wiodr16", at_stage = 5,
 
 Execute somente as operações desejadas: preparação e cálculo acima são
 alternativas aos comandos de terminal, não passos adicionais obrigatórios.
+As funções públicas retornam invisivelmente os nomes dos métodos processados;
+os dados são gravados no run publicado. Leia-os com o leitor de resultados
+mostrado acima. A CLI pública e essas funções da API não oferecem filtros
+de ano, país ou setor para um cálculo completo: cada método executa sua
+cobertura contratada. Selecione uma amostra menor de pesquisa ao ler os
+resultados.
+
 Recálculo atualiza variáveis a partir de um run publicado e autenticado,
 preservando as matrizes, sem refazer investimento ou a resolução de Leontief.
 Ele não é um substituto de cálculo completo após mudar fontes, hipóteses de
@@ -471,18 +604,25 @@ Rscript --vanilla scripts/render_results_dictionary.R --check
 
 ## Compreender o código
 
+`scripts/` reúne o código da aplicação e os comandos de manutenção. O
+restaurador de pacotes `scripts/bootstrap.R` e o carregador privado
+`scripts/runtime_bootstrap.R` têm funções distintas. `tests/` contém código
+de verificação e dados de exemplo controlados (*fixtures*) mantidos no Git.
+Os resultados gerados pelos testes, logs e dados de campanhas ficam em
+`temp/<id>/`, ignorado pelo Git; não devem ser gravados junto ao código de teste.
+
 | Entrada/pasta | Função no percurso |
 | --- | --- |
 | `scripts/bootstrap.R`, `renv.lock` | Ambiente de pacotes reproduzível. |
-| `scripts/run_wlv.R`, `R/bootstrap.R`, `R/main.R` | Comandos de terminal, carregamento privado e funções públicas `prepare_wlv`, `get_wlv`, `recalc_wlv`. |
+| `scripts/run_wlv.R`, `scripts/runtime_bootstrap.R`, `scripts/main.R` | Comandos de terminal, carregamento privado e funções públicas `prepare_wlv`, `get_wlv`, `recalc_wlv`. |
 | `catalog/`, `config/`, `parameters/`, `methods/` | Suporte, unidades, seleção de módulos/indicadores, dependências e classificação econômica. Ordem de linhas CSV não define ordem de cálculo. |
-| `R/preparation/`, `R/lib/preparation_*`, `source_normalization.R` | Download verificado, preparação e geração normalizada. |
-| `R/modules/native/source_modules.R`, `indicator_source_derived_modules.R` | Variáveis observadas e derivadas: emprego, horas, câmbio, capital e preços. |
-| `R/modules/native/assumption_modules.R`, `capital_matrix_modules.R` | Complementação econômica e alocação de capital. |
-| `R/modules/native/matrix_modules.R`, `indicator_common_modules.R` | Valores, comércio, cestas e indicadores econômicos. |
-| `R/lib/native_planner.R`, `native_store.R`, `execution.R` | Ordenação por dependências, gestão dos recursos e cálculo/recálculo. |
-| `R/lib/scientific_validation.R`, `leontief_diagnostics.R`, `missingness.R` | Identidades, estabilidade numérica e significado das ausências. |
-| `R/lib/publication*.R`, `contracts/results/` | Proveniência, inventários e publicação transacional para WLVPanel. |
+| `scripts/preparation/`, `scripts/lib/preparation_*`, `source_normalization.R` | Download verificado, preparação e geração normalizada. |
+| `scripts/modules/native/source_modules.R`, `indicator_source_derived_modules.R` | Variáveis observadas e derivadas: emprego, horas, câmbio, capital e preços. |
+| `scripts/modules/native/assumption_modules.R`, `capital_matrix_modules.R` | Complementação econômica e alocação de capital. |
+| `scripts/modules/native/matrix_modules.R`, `indicator_common_modules.R` | Valores, comércio, cestas e indicadores econômicos. |
+| `scripts/lib/native_planner.R`, `native_store.R`, `execution.R` | Ordenação por dependências, gestão dos recursos e cálculo/recálculo. |
+| `scripts/lib/scientific_validation.R`, `leontief_diagnostics.R`, `missingness.R` | Identidades, estabilidade numérica e significado das ausências. |
+| `scripts/lib/publication*.R`, `contracts/results/` | Proveniência, inventários e publicação transacional para WLVPanel. |
 | `tests/testthat/`, `tests/manual/`, `docs/validation/` | Testes automáticos, provas reais reproduzíveis e evidências de versões. |
 
 Comece pelo módulo do indicador de interesse e leia suas entradas, unidades e
@@ -492,6 +632,111 @@ executar scripts históricos espalhados pelo repositório. Os
 [comentários científicos](code-commenting.md) explicam os pontos de decisão.
 Mudar uma regra econômica exige revisar contratos, testes, dicionário e os
 dois guias juntos. [Sincronização](documentation-sync.md) define essa revisão.
+
+## Contribuir com uma melhoria
+
+Uma issue registra uma pergunta ou um problema; um pull request (PR) propõe
+uma alteração concreta para revisão. As contribuições podem melhorar
+explicações, correspondências de fontes, hipóteses econômicas, cálculos
+numéricos ou cobertura. Declare qual desses elementos muda para que os
+revisores possam avaliar as evidências necessárias.
+
+### Acompanhar um indicador do significado à saída
+
+Considere `surplus_value.empe.r.pc`, a taxa de mais-valia dos empregados.
+Sua definição é o trabalho abstrato total dos empregados dividido pelo valor
+estimado da força de trabalho dos empregados, menos um. Para investigar ou
+melhorar sua implementação:
+
+1. Leia [teoria](theory-pt.md), [metodologia](methodology-pt.md),
+   [hipóteses](assumptions-pt.md) e a entrada do dicionário. Especifique a
+   população afetada, a unidade e o comportamento esperado antes de mudar
+   o código.
+2. Localize `wlv_indicator_surplus_value_empe_r_pc_spec()` em
+   `scripts/modules/native/indicator_common_modules.R`. A função nomeia os dois
+   indicadores de entrada e chama `wlv_native_stage5_ratio_spec()` no mesmo
+   arquivo. Essa fábrica compartilhada define o estágio 5, o tratamento do
+   denominador zero e o cálculo setorial e nacional. Leia a fábrica além
+   da pequena função específica do indicador.
+3. Acompanhe o registro em `scripts/modules/native/zz_indicator_registry.R` e a
+   seleção em `config/modules/common.csv`. As listas de indicadores publicados
+   estão em `config/outputs/sources/wiodr13.csv` e `wiodr16.csv`. Os contratos
+   aplicáveis `contracts/units/*_v2-units.csv` e `*_v2-aggregations.csv` definem
+   unidades armazenadas, exibição e agregação. `_method_solutions.csv` em um
+   run publicado é uma evidência gerada dos estágios selecionados, não um
+   arquivo-fonte a editar. Os scripts históricos de nomes semelhantes em
+   `scripts/modules/variables/` não substituem a implementação nativa ativa.
+4. Use um exemplo calculado de forma independente para definir o comportamento
+   esperado. Se dois setores têm 100 e 300 horas de trabalho e valores da
+   força de trabalho de 50 e 100 horas, suas taxas são 100% e 200%; a agregada
+   é `400 / 150 - 1 = 1.666...`, aproximadamente 166,67%. A média simples
+   produz 150% e é incorreta para esse agregado. Inclua também um denominador
+   zero e um grupo inteiramente ausente. Esses casos verificam o comportamento
+   econômico pretendido, em vez de apenas repetir a implementação no teste.
+5. Ajuste as evidências à mudança. Uma correção editorial exige equivalência
+   de sentido nos dois idiomas e verificações documentais. Uma correção de
+   fórmula exige também testes pertinentes, comparações numéricas e indicação
+   dos resultados afetados. Uma hipótese alterada a montante pode exigir
+   cálculo completo; o recálculo seletivo não substitui automaticamente
+   indicadores dependentes fora da seleção.
+
+Os arquivos pertinentes podem ser localizados na raiz do repositório com:
+
+```sh
+rg -n 'surplus_value.empe.r.pc|wlv_native_stage5_ratio_spec' scripts/modules/native config contracts/units docs/indicator-descriptions.csv
+```
+
+### Acrescentar um indicador ou ampliar o método
+
+| Alteração proposta | Implementação e documentação a consultar |
+| --- | --- |
+| Esclarecer um indicador existente | `docs/indicator-descriptions.csv` contém descrições PT/EN; os guias pareados explicam a interpretação. As páginas geradas do dicionário precisam ser regeneradas, não editadas diretamente. |
+| Acrescentar um indicador derivado | Especificação de módulo nativo e entrada no registro explícito; módulos selecionados em `config/modules/`; saídas selecionadas em `config/outputs/`; contratos de unidade/agregação aplicáveis; descrições econômicas, tratamento de ausências e testes. |
+| Alterar a classificação do trabalho ou uma imputação | `methods/<method>/_sectors.csv`, módulos ativos de hipóteses, dependências matriciais afetadas, contratos científicos e evidências de sensibilidade. Preserve a interpretação dos resultados já publicados. |
+| Acrescentar uma fonte estatística ou edição | `catalog/sources.csv`, `catalog/methods.csv`, `scripts/preparation/registry.R`, preparação e normalização da fonte, correspondência de setores/países, políticas de unidades e ausências, módulos nativos e validação independente. Um adaptador de download sozinho não basta. |
+
+Uma fonte adicionada precisa estabelecer quais campos medem produção,
+insumos, horas, emprego, remuneração, investimento e capital; suas unidades
+e anos; a orientação de cada eixo; e o tratamento dos campos indisponíveis.
+Também precisa de identificação e direitos das fontes, classificação
+justificada dos setores produtivos, correspondências reproduzíveis e
+evidências sobre as estimativas resultantes. EXIOBASE, EORA e métodos
+alternativos de redução continuam adiados até que seu percurso público e
+sua validação sejam implementados. Mudar um rótulo no catálogo ou usar
+`--allow-experimental` não fornece esses componentes pendentes. O
+[registro de tarefas pendentes](assumptions-pt.md) distingue essas ampliações
+de pesquisa das correções aos métodos atualmente suportados.
+
+Para modificar um indicador, comece pelos testes pertinentes em
+`tests/testthat/test-native-indicator-modules.R`,
+`test-native-aggregation-registry.R`, `test-unit-dimensions.R`,
+`test-missingness-contracts.R` e `test-scientific-validation.R`.
+Os testes de integração pública e de recálculo verificam se a mudança funciona
+no percurso completo. Execute os testes pelo fluxo de campanhas em
+[validação e erros frequentes](#validação-e-erros-frequentes); mantenha
+comparações empíricas, logs e worktrees temporárias dentro da campanha.
+Nunca use a campanha 054 preservada para uma nova tentativa.
+
+Quando descrições econômicas ou a cobertura dos indicadores mudarem,
+regenere e confira os dicionários e então revise as diferenças:
+
+```sh
+Rscript --vanilla scripts/render_results_dictionary.R
+Rscript --vanilla scripts/render_results_dictionary.R --check
+Rscript --vanilla scripts/render_method_catalog.R --check
+git diff --check
+git status --short
+```
+
+Um PR passível de revisão explica o problema econômico, comportamentos anterior
+e novo, métodos e períodos afetados, hipóteses e limitações, arquivos alterados
+e evidências obtidas. Declare expressamente quais verificações foram executadas
+e se houve algum cálculo com fontes reais. Inclua os dois idiomas e atualize
+contratos e revisão documental se a semântica científica ou o percurso público
+mudar. Mantenha os dados de pesquisa gerados fora do Git. Relate falhas de
+download com a identidade da fonte e o diagnóstico; relate discrepâncias
+numéricas com método, run, indicador, coordenadas, valor observado e
+comportamento esperado.
 
 ## Fontes e atribuição
 

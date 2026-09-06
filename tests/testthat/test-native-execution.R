@@ -1,6 +1,6 @@
 native_execution_bootstrap <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "bootstrap.R"),
+  file.path(wlv_test_root, "scripts", "runtime_bootstrap.R"),
   envir = native_execution_bootstrap
 )
 native_execution_runtime <- native_execution_bootstrap$wlv_load_runtime(
@@ -1278,7 +1278,7 @@ test_that("public FST sidecars omit axis names without mutating arrays", {
 })
 
 test_that("execution definition has no legacy executor or dynamic escape", {
-  path <- file.path(wlv_test_root, "R", "lib", "execution.R")
+  path <- file.path(wlv_test_root, "scripts", "lib", "execution.R")
   violations <- native_execution_runtime$wlv_runtime_static_scan_file(
     path,
     root = wlv_test_root

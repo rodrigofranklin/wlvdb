@@ -1,14 +1,14 @@
 retention_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "publication_manifest.R"),
+  file.path(wlv_test_root, "scripts", "lib", "publication_manifest.R"),
   envir = retention_environment
 )
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "publication.R"),
+  file.path(wlv_test_root, "scripts", "lib", "publication.R"),
   envir = retention_environment
 )
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "publication_retention.R"),
+  file.path(wlv_test_root, "scripts", "lib", "publication_retention.R"),
   envir = retention_environment
 )
 

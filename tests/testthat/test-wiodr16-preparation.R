@@ -1,6 +1,6 @@
 wiodr16_preparation_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "utils", "wiodr16_preparation.R"),
+  file.path(wlv_test_root, "scripts", "utils", "wiodr16_preparation.R"),
   envir = wiodr16_preparation_environment
 )
 

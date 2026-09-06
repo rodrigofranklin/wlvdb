@@ -1,6 +1,6 @@
 execution_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "execution.R"),
+  file.path(wlv_test_root, "scripts", "lib", "execution.R"),
   envir = execution_environment
 )
 

@@ -1,13 +1,13 @@
 native_matrix_shape_environment <- new.env(parent = globalenv())
 for (native_matrix_shape_file in c(
-  "R/lib/module_runtime.R",
-  "R/lib/semantic_resources.R",
-  "R/lib/functions.R",
-  "R/modules/native/contracts.R",
-  "R/modules/native/source_modules.R",
-  "R/modules/native/indicator_helpers.R",
-  "R/modules/native/matrix_modules.R",
-  "R/modules/native/indicator_source_derived_modules.R"
+  "scripts/lib/module_runtime.R",
+  "scripts/lib/semantic_resources.R",
+  "scripts/lib/functions.R",
+  "scripts/modules/native/contracts.R",
+  "scripts/modules/native/source_modules.R",
+  "scripts/modules/native/indicator_helpers.R",
+  "scripts/modules/native/matrix_modules.R",
+  "scripts/modules/native/indicator_source_derived_modules.R"
 )) {
   sys.source(
     file.path(wlv_test_root, native_matrix_shape_file),

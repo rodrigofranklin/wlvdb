@@ -1,4 +1,8 @@
-.Rproj.user
+# Personal IDE configuration and R session state.
+*.Rproj
+.Rproj.user/
+.vscode/
+.idea/
 .Rhistory
 .RDataTmp
 .RData
@@ -6,6 +10,10 @@
 temp
 # Local campaigns, experiments, worktrees and their generated artifacts.
 /temp/
+# Historical tools live under tests/manual/archive; generated logs stay local.
+/run_logs/
+*.Rout
+*.log
 results
 !/contracts/results/
 !/contracts/results/**

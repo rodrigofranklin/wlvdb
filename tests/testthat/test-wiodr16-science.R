@@ -1,6 +1,6 @@
 wiodr16_functions_environment <- new.env(parent = globalenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "functions.R"),
+  file.path(wlv_test_root, "scripts", "lib", "functions.R"),
   envir = wiodr16_functions_environment
 )
 
@@ -231,11 +231,11 @@ test_that("the China assumption converts thousands of hours and mirrors employee
   )
   environment <- new.env(parent = globalenv())
   sys.source(
-    file.path(wlv_test_root, "R", "lib", "functions.R"),
+    file.path(wlv_test_root, "scripts", "lib", "functions.R"),
     envir = environment
   )
   sys.source(
-    file.path(wlv_test_root, "R", "lib", "wiodr16_allocation.R"),
+    file.path(wlv_test_root, "scripts", "lib", "wiodr16_allocation.R"),
     envir = environment
   )
   environment$parameters <- data.frame(description = "")
@@ -253,7 +253,7 @@ test_that("the China assumption converts thousands of hours and mirrors employee
   sys.source(
     file.path(
       wlv_test_root,
-      "R", "modules", "assumptions", "china", "china_wiodr16.R"
+      "scripts", "modules", "assumptions", "china", "china_wiodr16.R"
     ),
     envir = environment
   )
@@ -295,19 +295,19 @@ test_that("WIOD16 capital allocation handles UK, Greece, fallback and zero weigh
   outputs <- c(inputs, paste0(countries, ".c60"))
   environment <- new.env(parent = globalenv())
   sys.source(
-    file.path(wlv_test_root, "R", "lib", "functions.R"),
+    file.path(wlv_test_root, "scripts", "lib", "functions.R"),
     envir = environment
   )
   sys.source(
-    file.path(wlv_test_root, "R", "lib", "wiodr16_allocation.R"),
+    file.path(wlv_test_root, "scripts", "lib", "wiodr16_allocation.R"),
     envir = environment
   )
   sys.source(
-    file.path(wlv_test_root, "R", "lib", "gfcf_contracts.R"),
+    file.path(wlv_test_root, "scripts", "lib", "gfcf_contracts.R"),
     envir = environment
   )
   sys.source(
-    file.path(wlv_test_root, "R", "lib", "gfcf_diagnostics.R"),
+    file.path(wlv_test_root, "scripts", "lib", "gfcf_diagnostics.R"),
     envir = environment
   )
   environment$lists <- list(
@@ -358,7 +358,7 @@ test_that("WIOD16 capital allocation handles UK, Greece, fallback and zero weigh
     sys.source(
       file.path(
         wlv_test_root,
-        "R", "modules", "matrices", "wiodr16", "euklems.R"
+        "scripts", "modules", "matrices", "wiodr16", "euklems.R"
       ),
       envir = environment
     )

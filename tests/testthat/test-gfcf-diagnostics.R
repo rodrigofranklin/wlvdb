@@ -1,6 +1,6 @@
 gfcf_diagnostic_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "gfcf_diagnostics.R"),
+  file.path(wlv_test_root, "scripts", "lib", "gfcf_diagnostics.R"),
   envir = gfcf_diagnostic_environment
 )
 

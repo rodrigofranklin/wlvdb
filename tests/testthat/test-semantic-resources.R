@@ -1,14 +1,14 @@
 semantic_resource_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "module_runtime.R"),
+  file.path(wlv_test_root, "scripts", "lib", "module_runtime.R"),
   envir = semantic_resource_environment
 )
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "semantic_resources.R"),
+  file.path(wlv_test_root, "scripts", "lib", "semantic_resources.R"),
   envir = semantic_resource_environment
 )
 sys.source(
-  file.path(wlv_test_root, "R", "modules", "native", "contracts.R"),
+  file.path(wlv_test_root, "scripts", "modules", "native", "contracts.R"),
   envir = semantic_resource_environment
 )
 
@@ -54,7 +54,7 @@ wlv_semantic_test_anomalies <- function(years = c("2001", "2000")) {
 }
 
 test_that("semantic resource definitions have function-only top-level RHS", {
-  path <- file.path(wlv_test_root, "R", "lib", "semantic_resources.R")
+  path <- file.path(wlv_test_root, "scripts", "lib", "semantic_resources.R")
   expressions <- parse(path, keep.source = FALSE)
   is_function_definition <- vapply(expressions, function(expression) {
     is.call(expression) && identical(expression[[1L]], as.name("<-")) &&

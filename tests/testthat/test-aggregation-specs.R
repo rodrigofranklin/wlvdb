@@ -1,6 +1,6 @@
 aggregation_spec_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "aggregation_specs.R"),
+  file.path(wlv_test_root, "scripts", "lib", "aggregation_specs.R"),
   envir = aggregation_spec_environment
 )
 

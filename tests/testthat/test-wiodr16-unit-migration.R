@@ -1,6 +1,6 @@
 wiodr16_aggregation_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "aggregation_specs.R"),
+  file.path(wlv_test_root, "scripts", "lib", "aggregation_specs.R"),
   envir = wiodr16_aggregation_environment
 )
 
@@ -148,7 +148,7 @@ test_that("selective recalculation normalizes only selected price indices", {
   normalize <- function(sea_vars = NULL, expose_selection = TRUE) {
     environment <- new.env(parent = globalenv())
     sys.source(
-      file.path(wlv_test_root, "R", "lib", "functions.R"),
+      file.path(wlv_test_root, "scripts", "lib", "functions.R"),
       envir = environment
     )
     environment$`%>%` <- magrittr::`%>%`
@@ -171,7 +171,7 @@ test_that("selective recalculation normalizes only selected price indices", {
     sys.source(
       file.path(
         wlv_test_root,
-        "R", "modules", "variables", "wiodr13",
+        "scripts", "modules", "variables", "wiodr13",
         "normalize_price_indices.R"
       ),
       envir = environment

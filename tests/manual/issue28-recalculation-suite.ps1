@@ -14,7 +14,7 @@ if ([IO.Path]::GetDirectoryName($campaign) -cne (Join-Path $repo 'temp')) {
 $record = Get-Content -LiteralPath (Join-Path $campaign '.campaign.json') -Raw | ConvertFrom-Json
 if ($record.status -cne 'active') { throw 'The campaign must already be active.' }
 $taskRoot = Join-Path $campaign 'worktrees/candidate'
-if (-not (Test-Path -LiteralPath (Join-Path $taskRoot 'R/bootstrap.R'))) {
+if (-not (Test-Path -LiteralPath (Join-Path $taskRoot 'scripts/runtime_bootstrap.R'))) {
   throw 'Provision the immutable candidate snapshot and normalized sources first.'
 }
 $saved = @{}

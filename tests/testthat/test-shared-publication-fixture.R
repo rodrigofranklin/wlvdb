@@ -1,10 +1,10 @@
 shared_publication_fixture_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "source_manifest.R"),
+  file.path(wlv_test_root, "scripts", "lib", "source_manifest.R"),
   envir = shared_publication_fixture_environment
 )
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "publication_manifest.R"),
+  file.path(wlv_test_root, "scripts", "lib", "publication_manifest.R"),
   envir = shared_publication_fixture_environment
 )
 

@@ -43,7 +43,7 @@ if (startsWith(tolower(output_dir), root_prefix)) {
 }
 
 bootstrap_environment <- new.env(parent = baseenv())
-sys.source(file.path(root, "R", "bootstrap.R"), envir = bootstrap_environment)
+sys.source(file.path(root, "scripts", "runtime_bootstrap.R"), envir = bootstrap_environment)
 runtime <- bootstrap_environment$wlv_load_runtime(root)
 
 phase <- function(label) {

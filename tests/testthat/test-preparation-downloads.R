@@ -1,6 +1,6 @@
 preparation_download_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "utils", "preparation_downloads.R"),
+  file.path(wlv_test_root, "scripts", "utils", "preparation_downloads.R"),
   envir = preparation_download_environment
 )
 

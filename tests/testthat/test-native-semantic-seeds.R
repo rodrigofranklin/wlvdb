@@ -1,6 +1,6 @@
 native_semantic_seed_bootstrap <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "bootstrap.R"),
+  file.path(wlv_test_root, "scripts", "runtime_bootstrap.R"),
   envir = native_semantic_seed_bootstrap
 )
 native_semantic_seed_runtime <- native_semantic_seed_bootstrap$wlv_load_runtime(

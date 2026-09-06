@@ -1,10 +1,10 @@
 preparation_task_environment <- new.env(parent = baseenv())
 for (path in c(
-  file.path("R", "lib", "preparation_tasks.R"),
-  file.path("R", "preparation", "native_euklems.R"),
-  file.path("R", "preparation", "native_wiodr13.R"),
-  file.path("R", "preparation", "native_wiodr16.R"),
-  file.path("R", "preparation", "registry.R")
+  file.path("scripts", "lib", "preparation_tasks.R"),
+  file.path("scripts", "preparation", "native_euklems.R"),
+  file.path("scripts", "preparation", "native_wiodr13.R"),
+  file.path("scripts", "preparation", "native_wiodr16.R"),
+  file.path("scripts", "preparation", "registry.R")
 )) {
   sys.source(
     file.path(wlv_test_root, path),

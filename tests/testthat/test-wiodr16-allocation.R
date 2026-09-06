@@ -1,6 +1,6 @@
 wiodr16_allocation_environment <- new.env(parent = baseenv())
 sys.source(
-  file.path(wlv_test_root, "R", "lib", "wiodr16_allocation.R"),
+  file.path(wlv_test_root, "scripts", "lib", "wiodr16_allocation.R"),
   envir = wiodr16_allocation_environment
 )
 
@@ -260,23 +260,23 @@ test_that("WIOD16 allocation truncates known stock and uses only exact GFCF fall
 test_that("WIOD16 stock modules preserve structural missing values before assumptions", {
   environment <- new.env(parent = globalenv())
   sys.source(
-    file.path(wlv_test_root, "R", "lib", "functions.R"),
+    file.path(wlv_test_root, "scripts", "lib", "functions.R"),
     envir = environment
   )
   sys.source(
-    file.path(wlv_test_root, "R", "lib", "wiodr16_allocation.R"),
+    file.path(wlv_test_root, "scripts", "lib", "wiodr16_allocation.R"),
     envir = environment
   )
   sys.source(
-    file.path(wlv_test_root, "R", "lib", "missingness.R"),
+    file.path(wlv_test_root, "scripts", "lib", "missingness.R"),
     envir = environment
   )
   sys.source(
-    file.path(wlv_test_root, "R", "lib", "result_contracts.R"),
+    file.path(wlv_test_root, "scripts", "lib", "result_contracts.R"),
     envir = environment
   )
   sys.source(
-    file.path(wlv_test_root, "R", "lib", "gfcf_contracts.R"),
+    file.path(wlv_test_root, "scripts", "lib", "gfcf_contracts.R"),
     envir = environment
   )
   environment$wlv_contract_runtime <- wlv_test_contract_runtime(
@@ -339,7 +339,7 @@ test_that("WIOD16 stock modules preserve structural missing values before assump
     expect_no_error(sys.source(
       file.path(
         wlv_test_root,
-        "R", "modules", "variables", "wiodr16", script
+        "scripts", "modules", "variables", "wiodr16", script
       ),
       envir = environment
     ))
