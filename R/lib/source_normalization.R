@@ -120,6 +120,12 @@ wlv_new_source_normalization_contract <- function(
   )
 }
 
+# Unidades canônicas: dólares/moeda local em unidades, pessoas, horas, índices
+# base 1. Ex.: 2 milhões de USD -> 2.000.000 USD; índice 125 -> 1,25. Isso não
+# converte moeda local em USD nem um estoque real em nominal: essas operações
+# econômicas exigem câmbio/deflator nos módulos derivados. Os anos-base e as
+# variáveis diferem entre WIOD13 e WIOD16; consulte os guias bilíngues em
+# docs/guide-pt.md e docs/guide-en.md e os contratos em contracts/units/.
 wlv_source_normalization_contract <- function(source) {
   if (
     !is.character(source) || length(source) != 1L || is.na(source) ||
@@ -353,6 +359,9 @@ wlv_source_normalization_marker_value <- function(contract, artifact) {
   )
 }
 
+# Multiplica mantendo eixos/rótulos e marca a geração normalizada para rejeitar
+# dupla aplicação. Um milhão multiplicado outra vez por um milhão pareceria
+# um cálculo válido em R, mas invalidaria todas as razões trabalho/moeda.
 wlv_normalize_source_array <- function(value, contract, artifact = c("m_io", "sea")) {
   artifact <- match.arg(artifact)
   wlv_validate_source_normalization_contract(contract)

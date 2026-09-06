@@ -71,6 +71,10 @@ wlv_wiodr16_gfcf_columns <- function(column_labels, countries) {
   match(expected, column_labels)
 }
 
+# Lê a jornada projetada para China, conferindo nomes/códigos/anos contra WIOD16.
+# O CSV guarda milhares de horas por pessoa, derivados da escala original
+# H_EMP/EMP da WIOD13; assumption.china multiplica por 1000 ao gerar horas.
+# Guias: docs/guide-pt.md e docs/guide-en.md.
 wlv_read_wiodr16_china_hours_per_worker <- function(
     path,
     expected_codes,
@@ -170,6 +174,10 @@ wlv_read_wiodr16_china_hours_per_worker <- function(
   t(hours)
 }
 
+# Cada coluna pertence a um usuário de capital. Divide seus pesos pelo total
+# da coluna e multiplica pelo estoque monetário desse usuário, conservando-o.
+# Estoque positivo sem pesos primários usa fallback explícito de FBCF; ausência
+# também do fallback aborta. Estoque e pesos ambos zero produzem coluna zero.
 wlv_distribute_capital_stock <- function(
     weights,
     capital_stock,
@@ -247,6 +255,9 @@ wlv_distribute_capital_stock <- function(
   result
 }
 
+# Uma taxa agregada sintética soma taxa do componente × parcela de seu estoque.
+# Taxa diretamente observada não é substituída. Estoque agregado zero só admite
+# componente zero, cuja contribuição é zero: um ativo real não cabe num total nulo.
 wlv_add_synthetic_depreciation_component <- function(
     aggregate_rate,
     component_rate,
@@ -303,6 +314,9 @@ wlv_add_synthetic_depreciation_component <- function(
   aggregate_rate
 }
 
+# Junta fluxos intermediários e depreciação para formar o numerador técnico de
+# Leontief. Devem ter mesma forma/unidade. Ausências só viram zero na máscara
+# estrutural autorizada; um NA inesperado não é um insumo inexistente.
 wlv_sum_input_flows <- function(
     intermediate_consumption,
     depreciation,

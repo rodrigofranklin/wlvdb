@@ -1,5 +1,13 @@
 # Native common indicator modules -----------------------------------------
 
+# Indicadores públicos usam ano × setor × país. As matrizes de origem usam
+# ano × fornecedor × usuário/demanda; agrupar exige conservar a interpretação
+# econômica desses eixos. As unidades vêm do contrato e das entradas, não da
+# operação de soma. Guias: docs/guide-pt.md e docs/guide-en.md.
+#
+# Para importações, o grupo identifica setor do produto fornecido e país que o
+# recebe, inclusive em demanda final. Não é simplesmente o setor comprador.
+# A verificação exige que cada célula da WIOT pertença exatamente a um grupo.
 wlv_native_import_group_indices_assert <- function(indices, nums) {
   group_lengths <- lengths(indices)
   expected_count <- nums$input * nums$output
@@ -60,6 +68,9 @@ wlv_native_sum_import_groups <- function(value, indices) {
   )
 }
 
+# Hipótese dos dois métodos públicos: uma hora conta como uma hora de trabalho
+# abstrato, pois todos os multiplicadores de complexidade/intensidade são 1.
+# É uma escolha metodológica explícita, não evidência de trabalho homogêneo.
 wlv_native_complex_multiplier_spec <- function(id, indicator, employee = FALSE) {
   label <- if (employee) " (employees only)" else ""
   metadata <- wlv_native_indicator_metadata_row(
@@ -112,6 +123,9 @@ wlv_indicator_complex_labour_multiplier_empe_spec <- function() {
   )
 }
 
+# Trabalho abstrato = horas totais × multiplicador sem unidade. emp inclui todos
+# os ocupados; empe somente empregados. A grandeza mv mantém a escala das horas
+# normalizadas. O filtro de setores produtivos é aplicado depois, quando exigido.
 wlv_native_abstract_labour_spec <- function(employee = FALSE) {
   person <- if (employee) "empe" else "emp"
   indicator <- paste0("abstract_labour.", person, ".s.mv")
@@ -152,6 +166,9 @@ wlv_indicator_abstract_labour_empe_s_mv_spec <- function() {
   wlv_native_abstract_labour_spec(TRUE)
 }
 
+# Produto novo em valor: trabalho abstrato apenas nos setores produtivos.
+# Multiplicar pela classificação 0/1 zera os demais por hipótese do método;
+# não declara que seu valor adicionado monetário observado seja zero.
 wlv_indicator_gdp_s_mv_spec <- function() {
   wlv_native_indicator_spec(
   "indicator.gdp.s.mv",
@@ -184,6 +201,8 @@ wlv_indicator_gdp_s_mv_spec <- function() {
 )
 }
 
+# Recorta o VA monetário da SEA pela mesma classificação produtiva. Esta série
+# continua a preços de mercado; o recorte não é uma conversão de USD para mv.
 wlv_indicator_gdp_p_s_us_spec <- function() {
   wlv_native_indicator_spec(
   "indicator.gdp.p.s.us",
@@ -226,6 +245,10 @@ wlv_native_stage4_matrix_requirements <- function(resource, source = FALSE) {
   )
 }
 
+# Somar destinos de cada fornecedor produz sua produção bruta; com filtro trade,
+# somente exportações. Ex.: uma linha com vendas domésticas 8 e externas 2 dá
+# produção 10 ou exportações 2, na unidade da matriz (USD ou mv).
+# A fábrica atende todas as instâncias rowsum abaixo e preserva os anos do bloco.
 wlv_native_stage4_rowsum_spec <- function(
     id,
     resource,
@@ -323,6 +346,9 @@ wlv_indicator_exports_s_us_spec <- function() {
 )
 }
 
+# Importações são atribuídas ao país de destino e ao setor do produto importado.
+# Filtrar trade exclui operações domésticas; os índices canônicos somam usos
+# intermediários e finais por essa chave, sem duplicá-los nem trocar origens.
 wlv_native_stage4_import_spec <- function(id, resource, metadata, source = FALSE) {
   wlv_native_indicator_spec(
     id,
@@ -390,6 +416,10 @@ wlv_indicator_imports_s_us_spec <- function() {
 )
 }
 
+# O saldo de transferências é transferência nas exportações menos transferência
+# nas importações. Positivo = valor apropriado do exterior; negativo = cedido.
+# productive limita o cálculo a mercadorias de fornecedores produtivos; a série
+# total também inclui fluxos de atividades classificadas como não produtivas.
 wlv_native_stage4_trade_transfer_spec <- function(id, productive, metadata) {
   wlv_native_indicator_spec(
     id,
@@ -470,6 +500,12 @@ wlv_indicator_trade_transfers_p_s_mv_spec <- function() {
 )
 }
 
+# Valor de reprodução da força de trabalho: repartir a remuneração monetária
+# pela cesta de consumo e multiplicar cada produto/origem por lambda (mv/USD).
+# Somar fornecedores (colSums) dá o trabalho incorporado na cesta comprada pelos
+# trabalhadores de cada setor/país. Usa a cesta média nacional ou internacional
+# configurada, hipótese que não observa o consumo individual de cada trabalhador.
+# A variante empe aproxima capital variável; emp inclui renda dos não empregados.
 wlv_native_stage4_labour_force_spec <- function(id, compensation, metadata) {
   wlv_native_indicator_spec(
     id,
@@ -537,6 +573,9 @@ wlv_indicator_labour_force_value_emp_s_mv_spec <- function() {
 )
 }
 
+# Publica lambda com o formato setorial: magnitude de trabalho incorporado por
+# unidade monetária da produção. Reformatar ano × input para ano × setor × país
+# não recalcula Leontief nem altera seus valores/anos.
 wlv_indicator_value_m_mv_spec <- function() {
   wlv_native_indicator_spec(
   "indicator.value.m.mv",
@@ -560,6 +599,9 @@ wlv_indicator_value_m_mv_spec <- function() {
 )
 }
 
+# Somar origens de capital (colunas de usuários mantidas) produz a depreciação
+# anual de cada setor proprietário, em moeda. Será subtraída do lucro bruto
+# para a taxa de lucro apropriado; não se soma entre anos como se fosse estoque.
 wlv_indicator_capital_depreciation_s_us_spec <- function() {
   wlv_native_indicator_spec(
   "indicator.capital_depreciation.s.us",
@@ -594,6 +636,12 @@ wlv_indicator_capital_depreciation_s_us_spec <- function() {
 
 # Stage 5: final sector and country indicators -----------------------------
 
+# Fábrica das médias e taxas abaixo: dividir grandezas com os mesmos eixos.
+# subtract_one transforma trabalho/valor da força de trabalho em (trabalho -
+# valor da força de trabalho)/valor da força de trabalho, a taxa de mais-valia.
+# Taxas são razões decimais: 0,25 corresponde a 25%, sem multiplicação aqui.
+# Denominador zero é not_applicable. O agregado nacional/mundial é uma razão
+# dos totais independentes, nunca a média simples das razões setoriais.
 wlv_native_stage5_ratio_spec <- function(
     id,
     numerator,
@@ -721,6 +769,10 @@ wlv_indicator_surplus_value_emp_r_pc_spec <- function() {
   subtract_one = TRUE
 )
 }
+# Taxa de lucro apropriado = (lucro monetário - depreciação) / estoque de capital.
+# É uma aproximação contábil à rentabilidade, distinta da taxa marxiana m/(c+v).
+# País e mundo calculam primeiro os totais monetários. Estoque zero torna a razão
+# inaplicável; não é motivo para publicar zero de rentabilidade.
 wlv_native_appropriated_profit_spec <- function() {
   wlv_native_indicator_spec(
     "indicator.appropriated_profit.r.pc",
@@ -790,6 +842,10 @@ wlv_indicator_trade_transfers_p_m_pc_spec <- function() {
 )
 }
 
+# Combina séries aditivas já comparáveis: exportações - importações é saldo
+# comercial; transferência total - produtiva isola a parcela não produtiva.
+# Os agregados são produzidos depois pelo registro de agregação, preservando
+# a unidade e a política de ausência de cada indicador.
 wlv_native_stage5_sum_spec <- function(
     id,
     requires,
@@ -864,6 +920,10 @@ wlv_indicator_trade_balance_s_mv_spec <- function() {
 )
 }
 
+# Preços diretos proporcionais ao valor: produção bruta mundial em USD / produção
+# bruta mundial em mv fornece USD/mv para cada ano. Multiplicar produto ou VA
+# em mv por esse coeficiente conserva a soma mundial da produção monetária.
+# Não é câmbio, preço observado nem deflator temporal. Denominador zero aborta.
 wlv_native_direct_price_spec <- function(id, base_indicator, metadata) {
   base_is_gross_output <- identical(base_indicator, "gross_output.s.mv")
   requirements <- c(
@@ -929,6 +989,10 @@ wlv_indicator_gross_output_s_du_spec <- function() {
 )
 }
 
+# Taxa de mais-valia restrita aos setores produtivos. Setorialmente a máscara
+# zera a taxa fora do recorte (convenção publicada); nacionalmente/mundialmente
+# recalcula trabalho produtivo / custo de reprodução produtivo - 1, em razão
+# decimal. Somar taxas ou zerar apenas uma das parcelas distorceria a medida.
 wlv_native_productive_surplus_spec <- function(employee = FALSE) {
   person <- if (employee) "empe" else "emp"
   indicator <- paste0("surplus_value.", person, "_p.r.pc")

@@ -75,6 +75,11 @@ wlv_assert_euklems_table_native <- function(value, label) {
   invisible(TRUE)
 }
 
+# EU KLEMS fornece composição setorial do estoque por tipo de ativo e taxas de
+# depreciação. Não substitui o estoque monetário da WIOD: produz pesos sem unidade
+# e taxas anuais para distribuí-lo. Cada tabela de saída é país × setor, com uma
+# coluna por ativo; os anos ficam separados em ekk_*.fst e ekdeprate_*.fst.
+# Guias e hipóteses: docs/guide-pt.md e docs/guide-en.md.
 wlv_prepare_euklems_outputs <- function(ctx, years) {
   requested_euklems_years <- wlv_normalize_euklems_years_native(years)
   ensure_directory <- ctx$service("ensure_directory")
@@ -196,6 +201,9 @@ wlv_prepare_euklems_outputs <- function(ctx, years) {
     }
     ek_k$control <- ek_k$K_GFCF
 
+    # Falta de cobertura no total industrial elimina o país da base de referência;
+    # LU e SE também são exclusões explícitas desta preparação. Não se interpreta
+    # a ausência de seus ativos como uma economia sem capital.
     ek_k$sum <- rowSums(ek_k[, lists$ek_variables], na.rm = FALSE)
     countries_to_exclude <- ek_k[
       ek_k$sector == "TOT_IND" & is.na(ek_k$sum),
@@ -212,6 +220,9 @@ wlv_prepare_euklems_outputs <- function(ctx, years) {
     ]
     ek_va <- ek_va[!(ek_va$country %in% countries_to_exclude), ]
 
+    # Quando só há um agregado, repartimos os ativos entre seus setores pelo
+    # valor adicionado: VA do setor / VA do agregado. prop2 e prop são níveis
+    # sucessivos do mapa versionado, não estimativas independentes para somar.
     ek_va$prop <- 0
     ek_va$prop2 <- 0
     for (aggregate in unique(
@@ -264,6 +275,9 @@ wlv_prepare_euklems_outputs <- function(ctx, years) {
         ek_k[filter2, lists$ek_variables] * ek_va_prop[filter1, ]
     }
 
+    # Após as imputações previstas no mapa, as lacunas restantes viram zero
+    # nesta preparação histórica. É uma convenção da composição EU KLEMS,
+    # não uma autorização geral para zerar ausências da SEA ou de indicadores.
     ek_k[is.na(ek_k)] <- 0
     for (index in which(aggregation[, 3L] == "needed")) {
       filter1 <-
@@ -296,6 +310,9 @@ wlv_prepare_euklems_outputs <- function(ctx, years) {
         ek_k[filter1, lists$ek_variables] + ek_k[filter2, lists$ek_variables]
     }
 
+    # Uma taxa de depreciação diretamente fornecida tem precedência. Para novos
+    # agregados, cada componente contribui com taxa × estoque / estoque agregado;
+    # somar taxas simples daria peso indevido a ativos pequenos.
     direct_dep_rate_provided <- !is.na(as.matrix(
       ek_dep_rate[, lists$ek_variables, drop = FALSE]
     ))
@@ -357,12 +374,17 @@ wlv_prepare_euklems_outputs <- function(ctx, years) {
     }
     ek_dep_rate[is.na(ek_dep_rate)] <- 0
 
+    # Convertemos níveis em participação de cada setor no estoque nacional do
+    # mesmo ativo. Ex.: 20 de máquinas num total 100 produz peso 0,2, não 20%.
     for (variable in lists$ek_variables) {
       totals <- ek_k[ek_k$sector == "TOT", c("country", variable)]
       totals <- totals[match(ek_k$country, totals$country), variable]
       ek_k[, variable] <- ek_k[, variable] / totals
     }
 
+    # MD é uma referência sintética: média simples entre países disponíveis,
+    # por setor/ativo. AT fornece apenas a estrutura das linhas. A matriz de
+    # capital usa MD quando uma região WIOD não possui país EU KLEMS correspondente.
     ek_k_md <- ek_k[ek_k$country == "AT", ]
     ek_k_md$country <- "MD"
     ek_dep_rate_md <- ek_k_md

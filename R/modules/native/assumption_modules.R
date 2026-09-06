@@ -46,6 +46,11 @@ wlv_native_assumption_table_ref <- function(key, alias) {
   wlv_native_run_ref(key, alias, "data.frame")
 }
 
+# China WIOD13: aproxima empregados (empe) por todas as pessoas ocupadas (emp),
+# tanto no número de pessoas quanto nas horas. É hipótese sobre a relação de
+# emprego, não informação observada. Arrays ano × setor × país; o texto da
+# hipótese acompanha parameters para interpretação/publicação posterior.
+# Guias: docs/guide-pt.md e docs/guide-en.md.
 wlv_assumption_china_wiodr13_spec <- function() {
   wlv_native_module_spec(
   id = "assumption.china.wiodr13",
@@ -160,6 +165,12 @@ wlv_assumption_china_reduction_spec <- function() {
 )
 }
 
+# China WIOD16: aplica jornada anual inferida de H_EMP/EMP da WIOD13, mapeada
+# entre setores, mantendo 2009 até 2014. A fonte do recurso hours_per_worker é
+# registrada pelo carregador. O CSV de jornada está em milhares de horas por
+# pessoa; 1000 converte essa jornada em horas, multiplicadas pelos ocupados em
+# pessoas (emp.s.un). Não representa crescimento da jornada.
+# Empregados são aproximados por todos os ocupados pela ausência de SEA separada.
 wlv_assumption_china_wiodr16_spec <- function() {
   wlv_native_module_spec(
   id = "assumption.china.wiodr16",
@@ -236,6 +247,9 @@ wlv_assumption_china_wiodr16_spec <- function() {
 )
 }
 
+# Variante histórica de sensibilidade: zera dados laborais/capital de ROW e
+# empresta o índice de preços dos EUA. Zero aqui é uma hipótese do método, não
+# observação de um resto do mundo sem atividade. A WIOT mundial é preservada.
 wlv_assumption_row_none_spec <- function() {
   wlv_native_module_spec(
   id = "assumption.row.none",
@@ -373,6 +387,11 @@ wlv_native_row_sector_means <- function(value, countries) {
   result
 }
 
+# Distribui o total externo de ocupados de ROW entre setores. O peso é o VA
+# setorial de ROW multiplicado por ocupados/VA do mesmo setor nos demais países.
+# Normalizar os pesos em cada ano conserva o total externo. As horas usam a
+# jornada média setorial dos países observados, hipótese de extrapolação.
+# Entradas/saídas: ano × setor × país; esta função não imputa denominadores zero.
 wlv_native_row_allocate_employment <- function(
     employment,
     hours,
@@ -395,6 +414,11 @@ wlv_native_row_allocate_employment <- function(
   )
 }
 
+# Estima o capital de ROW a partir do país de menor intensidade capital/trabalho
+# disponível em cada ano. basis distingue horas de pessoas: as duas razões têm
+# unidades diferentes e não devem ser intercambiadas. Intensidade zero deixa
+# de ser candidata mínima; o helper contratual trata setores sem referência
+# válida e registra o fallback. O resultado continua na unidade do estoque.
 wlv_native_row_capital_from_reference <- function(
     capital_stock,
     labour,
@@ -519,6 +543,10 @@ wlv_native_row_standard_provides <- function(args) {
   result
 }
 
+# Hipótese ROW dos métodos públicos: trabalho total externo, repartição setorial
+# pela intensidade observada e capital por referência. Cada recurso substituído
+# declara seu predecessor; isso preserva a ordem China -> ROW -> indicadores
+# derivados e permite ao recálculo reconstruir as dependências corretas.
 wlv_assumption_row_standard_spec <- function() {
   wlv_native_module_spec(
   id = "assumption.row.standard",

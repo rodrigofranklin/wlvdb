@@ -4,6 +4,11 @@
 # remove repetitive syntax; they do not discover dependencies or infer module
 # behavior from file names or configuration rows.
 
+# Um contrato impede combinar arrays que têm o mesmo tamanho e significados
+# distintos. axes nomeia as dimensões; unit descreve a grandeza; missingness
+# vincula ausência à regra aplicável. scope=run cobre a execução, io_period um
+# bloco de anos. Esses controles acompanham valor/estado até a publicação.
+# Guias: docs/guide-pt.md e docs/guide-en.md; docs/code-commenting.md.
 wlv_native_array_contract <- function(
     scope = c("run", "io_period"),
     axes,
@@ -575,6 +580,10 @@ wlv_native_add_semantic_bundles <- function(
   provides
 }
 
+# Módulo = transformação com entradas (requires), saídas (provides) e operação
+# declaradas. O produtor/predecessor torna explícita a ordem científica quando
+# uma hipótese substitui uma série. O estado semântico é um recurso associado:
+# NA sem sua causa não é suficiente para validar ou recalcular uma observação.
 wlv_native_module_spec <- function(
     id,
     scope = c("run", "io_period"),
@@ -727,6 +736,8 @@ wlv_native_indicator_key <- function(indicator, level = c("sector", "country")) 
   paste("sea", level, indicator, sep = "/")
 }
 
+# Séries setoriais: ano × setor × país; agregadas: ano × país. Uma mudança de
+# nível exige regra de agregação, não apenas retirar a dimensão do setor.
 wlv_native_indicator_contract <- function(
     indicator,
     scope = c("run", "io_period"),

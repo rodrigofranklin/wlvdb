@@ -6,6 +6,11 @@
 # the same key at run scope.  The collector requires exact, non-overlapping
 # coverage of `dimensions/lists$years` and preserves all values and NA states.
 
+# Reúne séries calculadas por blocos de anos sem recalcular sua economia.
+# Exige cada ano exatamente uma vez, setores/países na mesma ordem e estados
+# semânticos preservados. Ano ausente não pode virar zero; ano duplicado não
+# pode sobrescrever outra estimativa. Saída ano × setor × país para estágio 5.
+# Guias: docs/guide-pt.md e docs/guide-en.md.
 wlv_indicator_stage4_collector_spec <- function() {
   wlv_native_module_spec(
   id = "indicator.stage4_collector",

@@ -235,6 +235,12 @@ wlv_leontief_factor_solve <- function(factorization, right_hand_side) {
   if (vector_result) as.vector(result) else result
 }
 
+# Certifica que as rodadas sucessivas de insumos convergem: para A não negativa,
+# isso corresponde ao critério de produtividade do sistema; havendo sinais,
+# aplica-se a |A| para exigir convergência absoluta. O vetor positivo precisa
+# dominar |A|' vezes ele mesmo, inclusive após a margem de arredondamento.
+# É uma condição matemática de admissibilidade, não a classificação marxista
+# dos setores produtivos, que já chegou ao solver como uma máscara distinta.
 wlv_leontief_certificate <- function(
     coefficients,
     policy,
@@ -334,6 +340,12 @@ wlv_leontief_certificate <- function(
   )
 }
 
+# Resolve (I-A)' lambda = l: a transposição permite representar o vetor-linha
+# econômico lambda = l + lambda A como vetor-coluna no solucionador R.
+# A é fornecedor × usuário e l mede trabalho direto por unidade monetária;
+# lambda devolve trabalho total incorporado na mesma unidade. Somente o bloco
+# produtivo participa; setores excluídos voltam com zero por hipótese.
+# Guias: docs/guide-pt.md e docs/guide-en.md; detalhes: docs/leontief-benchmark.md.
 wlv_solve_leontief <- function(
     coefficient_matrix,
     labour_requirements,
@@ -504,6 +516,9 @@ wlv_solve_leontief <- function(
   numerical_policy <- wlv_leontief_policy(dimension, policy)
   system_matrix <-
     t(diag(1, nrow = dimension, ncol = dimension) - productive_coefficients)
+  # rcond estima o inverso do condicionamento: próximo de zero significa que
+  # pequenas perturbações dos dados podem causar grande mudança em lambda.
+  # Não aceitar um sistema quase singular evita publicar precisão ilusória.
   reciprocal_condition <- tryCatch(
     base::rcond(system_matrix, norm = "I"),
     error = function(error) NA_real_
@@ -569,6 +584,9 @@ wlv_solve_leontief <- function(
     productive_labour,
     reciprocal_condition
   )
+  # Refinamento corrige resíduos de arredondamento reutilizando a fatoração.
+  # Os limites de erro regressivo/sensibilidade são conferidos mesmo quando o
+  # sistema retornou números finitos; sucesso do solver não encerra a validação.
   refinement_count <- 0L
   backward_error <- max(
     solution_diagnostics$eta_normwise,

@@ -171,6 +171,20 @@ wlv_native_auxiliary_instances <- function(
     "primary_argument_overrides",
     exact = TRUE
   )
+  # At checkpoint 4 the public WIOD13 GO index has already been rebased.
+  # Baskets require its original sector price levels; source provenance and
+  # unchanged method parameters are verified before these inputs are read.
+  raw_go_price <- config[
+    config$instance_id == "indicator.go_price.r.id", , drop = FALSE
+  ]
+  if (identical(mode, "recalculate") && identical(at_stage, 4L) &&
+      nrow(raw_go_price) == 1L &&
+      identical(raw_go_price$module_id[[1L]], "source_indicator") &&
+      identical(raw_go_price$source_variable[[1L]], "GO_P")) {
+    for (id in c("indicator.basket_price.r.pc", "indicator.basket_value.r.pc")) {
+      primary_argument_overrides[[id]]$go_price_from_source <- TRUE
+    }
+  }
   if (identical(mode, "recalculate") && at_stage >= 5L) {
     auxiliary <- Filter(function(instance) {
       !startsWith(instance$instance_id, "normalize.") &&
@@ -192,6 +206,12 @@ wlv_native_auxiliary_instances <- function(
   auxiliary
 }
 
+# Monta o percurso científico declarado pelas configurações ativas. Uma instância
+# de período calcula somente seus anos; coletores reúnem as séries antes das
+# razões finais e agregações. No recálculo, a seleção determina o que se refaz
+# e o store fornece recursos ancestrais autenticados para o restante. A montagem
+# do painel sempre recebe todas as séries terminais para não publicar um painel
+# parcial. Guias: docs/guide-pt.md e docs/guide-en.md.
 wlv_native_plan_instances <- function(
     registry,
     config,

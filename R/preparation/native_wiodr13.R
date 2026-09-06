@@ -88,6 +88,12 @@ wlv_assert_wiodr13_wiot_dimensions_native <- function(value, expected, label) {
   invisible(TRUE)
 }
 
+# Percurso WIOD13: arquivos autenticados -> matrizes brutas -> fonte normalizada.
+# A preparação conserva 1995–2009, 35 setores e 40 países mais ROW. A SEA final
+# tem eixos ano × variável × setor × país (15 × 27 × 35 × 41); a WIOT usa
+# ano × fornecedor × usuário/demanda (15 × 1435 × 1640). Valores monetários ainda
+# estão na escala original aqui; normalize_source aplica os contratos de unidade.
+# Guias: docs/guide-pt.md e docs/guide-en.md; convenção: docs/code-commenting.md.
 wlv_prepare_wiodr13_task <- function(ctx) {
   catalog <- ctx$catalog()
   source_record <- ctx$source_record()
@@ -179,6 +185,9 @@ wlv_prepare_wiodr13_task <- function(ctx) {
   }
 
   sea_year_columns <- as.character(1995:2009)
+  # A substituição por zero é uma hipótese histórica restrita ao perfil exato
+  # de ausências autenticado pelo validador. Uma nova célula ausente deve falhar
+  # antes deste laço; não significa que qualquer NA econômico seja zero.
   sea_missingness <- ctx$service(
     "validate_wiodr13_workbook_missingness"
   )(sea, years = sea_year_columns)
@@ -254,6 +263,8 @@ wlv_prepare_wiodr13_task <- function(ctx) {
       sea$country[[row_index]]
     ] <- as.matrix(sea[row_index, year_indexes + 4L])
   }
+  # TOT é o total já fornecido pela fonte: excluí-lo evita contá-lo novamente
+  # quando o cálculo somar os 35 setores elementares de cada país.
   lists$sectors <- lists$sectors[-1L]
   nums$sectors <- length(lists$sectors)
   sea_source <- sea_source[, , lists$sectors, , drop = FALSE]
@@ -304,6 +315,8 @@ wlv_prepare_wiodr13_task <- function(ctx) {
 
   m_io <- cbind(wiot_1, wiot_2, wiot_3)
   dim(m_io) <- c(1443, 1641, 15)
+  # Os dois últimos anos usam a revisão 2008–2011 da própria WIOD. Misturar
+  # revisões mudaria os fluxos de 2008/2009 e, adiante, valores e transferências.
   m_io[, , 14:15] <- wiot_4[seq_len(1443), seq_len(1641 * 2)]
   m_io <- aperm(m_io, c(3, 1, 2))
   lists$demand <- paste0("c", c(37, 38, 39, 41, 42))
@@ -323,6 +336,9 @@ wlv_prepare_wiodr13_task <- function(ctx) {
     )
   )
   nums$output <- length(lists$output)
+  # VA_USD (valor adicionado) e GO_USD (produção bruta) vêm das linhas contábeis
+  # da WIOT, inclusive para ROW. Depois da extração ficam só fornecedores nas
+  # linhas e usos intermediários/finais nas colunas; linhas totais não são setores.
   sea_source[, "VA_USD", , ] <- m_io[, 1441, seq_len(nums$input)]
   sea_source[, "GO_USD", , ] <- m_io[, 1443, seq_len(nums$input)]
   m_io <- m_io[, seq_len(nums$input), seq_len(nums$output), drop = FALSE]
@@ -400,6 +416,9 @@ wlv_prepare_wiodr13_task <- function(ctx) {
     catalog,
     unit_contract_id
   )
+  # A fonte normalizada inclui unidades, rótulos, estados de ausência e hashes.
+  # O cálculo só a consome após validação. As promoções retornadas abaixo são
+  # aplicadas pela transação de preparação, não por cada transformação isolada.
   normalized <- ctx$service("normalize_source")(
     m_io = m_io,
     sea = sea_source,

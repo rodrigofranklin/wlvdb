@@ -12,6 +12,11 @@
 # indicator.complex_labour_multiplier.empe.r.un` when that final module
 # rewrites the shares.
 
+# Mapa explícito das fábricas de indicadores, incluindo definições históricas
+# preservadas. O catálogo/configuração ativo escolhe as executáveis: estar nesta
+# lista não habilita um método alternativo. As fábricas compartilhadas explicam
+# fórmulas, unidades e ausência; seus wrappers só fornecem códigos/metadados.
+# Guias: docs/guide-pt.md e docs/guide-en.md.
 wlv_native_indicator_specs <- function() {
   list(
     wlv_source_indicator_spec(),
@@ -100,6 +105,10 @@ wlv_native_indicator_stage4_modules <- function() {
   )
 }
 
+# Conecta a ciência às etapas operacionais: matrizes por período -> coletores
+# anuais -> normalização de índices -> indicadores finais/agregação. Normalizar
+# a saída pública GO não permite usá-la como preço pré-normalização da cesta;
+# o planejador escolhe a dependência correta para WIOD13 no recálculo (#28).
 wlv_native_indicator_auxiliary_instances <- function(
     config,
     partitions,

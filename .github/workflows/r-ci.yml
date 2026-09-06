@@ -20,9 +20,32 @@ jobs:
       CI: "true"
       WLV_WORKERS: "1"
       R_ENVIRON_USER: "${{ github.workspace }}/.github/Renviron.ci"
-      RENV_PATHS_ROOT: "${{ github.workspace }}/../.renv-cache"
+      RENV_PATHS_ROOT: "${{ github.workspace }}/renv/local/ci-cache"
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Register the isolated verification campaign
+        shell: pwsh
+        run: |
+          if ($PSVersionTable.PSVersion -lt [version]'7.5') {
+            throw 'Campaign management requires PowerShell 7.5 or later.'
+          }
+          $created = @(./scripts/manage-campaigns.ps1 -Action New -Id ci -Purpose 'Clean-checkout unit and synthetic integration validation')
+          if ($created.Count -ne 1) { throw 'Campaign creation must return one structured record.' }
+          $campaign = $created[0]
+          if (-not [IO.Directory]::Exists($campaign.temporary_directory) -or
+              $campaign.root -ne [IO.Path]::GetFullPath('temp/ci')) {
+            throw 'Campaign paths do not match the checkout-local verification directory.'
+          }
+          foreach ($name in @('TEMP', 'TMP', 'TMPDIR')) {
+            "$name=$($campaign.temporary_directory)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
+          "WLV_CAMPAIGN_ROOT=$($campaign.root)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Install the documented Ubuntu package build dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends git build-essential gfortran pkg-config libcurl4-openssl-dev libssl-dev libxml2-dev libicu-dev zlib1g-dev
       - uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2
         with:
           r-version: "4.6.1"
@@ -38,6 +61,14 @@ jobs:
         run: Rscript --vanilla scripts/bootstrap.R
       - name: Validate the method catalog and generated support matrix
         run: Rscript --vanilla scripts/render_method_catalog.R --check
+      - name: Validate both result dictionaries
+        run: Rscript --vanilla scripts/render_results_dictionary.R --check
+      - name: Validate dictionary Unicode independently of the process locale
+        env:
+          LC_ALL: C
+          LC_CTYPE: C
+          LANG: C
+        run: Rscript --vanilla scripts/render_results_dictionary.R --check
       - name: Check safe startup
         run: Rscript --vanilla tests/smoke/startup.R
       - name: Check the entrypoint from outside the checkout
@@ -53,6 +84,12 @@ jobs:
         shell: Rscript {0}
         run: |
           source("renv/activate.R")
+          campaign <- normalizePath(Sys.getenv("WLV_CAMPAIGN_ROOT"), winslash = "/", mustWork = TRUE)
+          temporary <- normalizePath(tempdir(), winslash = "/", mustWork = TRUE)
+          stopifnot(
+            identical(as.character(getRversion()), "4.6.1"),
+            startsWith(temporary, paste0(campaign, "/scratch/"))
+          )
           files <- list.files("R", pattern = "\\.[Rr]$", recursive = TRUE, full.names = TRUE)
           invisible(lapply(files, parse))
           bootstrap <- new.env(parent = baseenv())
@@ -69,9 +106,25 @@ jobs:
         shell: Rscript {0}
         run: |
           source("renv/activate.R")
-          testthat::test_dir(
+          results <- testthat::test_dir(
             "tests/testthat",
             reporter = "summary",
             stop_on_failure = TRUE,
             stop_on_warning = TRUE
           )
+          counts <- as.data.frame(results)
+          cat(sprintf(
+            "Validation totals: files=%d cases=%d passed=%d failed=%d errors=%d warnings=%d skipped=%d\n",
+            length(unique(counts$file)), nrow(counts), sum(counts$passed),
+            sum(counts$failed), sum(counts$error), sum(counts$warning), sum(counts$skipped)
+          ))
+      - name: Close the verification campaign
+        if: always()
+        shell: pwsh
+        run: |
+          $action = if ('${{ job.status }}' -eq 'success') { 'Complete' } else { 'Fail' }
+          if (Test-Path -LiteralPath 'temp/ci/.campaign.json') {
+            ./scripts/manage-campaigns.ps1 -Action $action -Id ci
+          }
+          # Hosted runners discard this checkout and campaign after the job.
+          # Do not invoke Windows-only process inspection on the Ubuntu runner.

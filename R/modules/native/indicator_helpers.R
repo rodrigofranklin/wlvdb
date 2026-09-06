@@ -4,6 +4,9 @@
 # legacy engine stored sector indicators as year x sector x country arrays,
 # while input-output computations commonly expose year x input matrices.
 
+# Reinterpreta ano × input como ano × setor × país sem mudar a ordem numérica:
+# input deve enumerar setores dentro de cada país. Não agrega, converte unidade
+# ou imputa NA. Guias: docs/guide-pt.md e docs/guide-en.md.
 wlv_native_sector_array <- function(value, lists) {
   dimensions <- c(
     length(lists$years),
@@ -57,6 +60,9 @@ wlv_native_country_array <- function(country, world, lists) {
   result
 }
 
+# Soma setores por país e depois países por ano. Um grupo todo ausente continua
+# NA; as demais somas usam observações disponíveis. A ordem preserva a definição
+# do agregado e o arredondamento das reduções; WWW é acrescentado só no final.
 wlv_native_sum_country_and_world <- function(value, lists) {
   country <- apply(value, c(1L, 3L), sum, na.rm = TRUE)
   country_all_missing <- apply(is.na(value), c(1L, 3L), all)
@@ -68,6 +74,9 @@ wlv_native_sum_country_and_world <- function(value, lists) {
   wlv_native_country_array(country, world, lists)
 }
 
+# Caminho contratual de razão dos totais, com estados de numerador/denominador
+# e resultado registrados por país/WWW. subtract_one expressa taxa de mais-valia
+# quando os operandos são trabalho abstrato e valor de reprodução.
 wlv_native_country_and_world_ratio <- function(
     runtime,
     numerator,
@@ -115,6 +124,10 @@ wlv_native_country_and_world_ratio <- function(
   result
 }
 
+# Agrega numerador e denominador separadamente antes de dividir. Uma ausência
+# em um operando não elimina automaticamente o valor presente do outro; essa é
+# a convenção de totais independentes, distinta de selecionar pares completos
+# numa média ponderada. Denominador agregado zero é inaplicável.
 wlv_native_independent_country_ratio <- function(
     runtime,
     numerator,

@@ -1,3 +1,9 @@
+# ROW não possui série observada de estoque real: a aproximação deflaciona seu
+# estoque corrente estimado, corrigindo o índice cambial e dividindo pelo índice
+# de preço de produção. Arrays ano × setor, índices base 1; exige coincidência
+# nominal/real no ano-base e conserva zeros estruturais autenticados. O estoque
+# obtido é uma estimativa a preços constantes, não quantidade física de máquinas.
+# Guias: docs/guide-pt.md e docs/guide-en.md.
 wlv_row_constant_capital_stock <- function(
     current_stock,
     exchange_index,

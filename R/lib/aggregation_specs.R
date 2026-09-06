@@ -276,6 +276,10 @@ wlv_aggregation_state <- function(value) {
   attr(value, "wlv_state", exact = TRUE)
 }
 
+# Política de cobertura: error rejeita qualquer lacuna; propagate devolve
+# ausência; available usa observações presentes e marca partial se faltou alguma.
+# Um grupo todo ausente continua missing, jamais total zero por uma soma vazia.
+# Guias: docs/guide-pt.md e docs/guide-en.md.
 wlv_aggregation_missing_selection <- function(missing, policy, group) {
   if (!any(missing)) {
     return(list(selected = rep(TRUE, length(missing)), state = "finite"))
@@ -306,6 +310,10 @@ wlv_aggregation_assert_finite_result <- function(value, group) {
   value
 }
 
+# Cada linha é um grupo a reduzir; colunas são os setores/países componentes.
+# sum serve a níveis extensivos; legacy_mean preserva uma média histórica;
+# invariant exige valores iguais dentro da tolerância e conserva uma referência.
+# A estratégia vem do contrato do indicador, não de inferência pelo sufixo.
 wlv_aggregation_reduce_unary <- function(matrix, spec) {
   result <- rep(NA_real_, nrow(matrix))
   states <- rep(NA_character_, nrow(matrix))
@@ -356,6 +364,10 @@ wlv_aggregation_zero_result <- function(policy, group) {
   )
 }
 
+# ratio_of_sums: soma numeradores / soma denominadores. weighted_mean: soma
+# valor × peso / soma pesos. Selecionar pares completos impede usar o numerador
+# de um país sem seu denominador. A política explícita resolve soma de pesos
+# zero; escalas/unidades do resultado dependem das grandezas de cada lado.
 wlv_aggregation_reduce_pair <- function(left, right, spec) {
   result <- rep(NA_real_, nrow(left))
   states <- rep(NA_character_, nrow(left))

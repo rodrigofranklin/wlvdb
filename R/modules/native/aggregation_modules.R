@@ -56,6 +56,8 @@ wlv_native_aggregation_provides <- function(args) {
   }), recursive = FALSE)
 }
 
+# WWW já representa o mundo: removê-lo antes da agregação impede contar o total
+# duas vezes. ROW permanece, pois é uma região efetiva da tabela mundial.
 wlv_native_aggregation_values <- function(ctx, binding, level, local_country) {
   inputs <- wlv_aggregation_binding_inputs(binding)
   stats::setNames(lapply(inputs, function(indicator) {
@@ -87,6 +89,13 @@ wlv_native_aggregation_allowed_states <- function(
   }), names(values))
 }
 
+# Consolidação dos indicadores segundo regras versionadas, não uma soma cega.
+# Setorial: ano × setor × país -> nacional: ano × país -> mundial: ano.
+# Grandezas extensivas podem ser somadas; índices/médias exigem seus pesos e
+# taxas exigem a fórmula dos totais. As funções de fórmula próprias produzem
+# seus agregados; este módulo executa os bindings diretos do registro.
+# Ex.: salários 10+90 e ocupados 1+3 dão média 25, não média simples de 10 e 30.
+# Guias: docs/guide-pt.md, docs/guide-en.md e dicionários de resultados bilíngues.
 wlv_native_aggregation_spec <- function() {
   wlv_native_module_spec(
   id = "aggregation.direct",
@@ -114,6 +123,9 @@ wlv_native_aggregation_spec <- function() {
         "sector_to_country",
         country_values
       )
+      # Antes de reduzir, a política contratual decide quais ausências podem
+      # participar. O resultado carrega estado próprio: um total não ganha
+      # validade apenas porque sum(..., na.rm=TRUE) conseguiu produzir um número.
       allowed <- wlv_native_aggregation_allowed_states(
         runtime,
         "sea_sectors",

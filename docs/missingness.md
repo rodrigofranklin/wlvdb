@@ -99,9 +99,10 @@ capital allocation keeps its separately tested `0 / 0` aggregate exception.
 The standard WIOD exchange-rate calculation uses one ratio of compatible
 national totals for every country-year and broadcasts it to all sectors. An
 invalid national numerator, denominator, or rate aborts; it is never replaced
-with zero or a sector mean. The explicitly versioned `wiodr13v09` and
-`wiodr16v09` methods retain the prior sector calculation solely for historical
-comparability.
+with zero or a sector mean. The preserved `wiodr13v09` and `wiodr16v09`
+definitions describe the prior sector calculation solely for historical
+auditing; neither is executable in the current release, including with
+experimental opt-in.
 
 ## Checkpoints, diagnostics, and publication
 

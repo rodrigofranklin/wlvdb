@@ -1,10 +1,22 @@
 # WIOD 2016 recovery and source contract
 
+Beginner guides: [Português](guide-pt.md) / [English](guide-en.md).
+Only `wiodr13` and `wiodr16` are executable in this release. References to
+`wiodr16v09` or `zerodep_2` below describe historical contracts, not available
+calculation paths; experimental opt-in cannot enable them.
+
 The WIOD 2016 preparation is pinned to the official **World Input-Output
 Database 2016 Release, 2000-2014**, DOI
 [`10.34894/PJ2M1C`](https://doi.org/10.34894/PJ2M1C). The University of
 Groningen describes the release and its coverage on the
 [official WIOD 2016 page](https://www.rug.nl/ggdc/valuechain/wiod/wiod-2016-release).
+
+The Dataverse 2.1 metadata checked on 2026-09-06 declares Creative Commons
+Attribution 4.0 International (CC BY 4.0). Shared EU KLEMS inputs use the
+[2019 archive's CC BY 4.0 terms](https://euklems.eu/archive-history/); their
+exact sizes and SHA-256 hashes appear in [the WIOD13 input table](wiodr13.md).
+The pinned file IDs and bytes, not an upstream site's newest release, define
+the source generation.
 
 ## Pinned inputs
 

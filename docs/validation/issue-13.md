@@ -1,5 +1,14 @@
 # Issue 13 — validação do corte principal
 
+Arquivo local consolidado em 2026-09-05: `temp/054/`, ignorado pelo Git e protegido
+contra limpeza. Contém `main/`, `performance/`, os inputs de tooling necessários
+e os manifests SHA-256 da realocação. Os caminhos absolutos históricos abaixo
+foram preservados como proveniência; use `temp/054/relocation-map.json` para
+localizar os arquivos atuais. As demais campanhas locais foram removidas por
+instrução do usuário; o inventário da manutenção registra eventuais resíduos.
+Novos experimentos seguem `AGENTS.md` e
+[`../local-campaigns.md`](../local-campaigns.md); não reexecutar o arquivo 054.
+
 Estado em 2026-09-05: **todos os gates técnicos aprovados; relatório integral concluído**. Ciência: 28 cenários, 38 comparações e dez deltas aprovados; desempenho: 14/14 pares dentro dos limites; preparação: dois braços e quatro comparações aprovados; falhas: 10/10 com rollback e nenhuma release parcial. O agregado final passou às `16:25:15Z` e foi adotado pelo controlador sem repetir cenários ou iniciar novos processos. A CI Windows/Ubuntu aprovou o código final `1480dd8`. O escopo é exclusivamente WIOD13/WIOD16, sem papers; o canal público não foi alterado. As tentativas anteriores, inclusive reprovadas, permanecem preservadas e discriminadas abaixo.
 
 ## Escopo e referências

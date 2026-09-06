@@ -4328,13 +4328,45 @@ wlv_method_result_metadata <- function(
 }
 
 wlv_write_result_csv <- function(value, path) {
+  # write.table traduz strings marcadas para o locale nativo antes de aplicar
+  # fileEncoding. Em locale C isso transforma acentos em escapes <U+....>.
+  # A cópia abaixo contém bytes UTF-8 validados, sem uma segunda tradução;
+  # a conexão binária mantém o serializador CSV e sua precisão numérica.
+  utf8_bytes <- function(text) {
+    text <- enc2utf8(text)
+    valid <- iconv(text, from = "UTF-8", to = "UTF-8", sub = NA)
+    if (any(!is.na(text) & is.na(valid)) ||
+        any(grepl("\ufffd", text, fixed = TRUE), na.rm = TRUE)) {
+      stop("Method metadata contains invalid UTF-8 text.", call. = FALSE)
+    }
+    Encoding(text) <- "unknown"
+    text
+  }
+  names(value) <- utf8_bytes(names(value))
+  value[] <- lapply(value, function(column) {
+    if (is.character(column)) {
+      column <- utf8_bytes(column)
+    } else if (is.factor(column)) {
+      levels(column) <- utf8_bytes(levels(column))
+    }
+    column
+  })
+  output <- rawConnection(raw(), open = "wb")
+  on.exit(close(output), add = TRUE)
   utils::write.csv2(
     value,
-    path,
+    output,
     row.names = FALSE,
-    na = "",
-    fileEncoding = "UTF-8"
+    na = ""
   )
+  bytes <- rawConnectionValue(output)
+  # Preserva também os bytes ASCII históricos: conexões de texto Windows
+  # expandiam cada LF, inclusive dentro de um campo entre aspas, para CRLF.
+  if (.Platform$OS.type == "windows") {
+    bytes <- charToRaw(gsub("\n", "\r\n", rawToChar(bytes),
+      fixed = TRUE, useBytes = TRUE))
+  }
+  writeBin(bytes, path)
   size <- file.info(path)$size
   connection <- file(path, open = "rb")
   on.exit(close(connection), add = TRUE)

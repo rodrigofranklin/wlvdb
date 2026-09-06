@@ -9,6 +9,14 @@ wlv_native_filters_contract <- function() {
   )
 }
 
+# Transformação de preços em valores: quantifica trabalho direto e indireto.
+# Por ano, A[i,j] é consumo intermediário mais depreciação fornecidos por i a j,
+# divididos pela produção bruta monetária de j. Linhas fornecem; colunas usam.
+# Só o bloco classificado como produtivo entra no sistema de Leontief. l é
+# trabalho abstrato direto por unidade monetária; lambda satisfaz lambda = l +
+# lambda A. Multiplicar cada linha monetária por seu lambda gera magnitude de
+# valor (mv), preservando ano × input × output. Não confundir lambda com preço.
+# Guias: docs/guide-pt.md e docs/guide-en.md, convenção: docs/code-commenting.md.
 wlv_matrix_transformation_spec <- function() {
   wlv_native_module_spec(
   id = "matrix.transformation",
@@ -98,6 +106,9 @@ wlv_matrix_transformation_spec <- function() {
     )
     dimnames(gross_output) <- list(lists$years, lists$input)
 
+    # Uma coluna com produção zero precisa ser examinada antes da divisão.
+    # 0/0 sem fluxos admite coeficiente zero; fluxo não nulo com produto zero
+    # é uma anomalia econômica registrada e validada, nunca ignorada em silêncio.
     zero_output_scans <- vector("list", year_count)
     for (year_index in seq_len(year_count)) {
       annual_numerator <- leontief_numerator_for_year(year_index)
@@ -127,6 +138,9 @@ wlv_matrix_transformation_spec <- function() {
       include_both_zero = TRUE
     )
 
+    # O filtro produtivo realiza a hipótese sobre criação de valor: horas de
+    # atividades não produtivas não entram como trabalho novo neste sistema.
+    # A divisão contratual preserva país/setor para localizar a eventual anomalia.
     labour_numerator <- abstract_labour *
       rep(rows$productive, each = year_count)
     labour_requirements <- wlv_safe_divide_runtime(
@@ -171,6 +185,10 @@ wlv_matrix_transformation_spec <- function() {
       }
       if (any(zero_output)) coefficients[, zero_output] <- 0
       dimnames(coefficients) <- list(productive_labels, productive_labels)
+      # Exemplo de um setor: com l=2 e A=0,5, lambda=4. Metade do trabalho
+      # incorporado corresponde às rodadas indiretas de reposição dos insumos.
+      # O solucionador confere o resíduo e registra condicionamento numérico;
+      # uma solução calculável não é, por si só, uma prova de adequação econômica.
       result <- wlv_solve_leontief(
         coefficient_matrix = coefficients,
         labour_requirements = stats::setNames(
@@ -219,6 +237,11 @@ wlv_matrix_transformation_spec <- function() {
 )
 }
 
+# Transferência em cada fluxo internacional = equivalente em trabalho do
+# pagamento monetário menos trabalho incorporado na mercadoria. O fator anual
+# balance_factor = valor das exportações / preço das exportações produtivas
+# torna essas parcelas comparáveis. A convenção de ganho/perda do país é aplicada
+# adiante ao comparar exportações e importações. Fluxos domésticos são excluídos.
 wlv_matrix_transfers_spec <- function() {
   wlv_native_module_spec(
   id = "matrix.transfers",
@@ -263,6 +286,9 @@ wlv_matrix_transfers_spec <- function() {
       sum,
       na.rm = TRUE
     )
+    # As somas usam as células disponíveis (na.rm=TRUE); essa opção não valida
+    # ausência de dados. O contrato de fonte e os diagnósticos tratam cobertura
+    # e resultados não finitos. Aqui não há substituição especial de razão 0/0.
     balance_factor <- numerator / denominator
     transfers <- (source_io * trade_repeated * balance_factor) -
       (values * trade_repeated)
@@ -283,6 +309,12 @@ wlv_matrix_transfers_spec <- function() {
 )
 }
 
+# Cesta: participação de cada produto/origem no consumo final, sem unidade.
+# Na variante nacional, cada país consumidor tem sua cesta, repetida entre seus
+# setores; na internacional, uma cesta mundial é comum a todos. São participações
+# monetárias observadas, não quantidades físicas nem uma norma de subsistência.
+# A saída conserva os eixos completos da WIOT; a aplicação produtiva da cesta
+# usa apenas o bloco input × input. As demais colunas ficam ausentes por desenho.
 wlv_matrix_basket_spec <- function(id, international = FALSE) {
   wlv_native_module_spec(
     id = id,
@@ -362,6 +394,9 @@ wlv_matrix_basket_international_spec <- function() {
 )
 }
 
+# Hipótese de sensibilidade que substitui depreciação por zero após matrix.capital.
+# Não apaga o estoque de capital; altera os insumos repostos em Leontief e os
+# indicadores que dependem da depreciação. A hipótese é selecionada pelo método.
 wlv_matrix_zero_depreciation_spec <- function(id) {
   wlv_native_module_spec(
     id = id,
