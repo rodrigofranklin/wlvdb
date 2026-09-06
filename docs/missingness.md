@@ -62,9 +62,16 @@ Aggregations choose an explicit policy:
 
 Under `available`, an all-missing group remains `NA` with its declared state. It
 never becomes zero or `NaN`. Consequently `c(NA, NA)` and `c(0, 0)` remain
-scientifically distinct. Country and world results use paired coverage for
-ratios of aggregates so numerator and denominator are built from the same
-available sector coordinates.
+scientifically distinct. The active standard stage-5 ratio modules sum their
+numerator and denominator independently through
+`wlv_native_independent_country_ratio()`; their coverage can therefore differ.
+The appropriated-profit module also aggregates capital compensation,
+depreciation and capital stock separately. A paired-coverage strategy elsewhere
+in the aggregation machinery must not be generalized to these published rates.
+For example, world persons-engaged surplus-value rates can include imputed ROW
+hours without corresponding reproduction costs. Review each operand before
+interpreting the ratio; see the [methodology](methodology-en.md) and the
+[coverage workflow](use-results-en.md#compare-ratios-on-common-coverage).
 
 The typed dispatcher keeps its more detailed reduction state (`finite`,
 `partial`, `missing`, `zero_denominator`, or `not_applicable`) on the result and

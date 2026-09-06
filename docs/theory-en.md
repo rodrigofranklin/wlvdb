@@ -1,6 +1,6 @@
 # Theory: what the estimates mean
 
-<!-- documentation-revision: wiod-consolidation-v1 -->
+<!-- documentation-revision: wiod-reader-workflows-v2 -->
 
 [Português](theory-pt.md) | English | [Home](../README.md) | [Practical guide](guide-en.md) | [Mathematics](methodology-en.md) | [Assumptions and open work](assumptions-en.md) | [References](references-en.md)
 
@@ -13,8 +13,8 @@ observed production, employment and expenditure.
 Read this chapter in order on a first visit. It explains the concepts before
 the [mathematical chapter](methodology-en.md) derives the calculations. The
 current `wiodr13` and `wiodr16` methods are particular implementations of the
-research programme described in the two supplied works. They do not implement
-every alternative discussed in those works, and they do not automatically
+research programme of Franklin et al. (2022) and Franklin (2025). They do not
+implement every alternative discussed in those works, and they do not automatically
 reproduce their published tables.
 
 ## 1. From useful things to social labour

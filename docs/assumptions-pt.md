@@ -1,6 +1,6 @@
 # Hipóteses, limitações e trabalho pendente
 
-<!-- documentation-revision: wiod-consolidation-v1 -->
+<!-- documentation-revision: wiod-reader-workflows-v2 -->
 
 Português | [English](assumptions-en.md) | [Início](../README-PT.md) | [Teoria](theory-pt.md) | [Matemática](methodology-pt.md) | [Guia prático](guide-pt.md)
 
@@ -43,7 +43,7 @@ enquanto a tabela WIOD13 atual inclui ambos (`H` e `O`). A máscara atual tem
 25 setores produtivos; o sistema descrito no artigo usa 23. Portanto, usar a
 mesma versão da matriz de insumo-produto não basta para reproduzir o estudo.
 
-A teoria e as posições específicas dos materiais fornecidos estão em
+Os conceitos e as posições de Franklin et al. (2022) e Franklin (2025) estão em
 [teoria](theory-pt.md), com [referências ABNT](references-pt.md). A execução
 está nos [módulos de matrizes](../scripts/modules/native/matrix_modules.R), nos
 [indicadores comuns](../scripts/modules/native/indicator_common_modules.R) e nos

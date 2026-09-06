@@ -702,8 +702,8 @@ wlv_indicator_abstract_labour_empe_m_mv_spec <- function() {
   "indicator.abstract_labour.empe.m.mv",
   "abstract_labour.empe.s.mv", "empe.s.un",
   wlv_native_indicator_metadata_row(
-    "abstract_labour.empe.m.mv", "Working day of employee per year (magnitude of value)",
-    "Average magnitude of value \"created\" by employee per year. Includes productive and unproductive workers.",
+    "abstract_labour.empe.m.mv", "Annual abstract labour per employee",
+    "Annual weighted employee hours divided by employee count. Includes productive and unproductive industries; this is not a daily working time or a claim that every included industry creates new value.",
     NA_character_, "Labour and employment", "value"
   )
 )
@@ -713,8 +713,8 @@ wlv_indicator_abstract_labour_emp_m_mv_spec <- function() {
   "indicator.abstract_labour.emp.m.mv",
   "abstract_labour.emp.s.mv", "emp.s.un",
   wlv_native_indicator_metadata_row(
-    "abstract_labour.emp.m.mv", "Working day of persons engaged per year (magnitude of value)",
-    "Average magnitude of value \"created\" by persons engaged per year. Includes productive and unproductive workers.",
+    "abstract_labour.emp.m.mv", "Annual abstract labour per person engaged",
+    "Annual weighted hours divided by the number of persons engaged, including non-employees and unproductive industries. This is not daily working time or the productive new-value aggregate.",
     NA_character_, "Labour and employment", "value"
   )
 )
@@ -1028,8 +1028,8 @@ wlv_native_productive_surplus_spec <- function(employee = FALSE) {
     metadata = wlv_native_indicator_metadata_row(
       indicator,
       if (employee) "Rate of surplus value (productive workers)" else "Rate of surplus value of persons engaged (productive workers)",
-      if (employee) "Rate of surplus value of productive employee. It is a measure of exploitation of labour in a capitalist relation of production." else "Rate of surplus value of persons engage, include only productive sectors.",
-      if (employee) "Obtained by dividing the sum of abstract labour of employees by the variable capital of productive sectors, minus one." else "Obtained by dividing the sum of abstract labour of persons engaged by the labour compensation of productive sectors, minus one.",
+      if (employee) "Estimated surplus-value rate of employees in industries classified as productive, under the national consumption-basket and equal-hour assumptions." else "Estimated surplus-value rate of persons engaged in productive industries, including non-employees under the source's labour-compensation convention.",
+      if (employee) "Productive employee abstract labour divided by the labour content of the basket financed by productive employee compensation, minus one." else "Productive persons-engaged abstract labour divided by the labour content of the basket financed by their labour compensation, minus one. Both operands are in labour-value units, not hours divided by money.",
       "Rate of surplus value", "percent", TRUE
     ),
     run = local({

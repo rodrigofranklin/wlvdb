@@ -1,12 +1,16 @@
 # Referências e roteiro de leitura
 
-<!-- documentation-revision: wiod-consolidation-v1 -->
+<!-- documentation-revision: wiod-reader-workflows-v2 -->
 
 Português | [English](references-en.md) | [Início](../README-PT.md) | [Teoria](theory-pt.md) | [Matemática](methodology-pt.md) | [Guia prático](guide-pt.md)
 
 As referências seguem as convenções de autoria, título e publicação da
 ABNT. Os títulos originais foram preservados. As citações de páginas usam
 a numeração impressa nas edições abaixo, inclusive na leitura em PDF.
+
+Para citar uma análise, consulte também [software, resultados e fontes estatísticas](citation-pt.md).
+Essa página oferece modelos de nota de dados e distingue exportações do site
+de publicações nativas, sem atribuir identificadores que não foram fornecidos.
 
 ## Fontes principais consultadas
 
@@ -19,7 +23,7 @@ problem: questioning the exploitation rate equalization hypothesis.
 p. 362–390, 2022. DOI:
 [10.13169/worlrevipoliecon.13.3.0362](https://doi.org/10.13169/worlrevipoliecon.13.3.0362).
 
-O artigo fornecido fundamenta a comparação entre os métodos de redução
+O artigo de 2022 fundamenta a comparação entre os métodos de redução
 do trabalho, sua crítica teórica e a construção empírica original.
 
 | Páginas | Objetivo da leitura |

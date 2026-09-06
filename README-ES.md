@@ -1,4 +1,15 @@
-#Resumo 
+# World Labour Values Database — aviso sobre esta versión
+
+La documentación mantenida se encuentra en [portugués](README-PT.md) y
+[inglés](README.md). Para consultar los datos, acceda a
+[World Labour Values](https://panel.worldlabourvalues.org/) o a
+[LabCidades/UFES](http://labcidades.ufes.br/worldlabourvalues/).
+
+El contenido conservado a continuación es histórico: no define las capacidades,
+las referencias bibliográficas ni las instrucciones vigentes. Utilice los
+manuales mantenidos para consultar, reproducir o ampliar el proyecto.
+
+## Texto histórico
 
 Open Science Project para desarrollar, implementar y mejorar las metodologías para valores (marxistas, sraffianos ...) y estimaciones de categorias basadas en información pública de  Matrices de Insumo y Producto Mundiales, Klems, Datos de Eclal IO. Extensiones adicionales para incluir exiobase, las mejores estimaciones disponibles para más países. 
 

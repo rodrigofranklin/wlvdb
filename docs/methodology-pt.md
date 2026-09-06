@@ -1,10 +1,10 @@
 # Metodologia matemática
 
-<!-- documentation-revision: wiod-consolidation-v1 -->
+<!-- documentation-revision: wiod-reader-workflows-v2 -->
 
 [English](methodology-en.md) · [Teoria](theory-pt.md) · [Hipóteses e trabalho pendente](assumptions-pt.md) · [Guia prático](guide-pt.md) · [Referências em ABNT](references-pt.md)
 
-Revisão documental: `wiod-consolidation-v1`.
+Revisão documental: `wiod-reader-workflows-v2`.
 
 Este capítulo acompanha os **métodos atualmente executáveis `wiodr13` e `wiodr16`**. Ele traduz o cálculo nativo em equações e em um pequeno exemplo. O artigo de Franklin et al. (2022, p. 370–375) explica a estrutura comum de insumo-produto e compara diferentes reduções do trabalho complexo; Franklin (2025, p. 190–200) desenvolve a aplicação internacional. As alternativas de pesquisa desses textos não são todas métodos executáveis nesta versão. Em particular, os métodos padrão utilizam multiplicadores de horas de trabalho iguais a um e cestas nacionais de consumo. Consulte a situação de suporte no [catálogo de métodos](methods.md).
 

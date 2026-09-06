@@ -1,6 +1,6 @@
 # Teoria: o significado das estimativas
 
-<!-- documentation-revision: wiod-consolidation-v1 -->
+<!-- documentation-revision: wiod-reader-workflows-v2 -->
 
 Português | [English](theory-en.md) | [Início](../README-PT.md) | [Guia prático](guide-pt.md) | [Matemática](methodology-pt.md) | [Hipóteses e trabalho pendente](assumptions-pt.md) | [Referências](references-pt.md)
 
@@ -13,7 +13,7 @@ modelo que conecte essa teoria aos registros de produção, emprego e despesa.
 Na primeira leitura, siga a ordem deste capítulo. Ele apresenta os conceitos
 antes de o [capítulo matemático](methodology-pt.md) desenvolver os cálculos.
 Os métodos atuais `wiodr13` e `wiodr16` são implementações particulares do
-programa de pesquisa descrito nos dois materiais fornecidos. Eles não
+programa de pesquisa de Franklin et al. (2022) e Franklin (2025). Eles não
 implementam todas as alternativas discutidas nessas obras, nem reproduzem
 automaticamente suas tabelas publicadas.
 

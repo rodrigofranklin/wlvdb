@@ -1,8 +1,18 @@
 # World Labour Values Database (WLVDB)
 
-<!-- documentation-revision: wiod-consolidation-v1 -->
+<!-- documentation-revision: wiod-reader-workflows-v2 -->
 
 [Português](README-PT.md) | English
+
+## Access the data
+
+Results are available through [World Labour Values](https://panel.worldlabourvalues.org/)
+and the [LabCidades/UFES access point](http://labcidades.ufes.br/worldlabourvalues/).
+You can consult and obtain data through the website without installing R or
+rebuilding the database. Start with the [use and interpretation workflow](docs/use-results-en.md),
+which follows indicator selection, coverage, analysis and citation.
+
+## About the database
 
 WLVDB estimates labour values, surplus-value rates, capital and trade transfers
 from world input-output tables and socioeconomic accounts. It connects economic
@@ -30,8 +40,9 @@ by step before mapping its equations to the implementation.
 | Understand the concepts and their measurement | [Theory: labour, value, reproduction, exploitation and trade](docs/theory-en.md), with [ABNT references](docs/references-en.md) |
 | Understand the mathematics | [Methodology: notation, derivations, worked example and code mapping](docs/methodology-en.md) |
 | Evaluate assumptions and research gaps | [Assumptions, imputations, exceptional data and work still needed](docs/assumptions-en.md) |
-| Use results without running a calculation | [Files, units, missing values and reading data](docs/guide-en.md#use-the-results), then the [complete indicator dictionary](docs/results-dictionary-en.md) |
-| Reproduce or improve the project | [Installation and executable workflow](docs/guide-en.md#run-the-project), then the [contribution walkthrough](docs/guide-en.md#contribute-an-improvement) |
+| Use data | [Website, selection, coverage, interpretation and R example](docs/use-results-en.md), with [indicator-family cards](docs/indicator-families-en.md) and the [dictionary](docs/results-dictionary-en.md) |
+| Reproduce the database | [Environment, sources, calculation, validation and resources](docs/guide-en.md#run-the-project) |
+| Contribute | [From an indicator's meaning to its module, test and change proposal](docs/guide-en.md#contribute-an-improvement) |
 
 The conceptual chapters draw on Franklin et al. (2022) and Franklin (2025).
 They distinguish those studies' assumptions from the current code: productive

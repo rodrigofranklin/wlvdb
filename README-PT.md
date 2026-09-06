@@ -1,8 +1,18 @@
 # Banco de Dados de Valores Trabalho Mundiais (WLVDB)
 
-<!-- documentation-revision: wiod-consolidation-v1 -->
+<!-- documentation-revision: wiod-reader-workflows-v2 -->
 
 Português | [English](README.md)
+
+## Acesse os dados
+
+Os resultados estão disponíveis no [World Labour Values](https://panel.worldlabourvalues.org/)
+e no [acesso pelo LabCidades/UFES](http://labcidades.ufes.br/worldlabourvalues/).
+Você pode consultar e obter dados pelo site sem instalar R ou executar o banco.
+Comece pelo [percurso de uso e interpretação](docs/use-results-pt.md): ele
+acompanha a escolha do indicador, a cobertura, a análise e a citação.
+
+## Sobre o banco
 
 O WLVDB estima valores trabalho, taxas de mais-valia, capital e transferências
 pelo comércio a partir de matrizes mundiais de insumo-produto e contas
@@ -30,8 +40,9 @@ pequena economia passo a passo antes de relacionar suas equações à implementa
 | Entender os conceitos e sua mensuração | [Teoria: trabalho, valor, reprodução, exploração e comércio](docs/theory-pt.md), com [referências ABNT](docs/references-pt.md) |
 | Entender a matemática | [Metodologia: notação, derivações, exemplo resolvido e correspondência com o código](docs/methodology-pt.md) |
 | Avaliar hipóteses e lacunas de pesquisa | [Hipóteses, imputações, dados excepcionais e trabalho pendente](docs/assumptions-pt.md) |
-| Usar resultados sem executar cálculos | [Arquivos, unidades, ausências e leitura de dados](docs/guide-pt.md#usar-os-resultados), depois o [dicionário completo de indicadores](docs/results-dictionary-pt.md) |
-| Reproduzir ou melhorar o projeto | [Instalação e percurso executável](docs/guide-pt.md#executar-o-projeto), depois o [percurso de contribuição](docs/guide-pt.md#contribuir-com-uma-melhoria) |
+| Usar os dados | [Site, seleção, cobertura, interpretação e exemplo em R](docs/use-results-pt.md), com [fichas das famílias de indicadores](docs/indicator-families-pt.md) e [dicionário](docs/results-dictionary-pt.md) |
+| Reproduzir o banco | [Ambiente, fontes, cálculo, validação e recursos](docs/guide-pt.md#executar-o-projeto) |
+| Contribuir | [Do significado de um indicador ao módulo, teste e proposta de alteração](docs/guide-pt.md#contribuir-com-uma-melhoria) |
 
 Os capítulos conceituais se apoiam em Franklin et al. (2022) e Franklin (2025).
 Eles distinguem as hipóteses desses estudos das adotadas pelo código atual:
