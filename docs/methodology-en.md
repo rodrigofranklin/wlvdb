@@ -32,7 +32,7 @@ For one year, an industry is a **country–sector pair**. A Brazilian steel indu
 | $b_{ic}$ | Share of supplier $i$ in country $c$'s consumption basket | Dimensionless |
 | $W_j$, $v_j$ | Employee compensation in money; its basket equivalent in labour value | Current USD; labour-value units |
 
-Here **$D$ is a depreciation flow matrix**, matching `k_depreciation`. The article uses $D$ for depreciation *coefficients*. Below, $d=D\,\mathrm{diag}(x)^{-1}$ denotes those coefficients. Keeping this distinction avoids adding a stock or an unscaled flow to a coefficient matrix.
+Here **$D$ is a depreciation flow matrix**, matching `k_depreciation`. The article uses $D$ for depreciation *coefficients*. Below, $`d=D\,\mathrm{diag}(x)^{-1}`$ denotes those coefficients. Keeping this distinction avoids adding a stock or an unscaled flow to a coefficient matrix.
 
 The source generation is normalized before calculation: money is in currency units, labour in hours, and employment in persons, rather than the provider's millions/thousands. A stored `.mv` unit has the numerical scale of an hour under $z=1$, but its theoretical meaning depends on the productive classification and reduction assumption. The [unit contracts](units.md), including `_normalization_contract.csv` and `_unit_contract.csv`, are authoritative. The full WIOD13 industry system has 1,435 pairs; WIOD16 has 2,464. The solve uses their productive subset.
 

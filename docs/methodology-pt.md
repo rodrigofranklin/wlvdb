@@ -32,7 +32,7 @@ Em cada ano, uma unidade produtiva é um **par país–setor**. A siderurgia bra
 | $b_{ic}$ | Participação do fornecedor $i$ na cesta de consumo do país $c$ | Sem unidade |
 | $W_j$, $v_j$ | Remuneração monetária dos empregados; equivalente de sua cesta em valor-trabalho | USD correntes; unidades de magnitude de valor |
 
-Aqui **$D$ é uma matriz de fluxos de depreciação**, correspondente a `k_depreciation`. O artigo utiliza $D$ para os *coeficientes* de depreciação. Abaixo, $d=D\,\mathrm{diag}(x)^{-1}$ representa esses coeficientes. Essa distinção evita somar um estoque ou um fluxo não normalizado a uma matriz de coeficientes.
+Aqui **$D$ é uma matriz de fluxos de depreciação**, correspondente a `k_depreciation`. O artigo utiliza $D$ para os *coeficientes* de depreciação. Abaixo, $`d=D\,\mathrm{diag}(x)^{-1}`$ representa esses coeficientes. Essa distinção evita somar um estoque ou um fluxo não normalizado a uma matriz de coeficientes.
 
 A geração da fonte é normalizada antes do cálculo: moeda em unidades monetárias, trabalho em horas e emprego em pessoas, em vez dos milhões/milhares utilizados pelo provedor. Uma unidade `.mv` armazenada tem a escala numérica de uma hora sob $z=1$, mas seu significado teórico depende da classificação produtiva e da hipótese de redução. Os [contratos de unidades](units.md), incluindo `_normalization_contract.csv` e `_unit_contract.csv`, são a referência autorizada. O sistema completo de atividades da WIOD13 tem 1.435 pares; o da WIOD16 tem 2.464. A solução utiliza seu subconjunto produtivo.
 
