@@ -14,7 +14,7 @@ parse_arguments <- function(arguments) {
     year = "2013",
     repetitions = 5L,
     poll_ms = 25,
-    output = file.path("run_logs", "leontief-benchmark")
+    output = file.path(Sys.getenv("WLV_CAMPAIGN_ROOT"), "results", "leontief-benchmark")
   )
   child <- FALSE
   strategy <- fixture <- NULL
@@ -117,6 +117,53 @@ project_root <- normalizePath(
   winslash = "/",
   mustWork = TRUE
 )
+Sys.setenv(RENV_PROJECT = project_root)
+source(file.path(project_root, "renv", "activate.R"), local = TRUE)
+campaign_root <- Sys.getenv("WLV_CAMPAIGN_ROOT", "")
+if (!nzchar(campaign_root) || !dir.exists(campaign_root)) {
+  stop("Launch benchmarks with scripts/run-experiment.ps1 inside temp/<id>/.", call. = FALSE)
+}
+campaign_root <- normalizePath(campaign_root, winslash = "/", mustWork = TRUE)
+campaign_parent <- normalizePath(file.path(project_root, "temp"), winslash = "/", mustWork = TRUE)
+if (!identical(tolower(dirname(campaign_root)), tolower(campaign_parent)) ||
+    basename(campaign_root) == "054") {
+  stop("Benchmark campaign must be a new campaign inside this repository's temp/.", call. = FALSE)
+}
+manifest_path <- file.path(campaign_root, ".campaign.json")
+if (!file.exists(manifest_path)) {
+  stop("Benchmark campaign is not registered.", call. = FALSE)
+}
+campaign_record <- jsonlite::fromJSON(manifest_path)
+if (!identical(campaign_record$schema, "wlv-campaign/1") ||
+    !identical(campaign_record$id, basename(campaign_root)) ||
+    !identical(campaign_record$status, "active")) {
+  stop("Benchmark requires an active campaign.", call. = FALSE)
+}
+session_temporary <- normalizePath(tempdir(), winslash = "/", mustWork = TRUE)
+if (!startsWith(tolower(session_temporary), paste0(tolower(campaign_root), "/"))) {
+  stop("Set TEMP, TMP and TMPDIR to the campaign scratch/ before starting R.", call. = FALSE)
+}
+# Resolve and validate the destination before loading data or starting a benchmark.
+benchmark_output <- arguments$output
+if (!grepl("^([A-Za-z]:[/\\\\]|/)", benchmark_output)) {
+  benchmark_output <- file.path(project_root, benchmark_output)
+}
+output_parts <- strsplit(chartr("\\", "/", benchmark_output), "/", fixed = TRUE)[[1L]]
+if (any(output_parts %in% c(".", ".."))) {
+  stop("Benchmark output cannot contain dot path components.", call. = FALSE)
+}
+if (!startsWith(tolower(chartr("\\", "/", benchmark_output)),
+                paste0(tolower(campaign_root), "/"))) {
+  stop("Benchmark output must stay inside its campaign.", call. = FALSE)
+}
+ancestor <- benchmark_output
+while (!dir.exists(ancestor)) ancestor <- dirname(ancestor)
+resolved_ancestor <- normalizePath(ancestor, winslash = "/", mustWork = TRUE)
+if (!identical(tolower(resolved_ancestor), tolower(campaign_root)) &&
+    !startsWith(tolower(resolved_ancestor), paste0(tolower(campaign_root), "/"))) {
+  stop("Benchmark output must stay inside its campaign.", call. = FALSE)
+}
+arguments$output <- benchmark_output
 bootstrap_environment <- new.env(parent = baseenv())
 sys.source(
   file.path(project_root, "R", "bootstrap.R"),

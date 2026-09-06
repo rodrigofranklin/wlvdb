@@ -4,6 +4,8 @@
 .RData
 .Ruserdata
 temp
+# Local campaigns, experiments, worktrees and their generated artifacts.
+/temp/
 results
 !/contracts/results/
 !/contracts/results/**

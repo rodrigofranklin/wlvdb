@@ -1,0 +1,82 @@
+# Campanhas e limpeza local
+
+Toda campanha ou experimento fica em `temp/<id>/`, dentro do checkout principal.
+Isso inclui worktrees Git, fontes copiadas, resultados, logs e arquivos temporários.
+O diretório é ignorado pelo Git. O código reutilizável continua em `scripts/` e
+`tests/manual/`.
+
+Os comandos de gerenciamento requerem PowerShell 7.5 ou posterior.
+
+## Criar e executar
+
+Para preparar uma campanha composta de várias etapas, na raiz do projeto:
+
+```powershell
+pwsh -File scripts/manage-campaigns.ps1 -Action New -Id teste-055 -Purpose 'Comparação de desempenho'
+```
+
+O comando cria `worktrees/`, `scratch/`, `logs/` e `results/`, além de
+`.campaign.json`, que registra commit, finalidade, estado e preservação.
+Use somente esses diretórios para os artefatos da campanha.
+
+Para executar um comando em uma campanha nova, com os temporários dos processos
+filhos direcionados para dentro dela:
+
+```powershell
+./scripts/run-experiment.ps1 -Id teste-056 -Executable Rscript `
+  -ArgumentList @('--vanilla', 'scripts/benchmark_leontief.R') `
+  -Purpose 'Benchmark Leontief' -Preserve
+```
+
+O executor configura `TEMP`, `TMP`, `TMPDIR` e `WLV_CAMPAIGN_ROOT`, captura o log
+em UTF-8 e registra conclusão ou falha. Os argumentos de saída dos programas
+também precisam apontar para a campanha; variáveis de ambiente não redirecionam
+arquivos com caminhos explicitamente definidos pelo programa.
+
+Para campanhas de várias etapas, configure essas quatro variáveis no processo
+lançador antes de iniciar R/Python/PowerShell. Os escritores JSON da campanha
+manual da issue 13 rejeitam destinos externos a `temp/<id>/` e campanhas fechadas.
+O provisionador de desempenho aplica a mesma restrição antes de copiar dados.
+Scripts históricos arquivados conservam seus bytes e não devem ser executados
+diretamente como lançadores de campanhas novas.
+
+## Encerrar e limpar
+
+Depois de encerrar os processos e revisar os resultados:
+
+```powershell
+pwsh -File scripts/manage-campaigns.ps1 -Action Complete -Id teste-055
+pwsh -File scripts/manage-campaigns.ps1 -Action Clean
+pwsh -File scripts/manage-campaigns.ps1 -Action Clean -Apply
+```
+
+Use `Fail` para uma campanha abandonada ou reprovada. Use `-Preserve` em `New`,
+`Complete` ou `Fail` quando a campanha precisar permanecer para consulta.
+`Status` lista campanhas e seus estados; `Clean -Id <id>` limita o alvo.
+
+`Clean` faz uma simulação por padrão. `-Apply` exclui somente campanhas encerradas
+e não preservadas, depois de verificar os caminhos, manifests, processos, locks,
+links e o estado das worktrees. Uma worktree com alterações versionadas ou
+arquivos não rastreados bloqueia a limpeza; dados ignorados pelo Git são
+descartáveis quando a campanha foi encerrada sem preservação. O comando remove
+as worktrees pelo Git antes de remover a pasta da campanha.
+
+A limpeza faz parte do encerramento: não acumule campanhas, tentativas ou caches
+sem finalidade. Se for preciso preservar apenas um relatório, guarde-o com sua
+proveniência antes de descartar as fontes e resultados intermediários.
+
+## Arquivo 054
+
+`temp/054/` está marcado como `archived` e `preserve=true`; o comando de limpeza
+também protege explicitamente esse identificador. A pasta contém `main/`,
+`performance/`, pequenas dependências de tooling e os registros da realocação.
+Os arquivos autenticados conservam o conteúdo original. `relocation-map.json`
+relaciona os caminhos históricos com os atuais. Consulte o `README.md` dentro
+desse arquivo para verificar sua integridade e localizar as provas finais.
+
+Essa pasta não é o destino de novos experimentos e não deve ser reexecutada.
+Excluir ou modificar a 054 requer nova instrução explícita do usuário.
+
+`source_data/`, `results/`, `renv/` e `.git/` do checkout principal são preservados
+pelo gerenciamento de campanhas. A retenção de publicações do banco é uma
+operação separada, descrita em `publication-storage.md`.

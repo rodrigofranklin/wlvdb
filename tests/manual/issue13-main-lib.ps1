@@ -1,4 +1,5 @@
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot '../../scripts/campaign-paths.ps1')
 
 $script:Issue13MainMethods = [string[]]@('wiodr13', 'wiodr16')
 $script:Issue13MainArms = [string[]]@('baseline', 'candidate')
@@ -247,7 +248,7 @@ function Write-Issue13MainJson(
   [Parameter(Mandatory)][object]$Value,
   [Parameter(Mandatory)][string]$Path
 ) {
-  $full = ConvertTo-Issue13MainFullPath $Path
+  $full = Assert-WlvCampaignOutputPath (ConvertTo-Issue13MainFullPath $Path)
   $parent = Split-Path -Parent $full
   if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
     $null = New-Item -ItemType Directory -Path $parent

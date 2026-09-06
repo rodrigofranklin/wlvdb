@@ -1,6 +1,5 @@
 param(
-  [string]$SourceV5Config =
-    'D:\Trabalho\Code\wlvdb-issue13-native-final-config-v5-terminal-rerun-053\gate-config.json'
+  [Parameter(Mandatory)][string]$SourceV5Config
 )
 
 $ErrorActionPreference = 'Stop'

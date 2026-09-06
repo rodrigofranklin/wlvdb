@@ -10,18 +10,19 @@ aleatória ou sintética.
 
 O comando de referência é:
 
-```sh
-Rscript --vanilla scripts/benchmark_leontief.R \
-  --method wiodr16 \
-  --channel stable \
-  --year 2013 \
-  --repetitions 5 \
-  --poll-ms 25 \
-  --output run_logs/leontief-benchmark
+```powershell
+./scripts/run-experiment.ps1 -Id leontief-055 -Executable Rscript `
+  -ArgumentList @('--vanilla', 'scripts/benchmark_leontief.R',
+    '--method', 'wiodr16', '--channel', 'stable', '--year', '2013',
+    '--repetitions', '5', '--poll-ms', '25') -Preserve
 ```
 
-No Windows PowerShell, use o mesmo comando em uma linha ou substitua `\` pelo
-acento grave de continuação. O script requer `fst` e `processx`. Ele não usa
+O lançador cria `temp/leontief-055/`, configura os temporários dos processos
+filhos e grava os resultados em `results/leontief-benchmark/` dentro da campanha.
+O identificador deve ser novo; consulte `local-campaigns.md` para encerrar e limpar
+campanhas. Fora do Windows, registre uma campanha equivalente e configure
+`WLV_CAMPAIGN_ROOT`, `TEMP`, `TMP` e `TMPDIR` antes de iniciar R. O script requer
+`fst`, `jsonlite` e `processx`. Ele não usa
 `ps` diretamente; `ps` pode aparecer como dependência transitiva de
 `processx`.
 

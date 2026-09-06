@@ -34,7 +34,7 @@ function Assert-PerformanceProvisioningDisjoint([string]$Destination, [string[]]
 $scienceConfig = ConvertTo-Issue13MainFullPath $ScienceConfigPath -RequireExistingFile
 $config = Read-Issue13MainJson $scienceConfig
 $null = Assert-Issue13MainConfig $config
-$root = ConvertTo-Issue13MainFullPath $OutputRoot
+$root = Assert-WlvCampaignOutputPath (ConvertTo-Issue13MainFullPath $OutputRoot)
 if ((Split-Path -Leaf $root) -cnotmatch '^wlvdb-issue13-performance-[a-z0-9-]+$' -or
     (Test-Path -LiteralPath $root)) {
   throw 'Performance output must be a new, specifically named directory.'
@@ -42,7 +42,9 @@ if ((Split-Path -Leaf $root) -cnotmatch '^wlvdb-issue13-performance-[a-z0-9-]+$'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $scienceBefore = Get-Issue13MainSha256 $scienceConfig
 $armBindings = @{}
-$protectedPaths = @($repo, [string]$config.control_root, [string]$config.evidence_root)
+# The output guard already confines writes to temp/<active-campaign>/.
+# Protect actual scientific inputs without rejecting that entire checkout subtree.
+$protectedPaths = @([string]$config.control_root, [string]$config.evidence_root)
 foreach ($arm in @('baseline', 'candidate')) {
   $armBindings[$arm] = Get-Issue13MainArmBinding $config $arm
   foreach ($method in @('wiodr13', 'wiodr16')) {
