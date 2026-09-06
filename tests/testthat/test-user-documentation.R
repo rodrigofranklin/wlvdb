@@ -15,9 +15,12 @@ test_that("beginner documentation stays bilingual and its examples parse", {
     c("docs/methodology-pt.md", "docs/methodology-en.md"),
     c("docs/assumptions-pt.md", "docs/assumptions-en.md"),
     c("docs/references-pt.md", "docs/references-en.md"),
-    c("docs/results-dictionary-pt.md", "docs/results-dictionary-en.md")
+    c("docs/results-dictionary-pt.md", "docs/results-dictionary-en.md"),
+    c("docs/use-results-pt.md", "docs/use-results-en.md"),
+    c("docs/indicator-families-pt.md", "docs/indicator-families-en.md"),
+    c("docs/citation-pt.md", "docs/citation-en.md")
   )
-  revision <- "<!-- documentation-revision: wiod-consolidation-v1 -->"
+  revision <- "<!-- documentation-revision: wiod-reader-workflows-v2 -->"
   for (pair in pairs) {
     documents <- lapply(file.path(wlv_test_root, pair), readLines, encoding = "UTF-8")
     for (i in seq_along(documents)) {
@@ -56,7 +59,10 @@ test_that("beginner guide local links and anchors resolve", {
   documents <- c("README.md", "README-PT.md", "docs/guide-pt.md", "docs/guide-en.md",
     "docs/theory-pt.md", "docs/theory-en.md", "docs/methodology-pt.md", "docs/methodology-en.md",
     "docs/assumptions-pt.md", "docs/assumptions-en.md", "docs/references-pt.md", "docs/references-en.md",
-    "docs/results-dictionary-pt.md", "docs/results-dictionary-en.md", "docs/documentation-sync.md")
+    "docs/results-dictionary-pt.md", "docs/results-dictionary-en.md", "docs/documentation-sync.md",
+    "docs/use-results-pt.md", "docs/use-results-en.md",
+    "docs/indicator-families-pt.md", "docs/indicator-families-en.md",
+    "docs/citation-pt.md", "docs/citation-en.md")
   slug <- function(value) {
     value <- tolower(sub("^#+ +", "", value))
     value <- gsub("[^\\p{L}\\p{N}_ -]", "", value, perl = TRUE)

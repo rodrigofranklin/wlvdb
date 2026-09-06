@@ -1,8 +1,8 @@
 # Dicionário de resultados
 
-<!-- documentation-revision: wiod-consolidation-v1 -->
+<!-- documentation-revision: wiod-reader-workflows-v2 -->
 
-[English](results-dictionary-en.md) | [Guia em português](guide-pt.md)
+[English](results-dictionary-en.md) | [Guia em português](guide-pt.md) | [Usar dados](use-results-pt.md) | [Fichas](indicator-families-pt.md)
 
 Este dicionário cobre todos os indicadores publicados por `wiodr13` (1995–2009) e `wiodr16` (2000–2014). As tabelas são geradas dos contratos v2 e das descrições econômicas revisadas. Cada linha se aplica a `sea_sectors` e `sea_countries`, salvo a ausência mundial indicada na coluna de agregação. Países e setores seguem os rótulos de cada run: as duas fontes não têm classificação nem cobertura geográfica idênticas.
 
@@ -44,7 +44,7 @@ As hipóteses de trabalho produtivo, igualdade das horas, resto do mundo, China,
 | `abstract_labour.emp.s.mv` | Horas de todas as pessoas ocupadas multiplicadas pelo fator de trabalho complexo. | horas abstratas | sem escala adicional | soma / soma |
 | `gdp.s.mv` | Trabalho abstrato de todas as pessoas ocupadas nos setores classificados como produtivos. Os demais setores recebem zero pelo filtro econômico. | horas abstratas | sem escala adicional | soma / soma |
 | `basket_price.r.pc` | Índice nacional do preço da cesta fixa de consumo, rebaseado em 2000. Cesta de referência: 1995 em WIOD13, 2000 em WIOD16. | índice (2000 = 1) | sem escala adicional | valor nacional comum / NA |
-| `basket_value.r.pc` | Índice nacional do trabalho incorporado na cesta fixa de consumo, rebaseado em 2000. | índice (2000 = 1) | sem escala adicional | valor nacional comum / NA |
+| `basket_value.r.pc` | Índice nacional do trabalho incorporado na cesta de participações monetárias fixas, rebaseado em 2000. A equivalência exata com uma cesta física fixa exige avaliar as bases de preços e câmbio na WIOD13. | índice (2000 = 1) | sem escala adicional | valor nacional comum / NA |
 | `gross_output.s.mv` | Trabalho produtivo total incorporado ao produto bruto, direto e indireto, pela soma das linhas da matriz values. | horas abstratas | sem escala adicional | soma / soma |
 | `labour_force_value.s.mv` | Valor da cesta de consumo financiada pela remuneração dos empregados, usado como estimativa do capital variável. | horas abstratas | sem escala adicional | soma / soma |
 | `value.m.mv` | Trabalho produtivo incorporado por USD de produto bruto: lambda no setor, razão dos totais nos agregados. | horas abstratas/USD | sem escala adicional | razão dos totais / razão dos totais |
@@ -102,7 +102,7 @@ As hipóteses de trabalho produtivo, igualdade das horas, resto do mundo, China,
 | `abstract_labour.emp.s.mv` | Horas de todas as pessoas ocupadas multiplicadas pelo fator de trabalho complexo. | horas abstratas | sem escala adicional | soma / soma |
 | `gdp.s.mv` | Trabalho abstrato de todas as pessoas ocupadas nos setores classificados como produtivos. Os demais setores recebem zero pelo filtro econômico. | horas abstratas | sem escala adicional | soma / soma |
 | `basket_price.r.pc` | Índice nacional do preço da cesta fixa de consumo, rebaseado em 2000. Cesta de referência: 1995 em WIOD13, 2000 em WIOD16. | índice (2000 = 1) | ×100 pontos | valor nacional comum / NA |
-| `basket_value.r.pc` | Índice nacional do trabalho incorporado na cesta fixa de consumo, rebaseado em 2000. | índice (2000 = 1) | ×100 pontos | valor nacional comum / NA |
+| `basket_value.r.pc` | Índice nacional do trabalho incorporado na cesta de participações monetárias fixas, rebaseado em 2000. A equivalência exata com uma cesta física fixa exige avaliar as bases de preços e câmbio na WIOD13. | índice (2000 = 1) | ×100 pontos | valor nacional comum / NA |
 | `gross_output.s.mv` | Trabalho produtivo total incorporado ao produto bruto, direto e indireto, pela soma das linhas da matriz values. | horas abstratas | sem escala adicional | soma / soma |
 | `labour_force_value.s.mv` | Valor da cesta de consumo financiada pela remuneração dos empregados, usado como estimativa do capital variável. | horas abstratas | sem escala adicional | soma / soma |
 | `value.m.mv` | Trabalho produtivo incorporado por USD de produto bruto: lambda no setor, razão dos totais nos agregados. | horas abstratas/USD | sem escala adicional | razão dos totais / razão dos totais |

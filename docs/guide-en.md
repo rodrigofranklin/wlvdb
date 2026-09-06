@@ -1,6 +1,6 @@
 # WLVDB guide for economists
 
-<!-- documentation-revision: wiod-consolidation-v1 -->
+<!-- documentation-revision: wiod-reader-workflows-v2 -->
 
 [Português](guide-pt.md) | English | [Home](../README.md) | [Dictionary](results-dictionary-en.md)
 
@@ -193,14 +193,21 @@ economic bases are not comparable.
 
 ## Use the results
 
+Data are available through [World Labour Values](https://panel.worldlabourvalues.org/)
+and [LabCidades/UFES](http://labcidades.ufes.br/worldlabourvalues/).
+The [use workflow](use-results-en.md) starts in the browser and follows
+selection, coverage, interpretation and citation without requiring R.
+The [indicator-family cards](indicator-families-en.md) help choose a measure.
+
 Cloning this repository supplies code, configuration, documentation and
-versioned supplements. It does **not** supply a calculated database:
-`source_data/` and `results/` are excluded from Git. For the reading examples,
-obtain a complete publication from the project maintainers or generate one
-using the calculation instructions below. A publication must include its
-channel, release and referenced runs. The guide does not assume an automatic
-download of precomputed results. The small test fixtures are illustrative
-data, not estimates for countries.
+versioned supplements; `source_data/` and `results/` are not included in Git.
+A selection exported through the website can be analysed according to its
+fields and metadata. Do not treat it as a complete native publication: the
+FST reading examples below require the channel, release and referenced runs,
+including manifests and sidecars. Inspect the obtained material before choosing
+a reader; a CSV or spreadsheet is not input to `read_fst_array()`. The full
+calculation described in this guide also produces a native publication.
+Test fixtures are illustrative data.
 
 ### Files and units
 
@@ -292,13 +299,15 @@ the other source.
 
 ### Turn a selected series into an analysis table
 
-Suppose the research question concerns the employee surplus-value rate in
-Brazil. The code below continues the previous R session and produces one
-row per year. It keeps the stored ratio alongside its displayed percentage;
-neither column changes the economic definition of the indicator.
+The initial question is the surplus-value rate of employees in industries
+classified as productive in Brazil, from 1995 to 2007. This code continues
+the previous session, retains all years for auditing and marks the intended
+scope; stored ratios and displayed percentages have the same definition.
+The [complete example](use-results-en.md#read-a-native-publication-in-r) links
+the series to states and anomalies before a use decision is made.
 
 ```r
-indicator <- "surplus_value.empe.r.pc"
+indicator <- "surplus_value.empe_p.r.pc"
 unit <- unique(units[units$indicator == indicator,
   c("canonical_unit", "display_unit", "display_multiplier")])
 stopifnot(nrow(unit) == 1L)
@@ -313,6 +322,8 @@ analysis <- data.frame(
 analysis$display_value <- analysis$stored_value *
   as.numeric(unit$display_multiplier[[1L]])
 analysis$display_unit <- unit$display_unit[[1L]]
+analysis$in_requested_period <- analysis$year %in% 1995:2007
+analysis$wiodr13_coverage_alert <- analysis$year %in% 2008:2009
 print(analysis)
 ```
 
@@ -323,13 +334,14 @@ explicit CSV export in your analysis project. Missing observations remain
 missing. Review `_states.csv` and `_anomalies.csv` before interpreting a
 series or discarding rows.
 
-This particular indicator includes productive and unproductive **employees**.
-Choose `surplus_value.empe_p.r.pc` for the productive-employee variant and
-consult its definition before comparison. A displayed value of 150 means a
-rate of 150%, not 150 hours; a move from 150% to 160% is 10 percentage points.
-Use the already calculated national rate: the mean of sector rates answers
-a different question. The WIOD13 coverage warning above still applies to
-2008–2009; this reading example applies no panel filter.
+This indicator restricts the population to **employees in productive industries**.
+The `surplus_value.empe.r.pc` variant also includes unproductive industries;
+`emp` includes non-employees. These choices answer different questions.
+A displayed value of 150 means 150%, not 150 hours; moving to 160% is a change
+of 10 percentage points. Use the published national rate rather than the mean
+of industry rates. Scope columns do not authorize automatic inclusion: inspect
+states, anomalies and operand coverage. Years 2008–2009 remain in the audit
+table but fall outside the introductory selection.
 
 ### Record the data behind an analysis
 

@@ -1,6 +1,6 @@
 # Guia do WLVDB para economistas
 
-<!-- documentation-revision: wiod-consolidation-v1 -->
+<!-- documentation-revision: wiod-reader-workflows-v2 -->
 
 Português | [English](guide-en.md) | [Início](../README-PT.md) | [Dicionário](results-dictionary-pt.md)
 
@@ -194,14 +194,21 @@ média mundial, porque as moedas e bases econômicas não são comparáveis.
 
 ## Usar os resultados
 
+Os dados estão disponíveis no [World Labour Values](https://panel.worldlabourvalues.org/)
+e no [LabCidades/UFES](http://labcidades.ufes.br/worldlabourvalues/).
+O [percurso de uso](use-results-pt.md) começa pela consulta no navegador e
+acompanha seleção, cobertura, interpretação e citação, sem exigir R.
+As [fichas por família](indicator-families-pt.md) ajudam a escolher o indicador.
+
 Clonar este repositório fornece código, configurações, documentação e
-suplementos versionados. Isso **não** fornece um banco de dados calculado:
-`source_data/` e `results/` são excluídos do Git. Para executar os exemplos
-de leitura, obtenha uma publicação completa com os mantenedores do projeto
-ou produza uma seguindo as instruções de cálculo abaixo. Uma publicação
-precisa incluir canal, release e runs referenciados. O guia não pressupõe
-download automático de resultados previamente calculados. As pequenas
-fixtures de teste são dados ilustrativos, não estimativas para países.
+suplementos versionados; `source_data/` e `results/` não são incluídos no Git.
+Uma seleção exportada pelo site é adequada ao trabalho de análise conforme
+seus campos e metadados. Ela não deve ser tratada como uma publicação nativa
+completa: os exemplos de leitura FST abaixo exigem a árvore de canal, release
+e runs referenciados, com manifestos e arquivos auxiliares. Confira o conteúdo
+do material obtido antes de escolher o leitor; um CSV ou uma planilha não é
+entrada para `read_fst_array()`. O cálculo completo descrito neste guia também
+produz a publicação nativa. As fixtures dos testes são ilustrativas.
 
 ### Arquivos e unidades
 
@@ -293,13 +300,15 @@ método por `wiodr16` para ler a outra fonte.
 
 ### Transformar uma série selecionada em tabela de análise
 
-Suponha que a pergunta de pesquisa trate da taxa de mais-valia dos empregados
-no Brasil. O código abaixo continua a sessão R anterior e produz uma linha
-por ano. Ele conserva a razão armazenada ao lado da porcentagem exibida;
-nenhuma dessas colunas modifica a definição econômica do indicador.
+A pergunta inicial é a taxa de mais-valia dos empregados dos setores
+classificados como produtivos no Brasil, de 1995 a 2007. O código continua
+a sessão anterior, conserva todos os anos para auditoria e marca o recorte
+pretendido; a razão armazenada e a porcentagem exibida têm a mesma definição.
+O [exemplo completo](use-results-pt.md#ler-uma-publicação-nativa-em-r) relaciona
+a série aos estados e às anomalias antes de uma decisão de uso.
 
 ```r
-indicator <- "surplus_value.empe.r.pc"
+indicator <- "surplus_value.empe_p.r.pc"
 unit <- unique(units[units$indicator == indicator,
   c("canonical_unit", "display_unit", "display_multiplier")])
 stopifnot(nrow(unit) == 1L)
@@ -314,6 +323,8 @@ analysis <- data.frame(
 analysis$display_value <- analysis$stored_value *
   as.numeric(unit$display_multiplier[[1L]])
 analysis$display_unit <- unit$display_unit[[1L]]
+analysis$in_requested_period <- analysis$year %in% 1995:2007
+analysis$wiodr13_coverage_alert <- analysis$year %in% 2008:2009
 print(analysis)
 ```
 
@@ -324,13 +335,14 @@ estatísticos ou exportação explícita em CSV no seu projeto de análise.
 As observações ausentes continuam ausentes. Consulte `_states.csv` e
 `_anomalies.csv` antes de interpretar uma série ou descartar linhas.
 
-Este indicador inclui **empregados** produtivos e improdutivos. Escolha
-`surplus_value.empe_p.r.pc` para a variante dos empregados produtivos e
-consulte sua definição antes de comparar. Um valor exibido de 150 significa
-taxa de 150%, não 150 horas; passar de 150% para 160% representa 10 pontos
-percentuais. Use a taxa nacional já calculada: a média das taxas setoriais
-responde a outra pergunta. O alerta anterior de cobertura WIOD13 continua
-válido para 2008–2009; este exemplo de leitura não aplica o filtro do painel.
+Este indicador restringe a população aos **empregados de setores produtivos**.
+A variante `surplus_value.empe.r.pc` inclui também os setores improdutivos;
+`emp` inclui ocupados não assalariados. Essas opções respondem a perguntas
+diferentes. Um valor exibido de 150 representa 150%, não 150 horas; a passagem
+para 160% equivale a 10 pontos percentuais. Use a taxa nacional publicada,
+em vez da média das taxas setoriais. As colunas de recorte não autorizam
+inclusão automática: examine estados, anomalias e cobertura dos componentes.
+Os anos 2008–2009 continuam na tabela de auditoria, fora do recorte inicial.
 
 ### Registrar os dados utilizados na análise
 

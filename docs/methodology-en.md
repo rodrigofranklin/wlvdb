@@ -1,10 +1,10 @@
 # Mathematical methodology
 
-<!-- documentation-revision: wiod-consolidation-v1 -->
+<!-- documentation-revision: wiod-reader-workflows-v2 -->
 
 [Português](methodology-pt.md) · [Theory](theory-en.md) · [Assumptions and open work](assumptions-en.md) · [Practical guide](guide-en.md) · [ABNT references](references-en.md)
 
-Documentation revision: `wiod-consolidation-v1`.
+Documentation revision: `wiod-reader-workflows-v2`.
 
 This chapter follows the **currently executable `wiodr13` and `wiodr16` methods**. It translates the native calculation into equations and a small example. The article by Franklin et al. (2022, p. 370–375) explains the common input-output framework and compares several reductions of skilled labour; Franklin (2025, p. 190–200) develops the international application. Their research alternatives are not all executable methods in this release. In particular, the standard methods use equal labour-hour multipliers and national consumption baskets. See the [method catalog](methods.md) for support status.
 

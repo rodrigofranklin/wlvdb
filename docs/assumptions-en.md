@@ -1,6 +1,6 @@
 # Assumptions, limitations and work still needed
 
-<!-- documentation-revision: wiod-consolidation-v1 -->
+<!-- documentation-revision: wiod-reader-workflows-v2 -->
 
 [Português](assumptions-pt.md) | English | [Home](../README.md) | [Theory](theory-en.md) | [Mathematics](methodology-en.md) | [Practical guide](guide-en.md)
 
@@ -42,7 +42,7 @@ Services, whereas the current WIOD13 table includes both (`H` and `O`). The
 current mask has 25 productive industries; the article's stated system uses 23.
 Matching the IO release is therefore insufficient to reproduce that study.
 
-Theory and the supplied texts' specific positions are explained in
+The concepts and positions of Franklin et al. (2022) and Franklin (2025) are explained in
 [theory](theory-en.md), with [ABNT references](references-en.md). Runtime
 implementations are in [matrix modules](../scripts/modules/native/matrix_modules.R),
 [common indicator modules](../scripts/modules/native/indicator_common_modules.R) and

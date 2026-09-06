@@ -1,8 +1,8 @@
 # Results dictionary
 
-<!-- documentation-revision: wiod-consolidation-v1 -->
+<!-- documentation-revision: wiod-reader-workflows-v2 -->
 
-[Português](results-dictionary-pt.md) | [English guide](guide-en.md)
+[Português](results-dictionary-pt.md) | [English guide](guide-en.md) | [Use data](use-results-en.md) | [Cards](indicator-families-en.md)
 
 This dictionary covers every indicator published by `wiodr13` (1995–2009) and `wiodr16` (2000–2014). Tables are generated from v2 contracts and reviewed economic descriptions. Each row applies to `sea_sectors` and `sea_countries`, except for the world absence indicated in the aggregation column. Countries and sectors follow each run's labels: the sources do not have identical classifications or geographic coverage.
 
@@ -44,7 +44,7 @@ Assumptions about productive labour, equal hours, the rest of the world, China, 
 | `abstract_labour.emp.s.mv` | All-persons-engaged hours multiplied by the complex-labour factor. | abstract hours | no additional scaling | sum / sum |
 | `gdp.s.mv` | Abstract labour of all persons engaged in industries classified as productive. Other industries receive zero under the economic filter. | abstract hours | no additional scaling | sum / sum |
 | `basket_price.r.pc` | National price index of the fixed consumption basket, rebased to 2000. Reference basket: 1995 for WIOD13, 2000 for WIOD16. | index (2000 = 1) | no additional scaling | common national value / NA |
-| `basket_value.r.pc` | National index of labour embodied in the fixed consumption basket, rebased to 2000. | index (2000 = 1) | no additional scaling | common national value / NA |
+| `basket_value.r.pc` | National labour-content index of the fixed monetary-share basket, rebased to 2000. Exact equivalence with a fixed physical basket requires evaluating WIOD13 price and exchange-rate bases. | index (2000 = 1) | no additional scaling | common national value / NA |
 | `gross_output.s.mv` | Total productive labour embodied in gross output, directly and indirectly, from row sums of the values matrix. | abstract hours | no additional scaling | sum / sum |
 | `labour_force_value.s.mv` | Value of the consumption basket financed by employee compensation, used as an estimate of variable capital. | abstract hours | no additional scaling | sum / sum |
 | `value.m.mv` | Productive labour embodied per USD of gross output: lambda at sector level, ratio of totals at aggregate levels. | abstract hours/USD | no additional scaling | ratio of totals / ratio of totals |
@@ -102,7 +102,7 @@ Assumptions about productive labour, equal hours, the rest of the world, China, 
 | `abstract_labour.emp.s.mv` | All-persons-engaged hours multiplied by the complex-labour factor. | abstract hours | no additional scaling | sum / sum |
 | `gdp.s.mv` | Abstract labour of all persons engaged in industries classified as productive. Other industries receive zero under the economic filter. | abstract hours | no additional scaling | sum / sum |
 | `basket_price.r.pc` | National price index of the fixed consumption basket, rebased to 2000. Reference basket: 1995 for WIOD13, 2000 for WIOD16. | index (2000 = 1) | ×100 points | common national value / NA |
-| `basket_value.r.pc` | National index of labour embodied in the fixed consumption basket, rebased to 2000. | index (2000 = 1) | ×100 points | common national value / NA |
+| `basket_value.r.pc` | National labour-content index of the fixed monetary-share basket, rebased to 2000. Exact equivalence with a fixed physical basket requires evaluating WIOD13 price and exchange-rate bases. | index (2000 = 1) | ×100 points | common national value / NA |
 | `gross_output.s.mv` | Total productive labour embodied in gross output, directly and indirectly, from row sums of the values matrix. | abstract hours | no additional scaling | sum / sum |
 | `labour_force_value.s.mv` | Value of the consumption basket financed by employee compensation, used as an estimate of variable capital. | abstract hours | no additional scaling | sum / sum |
 | `value.m.mv` | Productive labour embodied per USD of gross output: lambda at sector level, ratio of totals at aggregate levels. | abstract hours/USD | no additional scaling | ratio of totals / ratio of totals |

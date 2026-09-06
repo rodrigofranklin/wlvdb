@@ -1,12 +1,16 @@
 # References and reading map
 
-<!-- documentation-revision: wiod-consolidation-v1 -->
+<!-- documentation-revision: wiod-reader-workflows-v2 -->
 
 [Português](references-pt.md) | English | [Home](../README.md) | [Theory](theory-en.md) | [Mathematics](methodology-en.md) | [Practical guide](guide-en.md)
 
 References use ABNT author-title-publication conventions. Original titles
 are preserved. Page citations refer to the printed page numbers in the
 editions below, including when the work is read as a PDF.
+
+For an analysis citation, also consult [software, results and statistical sources](citation-en.md).
+That page supplies data-note templates and distinguishes website exports from
+native publications without assigning identifiers that were not supplied.
 
 ## Core sources consulted
 
@@ -19,7 +23,7 @@ problem: questioning the exploitation rate equalization hypothesis.
 p. 362–390, 2022. DOI:
 [10.13169/worlrevipoliecon.13.3.0362](https://doi.org/10.13169/worlrevipoliecon.13.3.0362).
 
-The supplied article is the source for the comparison of labour-reduction
+The 2022 article is the source for the comparison of labour-reduction
 methods, its theoretical critique and the original empirical construction.
 
 | Pages | Read for |

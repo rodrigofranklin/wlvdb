@@ -1,6 +1,30 @@
 # Convenção de documentação / Documentation convention
 
-Revisão / revision: `wiod-consolidation-v1`.
+Revisão / revision: `wiod-reader-workflows-v2`.
+
+## Percursos de uso / Reader workflows
+
+Os pares `use-results-pt/en.md`, `indicator-families-pt/en.md` e
+`citation-pt/en.md` integram o núcleo canônico. O primeiro começa pelo site;
+o guia técnico preserva os caminhos de reprodução e contribuição. Novos
+exemplos mantêm valores originais, estados, anomalias e decisões explícitas
+de cobertura. Os blocos de código dos pares devem ser idênticos.
+
+The `use-results-pt/en.md`, `indicator-families-pt/en.md` and `citation-pt/en.md`
+pairs belong to the canonical core. The first starts at the website; the
+technical guide retains reproduction and contribution workflows. New examples
+preserve original values, states, anomalies and explicit coverage decisions.
+Paired code blocks must be identical.
+
+A revisão altera documentação, exemplos e textos de metadados, não as fórmulas,
+classificações ou contratos numéricos. Textos em módulos também integram a
+identidade do código: preserve resultados antigos e seus manifestos; não
+reatribua a eles o commit novo. Respeite a compatibilidade exigida para recálculo.
+
+This revision changes documentation, examples and metadata text, not formulas,
+classifications or numerical contracts. Module text also contributes to code
+identity: preserve old results and manifests rather than relabelling them with
+the new commit. Follow the existing recalculation compatibility checks.
 
 ## Português
 
